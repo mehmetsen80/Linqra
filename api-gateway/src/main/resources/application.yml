@@ -25,27 +25,27 @@ spring:
     oauth2:
       client:
         registration:
-          lite-mesh-gateway-client:
-            client-id: lite-mesh-gateway-client
-            client-secret: ${KEYCLOAK_CLIENT_SECRET:SVwQlpupiIKUctK1Vh0yYwLxgkMZjjqY}
+          linqra-gateway-client:
+            client-id: linqra-gateway-client
+            client-secret: ${KEYCLOAK_CLIENT_SECRET:r4MBE75Axgsiu143HGvgQ1qlK6B9LCj5}
             authorization-grant-type: authorization_code
             scope: gateway.read
             redirect-uri: ${OAUTH2_REDIRECT_URI:http://localhost:3000/callback}
             provider: keycloak
         provider:
           keycloak:
-            token-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/token
-            authorization-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/auth
-            jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/certs
-            issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh
+            token-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/token
+            authorization-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/auth
+            jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/certs
+            issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra
       resourceserver:
         opaquetoken:
-          introspection-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/token/introspect
-          client-id: lite-mesh-gateway-client
-          client-secret: SVwQlpupiIKUctK1Vh0yYwLxgkMZjjqY
+          introspection-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/token/introspect
+          client-id: linqra-gateway-client
+          client-secret: r4MBE75Axgsiu143HGvgQ1qlK6B9LCj5
         jwt:
-          issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh
-          jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/certs
+          issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra
+          jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/certs
   data:
     mongodb:
       uri: mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority

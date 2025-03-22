@@ -1,11 +1,11 @@
 package org.lite.gateway.entity;
-import java.time.LocalDateTime;
-import java.util.Map;
 
+import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-import lombok.Data;
+import java.time.LocalDateTime;
+import java.util.Map;
 
 @Document(collection = "alerts")
 @Data

@@ -214,8 +214,10 @@ const RouteDetails = ({ route, setRoute, activeItem }) => {
                 <label>Method</label>
                 <QuestionMarkIcon tooltip="HTTP method for this route (GET, POST, etc.)" />
               </div>
-              {renderFieldValue('method', route.method || 'ALL', value => (
-                <code>{value}</code>
+              {renderFieldValue('method', route.methods, value => (
+                <code>
+                  {Array.isArray(value) ? value.join(', ') : 'ALL'}
+                </code>
               ))}
             </div>
             <div className={`info-item ${getFieldHighlight('path')}`}>

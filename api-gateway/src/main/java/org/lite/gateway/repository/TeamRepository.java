@@ -2,13 +2,12 @@ package org.lite.gateway.repository;
 
 import org.lite.gateway.entity.Team;
 import org.lite.gateway.entity.TeamStatus;
-import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
-import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.lang.NonNull;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import java.util.List;
 
 public interface TeamRepository extends ReactiveMongoRepository<Team, String> {
     // Basic queries

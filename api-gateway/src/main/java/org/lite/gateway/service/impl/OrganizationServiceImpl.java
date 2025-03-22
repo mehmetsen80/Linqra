@@ -5,15 +5,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.ErrorCode;
 import org.lite.gateway.dto.OrganizationDTO;
 import org.lite.gateway.entity.Organization;
-import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.exception.OrganizationOperationException;
+import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.repository.OrganizationRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.OrganizationService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
-
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 

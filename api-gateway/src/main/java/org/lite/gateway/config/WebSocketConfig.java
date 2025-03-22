@@ -5,25 +5,25 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.lang.NonNull;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.support.AbstractMessageChannel;
+import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.reactive.HandlerMapping;
 import org.springframework.web.reactive.handler.SimpleUrlHandlerMapping;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketMessage;
+import org.springframework.web.reactive.socket.WebSocketSession;
 import org.springframework.web.reactive.socket.server.support.WebSocketHandlerAdapter;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.support.AbstractMessageChannel;
+import reactor.util.retry.Retry;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
-import org.springframework.web.cors.CorsConfiguration;
-import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.web.reactive.socket.WebSocketSession;
 import java.util.UUID;
-import reactor.util.retry.Retry;
-import java.time.Duration;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Configuration
 @Slf4j
@@ -71,7 +71,7 @@ public class WebSocketConfig {
     @Bean
     public HandlerMapping webSocketHandlerMapping() {
         Map<String, WebSocketHandler> map = new HashMap<>();
-        map.put("/ws-lite-mesh", stompWebSocketHandler());
+        map.put("/ws-linqra", stompWebSocketHandler());
 
         SimpleUrlHandlerMapping mapping = new SimpleUrlHandlerMapping();
         mapping.setUrlMap(map);
@@ -83,7 +83,7 @@ public class WebSocketConfig {
         corsConfig.addAllowedMethod("*");
         corsConfig.addAllowedHeader("*");
         corsConfig.setAllowCredentials(true);
-        corsConfigMap.put("/ws-lite-mesh", corsConfig);
+        corsConfigMap.put("/ws-linqra", corsConfig);
         mapping.setCorsConfigurations(corsConfigMap);
 
         return mapping;

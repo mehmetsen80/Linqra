@@ -2,11 +2,9 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.lite.gateway.dto.*;
-import org.lite.gateway.enums.UserRole;
-import org.lite.gateway.dto.TeamInfoDTO;
 import org.lite.gateway.entity.*;
+import org.lite.gateway.enums.UserRole;
 import org.lite.gateway.exception.InvalidAuthenticationException;
 import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.exception.TeamOperationException;
@@ -18,11 +16,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
-import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -87,7 +85,7 @@ public class TeamServiceImpl implements TeamService {
                             .healthCheckEnabled(route.getHealthCheck().isEnabled())
                             .maxCallsPerDay(route.getMaxCallsPerDay())
                             .uri(route.getUri())
-                            .method(route.getMethod())
+                            .methods(route.getMethods())
                             .filters(route.getFilters())
                             .permissions(teamRoute.getPermissions())
                             .assignedAt(teamRoute.getAssignedAt())
@@ -368,7 +366,7 @@ public class TeamServiceImpl implements TeamService {
                 .permissions(teamRoute.getPermissions())
                 .assignedAt(teamRoute.getAssignedAt())
                 .assignedBy(assignedByUsername)
-                .method(apiRoute.getMethod())
+                .methods(apiRoute.getMethods())
                 .filters(apiRoute.getFilters())
                 .uri(apiRoute.getUri())
                 .maxCallsPerDay(apiRoute.getMaxCallsPerDay())
@@ -501,7 +499,7 @@ public class TeamServiceImpl implements TeamService {
                         .routeId(teamRoute.getRouteId())
                         .routeIdentifier(route.getRouteIdentifier())
                         .path(route.getPath())
-                        .method(route.getMethod())
+                        .methods(route.getMethods())
                         .filters(route.getFilters())
                         .version(route.getVersion())
                         .uri(route.getUri())

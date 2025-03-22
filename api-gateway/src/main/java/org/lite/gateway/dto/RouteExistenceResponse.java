@@ -3,6 +3,8 @@ package org.lite.gateway.dto;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 @Builder
 public class RouteExistenceResponse {
@@ -16,7 +18,7 @@ public class RouteExistenceResponse {
         private String id;
         private String routeIdentifier;
         private String uri;
-        private String method;
+        private List<String> methods;
         private String path;
         private Long createdAt;
         private Long updatedAt;

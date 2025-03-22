@@ -8,22 +8,21 @@ import org.lite.gateway.dto.LoginRequest;
 import org.lite.gateway.dto.RegisterRequest;
 import org.lite.gateway.entity.User;
 import org.lite.gateway.exception.DuplicateUserException;
+import org.lite.gateway.exception.InvalidCredentialsException;
 import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.exception.ValidationException;
 import org.lite.gateway.repository.UserRepository;
 import org.lite.gateway.service.JwtService;
+import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
 import org.lite.gateway.util.UserValidationUtil;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Service;
-import org.lite.gateway.service.UserContextService;
-import org.lite.gateway.exception.InvalidCredentialsException;
 
 import java.util.HashMap;
-
 import java.util.Map;
 import java.util.Set;
 

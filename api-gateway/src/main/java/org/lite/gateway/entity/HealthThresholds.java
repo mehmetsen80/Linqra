@@ -1,11 +1,9 @@
 package org.lite.gateway.entity;
 
-import lombok.Data;
-
-import org.springframework.data.mongodb.core.mapping.Field;
-
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import lombok.Data;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 @Data
 public class HealthThresholds {

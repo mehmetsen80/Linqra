@@ -1,28 +1,22 @@
 package org.lite.gateway.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.enums.UserRole;
-import org.lite.gateway.dto.TeamDTO;
+import org.lite.gateway.dto.*;
 import org.lite.gateway.entity.Team;
-import org.lite.gateway.service.TeamService;
+import org.lite.gateway.enums.UserRole;
+import org.lite.gateway.exception.InvalidAuthenticationException;
+import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.exception.TeamOperationException;
+import org.lite.gateway.service.TeamService;
+import org.lite.gateway.service.UserContextService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import org.springframework.http.HttpStatus;
-import org.lite.gateway.dto.ErrorResponse;
-import org.lite.gateway.dto.ErrorCode;
-import org.lite.gateway.exception.ResourceNotFoundException;
-import org.lite.gateway.service.UserContextService;
-import org.lite.gateway.exception.InvalidAuthenticationException;
-import org.springframework.web.server.ServerWebExchange;
-
-import jakarta.validation.Valid;
-
-import org.lite.gateway.dto.TeamRouteRequest;
-import org.lite.gateway.dto.TeamRouteDTO;
 
 @RestController
 @RequestMapping("/api/teams")

@@ -9,7 +9,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.stereotype.Service;
 import org.springframework.util.AntPathMatcher;
-import org.springframework.util.PathMatcher;
 
 import java.util.Map;
 import java.util.Set;
@@ -28,7 +27,7 @@ public class DynamicRouteService {
         add("/routes/**");
         add("/health/**");
         add("/analysis/**");
-        add("/ws-lite-mesh/**");
+        add("/ws-linqra/**");
         add("/metrics/**");
         add("/api/**");
         add("/favicon.ico");

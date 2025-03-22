@@ -291,4 +291,68 @@
 
 .team-info .text-muted {
   color: #6c757d;
+}
+
+/* Add only these new method colors, keeping existing ones unchanged */
+.method-badge.patch {
+  background-color: #50e3c2;  /* Teal */
+  color: white;
+}
+
+.method-badge.head {
+  background-color: #fca130;  /* Orange */
+  color: white;
+}
+
+.method-badge.options {
+  background-color: #0d5aa7;  /* Dark Blue */
+  color: white;
+}
+
+.api-route-method-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.api-route-method {
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 200;
+}
+
+.api-route-method.get {
+  background-color: #61affe;
+  color: white;
+}
+
+.api-route-method.post {
+  background-color: #49cc90;
+  color: white;
+}
+
+.api-route-method.put {
+  background-color: #fca130;
+  color: white;
+}
+
+.api-route-method.delete {
+  background-color: #f93e3e;
+  color: white;
+}
+
+.api-route-method.patch {
+  background-color: #50e3c2;  /* Teal */
+  color: white;
+}
+
+.api-route-method.head {
+  background-color: #9012fe;  /* Purple */
+  color: white;
+}
+
+.api-route-method.options {
+  background-color: #0d5aa7;  /* Dark Blue */
+  color: white;
 } 

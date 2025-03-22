@@ -2,9 +2,9 @@ version: '3.8'
 
 networks:
   default:
-  lite-mesh-network:
+  linqra-network:
     driver: bridge
-    name: lite-mesh-network  # Explicitly set the network name
+    name: linqra-network  # Explicitly set the network name
 
 services:
 
@@ -29,7 +29,7 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: password
     networks:
-      - lite-mesh-network
+      - linqra-network
 
 
   # postgres admin
@@ -46,7 +46,7 @@ services:
     volumes:
       - ./.kube/pgadmin/data/:/var/lib/pgadmin
     networks:
-      - lite-mesh-network
+      - linqra-network
 
   # keycloak
   keycloak-service:
@@ -88,23 +88,7 @@ services:
     ports:
       - "8281:8080"
     networks:
-      - lite-mesh-network
-
-#  # mongodb
-#  mongodb-service:
-#    build:
-#      context: .
-#      dockerfile: ./.kube/mongodb/Dockerfile
-#    environment:
-#      MONGO_INITDB_ROOT_USERNAME: root
-#      MONGO_INITDB_ROOT_PASSWORD: mongopw
-#      MONGO_GATEWAY_URL: mongodb-service
-#    ports:
-#      - "27017:27017"
-#    volumes:
-#      - ./.kube/mongodb/data/:/data/db
-#    networks:
-#      - lite-mesh-network
+      - linqra-network
 
 # mongodb nodes
   mongodb1:
@@ -127,7 +111,7 @@ services:
       - ./.kube/mongodb/data1/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
     networks:
-      - lite-mesh-network
+      - linqra-network
     command: mongod --bind_ip_all --replSet rs0 --port 27017 -keyFile /data/mongo-keyfile
 
   mongodb2:
@@ -150,7 +134,7 @@ services:
       - ./.kube/mongodb/data2/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
     networks:
-      - lite-mesh-network
+      - linqra-network
     command: mongod  --bind_ip_all  --replSet rs0 --port 27018 -keyFile /data/mongo-keyfile
 
   mongodb3:
@@ -173,9 +157,8 @@ services:
       - ./.kube/mongodb/data3/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
     networks:
-      - lite-mesh-network
+      - linqra-network
     command: mongod --bind_ip_all --replSet rs0 --port 27019 -keyFile /data/mongo-keyfile
-
 
 
   # redis
@@ -183,7 +166,6 @@ services:
     build:
       context: .
       dockerfile: ./.kube/redis/Dockerfile
-#    container_name: redis_container
     environment:
       REDIS_GATEWAY_URL: redis-service
     ports:
@@ -192,10 +174,8 @@ services:
       - ./.kube/redis/data/:/var/lib/redis/data
       - ./.kube/redis/redis.conf:/usr/local/etc/redis/redis.conf
     command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
-#    healthcheck:
-#      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
     networks:
-      - lite-mesh-network
+      - linqra-network
 
 
 #
@@ -225,7 +205,7 @@ services:
 #      - ./discovery-server:/app/discovery-server
 #      - ./keys:/app/keys
 #    networks:
-#      - lite-mesh-network
+#      - linqra-network
 #
 #
 #  # gateway
@@ -256,7 +236,7 @@ services:
 ##      restart_policy:
 ##        condition: on-failure
 #    networks:
-#      - lite-mesh-network
+#      - linqra-network
 #    depends_on:
 #      - discovery-service
 #      - mongodb-service
@@ -284,7 +264,7 @@ services:
 ##    deploy:
 ##      replicas: 3
 #    networks:
-#      - lite-mesh-network
+#      - linqra-network
 #    volumes:
 #      - ./inventory-service:/app/inventory-service
 #      - ./keys:/app/keys
@@ -312,7 +292,7 @@ services:
 #    #    deploy:
 #    #      replicas: 3
 #    networks:
-#      - lite-mesh-network
+#      - linqra-network
 #    volumes:
 #      - ./product-service:/app/product-service
 #      - ./keys:/app/keys

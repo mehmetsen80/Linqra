@@ -285,10 +285,10 @@ export const ApiRoutesDisplay = () => {
               <div className="route-header">
                 <div className="route-title">
                   <h3>{route.routeIdentifier}</h3>
-                  <div className="method-badges">
-                    {route.method.split(',').map((method, idx) => (
-                      <span key={idx} className={`method-badge ${method.trim().toLowerCase()}`}>
-                        {method.trim()}
+                  <div className="api-route-method-badges">
+                    {Array.isArray(route.methods) && route.methods.map((method, idx) => (
+                      <span key={idx} className={`api-route-method ${method.toLowerCase()}`}>
+                        {method}
                       </span>
                     ))}
                   </div>

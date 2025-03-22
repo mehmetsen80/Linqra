@@ -1,27 +1,23 @@
 package org.lite.gateway.controller;
 
+import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
-
+import org.lite.gateway.model.DashboardUpdate;
+import org.lite.gateway.model.TrendAnalysis;
 import org.lite.gateway.service.HealthCheckService;
 import org.lite.gateway.service.MetricsAggregator;
-import org.lite.gateway.model.TrendAnalysis;
+import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
 
-import jakarta.annotation.PreDestroy;
-
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-
-import reactor.core.publisher.Mono;
-
-import org.lite.gateway.model.DashboardUpdate;
-import org.springframework.messaging.MessageDeliveryException;
 
 @RestController
 @RequestMapping("/health")

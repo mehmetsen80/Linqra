@@ -1,8 +1,8 @@
 package org.lite.gateway.util;
 
 import org.lite.gateway.dto.ErrorCode;
-import org.lite.gateway.exception.ValidationException;
 import org.lite.gateway.dto.RegisterRequest;
+import org.lite.gateway.exception.ValidationException;
 
 public class UserValidationUtil {
     private static final String EMAIL_REGEX = "^[A-Za-z0-9+_.-]+@(.+)$";

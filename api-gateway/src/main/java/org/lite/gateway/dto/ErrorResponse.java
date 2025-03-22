@@ -1,10 +1,11 @@
 package org.lite.gateway.dto;
 
-import java.util.Map;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+
+import java.util.Map;
 
 /**
  * Represents a standardized error response.

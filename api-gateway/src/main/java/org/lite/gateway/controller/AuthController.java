@@ -2,21 +2,21 @@ package org.lite.gateway.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.lite.gateway.dto.*;
-import org.lite.gateway.service.UserService;
-import org.lite.gateway.service.KeycloakService;
 import org.lite.gateway.service.JwtService;
+import org.lite.gateway.service.KeycloakService;
 import org.lite.gateway.service.UserContextService;
+import org.lite.gateway.service.UserService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
-import org.springframework.http.HttpStatus;
-import java.util.List;
-import java.util.Map;
+import reactor.core.scheduler.Schedulers;
+
 import java.util.ArrayList;
 import java.util.HashMap;
-import reactor.core.scheduler.Schedulers;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")

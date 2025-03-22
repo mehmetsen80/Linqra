@@ -1,10 +1,11 @@
 package org.lite.gateway.dto;
 
-import lombok.Data;
-import lombok.Builder;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.lite.gateway.entity.TeamStatus;
+
 import java.time.LocalDateTime;
 import java.util.List;
 

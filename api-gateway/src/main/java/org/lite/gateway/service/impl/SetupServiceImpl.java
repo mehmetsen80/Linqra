@@ -2,11 +2,11 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.service.SetupService;
 import org.lite.gateway.dto.InitialSetupRequest;
 import org.lite.gateway.entity.User;
 import org.lite.gateway.exception.ValidationException;
 import org.lite.gateway.repository.UserRepository;
+import org.lite.gateway.service.SetupService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;

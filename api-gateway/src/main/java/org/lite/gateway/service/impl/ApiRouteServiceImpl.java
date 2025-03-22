@@ -4,28 +4,18 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.lite.gateway.dto.ErrorCode;
-import org.lite.gateway.dto.RouteChangeDetails;
-import org.lite.gateway.dto.RouteExistenceRequest;
-import org.lite.gateway.dto.RouteExistenceResponse;
-import org.lite.gateway.dto.VersionComparisonResult;
+import org.lite.gateway.config.GatewayRoutesRefresher;
+import org.lite.gateway.dto.*;
 import org.lite.gateway.entity.*;
 import org.lite.gateway.exception.DuplicateRouteException;
-import org.lite.gateway.repository.ApiRouteRepository;
-import org.lite.gateway.repository.ApiRouteVersionRepository;
-import org.lite.gateway.repository.RouteVersionMetadataRepository;
+import org.lite.gateway.exception.ResourceNotFoundException;
+import org.lite.gateway.repository.*;
 import org.lite.gateway.service.ApiRouteService;
+import org.lite.gateway.service.DynamicRouteService;
 import org.lite.gateway.service.UserContextService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import org.lite.gateway.repository.TeamRouteRepository;
-import org.lite.gateway.repository.UserRepository;
-import org.lite.gateway.repository.TeamMemberRepository;
-import org.lite.gateway.exception.ResourceNotFoundException;
-import org.lite.gateway.service.DynamicRouteService;
-import org.lite.gateway.config.GatewayRoutesRefresher;
 
 import java.util.*;
 
@@ -575,7 +565,7 @@ public class ApiRouteServiceImpl implements ApiRouteService {
                 .id(route.getId())
                 .routeIdentifier(route.getRouteIdentifier())
                 .uri(route.getUri())
-                .method(route.getMethod())
+                .methods(route.getMethods())
                 .path(route.getPath())
                 .createdAt(route.getCreatedAt())
                 .updatedAt(route.getUpdatedAt())

@@ -1,9 +1,9 @@
 package org.lite.gateway.controller;
 
-import org.lite.gateway.entity.User;
-import org.lite.gateway.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.entity.User;
+import org.lite.gateway.service.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;

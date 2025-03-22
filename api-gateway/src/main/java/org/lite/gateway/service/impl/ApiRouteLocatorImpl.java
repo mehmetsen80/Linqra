@@ -22,6 +22,11 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
+import org.springframework.web.server.ServerWebExchangeDecorator;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -86,6 +91,33 @@ public class ApiRouteLocatorImpl implements RouteLocator, ApplicationContextAwar
             routeSpec = predicateSpec.path(apiRoute.getPath());
         }
 
+        // Add body caching filter first
+        routeSpec.filters(f -> f.filter((exchange, chain) -> {
+            String method = exchange.getRequest().getMethod().name().toUpperCase();
+            if (Arrays.asList("POST", "PUT", "PATCH").contains(method)) {
+                return DataBufferUtils.join(exchange.getRequest().getBody())
+                    .flatMap(dataBuffer -> {
+                        byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                        dataBuffer.read(bytes);
+                        DataBufferUtils.release(dataBuffer);
+                        String body = new String(bytes, StandardCharsets.UTF_8);
+                        exchange.getAttributes().put("cachedRequestBody", body);
+                        
+                        ServerHttpRequestDecorator decorator = new ServerHttpRequestDecorator(
+                            exchange.getRequest()) {
+                            @Override
+                            public @NonNull Flux<DataBuffer> getBody() {
+                                return Flux.just(exchange.getResponse().bufferFactory()
+                                    .wrap(bytes));
+                            }
+                        };
+                        
+                        return chain.filter(exchange.mutate().request(decorator).build());
+                    });
+            }
+            return chain.filter(exchange);
+        }));
+
         // Add filter to check actual request path before applying resilience filters
         routeSpec.filters(f -> f.filter((exchange, chain) -> {
             String pathEndpoint = exchange.getRequest().getURI().getPath();
@@ -148,30 +180,25 @@ public class ApiRouteLocatorImpl implements RouteLocator, ApplicationContextAwar
         metric.setPathEndPoint(pathEndpoint);
 
         // Set the HTTP method
-        metric.setMethod(exchange.getRequest().getMethod().name());
+        String httpMethod = exchange.getRequest().getMethod().name().toUpperCase();
+        metric.setMethod(httpMethod);
 
         // Set queryParameters for methods that typically use query params
-        if (Arrays.asList("GET", "DELETE", "HEAD", "OPTIONS").contains(exchange.getRequest().getMethod().name().toUpperCase())) {
+        if (Arrays.asList("GET", "DELETE", "HEAD", "OPTIONS").contains(httpMethod)) {
             String queryParameters = exchange.getRequest().getURI().getQuery();
             metric.setQueryParameters(queryParameters != null ? queryParameters : "");
         }
 
-        // Save metrics - handle methods that can have a body
-        if (Arrays.asList("POST", "PUT", "PATCH").contains(exchange.getRequest().getMethod().name().toUpperCase())) {
-            exchange.getRequest().getBody().collectList().flatMap(dataBuffers -> {
-                StringBuilder bodyBuilder = new StringBuilder();
-                dataBuffers.forEach(buffer -> bodyBuilder.append(StandardCharsets.UTF_8.decode(buffer.toByteBuffer())));
-                metric.setRequestPayload(bodyBuilder.toString());
-                return metricService.saveMetric(metric);
-            }).subscribe();
-        } else {
-            metricService.saveMetric(metric).subscribe();
+        // For methods with body, get the cached body if available
+        if (Arrays.asList("POST", "PUT", "PATCH").contains(httpMethod)) {
+            String cachedBody = exchange.getAttribute("cachedRequestBody");
+            if (cachedBody != null) {
+                metric.setRequestPayload(cachedBody);
+            }
         }
 
-        // Log metrics
-        log.debug("Captured Metrics - InteractionType: {}, From: {}, To: {}, Base URL: {}, Path: {}, Duration: {}ms, Success: {}",
-                metric.getInteractionType(), metric.getFromService(), metric.getToService(),
-                metric.getGatewayBaseUrl(), metric.getPathEndPoint(), metric.getDuration(), metric.isSuccess());
+        // Save metric for all methods
+        metricService.saveMetric(metric).subscribe();
     }
 
     private String determineInteractionType(ServerWebExchange exchange, ApiMetric metric) {

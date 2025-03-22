@@ -5,10 +5,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.filter.ApiKeyAuthenticationFilter;
 import org.lite.gateway.service.DynamicRouteService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
@@ -19,27 +21,25 @@ import org.springframework.security.core.userdetails.MapReactiveUserDetailsServi
 import org.springframework.security.core.userdetails.ReactiveUserDetailsService;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.*;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
+import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
-import org.springframework.web.server.WebFilter;
-import reactor.core.publisher.Mono;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
-import org.springframework.http.server.reactive.ServerHttpRequest;
+import org.springframework.web.server.WebFilter;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -225,8 +225,8 @@ public class SecurityConfig {
         authorizedClientManager.setAuthorizedClientProvider(authorizedClientProvider);
 
 //        //This is just to test if we get the token or not, enable this to test
-//        OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("lite-mesh-gateway-client")
-//                .principal("lite-mesh-gateway-client")  // Use a dummy principal for client_credentials
+//        OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId("linqra-gateway-client")
+//                .principal("linqra-gateway-client")  // Use a dummy principal for client_credentials
 //                .build();
 //        authorizedClientManager.authorize(authorizeRequest)
 //                .flatMap(authorizedClient -> {
@@ -306,7 +306,7 @@ public class SecurityConfig {
 
                         //i.e. inventory-service.read or product-service.read should be defined in the keycloak
                         //we bypass the refresh and fallback end points
-                        if(!path.startsWith("/ws-lite-mesh")
+                        if(!path.startsWith("/ws-linqra")
                                 && !path.startsWith("/metrics/")
                                 && !path.startsWith("/analysis/")
                                 && !path.startsWith("/routes/")

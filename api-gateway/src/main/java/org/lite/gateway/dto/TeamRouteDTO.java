@@ -1,15 +1,15 @@
 package org.lite.gateway.dto;
 
-import lombok.Data;
-import lombok.Builder;
-import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
-
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.lite.gateway.entity.FilterConfig;
 import org.lite.gateway.entity.RoutePermission;
+
 import java.time.LocalDateTime;
-import java.util.Set;
 import java.util.List;
+import java.util.Set;
 
 @Data
 @Builder
@@ -25,7 +25,7 @@ public class TeamRouteDTO {
     private Set<RoutePermission> permissions;
     private LocalDateTime assignedAt;
     private String assignedBy;
-    private String method;
+    private List<String> methods;
     private List<FilterConfig> filters;
     private String uri;
     private Integer maxCallsPerDay;

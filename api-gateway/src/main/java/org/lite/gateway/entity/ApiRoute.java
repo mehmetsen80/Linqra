@@ -1,19 +1,21 @@
 package org.lite.gateway.entity;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.Valid;
-
-import java.util.List;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.Arrays;
 import org.springframework.data.annotation.Transient;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 
 @Document("apiRoutes")
@@ -23,7 +25,7 @@ public class ApiRoute{
         // Initialize default values
         this.version = 1;
         this.createdAt = System.currentTimeMillis();
-        this.method = "GET";
+        this.methods = new ArrayList<>(List.of("GET"));
         this.maxCallsPerDay = 100000;
         
         // Initialize default HealthCheckConfig
@@ -148,7 +150,11 @@ public class ApiRoute{
     @NotBlank(message = "URI is required")
     String uri;
     
-    String method;
+    @NotEmpty(message = "At least one HTTP method is required")
+    private List<@Pattern(
+        regexp = "^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)$",
+        message = "Invalid HTTP method. Allowed values: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS"
+    ) String> methods;
     
     @NotBlank(message = "Path is required")
     String path;
@@ -168,6 +174,12 @@ public class ApiRoute{
 
     @Transient
     private String teamId; // Helper field for route creation, not stored in DB
+
+    public void setMethod(List<String> methods) {
+        this.methods = methods.stream()
+            .map(String::toUpperCase)
+            .collect(Collectors.toList());
+    }
 }
 
 

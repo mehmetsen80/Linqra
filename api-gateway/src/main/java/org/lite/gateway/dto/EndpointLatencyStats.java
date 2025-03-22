@@ -1,7 +1,7 @@
 package org.lite.gateway.dto;
 
-import lombok.Data;
 import lombok.Builder;
+import lombok.Data;
 
 @Data
 @Builder

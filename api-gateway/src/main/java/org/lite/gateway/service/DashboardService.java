@@ -1,8 +1,8 @@
 package org.lite.gateway.service;
 
-import org.lite.gateway.dto.StatDTO;
 import org.lite.gateway.dto.EndpointLatencyStats;
 import org.lite.gateway.dto.ServiceUsageStats;
+import org.lite.gateway.dto.StatDTO;
 import reactor.core.publisher.Flux;
 
 public interface DashboardService {

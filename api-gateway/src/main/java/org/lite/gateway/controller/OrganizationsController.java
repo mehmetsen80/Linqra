@@ -1,15 +1,16 @@
 package org.lite.gateway.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.dto.OrganizationDTO;
-import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.ErrorCode;
+import org.lite.gateway.dto.ErrorResponse;
+import org.lite.gateway.dto.OrganizationDTO;
 import org.lite.gateway.entity.Organization;
 import org.lite.gateway.exception.InvalidAuthenticationException;
+import org.lite.gateway.exception.OrganizationOperationException;
 import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.exception.TeamOperationException;
-import org.lite.gateway.exception.OrganizationOperationException;
 import org.lite.gateway.service.OrganizationService;
 import org.lite.gateway.service.UserContextService;
 import org.springframework.http.HttpStatus;
@@ -19,7 +20,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 
 @RestController

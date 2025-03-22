@@ -3,6 +3,7 @@ package org.lite.gateway.entity;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+
 import java.time.LocalDateTime;
 
 @Data
@@ -21,4 +22,5 @@ public class ApiMetric {
     private String queryParameters;  // Parameters for GET requests
     private String requestPayload;   // Body data for POST requests
     private boolean success;         // false if exception is thrown
+    private String method;  // Add this field to store HTTP method
 }

@@ -1,26 +1,16 @@
 package org.lite.gateway.repository;
 
-import org.lite.gateway.dto.ErrorStats;
-import org.lite.gateway.dto.RouteStats;
-import org.lite.gateway.dto.ServiceErrorStats;
-import org.lite.gateway.dto.ServiceErrorTrend;
-import org.lite.gateway.dto.ServiceStats;
-import org.lite.gateway.dto.ServiceTimeSeriesStats;
-import org.lite.gateway.dto.ServiceUsageAggregation;
-import org.lite.gateway.dto.TimeSeriesStats;
-import org.lite.gateway.dto.EndpointStats;
-import org.lite.gateway.dto.EndpointTimeSeriesStats;
-import org.lite.gateway.dto.EndpointLatencyStats;
+import org.lite.gateway.dto.*;
 import org.lite.gateway.entity.ApiMetric;
+import org.springframework.data.mongodb.repository.Aggregation;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
-import org.springframework.data.mongodb.repository.Aggregation;
-
-import java.time.LocalDateTime;
-import java.time.Instant;
-import java.util.List;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.List;
 
 public interface ApiMetricRepository extends ReactiveMongoRepository<ApiMetric, String> {
     @Query("{ " +

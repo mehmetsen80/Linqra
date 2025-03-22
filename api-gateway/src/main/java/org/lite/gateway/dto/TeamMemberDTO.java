@@ -1,9 +1,10 @@
 package org.lite.gateway.dto;
 
-import lombok.Data;
 import lombok.Builder;
+import lombok.Data;
 import org.lite.gateway.entity.TeamMemberStatus;
 import org.lite.gateway.enums.UserRole;
+
 import java.time.LocalDateTime;
 
 @Data

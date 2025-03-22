@@ -17,19 +17,19 @@ public class OAuth2ClientConfig {
     @Value("${spring.security.oauth2.client.provider.keycloak.token-uri}")
     private String tokenUri;
 
-    @Value("${spring.security.oauth2.client.registration.lite-mesh-gateway-client.client-id}")
+    @Value("${spring.security.oauth2.client.registration.linqra-gateway-client.client-id}")
     private String clientId;
 
-    @Value("${spring.security.oauth2.client.registration.lite-mesh-gateway-client.client-secret}")
+    @Value("${spring.security.oauth2.client.registration.linqra-gateway-client.client-secret}")
     private String clientSecret;
 
-    @Value("${spring.security.oauth2.client.registration.lite-mesh-gateway-client.scope}")
+    @Value("${spring.security.oauth2.client.registration.linqra-gateway-client.scope}")
     private String scope;
 
     @Bean
     public ReactiveClientRegistrationRepository customClientRegistrationRepository() {
         ClientRegistration registration = ClientRegistration
-                .withRegistrationId("lite-mesh-gateway-client")
+                .withRegistrationId("linqra-gateway-client")
                 .clientId(clientId)
                 .clientSecret(clientSecret)
                 .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)

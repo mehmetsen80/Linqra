@@ -1,28 +1,28 @@
 package org.lite.gateway.service;
 
-import org.lite.gateway.entity.ApiRoute;
-import org.lite.gateway.entity.HealthThresholds;
-import org.lite.gateway.repository.ApiRouteRepository;
-import org.springframework.stereotype.Service;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.beans.factory.annotation.Value;
-import org.lite.gateway.model.ServiceHealthStatus;
-import org.lite.gateway.model.TrendAnalysis;
-import org.lite.gateway.dto.ServiceDTO;
-
-import java.util.HashMap;
-import java.util.Map;
-import org.springframework.web.reactive.function.client.WebClient;
-import lombok.extern.slf4j.Slf4j;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import java.time.Duration;
-import org.springframework.http.MediaType;
-import org.springframework.http.HttpHeaders;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.discovery.EurekaClient;
-import java.util.concurrent.ConcurrentHashMap;
+import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.dto.ServiceDTO;
+import org.lite.gateway.entity.ApiRoute;
+import org.lite.gateway.entity.HealthThresholds;
+import org.lite.gateway.model.ServiceHealthStatus;
+import org.lite.gateway.model.TrendAnalysis;
+import org.lite.gateway.repository.ApiRouteRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Service;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Validated

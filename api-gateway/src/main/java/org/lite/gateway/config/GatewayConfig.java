@@ -2,8 +2,8 @@ package org.lite.gateway.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.service.MetricService;
 import org.lite.gateway.service.ApiRouteService;
+import org.lite.gateway.service.MetricService;
 import org.lite.gateway.service.impl.ApiRouteLocatorImpl;
 import org.springframework.cloud.circuitbreaker.resilience4j.ReactiveResilience4JCircuitBreakerFactory;
 import org.springframework.cloud.gateway.route.RouteLocator;

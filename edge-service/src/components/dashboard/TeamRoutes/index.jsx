@@ -31,9 +31,9 @@ const TeamRoutes = () => {
   const navigate = useNavigate();
 
   // Move the helper functions outside useEffect
-  const getMethodBadges = useCallback((method) => {
-    if (!method) return [];
-    return method.split(',').map(m => m.trim());
+  const getMethodBadges = useCallback((methods) => {
+    if (!methods || !Array.isArray(methods)) return [];
+    return methods;
   }, []);
 
   const loadTeamRoutes = useCallback(async () => {
@@ -144,7 +144,7 @@ const TeamRoutes = () => {
                 <td>{route.routeIdentifier}</td>
                 <td>
                   <div className="method-badges">
-                    {getMethodBadges(route.method).map(method => (
+                    {getMethodBadges(route.methods).map(method => (
                       <span key={method} className={`method-badge ${method.toLowerCase()}`}>
                         {method}
                       </span>

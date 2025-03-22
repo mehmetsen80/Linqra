@@ -1,11 +1,13 @@
 package org.lite.gateway.service;
 
+import org.lite.gateway.model.MetricAnalysis;
 import org.lite.gateway.model.MetricPoint;
 import org.lite.gateway.model.TrendAnalysis;
 import org.lite.gateway.model.TrendDirection;
-import org.lite.gateway.model.MetricAnalysis;
 import org.springframework.stereotype.Service;
-import java.util.*;
+
+import java.util.Arrays;
+import java.util.List;
 
 @Service
 public class AdvancedMetricsAnalyzer {

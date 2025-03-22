@@ -1,12 +1,12 @@
 package org.lite.gateway.config;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 
 @Component
 @RequiredArgsConstructor
@@ -14,10 +14,10 @@ import org.springframework.beans.factory.annotation.Value;
 public class KeycloakProperties {
     private final ReactiveClientRegistrationRepository clientRegistrationRepository;
 
-    @Value("${spring.security.oauth2.client.registration.lite-mesh-gateway-client.redirect-uri}")
+    @Value("${spring.security.oauth2.client.registration.linqra-gateway-client.redirect-uri}")
     private String configuredRedirectUri;
 
-    private static final String CLIENT_ID = "lite-mesh-gateway-client";
+    private static final String CLIENT_ID = "linqra-gateway-client";
 
     public Mono<String> getTokenUrl() {
         return clientRegistrationRepository.findByRegistrationId(CLIENT_ID)

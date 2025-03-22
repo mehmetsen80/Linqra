@@ -1,10 +1,11 @@
 package org.lite.gateway.dto;
 
-import lombok.Data;
-import org.lite.gateway.entity.RoutePermission;
-import java.util.Set;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+import org.lite.gateway.entity.RoutePermission;
+
+import java.util.Set;
 
 @Data
 public class TeamRouteRequest {

@@ -22,7 +22,7 @@ class ClientAuthoritiesConverter implements Converter<Jwt, Flux<GrantedAuthority
     @SuppressWarnings("unchecked")
     public Flux<GrantedAuthority> convert(Jwt source) {
         final var resourceAccess = (Map<String, Object>) source.getClaims().getOrDefault("resource_access", Map.of());
-        final var clientAccess = (Map<String, Object>) resourceAccess.getOrDefault("lite-mesh-gateway-client", Map.of());
+        final var clientAccess = (Map<String, Object>) resourceAccess.getOrDefault("linqra-gateway-client", Map.of());
         final var roles = (List<String>) clientAccess.getOrDefault("roles", List.of());
         return Flux.fromStream(roles.stream())
                 .map("ROLE_%s"::formatted)

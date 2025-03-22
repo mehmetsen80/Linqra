@@ -1,0 +1,88 @@
+.user-summary {
+  border: none;
+  background-color: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.user-summary h4 {
+  color: var(--heading-primary);
+  margin-bottom: 0.75rem;
+}
+
+.user-summary .text-muted {
+  font-size: 0.9rem;
+}
+
+.user-summary .card-body {
+  padding: 1.5rem;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.quick-action-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  color: var(--primary-color);
+  background-color: #f8f9fa;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.quick-action-button:hover {
+  background-color: var(--primary-color);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.quick-action-button svg {
+  font-size: 1.2rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .user-summary .card-body > div {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .quick-actions {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.token-section {
+  position: relative;
+  display: inline-block;
+}
+
+.environment-badge {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border-radius: 8px;
+  background-color: var(--warning-color, #ffc107);
+  color: var(--dark, #000);
+  z-index: 1;
+}
+
+/* Add different colors for different environments */
+[data-environment="dev"] .environment-badge {
+  background-color: var(--info-light, #cce5ff);
+  color: var(--info-dark, #004085);
+}
+
+[data-environment="test"] .environment-badge {
+  background-color: var(--warning-light, #fff3cd);
+  color: var(--warning-dark, #856404);
+} 

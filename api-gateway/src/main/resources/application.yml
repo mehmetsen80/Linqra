@@ -1,0 +1,177 @@
+spring:
+  profiles:
+    active: dev  # or 'prod' for production
+  application:
+    name: api-gateway
+  main:
+    allow-bean-definition-overriding: true
+    allow-circular-references: true
+    web-application-type: reactive
+  redis:
+    host: ${REDIS_GATEWAY_URL:localhost}
+    port: 6379
+    database: 0
+    timeout: 60000
+    connect-timeout: 60000
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 2
+        max-wait: -1ms
+  session:
+    store-type: none
+  security:
+    oauth2:
+      client:
+        registration:
+          lite-mesh-gateway-client:
+            client-id: lite-mesh-gateway-client
+            client-secret: ${KEYCLOAK_CLIENT_SECRET:SVwQlpupiIKUctK1Vh0yYwLxgkMZjjqY}
+            authorization-grant-type: authorization_code
+            scope: gateway.read
+            redirect-uri: ${OAUTH2_REDIRECT_URI:http://localhost:3000/callback}
+            provider: keycloak
+        provider:
+          keycloak:
+            token-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/token
+            authorization-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/auth
+            jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/certs
+            issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh
+      resourceserver:
+        opaquetoken:
+          introspection-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/token/introspect
+          client-id: lite-mesh-gateway-client
+          client-secret: SVwQlpupiIKUctK1Vh0yYwLxgkMZjjqY
+        jwt:
+          issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh
+          jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/LiteMesh/protocol/openid-connect/certs
+  data:
+    mongodb:
+      uri: mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority
+      database: Linqra
+  cloud:
+    circuitbreaker:
+      resilience4j:
+        enabled: true #enable the Resilience4J auto-configuration
+    loadbalancer:
+      enabled: true # Enable Spring Cloud LoadBalancer for service-to-service discovery
+    gateway:
+      httpserver:
+        wiretap: true
+      httpclient:
+        wiretap: true
+      discovery:
+        locator:
+          enabled: true # Enables service discovery with Eureka
+          lower-case-service-id: true  # This ensures service IDs are matched in lowercase
+      routes:
+        ## Discover server route
+        # so, our gateway port is 7777, we access the discovery server through http://localhost:7777/eureka/web
+        # the filter is to reroute the request from http://localhost:7777/eureka/web to http://localhost:8761
+      - id: discovery-server
+        uri: https://${EUREKA_GATEWAY_URL:localhost}:8761
+        predicates:
+        - Path=/eureka/web
+        filters:
+          - SetPath=/
+
+        ## Discovery server static resources
+      - id: discovery-server-static
+        uri: https://${EUREKA_GATEWAY_URL:localhost}:8761
+        predicates:
+        - Path=/eureka/**
+
+#        ## Inventory Service (Just to Test) (This is being loaded dynamically from mongodb)
+#      - id: inventory-service
+#        uri: lb://inventory-service
+#        predicates:
+#        - Path=/inventory/**
+##        filters:
+##          - RewritePath=/inventory/(?<segment>.*), /${segment}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,loggers,threaddump, metrics
+
+eureka:
+  client:
+    service-url:
+      defaultZone: https://${EUREKA_GATEWAY_URL:localhost}:8761/eureka
+    enabled: true
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    hostname: ${EUREKA_INSTANCE_URL:localhost}
+    instance-id: ${spring.application.name}:${instanceId:${random.value}}
+    non-secure-port-enabled: false   # Disable non-secure HTTP port
+    secure-port-enabled: true        # Enable secure HTTPS port
+    secure-port: ${server.port}
+
+server:
+  host: ${GATEWAY_API_HOST:localhost}  # Default to "localhost" unless overridden
+  port: ${GATEWAY_API_PORT:7777}       # Default to 7777 unless overridden
+  http2:
+    enabled: true
+  use-forwarded-headers: true
+  ssl:
+    enabled: true
+    key-store: ${GATEWAY_KEY_STORE}
+    key-store-password: ${GATEWAY_KEY_STORE_PASSWORD}
+    key-alias: ${GATEWAY_ALIAS_NAME:gateway-app}
+    key-store-type: PKCS12
+    trust-store: ${GATEWAY_TRUST_STORE}
+    trust-store-password: ${GATEWAY_TRUST_STORE_PASSWORD}
+    trust-store-type: JKS
+    client-auth: want
+
+logging:
+  file:
+    name: logs/api-gateway.log
+  level:
+    root: INFO
+    org.springframework.security: INFO
+    org.springframework.web: INFO
+    org.springframework.web.reactive.function.client: INFO
+    org.springframework.security.oauth2.client: INFO
+    org.springframework.cloud.gateway: INFO
+    org.springframework.cloud.loadbalancer: INFO
+    org.springframework.cloud.client.discovery: INFO
+    org.springframework.cloud.netflix.eureka: INFO
+    io.github.resilience4j.circuitbreaker: INFO
+    org.springframework.cloud.gateway.route.RouteDefinitionLocator: INFO
+    org.springframework.cloud.gateway.filter.ratelimit: INFO
+    org.springframework.data.redis: INFO
+    org.springframework.web.socket: INFO
+    org.springframework.messaging: INFO
+    org.springframework.security.web.server.authentication.AuthenticationWebFilter: ERROR
+    javax.net.ssl: DEBUG
+    org.mongodb.driver: ERROR
+    org.mongodb.driver.cluster: WARN
+    org.mongodb.driver.connection: WARN
+    org.mongodb.driver.protocol: WARN
+    org.mongodb.driver.operation: WARN
+
+notifications:
+  email:
+    host: in-v3.mailjet.com
+    port: 587
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    to: msen@dipme.com
+    enabled: ${SMTP_ENABLED:false}
+  slack:
+    webhook-url: ${SLACK_WEBHOOK_URL}
+    enabled: ${SLACK_ENABLED:false}
+
+cors:
+  allowed-origins: http://localhost:3000,http://localhost:8080,https://your-prod-domain.com
+  allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD
+  allowed-headers: Origin,Content-Type,Accept,Authorization,X-Requested-With,X-User-Token
+  max-age: 3600
+
+jwt:
+  secret: 3a98d4c7b6e5f2a1d8c9b4a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1
+  expiration: 86400000 # 24 hours in milliseconds

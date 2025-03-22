@@ -1,0 +1,93 @@
+.view-route-layout {
+  display: flex;
+  min-height: 100vh;
+  background-color: #f8f9fa;
+}
+
+.left-navbar {
+  width: 280px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 24px 16px;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+}
+
+.nav-header {
+  padding: 0 12px 24px 12px;
+  border-bottom: 1px solid #eaeaea;
+  margin-bottom: 24px;
+}
+
+.nav-header h2 {
+  color: #2c3e50;
+  font-size: 1.5rem;
+  margin: 0;
+  font-weight: 600;
+}
+
+.nav-menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-item {
+  margin-bottom: 8px;
+}
+
+.nav-button {
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #5c6b7a;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nav-icon {
+  font-size: 1.2rem;
+  min-width: 24px;
+}
+
+.nav-button:hover {
+  background-color: rgba(var(--primary-color-rgb), 0.08);
+  color: var(--primary-color);
+  transform: translateX(4px);
+}
+
+.nav-button.active {
+  background-color: var(--primary-color);
+  color: white;
+  box-shadow: 0 2px 6px rgba(var(--primary-color-rgb), 0.2);
+}
+
+.nav-button.active:hover {
+  transform: none;
+  background-color: var(--primary-color);
+}
+
+.content-area {
+  flex: 1;
+  padding: 40px;
+  background-color: transparent;
+  border: 2px  #cccccc;
+  margin: 0px 16px 16px 16px;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.03);
+}
+
+.route-identifier {
+  color: var(--primary-color);
+  font-size: 1.0rem;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background-color: rgba(var(--primary-color-rgb), 0.1);
+  border-radius: 4px;
+  display: inline-block;
+}

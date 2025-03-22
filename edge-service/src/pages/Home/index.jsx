@@ -23,8 +23,8 @@ function Home() {
       <nav className="top-nav">
         <div className="nav-links">
           <a href="#features">Features</a>
-          <a href="https://docs.litemesh.org" target="_blank" rel="noopener noreferrer">Docs</a>
-          <a href="https://github.com/mehmetsen80/LiteMeshApp" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://docs.linqra.com" target="_blank" rel="noopener noreferrer">Docs</a>
+          <a href="https://github.com/mehmetsen80/Linqra" target="_blank" rel="noopener noreferrer">GitHub</a>
           {isAuthenticated ? (
             <Link to="/dashboard" className="auth-link">Dashboard</Link>
           ) : (
@@ -40,12 +40,12 @@ function Home() {
         <div className="hero-content">
           <img 
             src="/images/color_logo.png" 
-            alt="LiteMesh Logo" 
+            alt="Linqra Logo"
             className="hero-logo"
           />
           <div className="hero-separator"></div>
           <a 
-            href="https://github.com/mehmetsen80/LiteMeshApp" 
+            href="https://github.com/mehmetsen80/Linqra"
             target="_blank" 
             rel="noopener noreferrer"
             className="version-badge"
@@ -65,7 +65,7 @@ function Home() {
               Get Started
             </button>
             <a 
-              href="https://docs.litemesh.org" 
+              href="https://docs.linqra.com"
               className="cta-button secondary"
               target="_blank" 
               rel="noopener noreferrer"
@@ -99,7 +99,7 @@ function Home() {
 
       <div className="benefits-section">
         <div className="container">
-          <h2>Why Choose LiteMesh?</h2>
+          <h2>Why Choose Linqra?</h2>
           <div className="benefits-grid">
             <div className="benefit-item">
               <i className="fas fa-rocket"></i>
@@ -126,7 +126,7 @@ function Home() {
           <div className="architecture-image">
             <img 
               src={architectureDiagram} 
-              alt="LiteMesh Architecture" 
+              alt="Linqra Architecture"
               className="arch-diagram clickable"
               onClick={() => setShowImageModal(true)}
             />
@@ -166,7 +166,7 @@ function Home() {
 
       <footer className="footer">
         <div className="container">
-          <p className="copyright">&copy; 2024 LiteMesh. All rights reserved.</p>
+          <p className="copyright">&copy; 2025 Linqra. All rights reserved.</p>
         </div>
       </footer>
 

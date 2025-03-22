@@ -1,4 +1,4 @@
-name: LiteMesh Build
+name: Linqra Build
 
 on:
   push:

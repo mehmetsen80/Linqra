@@ -69,6 +69,21 @@
   color: #d32f2f;
 }
 
+.method-badge.patch {
+  background-color: #ffebee !important;
+  color: #58091a !important;
+}
+
+.method-badge.head {
+  background-color: #ffebee !important;
+  color: #f48237 !important;
+}
+
+.method-badge.options {
+  background-color: #ffebee !important;
+  color: #b91ae4 !important;
+}
+
 .status-badge {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;

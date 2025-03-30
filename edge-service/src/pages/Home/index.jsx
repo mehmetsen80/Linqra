@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import architectureDiagram from '/images/high_level_architecture.png';
+import architectureDiagram from '/images/linqra_high_level_architecture.png';
 import ImageModal from '../../components/common/ImageModal';
 import { useAuth } from '../../contexts/AuthContext';
 import './styles.css';
@@ -39,7 +39,7 @@ function Home() {
       <div className="hero-section">
         <div className="hero-content">
           <img 
-            src="/images/color_logo.png" 
+            src="/images/noBgWhite.png" 
             alt="Linqra Logo"
             className="hero-logo"
           />
@@ -50,13 +50,13 @@ function Home() {
             rel="noopener noreferrer"
             className="version-badge"
           >
-            0.9.1v
+            v0.1
           </a>
           <div className="hero-separator"></div>
-          <h1>Modern API Gateway Solution</h1>
+          {/* <h1>Modern API Gateway Solution</h1>
           <p className="hero-text">
             Monitor and manage your microservices with ease
-          </p>
+          </p> */}
           <div className="cta-buttons">
             <button 
               className="cta-button primary"
@@ -77,22 +77,37 @@ function Home() {
       </div>
 
       <div id="features" className="features-section">
-        <h2>Key Features That Power Your APIs</h2>
+        <h2>Unified Gateway for APIs and AI Services</h2>
         <div className="features-grid">
           <div className="feature-card">
-            <i className="fas fa-tachometer-alt"></i>
-            <h3>High Performance</h3>
-            <p>Built for speed and efficiency with minimal overhead, delivering lightning-fast response times and optimal resource utilization</p>
+            <i className="fas fa-network-wired"></i>
+            <h3>Hybrid Architecture</h3>
+            <p>Seamlessly manage both traditional REST APIs and modern AI services through a single, unified gateway</p>
+          </div>
+          <div className="feature-card">
+            <i className="fas fa-brain"></i>
+            <h3>AI-Ready Integration</h3>
+            <p>Native support for AI model deployment, inference optimization, and intelligent request routing</p>
+          </div>
+          <div className="feature-card">
+            <i className="fas fa-link"></i>
+            <h3>Linq Protocol</h3>
+            <p>Innovative protocol that unifies API calls into a streamlined POST-based approach for both traditional and AI endpoints</p>
           </div>
           <div className="feature-card">
             <i className="fas fa-shield-alt"></i>
-            <h3>Secure by Default</h3>
-            <p>Enterprise-grade security with built-in authentication, authorization, and advanced threat protection to safeguard your APIs</p>
+            <h3>Enterprise Security</h3>
+            <p>Comprehensive security with authentication, authorization, and advanced threat protection for all service types</p>
+          </div>
+          <div className="feature-card">
+            <i className="fas fa-tachometer-alt"></i>
+            <h3>High Performance</h3>
+            <p>Optimized for both API and AI workloads, delivering fast response times with efficient resource utilization</p>
           </div>
           <div className="feature-card">
             <i className="fas fa-chart-line"></i>
-            <h3>Real-time Metrics</h3>
-            <p>Monitor your services with detailed analytics, performance tracking, and customizable dashboards for data-driven decisions</p>
+            <h3>Unified Monitoring</h3>
+            <p>Real-time metrics and analytics for both API and AI services in a single, comprehensive dashboard</p>
           </div>
         </div>
       </div>

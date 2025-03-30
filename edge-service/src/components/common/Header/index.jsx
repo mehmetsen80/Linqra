@@ -30,7 +30,13 @@ const Header = () => {
   return (
     <Navbar expand="lg" className="app-header">
       <Container fluid>
-        <Navbar.Brand as={Link} to="/">Linqra</Navbar.Brand>
+        <Navbar.Brand as={Link} to="/">
+          <img 
+            src="/images/color_logo_no_background.png" 
+            alt="Linqra Logo" 
+            className="header-logo"
+          />
+        </Navbar.Brand>
         <Navbar.Toggle aria-controls="basic-navbar-nav" />
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">

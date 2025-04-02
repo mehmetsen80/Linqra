@@ -139,6 +139,10 @@
   .navbar-toggler:focus {
     box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.2);
   }
+  
+  .header-logo {
+    height: 40px;  /* Adjusted for mobile */
+  }
 }
 
 /* Add these styles to fix the active state */
@@ -209,4 +213,11 @@
 .nav-separator {
   color: #e0e0e0;
   opacity: 0.6;
+}
+
+.header-logo {
+  height: 55px;  /* Even larger */
+  width: auto;
+  object-fit: contain;
+  padding: 8px 0;  /* Increased padding to balance the larger size */
 }

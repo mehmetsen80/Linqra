@@ -64,32 +64,52 @@ public class LinqServiceImpl implements LinqService {
                     return Mono.error(new IllegalArgumentException("Invalid LINQ request"));
                 }
 
-                String cacheKey = generateCacheKey(request);
+                // Handle DELETE - invalidate related cache first
+                if ("delete".equalsIgnoreCase(request.getLink().getAction())) {
+                    // Create a corresponding GET request to find its cache key
+                    LinqRequest getFetchRequest = new LinqRequest();
+                    getFetchRequest.setLink(new LinqRequest.Link());
+                    getFetchRequest.getLink().setTarget(request.getLink().getTarget());
+                    getFetchRequest.getLink().setAction("fetch");
+                    getFetchRequest.setQuery(request.getQuery());
+                    
+                    String cacheKey = generateCacheKey(getFetchRequest);
+                    // Delete the cache entry
+                    redisTemplate.delete(cacheKey);
+                    
+                    return executeLinqRequest(request);
+                }
 
-                return Mono.fromCallable(() -> redisTemplate.opsForValue().get(cacheKey))
-                        .filter(Objects::nonNull)
-                        .map(value -> {
-                            try {
-                                return objectMapper.readValue(value, LinqResponse.class);
-                            } catch (Exception e) {
-                                throw new RuntimeException("Failed to deserialize cached LinqResponse", e);
-                            }
-                        })
-                        .map(response -> {
-                            response.getMetadata().setCacheHit(true);
-                            return response;
-                        })
-                        .switchIfEmpty(
+                // Handle GET/fetch with caching
+                if ("fetch".equalsIgnoreCase(request.getLink().getAction())) {
+                    String cacheKey = generateCacheKey(request);
+                    
+                    return Mono.fromCallable(() -> redisTemplate.opsForValue().get(cacheKey))
+                            .filter(Objects::nonNull)
+                            .map(value -> {
+                                try {
+                                    LinqResponse response = objectMapper.readValue(value, LinqResponse.class);
+                                    response.getMetadata().setCacheHit(true);
+                                    return response;
+                                } catch (Exception e) {
+                                    throw new RuntimeException("Failed to deserialize cached LinqResponse", e);
+                                }
+                            })
+                            .switchIfEmpty(
                                 executeLinqRequest(request)
-                                        .doOnNext(response -> {
-                                            try {
-                                                String jsonResponse = objectMapper.writeValueAsString(response);
-                                                redisTemplate.opsForValue().set(cacheKey, jsonResponse, Duration.ofMinutes(5));
-                                            } catch (Exception e) {
-                                                throw new RuntimeException("Failed to serialize LinqResponse for cache", e);
-                                            }
-                                        })
-                        );
+                                    .doOnNext(response -> {
+                                        try {
+                                            String jsonResponse = objectMapper.writeValueAsString(response);
+                                            redisTemplate.opsForValue().set(cacheKey, jsonResponse, Duration.ofMinutes(5));
+                                        } catch (Exception e) {
+                                            throw new RuntimeException("Failed to serialize LinqResponse for cache", e);
+                                        }
+                                    })
+                            );
+                }
+
+                // Don't cache other requests (create, update)
+                return executeLinqRequest(request);
             }));
     }
 
@@ -128,7 +148,19 @@ public class LinqServiceImpl implements LinqService {
     }
 
     private String generateCacheKey(LinqRequest request) {
-        return "linq:" + request.getQuery().hashCode();
+        // Build the actual URL path that would be cached
+        String path = request.getQuery().getIntent();
+        Map<String, String> params = request.getQuery().getParams();
+        
+        // Replace path variables
+        if (params != null) {
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                path = path.replace("{" + entry.getKey() + "}", entry.getValue());
+            }
+        }
+        
+        // Create cache key using target and resolved path
+        return "linq:" + request.getLink().getTarget() + ":" + path;
     }
 
     private Mono<LinqResponse> executeLinqRequest(LinqRequest request) {
@@ -162,15 +194,32 @@ public class LinqServiceImpl implements LinqService {
     }
 
     private String buildUrl(String target, String intent, Map<String, String> params) {
-        // Dynamically build baseUrl with protocol based on SSL config
         String protocol = sslEnabled ? "https" : "http";
         String baseUrl = String.format("%s://%s:%d", protocol, gatewayHost, gatewayPort);
-        String url = baseUrl + "/" + target + "/" + intent;
-        if (params != null && !params.isEmpty()) {
-            url += "?" + params.entrySet().stream()
+        
+        // Handle path variables first
+        String path = intent;
+        if (params != null) {
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                path = path.replace("{" + entry.getKey() + "}", entry.getValue());
+            }
+        }
+        
+        String url = baseUrl + "/" + target + "/" + path;
+        
+        // Add remaining params as query parameters
+        Map<String, String> queryParams = params != null ? 
+            params.entrySet().stream()
+                .filter(e -> !intent.contains("{" + e.getKey() + "}"))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
+            : Map.of();
+            
+        if (!queryParams.isEmpty()) {
+            url += "?" + queryParams.entrySet().stream()
                     .map(e -> e.getKey() + "=" + e.getValue())
                     .collect(Collectors.joining("&"));
         }
+        
         return url;
     }
 
@@ -183,9 +232,9 @@ public class LinqServiceImpl implements LinqService {
                 WebClient.RequestHeadersSpec<?> requestSpec = switch (method) {
                     case "GET" -> webClient.get().uri(url);
                     case "POST" -> webClient.post().uri(url)
-                            .bodyValue(request.getQuery().getParams());
+                            .bodyValue(request.getQuery().getPayload());
                     case "PUT" -> webClient.put().uri(url)
-                            .bodyValue(request.getQuery().getParams());
+                            .bodyValue(request.getQuery().getPayload());
                     case "DELETE" -> webClient.delete().uri(url);
                     default -> throw new IllegalArgumentException("Method not supported: " + method);
                 };
@@ -195,7 +244,11 @@ public class LinqServiceImpl implements LinqService {
                     .exchangeToMono(response -> {
                         if (response.statusCode().is2xxSuccessful()) {
                             return response.bodyToMono(Object.class)
-                                .switchIfEmpty(Mono.just(Map.of("message", "Success but no content")));
+                                .switchIfEmpty(Mono.just(Map.of(
+                                    "message", method.equals("DELETE") ? 
+                                        "Resource successfully deleted" : 
+                                        "Success but no content"
+                                )));
                         } else {
                             return response.bodyToMono(String.class)
                                 .flatMap(error -> Mono.error(new RuntimeException(

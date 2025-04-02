@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.ApiKey;
+import org.lite.gateway.exception.UnauthorizedException;
 import org.lite.gateway.repository.ApiKeyRepository;
 import org.lite.gateway.service.ApiKeyService;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -84,6 +85,10 @@ public class ApiKeyServiceImpl implements ApiKeyService {
                             log.error("Error caching API key", e);
                         }
                     })
+                    .switchIfEmpty(Mono.defer(() -> {
+                        log.warn("Invalid or expired API key: {}", apiKey);
+                        throw new UnauthorizedException("Invalid or expired API key");
+                    }))
             );
     }
 

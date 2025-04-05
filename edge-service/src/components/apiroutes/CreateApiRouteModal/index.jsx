@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Modal, Form, Spinner, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import Select from 'react-select';
 import { HiQuestionMarkCircle } from 'react-icons/hi';
 import Button from '../../common/Button';
 import './styles.css';
@@ -7,22 +8,34 @@ import { useTeam } from '../../../contexts/TeamContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { isSuperAdmin } from '../../../utils/roleUtils';
 
+// Move constant outside of component
+const AVAILABLE_METHODS = [
+  { value: 'GET', label: 'GET', color: '#61affe' },
+  { value: 'POST', label: 'POST', color: '#49cc90' },
+  { value: 'PUT', label: 'PUT', color: '#fca130' },
+  { value: 'DELETE', label: 'DELETE', color: '#f93e3e' },
+  { value: 'PATCH', label: 'PATCH', color: '#50e3c2' },
+  { value: 'HEAD', label: 'HEAD', color: '#9012fe' },
+  { value: 'OPTIONS', label: 'OPTIONS', color: '#0d5aa7' }
+];
 
 const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
   const { currentTeam, teams, userTeams } = useTeam();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [validated, setValidated] = useState(false);
+  const [showMethodDropdown, setShowMethodDropdown] = useState(false);
+  const methodDropdownRef = useRef(null);
+
+  // Initialize formData with the first method (GET)
   const [formData, setFormData] = useState({
     routeIdentifier: '',
     path: '',
     uri: '',
     scope: '',
-    method: 'GET',
+    methods: [AVAILABLE_METHODS[0]], // Default to GET
     teamId: currentTeam?.id
   });
-  const [validated, setValidated] = useState(false);
-  const [showMethodDropdown, setShowMethodDropdown] = useState(false);
-  const methodDropdownRef = useRef(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -43,6 +56,13 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
     }));
   };
 
+  const handleMethodChange = (selectedOptions) => {
+    setFormData(prev => ({
+      ...prev,
+      methods: selectedOptions
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const form = e.currentTarget;
@@ -55,7 +75,13 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
 
     setLoading(true);
     try {
-      await onSubmit(formData);
+      // Transform the formData to extract just the method values
+      const submissionData = {
+        ...formData,
+        methods: formData.methods.map(method => method.value) // Extract just the method names
+      };
+      
+      await onSubmit(submissionData);
       onHide();
     } catch (error) {
       console.error('Error creating route:', error);
@@ -115,6 +141,35 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
     );
   };
 
+  const customStyles = {
+    option: (provided, state) => ({
+      ...provided,
+      backgroundColor: state.isSelected ? state.data.color : state.isFocused ? `${state.data.color}22` : 'white',
+      color: state.isSelected ? 'white' : state.data.color,
+      ':active': {
+        backgroundColor: state.data.color,
+        color: 'white'
+      }
+    }),
+    multiValue: (provided, state) => ({
+      ...provided,
+      backgroundColor: `${state.data.color}22`,
+    }),
+    multiValueLabel: (provided, state) => ({
+      ...provided,
+      color: state.data.color,
+      fontWeight: 'bold'
+    }),
+    multiValueRemove: (provided, state) => ({
+      ...provided,
+      color: state.data.color,
+      ':hover': {
+        backgroundColor: state.data.color,
+        color: 'white'
+      }
+    })
+  };
+
   return (
     <Modal show={show} onHide={onHide} centered>
       <Modal.Header closeButton>
@@ -144,6 +199,41 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
             <Form.Control.Feedback type="invalid">
               Please select a team
             </Form.Control.Feedback>
+          </Form.Group>
+
+          <Form.Group className="mb-3">
+            <Form.Label className="d-flex align-items-center gap-2">
+              HTTP Methods
+              <OverlayTrigger
+                placement="top"
+                overlay={
+                  <Tooltip>
+                    Select one or multiple HTTP methods that this route will support.
+                  </Tooltip>
+                }
+              >
+                <span className="scope-help-icon">
+                  <HiQuestionMarkCircle />
+                </span>
+              </OverlayTrigger>
+            </Form.Label>
+            <Select
+              isMulti
+              name="methods"
+              options={AVAILABLE_METHODS}
+              value={formData.methods}
+              onChange={handleMethodChange}
+              styles={customStyles}
+              className="basic-multi-select"
+              classNamePrefix="select"
+              placeholder="Select HTTP methods..."
+              closeMenuOnSelect={false}
+            />
+            {formData.methods.length === 0 && (
+              <div className="text-danger small mt-1">
+                Please select at least one HTTP method
+              </div>
+            )}
           </Form.Group>
 
           <Form.Group className="mb-3">

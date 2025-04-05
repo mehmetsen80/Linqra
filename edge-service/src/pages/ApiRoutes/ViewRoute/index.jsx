@@ -4,10 +4,11 @@ import { FaRoute, FaNetworkWired } from 'react-icons/fa';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { apiRouteService } from '../../../services/apiRouteService';
 import RouteDetails from '../../../components/apiroutes/RouteDetails';
+import RouteEndpoints from '../../../components/apiroutes/RouteEndpoints';
 import './styles.css';
 
 const ViewRoute = () => {
-  const [activeItem, setActiveItem] = useState('basic');
+  const [activeItem, setActiveItem] = useState('config');
   const [route, setRoute] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -33,6 +34,23 @@ const ViewRoute = () => {
   if (error) return <div className="error-message">{error}</div>;
   if (!route) return <div className="error-message">Route not found</div>;
 
+  const renderContent = () => {
+    switch (activeItem) {
+      case 'basic':
+        return (
+          <RouteDetails 
+            route={route}
+            setRoute={setRoute}
+            activeItem={activeItem}
+          />
+        );
+      case 'config':
+        return <RouteEndpoints route={route} />;
+      default:
+        return <RouteDetails route={route} setRoute={setRoute} activeItem={activeItem} />;
+    }
+  };
+
   return (
     <div className="view-route-layout">
       <nav className="left-navbar">
@@ -43,15 +61,6 @@ const ViewRoute = () => {
         <ul className="nav-menu">
           <li className="nav-item">
             <button 
-              className={`nav-button ${activeItem === 'basic' ? 'active' : ''}`}
-              onClick={() => setActiveItem('basic')}
-            >
-              <FaRoute className="nav-icon" />
-              <span>Route Details</span>
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
               className={`nav-button ${activeItem === 'config' ? 'active' : ''}`}
               onClick={() => setActiveItem('config')}
             >
@@ -59,14 +68,19 @@ const ViewRoute = () => {
               <span>Route Endpoints</span>
             </button>
           </li>
+          <li className="nav-item">
+            <button 
+              className={`nav-button ${activeItem === 'basic' ? 'active' : ''}`}
+              onClick={() => setActiveItem('basic')}
+            >
+              <FaRoute className="nav-icon" />
+              <span>Route Details</span>
+            </button>
+          </li>
         </ul>
       </nav>
       <div className="content-area">
-        <RouteDetails 
-          route={route}
-          setRoute={setRoute}
-          activeItem={activeItem}
-        />
+        {renderContent()}
       </div>
     </div>
   );

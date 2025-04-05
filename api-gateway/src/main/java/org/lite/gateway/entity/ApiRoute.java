@@ -175,7 +175,7 @@ public class ApiRoute{
     @Transient
     private String teamId; // Helper field for route creation, not stored in DB
 
-    public void setMethod(List<String> methods) {
+    public void setMethods(List<String> methods) {
         this.methods = methods.stream()
             .map(String::toUpperCase)
             .collect(Collectors.toList());

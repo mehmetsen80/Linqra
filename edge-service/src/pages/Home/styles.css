@@ -66,23 +66,24 @@
 }
 
 .cta-button.primary {
-  background: white;
-  color: var(--primary-dark);
+  border: none;
+  color: var(--text-default);
+  transition: all 0.2s ease;
 }
 
 .cta-button.primary:hover {
-  background: #f8f9fa;
-  transform: translateY(-2px);
+  background-color: var(--primary-dark);
+  color: white;
 }
 
 .cta-button.secondary {
   border: 2px solid white;
   color: white;
+  transition: background-color 0.2s ease;
 }
 
 .cta-button.secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
+  background-color: rgba(255, 255, 255, 0.15);
 }
 
 .features-section {

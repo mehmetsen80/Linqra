@@ -71,7 +71,14 @@ public enum ErrorCode {
     ORGANIZATION_OPERATION_ERROR("ORG_7004", "Organization operation failed", ErrorSeverity.ERROR, ErrorCategory.OPERATION),
     ORGANIZATION_DELETE_ERROR("ORG_7005", "Organization deletion failed", ErrorSeverity.ERROR, ErrorCategory.OPERATION),
     ORGANIZATION_ALREADY_EXISTS("ORG_7006", "Organization already exists", ErrorSeverity.ERROR, ErrorCategory.VALIDATION),
-    ORGANIZATION_UPDATE_ERROR("ORG_7007", "Failed to update organization", ErrorSeverity.ERROR, ErrorCategory.OPERATION);
+    ORGANIZATION_UPDATE_ERROR("ORG_7007", "Failed to update organization", ErrorSeverity.ERROR, ErrorCategory.OPERATION),
+
+    // Endpoint Related Errors (8000-8999)
+    ENDPOINT_NOT_FOUND("ENDPOINT_8001", "Endpoint not found", ErrorSeverity.ERROR, ErrorCategory.NOT_FOUND),
+    ENDPOINT_VERSION_NOT_FOUND("ENDPOINT_8002", "Endpoint version not found", ErrorSeverity.ERROR, ErrorCategory.NOT_FOUND),
+    ENDPOINT_INVALID_SWAGGER("ENDPOINT_8003", "Invalid OpenAPI/Swagger JSON", ErrorSeverity.ERROR, ErrorCategory.VALIDATION),
+    ENDPOINT_ALREADY_EXISTS("ENDPOINT_8004", "Endpoint already exists", ErrorSeverity.ERROR, ErrorCategory.VALIDATION),
+    ENDPOINT_OPERATION_ERROR("ENDPOINT_8005", "Endpoint operation failed", ErrorSeverity.ERROR, ErrorCategory.OPERATION);
 
   
     

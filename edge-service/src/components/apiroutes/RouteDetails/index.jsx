@@ -165,7 +165,7 @@ const RouteDetails = ({ route, setRoute, activeItem }) => {
                 className="json-view-button" 
                 onClick={() => setShowJsonModal(true)}
               >
-                <i className="fas fa-code"></i> View JSON
+                <i className="fas fa-code"></i>&nbsp;View JSON
               </button>
               {hasChanges && (
                 <>
@@ -211,7 +211,7 @@ const RouteDetails = ({ route, setRoute, activeItem }) => {
           <div className="route-info-grid">
             <div className={`info-item ${getFieldHighlight('method')}`}>
               <div className="label-with-icon">
-                <label>Method</label>
+                <label>Methods</label>
                 <QuestionMarkIcon tooltip="HTTP method for this route (GET, POST, etc.)" />
               </div>
               {renderFieldValue('method', route.methods, value => (

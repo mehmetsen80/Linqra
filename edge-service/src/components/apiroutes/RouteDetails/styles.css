@@ -60,20 +60,27 @@
 }
 
 .json-view-button {
-  display: flex;
+  background: none;
+  border: 1px solid #dee2e6;
+  color: var(--text-default) !important;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 6px;
-  background: #6c757d;
-  color: white;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: all 0.2s ease;
+  font-weight: normal;
 }
 
 .json-view-button:hover {
-  background-color: #5a6268;
+  color: var(--primary-color) !important;
+  border-color: var(--primary-color);
+  background-color: rgba(237, 117, 52, 0.1);
+}
+
+.json-view-button i {
+  margin-right: 4px;
 }
 
 .route-details-container {

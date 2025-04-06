@@ -1,13 +1,18 @@
 package org.lite.gateway.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.lite.gateway.dto.LinqProtocolExample;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
+import org.lite.gateway.dto.SwaggerParameter;
+import org.lite.gateway.dto.SwaggerSchema;
 import org.lite.gateway.entity.RoutePermission;
-import org.lite.gateway.repository.ApiRouteRepository;
+import org.lite.gateway.repository.ApiRouteRepository; 
 import org.lite.gateway.repository.TeamRouteRepository;
 import org.lite.gateway.service.LinqService;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,9 +28,14 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import java.util.HashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @Slf4j
@@ -150,12 +160,12 @@ public class LinqServiceImpl implements LinqService {
     private String generateCacheKey(LinqRequest request) {
         // Build the actual URL path that would be cached
         String path = request.getQuery().getIntent();
-        Map<String, String> params = request.getQuery().getParams();
+        Map<String, Object> params = request.getQuery().getParams();
         
         // Replace path variables
         if (params != null) {
-            for (Map.Entry<String, String> entry : params.entrySet()) {
-                path = path.replace("{" + entry.getKey() + "}", entry.getValue());
+            for (Map.Entry<String, Object> entry : params.entrySet()) {
+                path = path.replace("{" + entry.getKey() + "}", entry.getValue().toString());
             }
         }
         
@@ -173,6 +183,8 @@ public class LinqServiceImpl implements LinqService {
             case "create" -> "POST";
             case "update" -> "PUT";
             case "delete" -> "DELETE";
+            case "patch" -> "PATCH";
+            case "options" -> "OPTIONS";
             default -> throw new IllegalArgumentException("Unsupported action: " + action);
         };
 
@@ -193,15 +205,15 @@ public class LinqServiceImpl implements LinqService {
             );
     }
 
-    private String buildUrl(String target, String intent, Map<String, String> params) {
+    private String buildUrl(String target, String intent, Map<String, Object> params) {
         String protocol = sslEnabled ? "https" : "http";
         String baseUrl = String.format("%s://%s:%d", protocol, gatewayHost, gatewayPort);
         
         // Handle path variables first
         String path = intent;
         if (params != null) {
-            for (Map.Entry<String, String> entry : params.entrySet()) {
-                path = path.replace("{" + entry.getKey() + "}", entry.getValue());
+            for (Map.Entry<String, Object> entry : params.entrySet()) {
+                path = path.replace("{" + entry.getKey() + "}", entry.getValue().toString());
             }
         }
         
@@ -211,7 +223,7 @@ public class LinqServiceImpl implements LinqService {
         Map<String, String> queryParams = params != null ? 
             params.entrySet().stream()
                 .filter(e -> !intent.contains("{" + e.getKey() + "}"))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
+                .collect(Collectors.toMap(e -> e.getKey().toString(), e -> e.getValue().toString()))
             : Map.of();
             
         if (!queryParams.isEmpty()) {
@@ -236,6 +248,9 @@ public class LinqServiceImpl implements LinqService {
                     case "PUT" -> webClient.put().uri(url)
                             .bodyValue(request.getQuery().getPayload());
                     case "DELETE" -> webClient.delete().uri(url);
+                    case "PATCH" -> webClient.patch().uri(url)
+                            .bodyValue(request.getQuery().getPayload());
+                    case "OPTIONS" -> webClient.options().uri(url);
                     default -> throw new IllegalArgumentException("Method not supported: " + method);
                 };
 
@@ -284,5 +299,166 @@ public class LinqServiceImpl implements LinqService {
             .map(SecurityContext::getAuthentication)
             .map(Authentication::getPrincipal)
             .cast(String.class);
+    }
+
+    private boolean isCollectionEndpoint(String path) {
+        String[] segments = path.split("/");
+        String lastSegment = segments[segments.length - 1];
+        return !lastSegment.startsWith("{") && !lastSegment.endsWith("}");
+    }
+
+    @Override
+    public Mono<LinqProtocolExample> convertToLinqProtocol(String method, String path, Object schema, String routeIdentifier) {
+        return Mono.fromCallable(() -> {
+            LinqProtocolExample example = new LinqProtocolExample();
+            
+            // Get the endpoint info
+            Map<String, Object> endpointInfo = (Map<String, Object>) schema;
+            example.setSummary((String) endpointInfo.get("summary"));
+            
+            // Create request example
+            LinqRequest linqRequest = createExampleRequest(method, path, schema, routeIdentifier);
+            example.setRequest(linqRequest);
+
+            // Create response example
+            LinqResponse response = createExampleResponse(method, path, schema, routeIdentifier);
+            example.setResponse(response);
+
+            return example;
+        });
+    }
+
+    private LinqRequest createExampleRequest(String method, String path, Object schema, String routeIdentifier) {
+        LinqRequest linqRequest = new LinqRequest();
+        Map<String, Object> schemaMap = (Map<String, Object>) schema;
+        
+        // Set target as routeIdentifier
+        LinqRequest.Link link = new LinqRequest.Link();
+        link.setTarget(routeIdentifier);
+        
+        // Convert HTTP method to Linq action
+        switch (method.toUpperCase()) {
+            case "GET" -> link.setAction("fetch");
+            case "POST" -> link.setAction("create");
+            case "PUT" -> link.setAction("update");
+            case "DELETE" -> link.setAction("delete");
+            case "PATCH" -> link.setAction("patch");
+            case "OPTIONS" -> link.setAction("options");
+            default -> throw new IllegalArgumentException("Unsupported HTTP method: " + method);
+        }
+        linqRequest.setLink(link);
+        
+        // Set up query with parameters
+        LinqRequest.Query query = new LinqRequest.Query();
+        query.setIntent(path);
+        
+        // Extract parameters from the endpoint info
+        Map<String, Object> params = new HashMap<>();
+        List<SwaggerParameter> parameters = (List<SwaggerParameter>) schemaMap.get("parameters");
+        if (parameters != null) {
+            parameters.forEach(param -> {
+                String name = param.getName();
+                Map<String, Object> paramSchema = param.getSchema();
+                // Just use the schema information directly
+                params.put(name, paramSchema);
+            });
+        }
+        query.setParams(params);
+        
+        // Handle request body for POST/PUT/PATCH
+        if ((method.equalsIgnoreCase("POST") || method.equalsIgnoreCase("PUT") || method.equalsIgnoreCase("PATCH")) 
+            && schemaMap.get("requestSchema") != null) {
+            Map<String, Object> requestSchema = (Map<String, Object>) schemaMap.get("requestSchema");
+            Map<String, Object> properties = (Map<String, Object>) requestSchema.get("properties");
+            if (properties != null) {
+                Map<String, Object> examplePayload = createExampleItem(properties, 1);
+                query.setPayload(examplePayload);
+            }
+        }
+        
+        linqRequest.setQuery(query);
+        return linqRequest;
+    }
+
+    private LinqResponse createExampleResponse(String method, String path, Object schema, String routeIdentifier) {
+        LinqResponse response = new LinqResponse();
+        Map<String, Object> schemaMap = (Map<String, Object>) schema;
+        
+        // Set up metadata
+        LinqResponse.Metadata metadata = new LinqResponse.Metadata();
+        metadata.setSource(routeIdentifier);
+        metadata.setStatus("success");
+        metadata.setTeam("67d0aeb17172416c411d419e");
+        metadata.setCacheHit(false);
+        response.setMetadata(metadata);
+
+        if (method.equalsIgnoreCase("DELETE")) {
+            response.setResult(Map.of("message", "Resource successfully deleted"));
+            return response;
+        }
+
+        if (method.equalsIgnoreCase("OPTIONS")) {
+            response.setResult(Map.of("methods", List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS")));
+            return response;
+        }
+
+        // Get the schema for the response
+        Map<String, Object> responseSchema = (Map<String, Object>) schemaMap.get("responseSchema");
+        if (responseSchema != null) {
+            // Handle schema reference if present
+            Map<String, Object> schemaContent = responseSchema;
+            if (responseSchema.containsKey("$ref")) {
+                String schemaName = ((String) responseSchema.get("$ref")).replace("#/components/schemas/", "");
+                schemaContent = (Map<String, Object>) ((Map<String, Object>) schemaMap.get("schemas")).get(schemaName);
+            }
+
+            Map<String, Object> properties = (Map<String, Object>) schemaContent.get("properties");
+            if (properties != null) {
+                if (isCollectionEndpoint(path)) {
+                    // For collection endpoints, return an array
+                    List<Map<String, Object>> items = new ArrayList<>();
+                    items.add(createExampleItem(properties, 1));
+                    items.add(createExampleItem(properties, 2));
+                    response.setResult(items);
+                } else {
+                    // For single item endpoints, return one item
+                    response.setResult(createExampleItem(properties, 1));
+                }
+            }
+        }
+
+        return response;
+    }
+
+    private Map<String, Object> createExampleItem(Map<String, Object> properties, int index) {
+        Map<String, Object> item = new HashMap<>();
+        
+        properties.forEach((propName, propDetails) -> {
+            Map<String, Object> details = (Map<String, Object>) propDetails;
+            String type = (String) details.get("type");
+            String format = (String) details.getOrDefault("format", null);
+            
+            Object value = generateExampleValue(type, format, propName, index);
+            item.put(propName, value);
+        });
+        
+        return item;
+    }
+
+    private Object generateExampleValue(String type, String format, String name, int index) {
+        switch (type) {
+            case "integer":
+                return format != null && format.equals("int64") ? 
+                    Long.valueOf(index) : Integer.valueOf(index);
+            case "number":
+                return format != null && format.equals("float") ? 
+                    Float.valueOf(index) : Double.valueOf(index);
+            case "boolean":
+                return true;
+            case "string":
+                return name + "_" + index;
+            default:
+                return index;
+        }
     }
 }

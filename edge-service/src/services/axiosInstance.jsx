@@ -11,23 +11,45 @@ const axiosInstance = axios.create({
   }
 });
 
-// Request interceptor
+// Request interceptor - proactive token refresh
 axiosInstance.interceptors.request.use(
-  (config) => {
+  async (config) => {
     const authData = JSON.parse(localStorage.getItem('authState') || '{}');
     if (authData.token) {
       try {
         const decoded = jwtDecode(authData.token);
         const currentTime = Date.now() / 1000;
+        const timeUntilExpiry = decoded.exp - currentTime;
         
-        if (decoded.exp < currentTime) {
-          // Token is expired
+        // If token will expire in less than 30 seconds, refresh it
+        if (timeUntilExpiry < 30 && !config.url.includes('/api/auth/')) {
+          try {
+            const response = await authService.refreshToken(authData.refreshToken);
+            if (response.data?.token) {
+              const newAuthState = {
+                user: response.data.user,
+                token: response.data.token,
+                refreshToken: response.data.refreshToken,
+                isAuthenticated: true
+              };
+              localStorage.setItem('authState', JSON.stringify(newAuthState));
+              config.headers.Authorization = `Bearer ${response.data.token}`;
+            }
+          } catch (refreshError) {
+            console.log('Token refresh failed:', refreshError);
+            authService.logout();
+            window.location.href = '/login';
+            return Promise.reject('Token refresh failed');
+          }
+        } else if (decoded.exp < currentTime) {
+          // Token is already expired
           authService.logout();
           window.location.href = '/login';
           return Promise.reject('Token expired');
+        } else {
+          // Token is still valid
+          config.headers.Authorization = `Bearer ${authData.token}`;
         }
-        
-        config.headers.Authorization = `Bearer ${authData.token}`;
       } catch (error) {
         // Invalid token
         authService.logout();
@@ -35,13 +57,12 @@ axiosInstance.interceptors.request.use(
         return Promise.reject('Invalid token');
       }
     }
-
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Response interceptor
+// Response interceptor - handles 401s as fallback
 axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {

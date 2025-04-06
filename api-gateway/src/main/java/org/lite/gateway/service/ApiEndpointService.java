@@ -9,6 +9,8 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 public interface ApiEndpointService {
     // Create new endpoint
     Mono<ApiEndpoint> createEndpoint(ApiEndpoint endpoint);

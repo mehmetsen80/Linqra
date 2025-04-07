@@ -24,27 +24,29 @@ axiosInstance.interceptors.request.use(
         // If token will expire in less than 30 seconds, refresh it
         if (timeUntilExpiry < 30 && !config.url.includes('/api/auth/')) {
           try {
-            const response = await authService.refreshToken(authData.refreshToken);
-            if (response.data?.token) {
+            // The refreshToken call was not properly handling the response
+            const { success, data, error } = await authService.refreshToken(authData.refreshToken);
+            if (success && data?.token) {
               const newAuthState = {
-                user: response.data.user,
-                token: response.data.token,
-                refreshToken: response.data.refreshToken,
+                user: data.user,
+                token: data.token,
+                refreshToken: data.refreshToken,
                 isAuthenticated: true
               };
               localStorage.setItem('authState', JSON.stringify(newAuthState));
-              config.headers.Authorization = `Bearer ${response.data.token}`;
+              config.headers.Authorization = `Bearer ${data.token}`;
+            } else {
+              throw new Error(error || 'Token refresh failed');
             }
           } catch (refreshError) {
-            console.log('Token refresh failed:', refreshError);
+            console.error('Token refresh failed:', refreshError);
             authService.logout();
-            window.location.href = '/login';
             return Promise.reject('Token refresh failed');
           }
         } else if (decoded.exp < currentTime) {
           // Token is already expired
+          console.error('Token expired');
           authService.logout();
-          window.location.href = '/login';
           return Promise.reject('Token expired');
         } else {
           // Token is still valid
@@ -52,8 +54,8 @@ axiosInstance.interceptors.request.use(
         }
       } catch (error) {
         // Invalid token
+        console.error('Invalid token:', error);
         authService.logout();
-        window.location.href = '/login';
         return Promise.reject('Invalid token');
       }
     }
@@ -68,20 +70,8 @@ axiosInstance.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // Extract error message from response if available
-    if (error.response?.data?.message) {
-      error.message = error.response.data.message;
-    }
-    
-    // Only attempt refresh if:
-    // 1. It's a 401 error
-    // 2. We haven't tried to refresh for this request yet
-    // 3. We're not on the login page
-    // 4. We have a refresh token
-    // 5. The request is not for /api/auth/login or /api/auth/refresh
     if (error.response?.status === 401 && 
         !originalRequest._retry && 
-        window.location.pathname !== '/login' &&
         !originalRequest.url.includes('/api/auth/')) {
       
       originalRequest._retry = true;
@@ -89,31 +79,31 @@ axiosInstance.interceptors.response.use(
       try {
         const authData = JSON.parse(localStorage.getItem('authState') || '{}');
         if (!authData.refreshToken) {
-          return Promise.reject(error);
+          throw new Error('No refresh token available');
         }
 
-        const response = await authService.refreshToken(authData.refreshToken);
-        if (response.data?.token) {
+        const { success, data, error: refreshError } = await authService.refreshToken(authData.refreshToken);
+        if (success && data?.token) {
           const newAuthState = {
-            user: response.data.user,
-            token: response.data.token,
-            refreshToken: response.data.refreshToken,
+            user: data.user,
+            token: data.token,
+            refreshToken: data.refreshToken,
             isAuthenticated: true
           };
           localStorage.setItem('authState', JSON.stringify(newAuthState));
           
           // Update headers for the retry
-          axiosInstance.defaults.headers.Authorization = `Bearer ${response.data.token}`;
-          originalRequest.headers.Authorization = `Bearer ${response.data.token}`;
+          axiosInstance.defaults.headers.Authorization = `Bearer ${data.token}`;
+          originalRequest.headers.Authorization = `Bearer ${data.token}`;
           
           // Retry the original request
           return axiosInstance(originalRequest);
+        } else {
+          throw new Error(refreshError || 'Token refresh failed');
         }
       } catch (refreshError) {
-        console.log('Token refresh failed:', refreshError);
-        // Clear auth data and redirect to login
+        console.error('Token refresh failed:', refreshError);
         authService.logout();
-        window.location.href = '/login';
         return Promise.reject(refreshError);
       }
     }

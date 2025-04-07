@@ -124,29 +124,22 @@ const authService = {
       
       return {
         success: false,
-        error: 'Invalid response structure'
+        error: 'Invalid response from server'
       };
     } catch (error) {
       console.error('Token refresh error:', error);
+      // If the refresh token is invalid or expired
+      if (error.response?.status === 401) {
+        authService.logout();
+      }
       return {
         success: false,
-        error: error.message || 'Failed to refresh token'
+        error: error.response?.data?.message || error.message || 'Failed to refresh token'
       };
     }
   },
 
-  setupAuthInterceptors: (logout) => {
-    axiosInstance.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        if (error.response?.status === 401) {
-          console.log('Received 401 response, logging out...');
-          logout();
-        }
-        return Promise.reject(error);
-      }
-    );
-  }
+  setupAuthInterceptors: () => {} // Empty function or remove entirely
 };
 
 export default authService;

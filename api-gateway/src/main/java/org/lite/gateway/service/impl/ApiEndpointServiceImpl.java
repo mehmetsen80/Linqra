@@ -502,15 +502,24 @@ public class ApiEndpointServiceImpl implements ApiEndpointService {
                                 
                                 // Generate example if not provided
                                 if (example == null && !statusCode.equals("204")) {
-                                    if (statusCode.startsWith("4") || statusCode.startsWith("5")) {
-                                        example = generateErrorExample(statusCode, response.get("description").asText(), path);
-                                    } else {
+                                    if (schemaNode.has("$ref")) {
+                                        // Use the referenced schema
+                                        String ref = schemaNode.get("$ref").asText();
+                                        String schemaName = ref.substring(ref.lastIndexOf("/") + 1);
+                                        JsonNode actualSchema = swagger.get("components")
+                                            .get("schemas")
+                                            .get(schemaName);
+                                        if (actualSchema != null) {
+                                            Map<String, Object> schemaDefinition = parseSchema(actualSchema);
+                                            example = generateExample(schemaDefinition);
+                                        }
+                                    } else if (schema != null) {
+                                        // Use the direct schema definition
                                         Object generatedExample = generateSuccessExample(schema);
                                         if (generatedExample instanceof Map) {
                                             example = (Map<String, Object>) generatedExample;
                                         } else if (generatedExample instanceof List) {
-                                            // For array responses, use the list directly
-                                            if (schema != null && "array".equals(schema.get("type"))) {
+                                            if ("array".equals(schema.get("type"))) {
                                                 example = Collections.singletonMap("items", generatedExample);
                                             } else {
                                                 example = Collections.singletonMap("value", generatedExample);

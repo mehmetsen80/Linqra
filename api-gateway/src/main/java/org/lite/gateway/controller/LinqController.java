@@ -23,7 +23,7 @@ import java.util.Collections;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/v1/linq")
+@RequestMapping("/linq")
 @Slf4j
 @AllArgsConstructor
 public class LinqController {
@@ -72,18 +72,9 @@ public class LinqController {
                         endpointsByTag.forEach((tag, endpoints) -> {
                             List<LinqProtocolExample> linqEndpoints = endpoints.stream()
                                 .map(endpointInfo -> {
-                                    // Create schema info for this endpoint
-                                    Map<String, Object> schemaInfo = new HashMap<>();
-                                    schemaInfo.put("requestSchema", schemas.get(endpointInfo.getPath() + "_request"));
-                                    schemaInfo.put("responseSchema", schemas.get(endpointInfo.getPath() + "_response"));
-                                    schemaInfo.put("summary", endpointInfo.getSummary());
-                                    schemaInfo.put("parameters", endpointInfo.getParameters());
-                                    
-                                    // Convert to Linq format
+                                    // Just pass the endpointInfo and routeIdentifier
                                     return linqService.convertToLinqProtocol(
-                                        endpointInfo.getMethod(),
-                                        endpointInfo.getPath(),
-                                        schemaInfo,
+                                        endpointInfo,
                                         request.getRouteIdentifier()
                                     ).block();
                                 })

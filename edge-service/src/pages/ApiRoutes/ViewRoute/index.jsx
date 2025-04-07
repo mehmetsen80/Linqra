@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaRoute, FaNetworkWired } from 'react-icons/fa';
+import { Form } from 'react-bootstrap';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { apiRouteService } from '../../../services/apiRouteService';
 import RouteDetails from '../../../components/apiroutes/RouteDetails';
@@ -8,7 +9,7 @@ import RouteEndpoints from '../../../components/apiroutes/RouteEndpoints';
 import './styles.css';
 
 const ViewRoute = () => {
-  const [activeItem, setActiveItem] = useState('config');
+  const [showEndpoints, setShowEndpoints] = useState(true);
   const [route, setRoute] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,53 +35,48 @@ const ViewRoute = () => {
   if (error) return <div className="error-message">{error}</div>;
   if (!route) return <div className="error-message">Route not found</div>;
 
-  const renderContent = () => {
-    switch (activeItem) {
-      case 'basic':
-        return (
-          <RouteDetails 
-            route={route}
-            setRoute={setRoute}
-            activeItem={activeItem}
-          />
-        );
-      case 'config':
-        return <RouteEndpoints route={route} />;
-      default:
-        return <RouteDetails route={route} setRoute={setRoute} activeItem={activeItem} />;
-    }
-  };
-
   return (
     <div className="view-route-layout">
-      <nav className="left-navbar">
-        <div className="nav-header">
+      <div className="route-header">
+        <div className="route-title-section">
           <h2>API Route</h2>
           <div className="route-identifier">{route.routeIdentifier}</div>
         </div>
-        <ul className="nav-menu">
-          <li className="nav-item">
-            <button 
-              className={`nav-button ${activeItem === 'config' ? 'active' : ''}`}
-              onClick={() => setActiveItem('config')}
-            >
-              <FaNetworkWired className="nav-icon" />
-              <span>Route Endpoints</span>
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-button ${activeItem === 'basic' ? 'active' : ''}`}
-              onClick={() => setActiveItem('basic')}
-            >
-              <FaRoute className="nav-icon" />
-              <span>Route Details</span>
-            </button>
-          </li>
-        </ul>
-      </nav>
+        <div className="view-toggle">
+          <div 
+            className={`toggle-option ${!showEndpoints ? 'active' : ''}`}
+            onClick={() => setShowEndpoints(false)}
+            role="button"
+          >
+            <FaRoute /> Details
+          </div>
+          <Form.Check 
+            type="switch"
+            id="view-switch"
+            checked={showEndpoints}
+            onChange={(e) => setShowEndpoints(e.target.checked)}
+            className="mx-2"
+          />
+          <div 
+            className={`toggle-option ${showEndpoints ? 'active' : ''}`}
+            onClick={() => setShowEndpoints(true)}
+            role="button"
+          >
+            <FaNetworkWired /> Endpoints
+          </div>
+        </div>
+      </div>
+      
       <div className="content-area">
-        {renderContent()}
+        {showEndpoints ? (
+          <RouteEndpoints route={route} />
+        ) : (
+          <RouteDetails 
+            route={route}
+            setRoute={setRoute}
+            activeItem="basic"
+          />
+        )}
       </div>
     </div>
   );

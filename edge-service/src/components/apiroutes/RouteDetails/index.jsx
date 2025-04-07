@@ -10,7 +10,6 @@ import './styles.css';
 import _ from 'lodash';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { useAuth } from '../../../contexts/AuthContext';
-import { FaInfoCircle, FaNetworkWired } from 'react-icons/fa';
 
 const RouteDetails = ({ route, setRoute, activeItem }) => {
   const [currentVersion, setCurrentVersion] = useState(null);
@@ -158,9 +157,6 @@ const RouteDetails = ({ route, setRoute, activeItem }) => {
           <div className="header-content">
             <h1>Route Details</h1>
             <div className="header-actions">
-              <button className="back-button" onClick={() => navigate('/api-routes')}>
-                <i className="fas fa-arrow-left"></i> Back to Routes
-              </button>
               <button 
                 className="json-view-button" 
                 onClick={() => setShowJsonModal(true)}

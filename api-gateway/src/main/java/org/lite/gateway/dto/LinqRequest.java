@@ -18,7 +18,7 @@ public class LinqRequest {
     @Data
     public static class Query {
         private String intent; // e.g., "greet"
-        private Map<String, String> params; // e.g., {}
+        private Map<String, Object> params; // e.g., {}
         private Object payload;  // Add this field for POST/PUT/PATCH request bodies
     }
 }

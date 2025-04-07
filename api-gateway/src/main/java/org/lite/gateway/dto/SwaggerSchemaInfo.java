@@ -10,4 +10,4 @@ public class SwaggerSchemaInfo {
     private String name;
     private String type;
     private Map<String, SwaggerProperty> properties;
-} 
+}

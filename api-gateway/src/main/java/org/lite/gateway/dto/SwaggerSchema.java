@@ -1,8 +1,7 @@
 package org.lite.gateway.dto;
 
-import lombok.Builder;
 import lombok.Data;
-import java.util.Map;
+import lombok.Builder;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 
@@ -10,7 +9,7 @@ import lombok.AllArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class SwaggerMediaType {
-    private Map<String, Object> schema;
-    private Object example;
+public class SwaggerSchema {
+    private String type;
+    private String format;
 } 

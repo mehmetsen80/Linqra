@@ -36,6 +36,7 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import org.springframework.web.server.WebFilter;
 import reactor.core.publisher.Mono;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -366,7 +367,13 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOrigins(List.of(allowedOrigins.split(",")));
         configuration.setAllowedMethods(List.of(allowedMethods.split(",")));
-        configuration.setAllowedHeaders(List.of(allowedHeaders.split(",")));
+        
+        // Add X-API-Key headers to allowed headers
+        List<String> allowedHeadersList = new ArrayList<>(List.of(allowedHeaders.split(",")));
+        allowedHeadersList.add("X-API-Key");
+        allowedHeadersList.add("X-API-Key-Name");
+        configuration.setAllowedHeaders(allowedHeadersList);
+        
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(maxAge);
 

@@ -2,12 +2,17 @@ package org.lite.gateway.entity;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document("apiEndpoints")
 @Data
+@Builder
+
+@AllArgsConstructor
 public class ApiEndpoint {
     public ApiEndpoint() {
         this.version = 1;

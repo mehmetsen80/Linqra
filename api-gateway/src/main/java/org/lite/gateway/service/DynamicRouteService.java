@@ -33,7 +33,7 @@ public class DynamicRouteService {
         add("/favicon.ico");
         add("/fallback/**");
         add("/actuator/**");
-        add("/linq");
+        add("/linq/**");
     }};
 
     private final Map<String, String> clientScopes = new ConcurrentHashMap<>();

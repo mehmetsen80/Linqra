@@ -344,7 +344,7 @@
 }
 
 .architecture-image {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 12px;
   padding: 1rem;
   width: 100%;
@@ -766,4 +766,53 @@ html {
   .protocol-benefits {
     grid-template-columns: 1fr;
   }
+}
+
+.architecture-explanation {
+  max-width: 800px;
+  margin: 0 auto 4rem;
+  text-align: left;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2.5rem;
+  border-radius: 12px;
+  backdrop-filter: blur(5px);
+  position: relative;
+  z-index: 2;
+}
+
+.architecture-explanation p {
+  color: var(--text-light);
+  font-size: 1.1rem;
+  line-height: 1.6;
+  margin-bottom: 1.5rem;
+}
+
+.architecture-explanation ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.architecture-explanation li {
+  color: var(--text-light);
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.architecture-explanation li strong {
+  color: var(--primary-light);
+  font-size: 1.1rem;
+  margin-bottom: 0.25rem;
+}
+
+.architecture-explanation li span {
+  font-size: 0.95rem;
+  opacity: 0.9;
+  line-height: 1.4;
 }

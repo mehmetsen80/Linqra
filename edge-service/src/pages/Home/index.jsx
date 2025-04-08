@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import architectureDiagram from '/images/linqra_high_level_architecture.png';
+import architectureDiagram from '/images/linqra-diagram-transparent.svg';
 import ImageModal from '../../components/common/ImageModal';
 import { useAuth } from '../../contexts/AuthContext';
 import './styles.css';
@@ -235,6 +235,36 @@ Content-Type: application/json
 
       <div id="how-it-works" className="architecture-section">
         <h2>How It Works?</h2>
+        
+        <div className="architecture-explanation">
+          <p>
+            Linqra is a unified gateway that seamlessly handles requests from traditional APIs, user applications, 
+            and AI services. Our centralized architecture simplifies integration by using a single, consistent protocol 
+            for all interactions.
+          </p>
+          <p>
+            Every request is enhanced with enterprise-grade features:
+          </p>
+          <ul>
+            <li>
+              <strong>Security</strong>
+              <span>Zero-trust architecture ensuring comprehensive protection at every layer</span>
+            </li>
+            <li>
+              <strong>Resiliency</strong>
+              <span>Built-in circuit breakers, automatic retries, and intelligent rate limiting</span>
+            </li>
+            <li>
+              <strong>Dynamic Routing</strong>
+              <span>Instant service discovery and automatic routing without configuration</span>
+            </li>
+            <li>
+              <strong>Analytics</strong>
+              <span>Comprehensive metrics and insights for real-time monitoring</span>
+            </li>
+          </ul>
+        </div>
+
         <div className="architecture-content">
           <div className="architecture-image">
             <img 

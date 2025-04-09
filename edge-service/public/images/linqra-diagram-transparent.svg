@@ -1,0 +1,58 @@
+<svg viewBox="0 0 600 500" xmlns="http://www.w3.org/2000/svg">
+  <!-- API Icon -->
+  <circle cx="170" cy="100" r="50" fill="#dd8c4a" />
+  <text x="170" y="110" font-family="Arial" font-size="24" fill="white" text-anchor="middle">API</text>
+  
+  <!-- Middle User Icon -->
+  <circle cx="300" cy="100" r="50" fill="#dd8c4a" />
+  <circle cx="300" cy="85" r="15" fill="white" />
+  <path d="M270,115 C270,95 330,95 330,115 C330,145 270,145 270,115" fill="white" />
+  
+  <!-- AI Icon -->
+  <circle cx="430" cy="100" r="50" fill="#dd8c4a" />
+  <text x="430" y="110" font-family="Arial" font-size="24" fill="white" text-anchor="middle">AI</text>
+  
+  <!-- Arrows from icons to Linqra box with better aligned paths and arrowheads -->
+  <!-- Left arrow (API to Linqra) - adjusted path -->
+  <path d="M170,150 Q170,230 227,230" stroke="#2d3e50" stroke-width="5" fill="none" />
+  <polygon points="220,223 230,230 220,237" fill="#2d3e50" />
+  
+  <!-- Middle arrow (User to Linqra) -->
+  <path d="M300,150 L300,222" stroke="#2d3e50" stroke-width="5" fill="none" />
+  <polygon points="290,215 300,230 310,215" fill="#2d3e50" />
+  
+  <!-- Right arrow (AI to Linqra) - adjusted path -->
+  <path d="M430,150 Q430,230 373,230" stroke="#2d3e50" stroke-width="5" fill="none" />
+  <polygon points="380,237 370,230 380,223" fill="#2d3e50" />
+  
+  <!-- Linqra Box -->
+  <rect x="230" y="230" width="140" height="60" rx="5" fill="#dd8c4a" />
+  <text x="300" y="267" font-family="Arial" font-size="28" font-weight="bold" fill="white" text-anchor="middle">Linqra</text>
+  
+  <!-- Bottom Arrow -->
+  <line x1="300" y1="290" x2="300" y2="315" stroke="#2d3e50" stroke-width="5" />
+  <polygon points="290,308 300,320 310,308" fill="#2d3e50" />
+  
+  <!-- Bottom horizontal line -->
+  <line x1="90" y1="320" x2="510" y2="320" stroke="#2d3e50" stroke-width="5" />
+  
+  <!-- Vertical connector lines - equally spaced -->
+  <line x1="90" y1="320" x2="90" y2="350" stroke="#2d3e50" stroke-width="5" />
+  <line x1="230" y1="320" x2="230" y2="350" stroke="#2d3e50" stroke-width="5" />
+  <line x1="370" y1="320" x2="370" y2="350" stroke="#2d3e50" stroke-width="5" />
+  <line x1="510" y1="320" x2="510" y2="350" stroke="#2d3e50" stroke-width="5" />
+  
+  <!-- Category Boxes with equal spacing -->
+  <rect x="40" y="350" width="100" height="80" rx="5" fill="white" stroke="#2d3e50" stroke-width="2" />
+  <text x="90" y="395" font-family="Arial" font-size="16" fill="#2d3e50" text-anchor="middle">Security</text>
+  
+  <rect x="180" y="350" width="100" height="80" rx="5" fill="white" stroke="#2d3e50" stroke-width="2" />
+  <text x="230" y="395" font-family="Arial" font-size="16" fill="#2d3e50" text-anchor="middle">Resiliency</text>
+  
+  <rect x="320" y="350" width="100" height="80" rx="5" fill="white" stroke="#2d3e50" stroke-width="2" />
+  <text x="370" y="385" font-family="Arial" font-size="16" fill="#2d3e50" text-anchor="middle">Dynamic</text>
+  <text x="370" y="405" font-family="Arial" font-size="16" fill="#2d3e50" text-anchor="middle">Routing</text>
+  
+  <rect x="460" y="350" width="100" height="80" rx="5" fill="white" stroke="#2d3e50" stroke-width="2" />
+  <text x="510" y="395" font-family="Arial" font-size="16" fill="#2d3e50" text-anchor="middle">Analytics</text>
+</svg>

@@ -30,7 +30,7 @@ spring:
             client-secret: ${KEYCLOAK_CLIENT_SECRET:r4MBE75Axgsiu143HGvgQ1qlK6B9LCj5}
             authorization-grant-type: authorization_code
             scope: gateway.read
-            redirect-uri: ${OAUTH2_REDIRECT_URI:http://localhost:3000/callback}
+            redirect-uri: ${OAUTH2_REDIRECT_URI:https://localhost:3000/callback}
             provider: keycloak
         provider:
           keycloak:
@@ -167,7 +167,7 @@ notifications:
     enabled: ${SLACK_ENABLED:false}
 
 cors:
-  allowed-origins: http://localhost:3000,http://localhost:8080,https://your-prod-domain.com
+  allowed-origins: http://localhost:3000,https://localhost:3000,https://localhost:8080,https://your-prod-domain.com
   allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD
   allowed-headers: Origin,Content-Type,Accept,Authorization,X-Requested-With,X-User-Token
   max-age: 3600

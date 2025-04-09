@@ -98,9 +98,33 @@ const authService = {
 
   handleSSOCallback: async (code) => {
     try {
-      const response = await axiosInstance.post('/api/auth/sso/callback', { code });
-      return response.data;
+      // Add request debugging
+      console.log('Sending SSO callback request with code:', code);
+      
+      const response = await axiosInstance.post('/api/auth/sso/callback', { code }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Add timeout
+        timeout: 10000,
+      });
+      
+      return response;
     } catch (error) {
+      // Enhanced error logging
+      console.error('SSO callback request failed:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      if (error.response?.status === 401) {
+        // If unauthorized, try to clear any stale state
+        localStorage.removeItem('access_token');
+        // You might want to refresh the page or redirect to login
+        window.location.href = '/login';
+      }
+      
       throw error;
     }
   },
@@ -124,29 +148,22 @@ const authService = {
       
       return {
         success: false,
-        error: 'Invalid response structure'
+        error: 'Invalid response from server'
       };
     } catch (error) {
       console.error('Token refresh error:', error);
+      // If the refresh token is invalid or expired
+      if (error.response?.status === 401) {
+        authService.logout();
+      }
       return {
         success: false,
-        error: error.message || 'Failed to refresh token'
+        error: error.response?.data?.message || error.message || 'Failed to refresh token'
       };
     }
   },
 
-  setupAuthInterceptors: (logout) => {
-    axiosInstance.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        if (error.response?.status === 401) {
-          console.log('Received 401 response, logging out...');
-          logout();
-        }
-        return Promise.reject(error);
-      }
-    );
-  }
+  setupAuthInterceptors: () => {} // Empty function or remove entirely
 };
 
 export default authService;

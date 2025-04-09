@@ -1,0 +1,57 @@
+name: Edge Service Build
+
+on:
+  push:
+    branches: [ "master" ]
+    paths:
+      - 'edge-service/**'  # Only trigger on changes to edge-service directory
+  pull_request:
+    branches: [ "master" ]
+    paths:
+      - 'edge-service/**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    needs: [java-build]  # Reference the renamed job from maven.yml
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./edge-service  # Set default working directory
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '21.6.1'
+          cache: 'npm'
+          cache-dependency-path: './edge-service/package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci  # More reliable than npm install for CI environments
+
+      - name: Build React app
+        run: npm run build
+        env:
+          CI: true
+
+      - name: Run tests
+        run: npm test
+        env:
+          CI: true
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          working-directory: edge-service 

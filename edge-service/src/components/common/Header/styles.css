@@ -4,6 +4,7 @@
   --primary-light: #ff8c4c;
   --text-light: #ffffff;
   --text-muted: rgba(255, 255, 255, 0.85);
+  --primary-color-rgb: 214, 95, 31;  /* This is the RGB equivalent of #d65f1f */
 }
 
 .navbar {
@@ -220,4 +221,61 @@
   width: auto;
   object-fit: contain;
   padding: 8px 0;  /* Increased padding to balance the larger size */
+}
+
+.app-header {
+  /* background: linear-gradient(
+    to right,
+    rgba(var(--primary-color-rgb), 0.8),
+    rgba(var(--primary-color-rgb), 0.95)
+  ) !important; */
+  backdrop-filter: blur(3px);
+  border-bottom: 0px solid rgba(var(--primary-color-rgb), 0.9);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  transition: all 0.3s ease;
+}
+
+/* Style the nav links for better visibility on transparent background */
+.app-header .nav-link {
+  color: var(--text-primary) !important;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.app-header .nav-link:hover,
+.app-header .nav-link.active {
+  opacity: 1;
+  color: #ffffff !important;
+}
+
+/* Style the separator for better visibility */
+.nav-separator {
+  color: var(--text-secondary);
+  opacity: 0.4;
+}
+
+/* Style the navbar brand/logo area */
+.app-header .navbar-brand {
+  opacity: 1;
+}
+
+/* Style the navbar toggler for mobile */
+.app-header .navbar-toggler {
+  border-color: rgba(var(--text-primary-rgb), 0.2);
+}
+
+/* Add a subtle transition effect when scrolling */
+.app-header {
+  transition: backdrop-filter 0.3s ease;
+}
+
+/* Optional: Add more blur when scrolling */
+.app-header.scrolled {
+  background: linear-gradient(
+    to right,
+    rgba(var(--primary-color-rgb), 0.15),
+    rgba(var(--primary-color-rgb), 0.2)
+  ) !important;
 }

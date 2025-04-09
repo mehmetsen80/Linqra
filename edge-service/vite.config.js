@@ -12,6 +12,14 @@ export default defineConfig(({ mode }) => {
   const apiGatewayUrl = env.VITE_API_GATEWAY_URL || 'https://localhost:7777';
   console.log('API Gateway URL:', apiGatewayUrl);
 
+  // HTTPS configuration based on environment
+  const httpsConfig = mode === 'production' 
+    ? false  // In production, SSL is handled by load balancer/reverse proxy
+    : {
+        key: fs.readFileSync(path.resolve(__dirname, '../keys/edge-private.key')),
+        cert: fs.readFileSync(path.resolve(__dirname, '../keys/edge-certificate.crt')),
+      };
+
   return {
     plugins: [react()],
     resolve: {
@@ -24,6 +32,7 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
       cors: true,
       open: true,
+      https: httpsConfig
     },
     build: {
       outDir: 'dist',

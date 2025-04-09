@@ -351,36 +351,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const handleSSOCallback = useCallback(async (code) => {
+  const handleSSOCallback = async (code) => {
     try {
-      // Clear state after validation
-      sessionStorage.removeItem('oauth_state');
-
+      console.log('Handling SSO callback with code:', code);
+      
       const response = await authService.handleSSOCallback(code);
       console.log('SSO callback response:', response);
 
-      if (response.success) {  // Check response.success instead of response.data
-        const newAuthState = {
-          token: response.token,           // Direct from response
-          refreshToken: response.refreshToken,  // Direct from response
-          user: response.user,             // Direct from response
-          isAuthenticated: true
-        };
-
-        updateAuthState(newAuthState);
-
-        await loadEnvironment();
-
-        // Navigate after state is updated
-        setTimeout(() => {
-          // Add this where login is successful in your auth service or context
-          localStorage.setItem('lastLoginTime', new Date().toISOString());
-          navigate('/dashboard');
-        }, 100);
-
-        return true;
-      }
-
+      // First check for errors
       if (response.error) {
         if (response.error === "Code already in use") {
           // Clear any existing state before redirecting
@@ -407,6 +385,28 @@ export const AuthProvider = ({ children }) => {
         throw new Error(response.error);
       }
 
+      // Then check for success
+      if (response.success) {
+        const newAuthState = {
+          token: response.token,
+          refreshToken: response.refreshToken,
+          user: response.user,
+          isAuthenticated: true
+        };
+
+        updateAuthState(newAuthState);
+
+        await loadEnvironment();
+
+        setTimeout(() => {
+          localStorage.setItem('lastLoginTime', new Date().toISOString());
+          navigate('/dashboard');
+        }, 100);
+
+        return true;
+      }
+
+      // If neither error nor success, clear state and redirect to login
       updateAuthState(createAuthState(null, null, false));
       localStorage.removeItem('authState');
       navigate('/login');
@@ -414,13 +414,15 @@ export const AuthProvider = ({ children }) => {
 
     } catch (error) {
       console.error('SSO callback error:', error);
+      // Clear all auth state on error
       updateAuthState(createAuthState(null, null, false));
-      sessionStorage.removeItem('oauth_state');
       localStorage.removeItem('authState');
+      localStorage.removeItem('lastLoginTime');
+      sessionStorage.removeItem('oauth_state');
       navigate('/login');
       return false;
     }
-  }, [navigate, updateAuthState]);
+  };
 
   // Add this to check initial auth state
   useEffect(() => {

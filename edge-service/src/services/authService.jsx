@@ -98,9 +98,33 @@ const authService = {
 
   handleSSOCallback: async (code) => {
     try {
-      const response = await axiosInstance.post('/api/auth/sso/callback', { code });
-      return response.data;
+      // Add request debugging
+      console.log('Sending SSO callback request with code:', code);
+      
+      const response = await axiosInstance.post('/api/auth/sso/callback', { code }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        // Add timeout
+        timeout: 10000,
+      });
+      
+      return response;
     } catch (error) {
+      // Enhanced error logging
+      console.error('SSO callback request failed:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      
+      if (error.response?.status === 401) {
+        // If unauthorized, try to clear any stale state
+        localStorage.removeItem('access_token');
+        // You might want to refresh the page or redirect to login
+        window.location.href = '/login';
+      }
+      
       throw error;
     }
   },

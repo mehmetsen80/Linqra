@@ -1,0 +1,63 @@
+.json-modal .modal-dialog {
+  max-width: 90%;
+}
+
+.json-modal .modal-body {
+  padding: 1rem;
+}
+
+.json-editor {
+  width: 100%;
+  min-height: 70vh;
+  font-family: monospace;
+  padding: 1rem;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #333;
+  resize: vertical;
+}
+
+.json-editor:read-only {
+  background-color: #252526;
+  cursor: default;
+}
+
+.json-modal .modal-footer {
+  border-top: 1px solid #dee2e6;
+  padding: 1rem;
+}
+
+.json-editor-modal .modal-dialog {
+  max-width: 90%;
+}
+
+.json-editor-modal .modal-body {
+  padding: 1rem;
+}
+
+.mode-indicator {
+  margin-left: 1rem;
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+
+.edit-toggle-btn {
+  margin-left: 1rem;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid #ced4da;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.edit-toggle-btn:hover {
+  background: #e9ecef;
+}
+
+.edit-toggle-btn.active {
+  background: #e9ecef;
+  border-color: #6c757d;
+} 

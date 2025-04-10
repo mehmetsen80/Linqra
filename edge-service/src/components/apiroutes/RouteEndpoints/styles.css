@@ -1,0 +1,764 @@
+.route-endpoints {
+  padding: 20px;
+}
+
+.endpoint-section {
+  margin-bottom: 2rem;
+}
+
+.endpoint-section h4 {
+  margin-bottom: 1rem;
+  color: #333;
+}
+
+.methods-container {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.endpoint-method-badge {
+  font-size: 1rem;
+  padding: 6px 8px;
+  color: white !important;
+  font-weight: 500;
+  min-width: 70px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+.copy-button {
+  background: none;
+  border: 1px solid #dee2e6;
+  color: var(--text-default) !important;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.copy-button:hover {
+  color: var(--primary-color) !important;
+  border-color: var(--primary-color);
+  background-color: rgba(237, 117, 52, 0.1);
+}
+
+.copy-button svg {
+  font-size: 1rem;
+}
+
+.copy-button .button-text {
+  color: var(--text-default);
+  font-weight: normal;
+}
+
+.linq-example {
+  background: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+}
+
+.linq-request h5 {
+  color: var(--heading-primary);
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+.linq-request h6 {
+  color: var(--heading-secondary);
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.linq-code {
+  background: #fff;
+  padding: 15px;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.linq-headers {
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.linq-body {
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 4px;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.nav-tabs {
+  border-bottom: 1px solid #dee2e6;
+}
+
+.nav-tabs .nav-link {
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.5rem 1rem;
+  margin-right: 1rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.nav-tabs .nav-link:hover {
+  border: none;
+  border-bottom: 2px solid var(--primary-color);
+  background-color: transparent;
+}
+
+.nav-tabs .nav-link.active {
+  border: none;
+  border-bottom: 2px solid var(--primary-color);
+  color: var(--primary-color) !important;
+  background-color: transparent;
+}
+
+.route-identifier-section {
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+}
+
+.route-identifier-section h4 {
+  color: var(--heading-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.identifier-value {
+  font-size: 1.1rem;
+}
+
+.identifier-value code {
+  color: var(--primary-color);
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  background-color: rgba(237, 117, 52, 0.1);
+  border-radius: 4px;
+}
+
+/* Add these styles to match RouteDetails */
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.header-section {
+  background-color: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-content h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  color: var(--heading-primary);
+}
+
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.json-view-button {
+  background: none;
+  border: 1px solid #dee2e6;
+  color: var(--text-muted);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.json-view-button:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  background-color: rgba(237, 117, 52, 0.1);
+}
+
+.view-route-page {
+  padding: 20px;
+}
+
+.route-details-container {
+  background-color: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.route-identifier-section {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.identifier-value {
+  font-size: 1.2rem;
+  color: #666;
+}
+
+.tag-header {
+  color: #333;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #eee;
+}
+
+.endpoint-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.endpoint-method-badge {
+  min-width: 70px;
+  text-align: center;
+}
+
+.endpoint-summary {
+  font-weight: 500;
+}
+
+.endpoint-path-inline {
+  color: #666;
+  font-size: 0.9rem;
+  padding: 2px 6px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.endpoint-content {
+  padding: 1.5rem;
+}
+
+.endpoint-url {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+}
+
+.method-type {
+  font-weight: bold;
+  color: #0d6efd;
+}
+
+.copy-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  background-color: transparent;
+  color: #6c757d;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.copy-button:hover {
+  color: #0d6efd;
+}
+
+.parameters-section,
+.request-section,
+.response-section {
+  margin-bottom: 2rem;
+}
+
+.parameters-table {
+  margin: 1rem 0;
+}
+
+.parameters-table table {
+  background-color: #fff;
+  border-radius: 4px;
+}
+
+.response-code-section {
+  margin: 15px 0;
+  padding: 10px;
+  border-radius: 4px;
+  border-left: 3px solid transparent;
+}
+
+.response-code-section:has(.badge-success) {
+  border-left-color: #198754;
+  background-color: rgba(25, 135, 84, 0.05);
+}
+
+.response-code-section:has(.badge-danger) {
+  border-left-color: #dc3545;
+  background-color: rgba(220, 53, 69, 0.05);
+}
+
+.response-code {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.response-description {
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: normal;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.version-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.version-toggle-link {
+  color: var(--primary-color);
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.version-toggle-link:hover {
+  color: var(--primary-dark);
+  text-decoration: underline;
+}
+
+/* Add these new styles */
+.endpoint-card {
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  margin-bottom: 1.5rem;
+  background: #fff;
+}
+
+.endpoint-header {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.endpoint-content h3,
+.endpoint-content h6 {
+  text-align: left;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  color: var(--heading-secondary);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Add margin-top to first section title */
+.endpoint-section h3:first-child,
+.request-section h6:first-child {
+  margin-top: 0.5rem;
+}
+
+/* Ensure consistent spacing between sections */
+.headers-section,
+.request-section,
+.response-section {
+  margin-bottom: 1.5rem;
+}
+
+.traditional-api-column,
+.linq-protocol-column {
+  flex: 1;
+  padding: 1.5rem;
+  background: #fff;
+}
+
+.column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.column-header h6 {
+  margin: 0;
+  color: var(--heading-secondary);
+  font-weight: 500;
+}
+
+.endpoint-url code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+h6 {
+  color: var(--heading-secondary);
+  margin-bottom: 0.5rem;
+}
+
+.copy-button {
+  background: none;
+  border: 1px solid #dee2e6;
+  color: var(--text-muted);
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.copy-button:hover {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+  background-color: rgba(237, 117, 52, 0.1);
+}
+
+.endpoint-details {
+  padding: 1rem;
+}
+
+.protocol-divider {
+  position: relative;
+  text-align: center;
+  margin: 2rem 0;
+}
+
+.protocol-divider::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 100%;
+  height: 1px;
+  background: #dee2e6;
+}
+
+.protocol-divider span {
+  background: #fff;
+  padding: 0 1rem;
+  color: var(--text-muted);
+  position: relative;
+}
+
+.linq-details {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  margin-top: 1rem;
+}
+
+/* Keep and update these styles */
+.syntax-highlighter-wrapper {
+  margin: 8px 0;
+  position: relative;
+}
+
+.syntax-highlighter-wrapper pre {
+  margin: 0 !important;
+  border-radius: 6px !important;
+}
+
+.endpoint-header-content {
+  padding: 8px 0;
+}
+
+.endpoint-title span {
+  font-weight: 500;
+  color: var(--heading-primary);
+  display: flex;
+  align-items: center;
+  height: 28px;
+}
+
+.endpoint-description {
+  color: var(--text-default);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.accordion-item {
+  border: 1px solid #dee2e6;
+  border-radius: 6px !important;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.accordion-header {
+  background: #f8f9fa;
+}
+
+.accordion-button {
+  padding: 1rem;
+  background: #f8f9fa;
+}
+
+.accordion-button:not(.collapsed) {
+  background: #f8f9fa;
+  color: inherit;
+  box-shadow: none;
+}
+
+.accordion-button:focus {
+  box-shadow: none;
+  border-color: #dee2e6;
+}
+
+.endpoint-header-content {
+  width: 100%;
+}
+
+.endpoint-title span {
+  font-weight: 500;
+  color: var(--heading-primary);
+  display: flex;
+  align-items: center;
+  height: 28px;
+}
+
+.endpoint-description {
+  color: var(--text-default);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.accordion-body {
+  padding: 1.5rem;
+  background: #fff;
+}
+
+/* Remove the accordion button icon and add our own */
+.accordion-button::after {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23212529'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+}
+
+/* Optional: Adjust badge background opacity for better consistency */
+.badge-primary {
+  background-color: rgba(13, 110, 253, 0.9) !important;
+}
+
+.badge-success {
+  background-color: rgba(25, 135, 84, 0.9) !important;
+}
+
+.badge-warning {
+  background-color: rgba(255, 193, 7, 0.9) !important;
+}
+
+.badge-danger {
+  background-color: rgba(220, 53, 69, 0.9) !important;
+}
+
+.badge-info {
+  background-color: rgba(13, 202, 240, 0.9) !important;
+}
+
+.badge-secondary {
+  background-color: rgba(108, 117, 125, 0.9) !important;
+}
+
+.method-type {
+  color: var(--primary-color);
+  font-weight: 600;
+  margin-right: 8px;
+}
+
+.endpoint-url code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+}
+
+.tag-header {
+  color: #333;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #eee;
+}
+
+.endpoint-path {
+  color: #666;
+  font-size: 0.9rem;
+  margin-left: 1rem;
+}
+
+.parameters-table {
+  margin: 1rem 0;
+}
+
+.parameters-table table {
+  background-color: #fff;
+  border-radius: 4px;
+}
+
+.response-code-section {
+  margin-bottom: 1.5rem;
+}
+
+.response-code {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.response-description {
+  color: #666;
+  font-size: 0.9rem;
+  font-weight: normal;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+.endpoint-summary {
+  font-weight: 500;
+}
+
+.endpoint-path-inline {
+  color: #666;
+  font-size: 0.9rem;
+  padding: 2px 6px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.add-endpoint-button {
+  background-color: var(--primary-color);
+  border: none;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-endpoint-button:hover {
+  background-color: var(--primary-color-dark);
+}
+
+.route-endpoints.version-preview {
+  position: relative;
+}
+
+.route-endpoints.version-preview::before {
+  content: 'Preview Mode';
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: #ffc107;
+  color: #000;
+  padding: 4px 8px;
+  border-radius: 0 0 0 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.version-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.version-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.endpoints-content.preview-mode {
+  border: 2px solid #ffc107;
+  border-radius: 4px;
+  padding: 16px;
+}
+
+.endpoints-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.endpoint-name {
+  font-size: 0.9rem;
+  color: var(--text-default);
+  margin-bottom: 8px;
+  padding: 4px 0;
+  font-style: italic;
+}
+
+.version-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.schema-section, .example-section {
+  margin: 10px 0;
+}
+
+.schema-section h6, .example-section h6 {
+  color: #666;
+  margin-bottom: 10px;
+  font-size: 0.9rem;
+}
+
+.example-section {
+  border-left: 3px solid #4CAF50;
+  padding-left: 10px;
+}

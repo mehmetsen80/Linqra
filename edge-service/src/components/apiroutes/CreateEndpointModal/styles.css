@@ -1,0 +1,47 @@
+.modal-body {
+  max-height: calc(100vh - 210px);
+  overflow-y: auto;
+}
+
+.form-control, .form-select {
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+}
+
+.form-control:focus, .form-select:focus {
+  background-color: #fff;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 0.2rem rgba(237, 117, 52, 0.25);
+}
+
+textarea.form-control {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 0.9rem;
+}
+
+.json-editor-modal .modal-dialog {
+  max-width: 90%;
+}
+
+.json-editor-modal .modal-body {
+  padding: 1.5rem;
+}
+
+/* Style for the JSON editor container */
+.json-editor-modal .jsoneditor-react-container {
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+
+/* Helper text styling */
+.text-muted {
+  color: #6c757d !important;
+}
+
+.mb-3 {
+  margin-bottom: 1rem;
+}
+
+.ms-2 {
+  margin-left: 0.5rem;
+} 

@@ -5,7 +5,7 @@ import { Form } from 'react-bootstrap';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { apiRouteService } from '../../../services/apiRouteService';
 import RouteDetails from '../../../components/apiroutes/RouteDetails';
-import RouteEndpoints from '../../../components/apiroutes/RouteEndpoints';
+import RouteEndpoints from '@/components/apiroutes/RouteEndpoints';
 import './styles.css';
 
 const ViewRoute = () => {

@@ -37,6 +37,11 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: true,
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+        },
+      },
       // Prevent bundling of certain imported packages
       commonjsOptions: {
         include: [/node_modules/],

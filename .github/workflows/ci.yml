@@ -45,21 +45,8 @@ jobs:
         run: rm -f package-lock.json
 
       - name: Install dependencies
-        run: |
-          npm install --legacy-peer-deps || true
-          npm audit || true
+        run: npm install --legacy-peer-deps
         continue-on-error: true
-
-      - name: Debug file structure
-        run: |
-          echo "Current directory:"
-          pwd
-          echo "\nContents of src/:"
-          ls -R src/
-          echo "\nChecking specific file:"
-          test -f src/components/apiroutes/RouteEndpoints/index.jsx && echo "File exists" || echo "File not found"
-          echo "\nFile case sensitivity check:"
-          find . -iname "RouteEndpoints" -type d
 
       - name: Build React app
         run: npm run build

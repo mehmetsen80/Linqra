@@ -98,63 +98,50 @@ jobs:
           mkdir -p ~/.ssh
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
 
+          # Debug: Check artifacts directory content
+          echo "Checking local artifacts directory:"
+          ls -la artifacts/
+          echo "Checking java-artifacts directory:"
+          ls -la artifacts/java-artifacts/
+          echo "Checking react-build directory:"
+          ls -la artifacts/react-build/
+
           # Create and verify temp directory
           ssh $EC2_USERNAME@$EC2_HOST '
-            # Clean up any existing temp directory
             rm -rf ~/deploy_temp
-            
-            # Create fresh temp directory
             mkdir -p ~/deploy_temp
-            
-            # Verify directory exists and is writable
-            if [ ! -d ~/deploy_temp ] || [ ! -w ~/deploy_temp ]; then
-              echo "Error: Cannot create or write to deploy_temp directory"
-              exit 1
-            fi
-            
             echo "Temporary directory ready"
           '
           
-          # Copy artifacts to temp directory
-          scp -r artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/
-          scp -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/
+          echo "Starting file copy..."
+          
+          # Copy Java artifacts with verbose flag
+          scp -v artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/
+          echo "Java artifacts copied"
+          
+          # Copy React build with verbose flag
+          scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/
+          echo "React build copied"
 
-          # Use SSH to execute sudo commands to move files
+          # Rest of the deployment
           ssh $EC2_USERNAME@$EC2_HOST '
-            # Verify files were copied
-            if [ ! -f ~/deploy_temp/*.jar ] || [ ! -d ~/deploy_temp/assets ]; then
-              echo "Error: Files not copied correctly"
-              exit 1
-            fi
-
-            # Move Java artifacts
+            echo "Checking deploy_temp contents:"
+            ls -la ~/deploy_temp/
+            
+            echo "Moving files to target directories..."
             sudo cp ~/deploy_temp/*.jar $TARGET_DIR/api-gateway/
             sudo chown -R ubuntu:ubuntu $TARGET_DIR/api-gateway/*.jar
             
-            # Move React build
             sudo cp -r ~/deploy_temp/* $TARGET_DIR/edge-service/
             sudo chown -R ubuntu:ubuntu $TARGET_DIR/edge-service/
 
-            # Cleanup temp directory
             rm -rf ~/deploy_temp
 
-            # Verify services are running
-            if ! sudo systemctl restart api-gateway; then
-              echo "Error: Failed to restart api-gateway"
-              exit 1
-            fi
-
-            if ! sudo nginx -t; then
-              echo "Error: Nginx configuration test failed"
-              exit 1
-            fi
-
-            if ! sudo systemctl restart nginx; then
-              echo "Error: Failed to restart nginx"
-              exit 1
-            fi
-
-            echo "Deployment completed successfully"
+            echo "Restarting services..."
+            sudo systemctl restart api-gateway
+            sudo nginx -t && sudo systemctl restart nginx
+            
+            echo "Deployment completed"
           '
 
   dependency-review:

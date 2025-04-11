@@ -98,51 +98,45 @@ jobs:
           mkdir -p ~/.ssh
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
 
-          # Debug: Check artifacts directory content
-          echo "Checking local artifacts directory:"
-          ls -la artifacts/
-          echo "Checking java-artifacts directory:"
-          ls -la artifacts/java-artifacts/
-          echo "Checking react-build directory:"
-          ls -la artifacts/react-build/
-
-          # Create and verify temp directory
-          ssh $EC2_USERNAME@$EC2_HOST '
+          # Create structured temp directory
+          ssh $EC2_USERNAME@$EC2_HOST "
             rm -rf ~/deploy_temp
-            mkdir -p ~/deploy_temp
-            echo "Temporary directory ready"
-          '
+            mkdir -p ~/deploy_temp/api-gateway
+            mkdir -p ~/deploy_temp/edge-service
+            echo 'Temporary directory structure ready'
+          "
           
           echo "Starting file copy..."
           
-          # Copy Java artifacts with verbose flag
-          scp -v artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/
-          echo "Java artifacts copied"
-          
-          # Copy React build with verbose flag
-          scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/
-          echo "React build copied"
+          # Copy artifacts to their respective directories
+          scp -v artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/
+          scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/
 
-          # Rest of the deployment
-          ssh $EC2_USERNAME@$EC2_HOST '
-            echo "Checking deploy_temp contents:"
-            ls -la ~/deploy_temp/
+          # Deploy files with structured approach
+          ssh $EC2_USERNAME@$EC2_HOST "
+            echo 'Checking deploy_temp contents:'
+            echo 'API Gateway files:'
+            ls -la ~/deploy_temp/api-gateway/
+            echo 'Edge Service files:'
+            ls -la ~/deploy_temp/edge-service/
             
-            echo "Moving files to target directories..."
-            sudo cp ~/deploy_temp/*.jar $TARGET_DIR/api-gateway/
-            sudo chown -R ubuntu:ubuntu $TARGET_DIR/api-gateway/*.jar
-            
-            sudo cp -r ~/deploy_temp/* $TARGET_DIR/edge-service/
-            sudo chown -R ubuntu:ubuntu $TARGET_DIR/edge-service/
+            echo 'Moving files to target directories...'
+            # Move entire directories
+            sudo cp -r ~/deploy_temp/api-gateway/* /var/www/linqra/api-gateway/
+            sudo cp -r ~/deploy_temp/edge-service/* /var/www/linqra/edge-service/
+
+            # Set permissions
+            sudo chown -R ubuntu:ubuntu /var/www/linqra/api-gateway/
+            sudo chown -R ubuntu:ubuntu /var/www/linqra/edge-service/
 
             rm -rf ~/deploy_temp
 
-            echo "Restarting services..."
-            sudo systemctl restart api-gateway
+            echo 'Restarting services...'
+            sudo systemctl restart api-gateway || echo 'Failed to restart api-gateway'
             sudo nginx -t && sudo systemctl restart nginx
             
-            echo "Deployment completed"
-          '
+            echo 'Deployment completed'
+          "
 
   dependency-review:
     if: github.event_name == 'pull_request'

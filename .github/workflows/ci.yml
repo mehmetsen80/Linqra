@@ -22,6 +22,13 @@ jobs:
           cache: maven
       - name: Build with Maven
         run: mvn -B package --file pom.xml
+      
+      # Upload Java artifacts
+      - name: Upload Java artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-artifacts
+          path: api-gateway/target/*.jar
 
   react-build:
     needs: java-build
@@ -58,10 +65,54 @@ jobs:
         env:
           CI: false
 
+      # Upload React build
+      - name: Upload React build
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-build
+          path: edge-service/dist
+
+  deploy:
+    needs: [java-build, react-build]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'  # Only deploy on master branch
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
+
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.HOST_DNS_PROD }}
+          EC2_USERNAME: ${{ secrets.USERNAME_PROD }}
+          TARGET_DIR: ${{ secrets.TARGET_DIR_PROD }}
+        run: |
+          # Disable strict host key checking
+          mkdir -p ~/.ssh
+          echo "StrictHostKeyChecking no" >> ~/.ssh/config
+
+          # Copy Java artifacts
+          scp -r artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/api-gateway/
+
+          # Copy React build
+          scp -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/edge-service/
+
+          # Restart services
+          ssh $EC2_USERNAME@$EC2_HOST '
+            sudo systemctl restart api-gateway
+            sudo nginx -t && sudo systemctl restart nginx
+          '
+
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
       - name: Dependency Review

@@ -55,13 +55,13 @@ public class LinqServiceImpl implements LinqService {
     @NonNull
     private final TeamRouteRepository teamRouteRepository;
 
-    @Value("${spring.server.host:localhost}")
+    @Value("${server.host:localhost}")
     private String gatewayHost;
 
-    @Value("${spring.server.port:7777}")
+    @Value("${server.port:7777}")
     private int gatewayPort;
 
-    @Value("${spring.server.ssl.enabled:true}")
+    @Value("${server.ssl.enabled:true}")
     private boolean sslEnabled;
 
     @Override
@@ -217,12 +217,13 @@ public class LinqServiceImpl implements LinqService {
         }
         
         String url = baseUrl + "/" + target + "/" + path;
+        log.info("Linq url: {}", url);
         
         // Add remaining params as query parameters
         Map<String, String> queryParams = params != null ? 
             params.entrySet().stream()
                 .filter(e -> !intent.contains("{" + e.getKey() + "}"))
-                .collect(Collectors.toMap(e -> e.getKey().toString(), e -> e.getValue().toString()))
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toString()))
             : Map.of();
             
         if (!queryParams.isEmpty()) {

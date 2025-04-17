@@ -13,7 +13,7 @@ RUN mvn clean install -pl discovery-server -am -DskipTests
 FROM eclipse-temurin:21-jdk-jammy
 
 # Install necessary packages
-RUN apt-get update && apt-get install -y net-tools && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y net-tools iputils-ping && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the runtime image
 WORKDIR /app

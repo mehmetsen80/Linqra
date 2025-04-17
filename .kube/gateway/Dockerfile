@@ -16,7 +16,7 @@ RUN mvn clean install -pl api-gateway -am -DskipTests
 FROM eclipse-temurin:21-jdk-jammy
 
 # Install necessary packages
-RUN apt-get update && apt-get install -y net-tools && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y net-tools iputils-ping && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Set the working directory in the runtime image
 WORKDIR /app
@@ -45,10 +45,11 @@ RUN keytool -importkeystore -srckeystore /app/gateway-truststore.jks \
 
 # Set other service-specific environment variables
 ENV REDIS_GATEWAY_URL=redis-service
-#ENV MONGO_GATEWAY_URL=mongodb-service
 ENV KEYCLOAK_GATEWAY_URL=keycloak-service
 ENV KEYCLOAK_GATEWAY_PORT=8080
 ENV EUREKA_GATEWAY_URL=discovery-service
+ENV GATEWAY_API_HOST=api-gateway-service
+ENV GATEWAY_API_PORT=7777
 
 # Expose the API gateway port
 EXPOSE 7777

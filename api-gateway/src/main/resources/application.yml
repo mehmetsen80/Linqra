@@ -48,7 +48,7 @@ spring:
           jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/certs
   data:
     mongodb:
-      uri: mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority
+      uri: ${MONGO_GATEWAY_URL:mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}
       database: Linqra
   cloud:
     circuitbreaker:
@@ -148,11 +148,12 @@ logging:
     org.springframework.messaging: INFO
     org.springframework.security.web.server.authentication.AuthenticationWebFilter: ERROR
     javax.net.ssl: DEBUG
-    org.mongodb.driver: ERROR
-    org.mongodb.driver.cluster: WARN
-    org.mongodb.driver.connection: WARN
-    org.mongodb.driver.protocol: WARN
-    org.mongodb.driver.operation: WARN
+    org.mongodb.driver: DEBUG
+    org.mongodb.driver.cluster: DEBUG
+    org.mongodb.driver.connection: DEBUG
+    org.mongodb.driver.protocol: DEBUG
+    org.mongodb.driver.operation: DEBUG
+    org.lite.gateway.config: DEBUG
 
 notifications:
   email:

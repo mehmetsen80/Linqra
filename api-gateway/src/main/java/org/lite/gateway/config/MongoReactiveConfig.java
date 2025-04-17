@@ -2,6 +2,9 @@ package org.lite.gateway.config;
 
 import com.mongodb.reactivestreams.client.MongoClient;
 import com.mongodb.reactivestreams.client.MongoClients;
+
+import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +26,7 @@ import org.springframework.transaction.reactive.TransactionalOperator;
 @Configuration
 @EnableReactiveMongoRepositories(basePackages = "org.lite.gateway.repository")
 @EnableReactiveMongoAuditing
+@Slf4j
 public class MongoReactiveConfig extends AbstractReactiveMongoConfiguration {
 
     @Value("${spring.data.mongodb.uri}")

@@ -149,9 +149,9 @@ jobs:
           scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/ || echo "Failed to copy edge-service artifacts"
           scp -v artifacts/docker-compose/docker-compose.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy docker-compose.yml"
           
-          # Modified .kube copy command to handle hidden directory
+          # Modified .kube copy command to handle hidden directory and files
           if [ -d "artifacts/kube-config/.kube" ]; then
-            scp -v -r artifacts/kube-config/.kube $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy .kube directory"
+            scp -v -r artifacts/kube-config/.kube/. $EC2_USERNAME@$EC2_HOST:~/deploy_temp/.kube/ || echo "Failed to copy .kube directory contents"
           else
             echo "No .kube directory found in artifacts"
           fi
@@ -170,40 +170,51 @@ jobs:
             echo 'Docker Compose file:'
             ls -la ~/deploy_temp/docker-compose.yml
             echo '.kube directory:'
-            ls -la ~/deploy_temp/.kube || echo 'No .kube directory'
+            ls -la ~/deploy_temp/.kube/
+            
+            echo 'Creating target directories with proper permissions...'
+            # Create base directory first
+            sudo mkdir -p /var/www/linqra
+            sudo chown ubuntu:ubuntu /var/www/linqra
+            
+            # Create and set permissions for subdirectories
+            for dir in api-gateway discovery-server edge-service .kube keys; do
+              sudo mkdir -p /var/www/linqra/\$dir
+              sudo chown ubuntu:ubuntu /var/www/linqra/\$dir
+            done
             
             echo 'Moving files to target directories...'
-            # Move files with error handling
-            sudo cp -r ~/deploy_temp/api-gateway/* /var/www/linqra/api-gateway/ || echo 'No api-gateway files to copy'
-            sudo cp -r ~/deploy_temp/discovery-server/* /var/www/linqra/discovery-server/ || echo 'No discovery-server files to copy'
-            sudo cp -r ~/deploy_temp/edge-service/* /var/www/linqra/edge-service/ || echo 'No edge-service files to copy'
-            sudo cp ~/deploy_temp/docker-compose.yml /var/www/linqra/ || echo 'No docker-compose.yml to copy'
+            # Copy files with proper error handling
+            echo 'Copying API Gateway files...'
+            cp -rv ~/deploy_temp/api-gateway/* /var/www/linqra/api-gateway/ || echo 'No api-gateway files to copy'
             
-            # Modified .kube copy command
-            if [ -d ~/deploy_temp/.kube ]; then
-              sudo cp -r ~/deploy_temp/.kube /var/www/linqra/
-              sudo chown -R ubuntu:ubuntu /var/www/linqra/.kube
-            fi
+            echo 'Copying Discovery Server files...'
+            cp -rv ~/deploy_temp/discovery-server/* /var/www/linqra/discovery-server/ || echo 'No discovery-server files to copy'
             
-            if [ -d ~/deploy_temp/keys ]; then
-              sudo cp -r ~/deploy_temp/keys /var/www/linqra/
-              sudo chown -R ubuntu:ubuntu /var/www/linqra/keys
-              sudo chmod -R 600 /var/www/linqra/keys
-            fi
+            echo 'Copying Edge Service files...'
+            cp -rv ~/deploy_temp/edge-service/* /var/www/linqra/edge-service/ || echo 'No edge-service files to copy'
+            
+            echo 'Copying Docker Compose file...'
+            cp -v ~/deploy_temp/docker-compose.yml /var/www/linqra/ || echo 'No docker-compose.yml to copy'
+            
+            echo 'Copying .kube files...'
+            cp -rv ~/deploy_temp/.kube/. /var/www/linqra/.kube/ || echo 'No .kube files to copy'
+            
+            echo 'Copying keys files...'
+            cp -rv ~/deploy_temp/keys/* /var/www/linqra/keys/ || echo 'No keys files to copy'
+            
+            echo 'Setting final permissions...'
+            sudo chown -R ubuntu:ubuntu /var/www/linqra/*
+            sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
 
-            # Set permissions for required directories
-            sudo chown -R ubuntu:ubuntu /var/www/linqra/api-gateway/
-            sudo chown -R ubuntu:ubuntu /var/www/linqra/discovery-server/
-            sudo chown -R ubuntu:ubuntu /var/www/linqra/edge-service/
-            sudo chown ubuntu:ubuntu /var/www/linqra/docker-compose.yml
+            echo 'Final directory structure:'
+            ls -la /var/www/linqra/
+            echo 'Discovery Server contents:'
+            ls -la /var/www/linqra/discovery-server/
+            echo 'API Gateway contents:'
+            ls -la /var/www/linqra/api-gateway/
 
             rm -rf ~/deploy_temp
-
-            echo 'Restarting services...'
-            sudo systemctl restart discovery-server || echo 'Failed to restart discovery-server'
-            sleep 10  # Wait for discovery server to be ready
-            sudo systemctl restart api-gateway || echo 'Failed to restart api-gateway'
-            sudo nginx -t && sudo systemctl restart nginx
             
             echo 'Deployment completed'
           "

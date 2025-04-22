@@ -198,13 +198,13 @@ jobs:
             cp -v ~/deploy_temp/docker-compose.yml /var/www/linqra/ || echo 'No docker-compose.yml to copy'
             
             echo 'Copying .kube files...'
-            cp -rv ~/deploy_temp/.kube/. /var/www/linqra/.kube/ || echo 'No .kube files to copy'
+            sudo cp -rv ~/deploy_temp/.kube/. /var/www/linqra/.kube/ || echo 'No .kube files to copy'
             
             echo 'Copying keys files...'
-            cp -rv ~/deploy_temp/keys/* /var/www/linqra/keys/ || echo 'No keys files to copy'
+            sudo cp -rv ~/deploy_temp/keys/* /var/www/linqra/keys/ || echo 'No keys files to copy'
             
             echo 'Setting final permissions...'
-            sudo chown -R ubuntu:ubuntu /var/www/linqra/*
+            sudo chown -R ubuntu:ubuntu /var/www/linqra
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
 
             echo 'Final directory structure:'

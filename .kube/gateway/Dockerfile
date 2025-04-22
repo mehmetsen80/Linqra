@@ -36,12 +36,48 @@ ENV GATEWAY_KEY_STORE=/app/gateway-keystore.jks
 ENV GATEWAY_KEY_STORE_PASSWORD=123456
 ENV GATEWAY_TRUST_STORE=/app/gateway-truststore.jks
 ENV GATEWAY_TRUST_STORE_PASSWORD=123456
+ENV CACERTS_PATH=${JAVA_HOME}/lib/security/cacerts
+
+# Verify truststore exists
+RUN if [ ! -f "${GATEWAY_TRUST_STORE}" ]; then \
+        echo "client-truststore.jks not found at ${GATEWAY_TRUST_STORE}"; \
+        exit 1; \
+    fi
+
+# Verify cacerts file exists and is writable
+RUN if [ ! -f "${CACERTS_PATH}" ]; then \
+        echo "cacerts file not found at ${CACERTS_PATH}"; \
+        if [ -d "${CACERTS_PATH}" ]; then \
+            echo "cacerts is a directory, listing contents:"; \
+            ls -ltr "${CACERTS_PATH}"; \
+            exit 1; \
+        fi; \
+        echo "Attempting to restore cacerts from base image"; \
+        cp /opt/java/openjdk/lib/security/cacerts.bak "${CACERTS_PATH}" 2>/dev/null || { \
+            echo "Failed to restore cacerts. Ensure base image contains cacerts."; \
+            exit 1; \
+        }; \
+    fi && \
+    chown root:root "${CACERTS_PATH}" && \
+    chmod 664 "${CACERTS_PATH}"
+
+
+RUN chown root:root "${CACERTS_PATH}" && chmod 664 "${CACERTS_PATH}"
 
 # Import all certificates from gateway-truststore.jks into the default cacerts truststore
 RUN keytool -importkeystore -srckeystore /app/gateway-truststore.jks \
-            -destkeystore "${JAVA_HOME}/lib/security/cacerts" \
+            -destkeystore "${CACERTS_PATH}" \
             -srcstorepass "${GATEWAY_TRUST_STORE_PASSWORD}" \
-            -deststorepass "${GATEWAY_TRUST_STORE_PASSWORD}" -noprompt -srcstoretype JKS -deststoretype JKS
+            -deststorepass "${GATEWAY_TRUST_STORE_PASSWORD}" \
+            -noprompt -srcstoretype JKS -deststoretype JKS > keytool_import.log 2>&1 || { \
+                cat keytool_import.log; \
+                echo "keytool import failed"; \
+                exit 1; \
+            }
+
+
+# Verify the import by listing the cacerts contents (optional, for debugging)
+RUN keytool -list -cacerts -storepass "${GATEWAY_TRUST_STORE_PASSWORD}" > cacerts_list.log
 
 # Set other service-specific environment variables
 ENV REDIS_GATEWAY_URL=redis-service
@@ -54,4 +90,13 @@ ENV GATEWAY_API_PORT=7777
 # Expose the API gateway port
 EXPOSE 7777
 
-ENTRYPOINT ["java", "-Djavax.net.debug=all", "-Djavax.net.debug=ssl", "-Dhttps.protocols=TLSv1.2,TLSv1.3", "-Djavax.net.ssl.keyStore=${GATEWAY_KEY_STORE}", "-Djavax.net.ssl.keyStorePassword=${GATEWAY_KEY_STORE_PASSWORD}", "-Djavax.net.ssl.trustStore=${JAVA_HOME}/lib/security/cacerts", "-Djavax.net.ssl.trustStorePassword=${GATEWAY_TRUST_STORE_PASSWORD}", "-jar", "LiteGateway.jar"]
+# Run the API gateway-service application with SSL configuration
+ENTRYPOINT ["java", \
+            "-Djavax.net.debug=all", \
+            "-Djavax.net.debug=ssl", \
+            "-Dhttps.protocols=TLSv1.2,TLSv1.3", \
+            "-Djavax.net.ssl.keyStore=${GATEWAY_KEY_STORE}", \
+            "-Djavax.net.ssl.keyStorePassword=${GATEWAY_KEY_STORE_PASSWORD}", \
+            "-Djavax.net.ssl.trustStore=${CACERTS_PATH}", \
+            "-Djavax.net.ssl.trustStorePassword=${GATEWAY_TRUST_STORE_PASSWORD}", \
+            "-jar", "LiteGateway.jar"]

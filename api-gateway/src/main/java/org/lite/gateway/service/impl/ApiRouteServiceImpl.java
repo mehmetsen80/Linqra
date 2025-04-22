@@ -604,15 +604,23 @@ public class ApiRouteServiceImpl implements ApiRouteService {
 
     public Mono<String> refreshRoutes() {
         return getAllRoutes(null)
-            .collectList()
-            .doOnSuccess(list -> {
-                list.forEach(apiRoute -> {
+            .flatMap(apiRoute -> {
+                // Convert synchronous operations to reactive
+                return Mono.fromRunnable(() -> {
                     dynamicRouteService.addPath(apiRoute);
                     dynamicRouteService.addScope(apiRoute);
-                    gatewayRoutesRefresher.refreshRoutes();
-                    log.info("Refreshed Path: {}", apiRoute.getPath());
-                });
+                })
+                .then(Mono.fromRunnable(gatewayRoutesRefresher::refreshRoutes))
+                .thenReturn(apiRoute);
             })
-            .thenReturn("Routes reloaded successfully");
+            .collectList()
+            .map(routes -> {
+                routes.forEach(route -> log.info("Refreshed Path: {}", route.getPath()));
+                return "Routes reloaded successfully";
+            })
+            .onErrorResume(e -> {
+                log.error("Error refreshing routes: {}", e.getMessage(), e);
+                return Mono.just("Error refreshing routes: " + e.getMessage());
+            });
     }
 }

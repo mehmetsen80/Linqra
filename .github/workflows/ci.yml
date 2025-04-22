@@ -30,6 +30,34 @@ jobs:
           name: java-artifacts
           path: api-gateway/target/*.jar
 
+      # Upload Discovery Server artifacts
+      - name: Upload Discovery Server artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-server-artifacts
+          path: discovery-server/target/*.jar
+
+      # Upload docker-compose.yml
+      - name: Upload docker-compose file
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-compose
+          path: docker-compose.yml
+
+      # Add this new step to upload .kube directory
+      - name: Upload .kube directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: kube-config
+          path: .kube/
+
+      # Add this new step to upload keys directory
+      - name: Upload keys directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: keys-config
+          path: keys/
+
   react-build:
     needs: java-build
     runs-on: ubuntu-latest
@@ -101,37 +129,63 @@ jobs:
           # Create structured temp directory
           ssh $EC2_USERNAME@$EC2_HOST "
             rm -rf ~/deploy_temp
+            mkdir -p ~/deploy_temp/.kube
             mkdir -p ~/deploy_temp/api-gateway
             mkdir -p ~/deploy_temp/edge-service
+            mkdir -p ~/deploy_temp/keys
+            mkdir -p ~/deploy_temp/discovery-server
             echo 'Temporary directory structure ready'
           "
           
           echo "Starting file copy..."
           
-          # Copy artifacts to their respective directories
+          # Copy all artifacts
           scp -v artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/
+          scp -v artifacts/discovery-server-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/
           scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/
+          scp -v -r artifacts/kube-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/.kube/
+          scp -v -r artifacts/keys-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/keys/
+          scp -v artifacts/docker-compose/docker-compose.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/
 
           # Deploy files with structured approach
           ssh $EC2_USERNAME@$EC2_HOST "
             echo 'Checking deploy_temp contents:'
             echo 'API Gateway files:'
             ls -la ~/deploy_temp/api-gateway/
+            echo 'Discovery Server files:'
+            ls -la ~/deploy_temp/discovery-server/
             echo 'Edge Service files:'
             ls -la ~/deploy_temp/edge-service/
+            echo '.kube files:'
+            ls -la ~/deploy_temp/.kube/
+            echo 'keys files:'
+            ls -la ~/deploy_temp/keys/
+            echo 'Docker Compose file:'
+            ls -la ~/deploy_temp/docker-compose.yml
             
             echo 'Moving files to target directories...'
             # Move entire directories
             sudo cp -r ~/deploy_temp/api-gateway/* /var/www/linqra/api-gateway/
+            sudo cp -r ~/deploy_temp/discovery-server/* /var/www/linqra/discovery-server/
             sudo cp -r ~/deploy_temp/edge-service/* /var/www/linqra/edge-service/
+            sudo cp -r ~/deploy_temp/.kube /var/www/linqra/
+            sudo cp -r ~/deploy_temp/keys /var/www/linqra/
+            sudo cp ~/deploy_temp/docker-compose.yml /var/www/linqra/
 
             # Set permissions
             sudo chown -R ubuntu:ubuntu /var/www/linqra/api-gateway/
+            sudo chown -R ubuntu:ubuntu /var/www/linqra/discovery-server/
             sudo chown -R ubuntu:ubuntu /var/www/linqra/edge-service/
+            sudo chown -R ubuntu:ubuntu /var/www/linqra/.kube/
+            sudo chown -R ubuntu:ubuntu /var/www/linqra/keys/
+            sudo chown ubuntu:ubuntu /var/www/linqra/docker-compose.yml
+            sudo chmod -R 600 /var/www/linqra/keys/
 
             rm -rf ~/deploy_temp
 
             echo 'Restarting services...'
+            sudo systemctl restart discovery-server || echo 'Failed to restart discovery-server'
+            sleep 10  # Wait for discovery server to be ready
             sudo systemctl restart api-gateway || echo 'Failed to restart api-gateway'
             sudo nginx -t && sudo systemctl restart nginx
             

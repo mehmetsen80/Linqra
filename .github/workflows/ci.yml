@@ -54,22 +54,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kube-config
-          path: |
-            .kube/**/*
-            .kube/.*
+          path: .kube/
           if-no-files-found: error
 
       # Add this new step to upload keys directory
-      - name: Debug keys directory
-        run: |
-          echo "Checking keys directory contents:"
-          ls -la keys/
-          
       - name: Upload keys directory
         uses: actions/upload-artifact@v4
         with:
           name: keys-config
-          path: keys/**/*
+          path: keys/
           if-no-files-found: error
 
   react-build:

@@ -44,19 +44,23 @@ jobs:
           name: docker-compose
           path: docker-compose.yml
 
-      # Add this new step to upload .kube directory
+      # Upload .kube directory - modified to handle hidden directory
       - name: Upload .kube directory
         uses: actions/upload-artifact@v4
         with:
           name: kube-config
-          path: .kube/
+          path: |
+            .kube
+            .kube/**
+        continue-on-error: true
 
-      # Add this new step to upload keys directory
+      # Add this new step to upload keys directory if it exists
       - name: Upload keys directory
         uses: actions/upload-artifact@v4
         with:
           name: keys-config
           path: keys/
+        continue-on-error: true
 
   react-build:
     needs: java-build
@@ -103,7 +107,7 @@ jobs:
   deploy:
     needs: [java-build, react-build]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'  # Only deploy on master branch
+    if: github.ref == 'refs/heads/master'
 
     steps:
       - name: Download all artifacts
@@ -139,13 +143,20 @@ jobs:
           
           echo "Starting file copy..."
           
-          # Copy all artifacts
-          scp -v artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/
-          scp -v artifacts/discovery-server-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/
-          scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/
-          scp -v -r artifacts/kube-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/.kube/
-          scp -v -r artifacts/keys-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/keys/
-          scp -v artifacts/docker-compose/docker-compose.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/
+          # Copy all artifacts with error handling
+          scp -v artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/ || echo "Failed to copy api-gateway artifacts"
+          scp -v artifacts/discovery-server-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/ || echo "Failed to copy discovery-server artifacts"
+          scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/ || echo "Failed to copy edge-service artifacts"
+          scp -v artifacts/docker-compose/docker-compose.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy docker-compose.yml"
+          
+          # Modified .kube copy command to handle hidden directory
+          if [ -d "artifacts/kube-config/.kube" ]; then
+            scp -v -r artifacts/kube-config/.kube $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy .kube directory"
+          else
+            echo "No .kube directory found in artifacts"
+          fi
+          
+          scp -v -r artifacts/keys-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/keys/ || echo "No keys directory to copy"
 
           # Deploy files with structured approach
           ssh $EC2_USERNAME@$EC2_HOST "
@@ -156,30 +167,35 @@ jobs:
             ls -la ~/deploy_temp/discovery-server/
             echo 'Edge Service files:'
             ls -la ~/deploy_temp/edge-service/
-            echo '.kube files:'
-            ls -la ~/deploy_temp/.kube/
-            echo 'keys files:'
-            ls -la ~/deploy_temp/keys/
             echo 'Docker Compose file:'
             ls -la ~/deploy_temp/docker-compose.yml
+            echo '.kube directory:'
+            ls -la ~/deploy_temp/.kube || echo 'No .kube directory'
             
             echo 'Moving files to target directories...'
-            # Move entire directories
-            sudo cp -r ~/deploy_temp/api-gateway/* /var/www/linqra/api-gateway/
-            sudo cp -r ~/deploy_temp/discovery-server/* /var/www/linqra/discovery-server/
-            sudo cp -r ~/deploy_temp/edge-service/* /var/www/linqra/edge-service/
-            sudo cp -r ~/deploy_temp/.kube /var/www/linqra/
-            sudo cp -r ~/deploy_temp/keys /var/www/linqra/
-            sudo cp ~/deploy_temp/docker-compose.yml /var/www/linqra/
+            # Move files with error handling
+            sudo cp -r ~/deploy_temp/api-gateway/* /var/www/linqra/api-gateway/ || echo 'No api-gateway files to copy'
+            sudo cp -r ~/deploy_temp/discovery-server/* /var/www/linqra/discovery-server/ || echo 'No discovery-server files to copy'
+            sudo cp -r ~/deploy_temp/edge-service/* /var/www/linqra/edge-service/ || echo 'No edge-service files to copy'
+            sudo cp ~/deploy_temp/docker-compose.yml /var/www/linqra/ || echo 'No docker-compose.yml to copy'
+            
+            # Modified .kube copy command
+            if [ -d ~/deploy_temp/.kube ]; then
+              sudo cp -r ~/deploy_temp/.kube /var/www/linqra/
+              sudo chown -R ubuntu:ubuntu /var/www/linqra/.kube
+            fi
+            
+            if [ -d ~/deploy_temp/keys ]; then
+              sudo cp -r ~/deploy_temp/keys /var/www/linqra/
+              sudo chown -R ubuntu:ubuntu /var/www/linqra/keys
+              sudo chmod -R 600 /var/www/linqra/keys
+            fi
 
-            # Set permissions
+            # Set permissions for required directories
             sudo chown -R ubuntu:ubuntu /var/www/linqra/api-gateway/
             sudo chown -R ubuntu:ubuntu /var/www/linqra/discovery-server/
             sudo chown -R ubuntu:ubuntu /var/www/linqra/edge-service/
-            sudo chown -R ubuntu:ubuntu /var/www/linqra/.kube/
-            sudo chown -R ubuntu:ubuntu /var/www/linqra/keys/
             sudo chown ubuntu:ubuntu /var/www/linqra/docker-compose.yml
-            sudo chmod -R 600 /var/www/linqra/keys/
 
             rm -rf ~/deploy_temp
 

@@ -44,23 +44,33 @@ jobs:
           name: docker-compose
           path: docker-compose.yml
 
-      # Upload .kube directory - modified to handle hidden directory
+      # Debug and upload .kube directory with hidden files
+      - name: Debug .kube directory
+        run: |
+          echo "Checking .kube directory contents:"
+          ls -la .kube/
+          
       - name: Upload .kube directory
         uses: actions/upload-artifact@v4
         with:
           name: kube-config
           path: |
-            .kube
-            .kube/**
-        continue-on-error: true
+            .kube/**/*
+            .kube/.*
+          if-no-files-found: error
 
-      # Add this new step to upload keys directory if it exists
+      # Add this new step to upload keys directory
+      - name: Debug keys directory
+        run: |
+          echo "Checking keys directory contents:"
+          ls -la keys/
+          
       - name: Upload keys directory
         uses: actions/upload-artifact@v4
         with:
           name: keys-config
-          path: keys/
-        continue-on-error: true
+          path: keys/**/*
+          if-no-files-found: error
 
   react-build:
     needs: java-build
@@ -149,9 +159,9 @@ jobs:
           scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/ || echo "Failed to copy edge-service artifacts"
           scp -v artifacts/docker-compose/docker-compose.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy docker-compose.yml"
           
-          # Modified .kube copy command to handle hidden directory and files
-          if [ -d "artifacts/kube-config/.kube" ]; then
-            scp -v -r artifacts/kube-config/.kube/. $EC2_USERNAME@$EC2_HOST:~/deploy_temp/.kube/ || echo "Failed to copy .kube directory contents"
+          # Modified .kube copy command to match the working keys pattern
+          if [ -d "artifacts/kube-config" ]; then
+            scp -v -r artifacts/kube-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/.kube/ || echo "Failed to copy .kube directory contents"
           else
             echo "No .kube directory found in artifacts"
           fi

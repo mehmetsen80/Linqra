@@ -199,7 +199,20 @@ services:
       - linqra-network
 
 
-  # gateway
+  # Load Balancer
+  gateway-loadbalancer:
+    image: haproxy:2.8
+    ports:
+      - "7777:7777"
+    volumes:
+      - ./.kube/gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./keys/haproxy/gateway-combined-container.pem:/etc/ssl/gateway-cert.pem:ro
+    networks:
+      - linqra-network
+    depends_on:
+      - api-gateway-service
+
+  # API Gateway Service
   api-gateway-service:
     build:
       context: .
@@ -210,7 +223,6 @@ services:
       GATEWAY_KEY_STORE: /app/gateway-keystore.jks
       GATEWAY_KEY_STORE_PASSWORD: 123456
       GATEWAY_API_HOST: api-gateway-service
-      GATEWAY_API_PORT: 7777
       GATEWAY_ALIAS_NAME: gateway-app-container
       REDIS_GATEWAY_URL: redis-service
       MONGO_GATEWAY_URL: "mongodb://root:mongopw@mongodb1:27017,mongodb2:27018,mongodb3:27019/admin?replicaSet=rs0"
@@ -226,12 +238,12 @@ services:
     volumes:
       - ./api-gateway:/app/api-gateway
       - ./keys:/app/keys
-    ports:
-      - "7777:7777"
-#    deploy:
-#      replicas: 3
-#      restart_policy:
-#        condition: on-failure
+    deploy:
+      replicas: 3
+      restart_policy:
+        condition: on-failure
+    expose:
+      - "7777"
     networks:
       - linqra-network
     depends_on:

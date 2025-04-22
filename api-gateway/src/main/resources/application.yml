@@ -147,13 +147,13 @@ logging:
     org.springframework.web.socket: INFO
     org.springframework.messaging: INFO
     org.springframework.security.web.server.authentication.AuthenticationWebFilter: ERROR
-    javax.net.ssl: DEBUG
-    org.mongodb.driver: DEBUG
-    org.mongodb.driver.cluster: DEBUG
-    org.mongodb.driver.connection: DEBUG
-    org.mongodb.driver.protocol: DEBUG
-    org.mongodb.driver.operation: DEBUG
-    org.lite.gateway.config: DEBUG
+    javax.net.ssl: INFO
+    org.mongodb.driver: ERROR
+    org.mongodb.driver.cluster: INFO
+    org.mongodb.driver.connection: INFO
+    org.mongodb.driver.protocol: INFO
+    org.mongodb.driver.operation: INFO
+    org.lite.gateway.config: ERROR
 
 notifications:
   email:

@@ -49,12 +49,20 @@ jobs:
         run: |
           echo "Checking .kube directory contents:"
           ls -la .kube/
+          echo "Checking contents of subdirectories:"
+          for dir in .kube/*/; do
+            echo "Contents of $dir:"
+            ls -la "$dir"
+          done
           
       - name: Upload .kube directory
         uses: actions/upload-artifact@v4
         with:
           name: kube-config
-          path: .kube/
+          path: |
+            .kube/
+            .kube/*/
+            .kube/*/*
           if-no-files-found: error
 
       # Add this new step to upload keys directory

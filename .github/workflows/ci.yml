@@ -53,6 +53,8 @@ jobs:
           for dir in .kube/*/; do
             echo "Contents of $dir:"
             ls -la "$dir"
+            echo "File count in $dir:"
+            find "$dir" -type f | wc -l
           done
           
       - name: Upload .kube directory
@@ -60,8 +62,7 @@ jobs:
         with:
           name: kube-config
           path: |
-            .kube/
-            .kube/*/
+            .kube/**/*
 
       # Add this new step to upload keys directory
       - name: Upload keys directory

@@ -59,8 +59,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kube-config
-          path: .kube/**
-          if-no-files-found: error
+          path: |
+            .kube/
+            .kube/*/
 
       # Add this new step to upload keys directory
       - name: Upload keys directory

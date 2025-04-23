@@ -49,20 +49,16 @@ jobs:
         run: |
           echo "Checking .kube directory contents:"
           ls -la .kube/
-          echo "Checking contents of subdirectories:"
-          for dir in .kube/*/; do
-            echo "Contents of $dir:"
-            ls -la "$dir"
-            echo "File count in $dir:"
-            find "$dir" -type f | wc -l
-          done
           
-      - name: Upload .kube directory
+      - name: Copy .kube to temporary directory
+        run: |
+          cp -r .kube kube-config
+          
+      - name: Upload kube directory
         uses: actions/upload-artifact@v4
         with:
           name: kube-config
-          path: |
-            .kube/**/*
+          path: kube-config/**
 
       # Add this new step to upload keys directory
       - name: Upload keys directory
@@ -159,7 +155,7 @@ jobs:
           scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/ || echo "Failed to copy edge-service artifacts"
           scp -v artifacts/docker-compose/docker-compose.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy docker-compose.yml"
           
-          # Modified .kube copy command to match the working keys pattern
+          # Modified .kube copy command
           if [ -d "artifacts/kube-config" ]; then
             scp -v -r artifacts/kube-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/.kube/ || echo "Failed to copy .kube directory contents"
           else

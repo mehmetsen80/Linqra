@@ -23,19 +23,39 @@ jobs:
       - name: Build with Maven
         run: mvn -B package --file pom.xml
       
-      # Upload Java artifacts
+      # Upload Java artifacts (JAR)
       - name: Upload Java artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: java-artifacts
+          name: api-gateway-artifacts
           path: api-gateway/target/*.jar
 
-      # Upload Discovery Server artifacts
+      # Upload API Gateway source files
+      - name: Upload API Gateway source
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-gateway-source
+          path: |
+            api-gateway/**
+            !api-gateway/target/**
+            !api-gateway/target/
+
+      # Upload Discovery Server artifacts (JAR)
       - name: Upload Discovery Server artifacts
         uses: actions/upload-artifact@v4
         with:
           name: discovery-server-artifacts
           path: discovery-server/target/*.jar
+
+      # Upload Discovery Server source files
+      - name: Upload Discovery Server source
+        uses: actions/upload-artifact@v4
+        with:
+          name: discovery-server-source
+          path: |
+            discovery-server/**
+            !discovery-server/target/**
+            !discovery-server/target/
 
       # Upload docker-compose.yml
       - name: Upload docker-compose file
@@ -43,6 +63,13 @@ jobs:
         with:
           name: docker-compose
           path: docker-compose.yml
+
+      # Upload root pom.xml
+      - name: Upload root pom file
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-pom
+          path: pom.xml
 
       # Debug and upload .kube directory with hidden files
       - name: Debug .kube directory
@@ -150,10 +177,13 @@ jobs:
           echo "Starting file copy..."
           
           # Copy all artifacts with error handling
-          scp -v artifacts/java-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/ || echo "Failed to copy api-gateway artifacts"
+          scp -v artifacts/api-gateway-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/ || echo "Failed to copy api-gateway artifacts"
+          scp -v -r artifacts/api-gateway-source/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/ || echo "Failed to copy api-gateway source"
           scp -v artifacts/discovery-server-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/ || echo "Failed to copy discovery-server artifacts"
+          scp -v -r artifacts/discovery-server-source/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/ || echo "Failed to copy discovery-server source"
           scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/ || echo "Failed to copy edge-service artifacts"
           scp -v artifacts/docker-compose/docker-compose.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy docker-compose.yml"
+          scp -v artifacts/root-pom/pom.xml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy root pom.xml"
           
           # Modified .kube copy command
           if [ -d "artifacts/kube-config" ]; then
@@ -202,6 +232,9 @@ jobs:
             
             echo 'Copying Docker Compose file...'
             cp -v ~/deploy_temp/docker-compose.yml /var/www/linqra/ || echo 'No docker-compose.yml to copy'
+            
+            echo 'Copying root pom.xml file...'
+            cp -v ~/deploy_temp/pom.xml /var/www/linqra/ || echo 'No pom.xml to copy'
             
             echo 'Copying .kube files...'
             sudo cp -rv ~/deploy_temp/.kube/. /var/www/linqra/.kube/ || echo 'No .kube files to copy'

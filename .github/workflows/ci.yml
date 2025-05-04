@@ -14,12 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: maven
 
       # Upload API Gateway source files
       - name: Upload API Gateway source
@@ -94,9 +88,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '21.5.0'
-          npm: '10.8.1'
           cache: 'npm'
           cache-dependency-path: './edge-service/package-lock.json'
+
+      - name: Upgrade npm
+        run: npm install -g npm@10.8.1
 
       - name: Remove package-lock.json
         run: rm -f package-lock.json
@@ -146,10 +142,10 @@ jobs:
           mkdir -p ~/.ssh
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
 
-          # Rsync main directories (only changed/new files)
-          rsync -avz --delete artifacts/api-gateway-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/api-gateway/
-          rsync -avz --delete artifacts/discovery-server-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/discovery-server/
-          rsync -avz --delete artifacts/react-build/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/edge-service/
+          # Rsync main directories (only changed/new files, with sudo on remote)
+          rsync -avz --delete --rsync-path="sudo rsync" artifacts/api-gateway-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/api-gateway/
+          rsync -avz --delete --rsync-path="sudo rsync" artifacts/discovery-server-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/discovery-server/
+          rsync -avz --delete --rsync-path="sudo rsync" artifacts/react-build/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/edge-service/
 
           # Use scp for sensitive or always-fresh files
           scp -v artifacts/docker-compose/docker-compose-ec2.yml $EC2_USERNAME@$EC2_HOST:/var/www/linqra/docker-compose.yml
@@ -157,14 +153,15 @@ jobs:
 
           # .kube and keys (if needed, use scp or rsync as appropriate)
           if [ -d "artifacts/kube-config" ]; then
-            rsync -avz --delete artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
+            rsync -avz --delete --rsync-path="sudo rsync" artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
           fi
           if [ -d "artifacts/keys-config" ]; then
-            rsync -avz --delete artifacts/keys-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/keys/
+            rsync -avz --delete --rsync-path="sudo rsync" artifacts/keys-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/keys/
           fi
 
-          # Set permissions
+          # Set permissions and deploy
           ssh $EC2_USERNAME@$EC2_HOST "
+            # Set permissions
             sudo chown -R ubuntu:ubuntu /var/www/linqra
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
             sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;

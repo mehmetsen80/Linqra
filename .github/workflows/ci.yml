@@ -166,15 +166,21 @@ jobs:
           fi
 
           # Set correct permissions for pgadmin
-          sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin/data
-          sudo chmod -R 755 /var/www/linqra/.kube/pgadmin/data
+          if [ -d /var/www/linqra/.kube/pgadmin/data ]; then
+            sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin/data
+            sudo chmod -R 755 /var/www/linqra/.kube/pgadmin/data
+          fi
 
           # Set correct permissions for MongoDB
-          sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/data1
-          sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/data2
-          sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/data3
-          sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
-          sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
+          for d in data1 data2 data3; do
+            if [ -d /var/www/linqra/.kube/mongodb/$d ]; then
+              sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/$d
+            fi
+          done
+          if [ -f /var/www/linqra/.kube/mongodb/mongo-keyfile ]; then
+            sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
+            sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
+          fi
 
           # Set permissions and deploy
           ssh $EC2_USERNAME@$EC2_HOST "

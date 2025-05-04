@@ -188,7 +188,7 @@ jobs:
             sudo chown -R ubuntu:ubuntu /var/www/linqra
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
             sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;
-            sudo find /var/www/linqra/keys -type f -exec chmod 644 {} \;
+            sudo find /var/www/linqra/keys -type f -exec chmod 600 {} \;
 
             # Move to the deployment directory
             cd /var/www/linqra

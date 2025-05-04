@@ -153,11 +153,28 @@ jobs:
 
           # .kube and keys (if needed, use scp or rsync as appropriate)
           if [ -d "artifacts/kube-config" ]; then
-            rsync -avz --delete --rsync-path="sudo rsync" artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
+            rsync -avz --delete \
+              --exclude 'mongodb/data1/' \
+              --exclude 'mongodb/data2/' \
+              --exclude 'mongodb/data3/' \
+              --exclude 'postgress/data/' \
+              --exclude 'pgadmin/data/' \
+              --rsync-path="sudo rsync" artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
           fi
           if [ -d "artifacts/keys-config" ]; then
             rsync -avz --delete --rsync-path="sudo rsync" artifacts/keys-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/keys/
           fi
+
+          # Set correct permissions for pgadmin
+          sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin/data
+          sudo chmod -R 755 /var/www/linqra/.kube/pgadmin/data
+
+          # Set correct permissions for MongoDB
+          sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/data1
+          sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/data2
+          sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/data3
+          sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
+          sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
 
           # Set permissions and deploy
           ssh $EC2_USERNAME@$EC2_HOST "

@@ -194,19 +194,28 @@ jobs:
             cd /var/www/linqra
 
             # Stop running containers
+            echo "Stopping running containers"
             docker compose stop
 
             # Prune unused images/containers/volumes/networks
+            echo "Pruning unused images/containers/volumes/networks"
             docker system prune -a -f
 
             # Check disk usage
+            echo "Checking disk usage"
             df -hT
 
             # Ensure the Docker network exists
+            echo "Ensuring the Docker network exists"
             docker network create linqra-network || true
 
             # Build and start containers
+            echo "Building and starting containers"
             sudo docker compose up -d --build
+
+            # Check if containers are running
+            echo "Checking if containers are running"
+            docker ps
           "
 
   dependency-review:

@@ -20,6 +20,8 @@ eureka:
 
 server:
   port: 8761
+  servlet:
+    context-path: /eureka
   ssl:
     enabled: true
     key-store: ${EUREKA_KEY_STORE}

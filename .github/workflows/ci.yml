@@ -20,15 +20,17 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
           cache: maven
-      - name: Build with Maven
-        run: mvn -B package --file pom.xml
-      
-      # Upload Java artifacts (JAR)
-      - name: Upload Java artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-gateway-artifacts
-          path: api-gateway/target/*.jar
+
+#      # Build with maven (we don't have to use it here since we will run our docker images on ec2 manually)
+#      - name: Build with Maven
+#        run: mvn -B package --file pom.xml
+#
+#      # Upload Java artifacts (JAR)
+#      - name: Upload Java artifacts
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: api-gateway-artifacts
+#          path: api-gateway/target/*.jar
 
       # Upload API Gateway source files
       - name: Upload API Gateway source
@@ -40,12 +42,12 @@ jobs:
             !api-gateway/target/**
             !api-gateway/target/
 
-      # Upload Discovery Server artifacts (JAR)
-      - name: Upload Discovery Server artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: discovery-server-artifacts
-          path: discovery-server/target/*.jar
+#      # Upload Discovery Server artifacts (JAR)
+#      - name: Upload Discovery Server artifacts
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: discovery-server-artifacts
+#          path: discovery-server/target/*.jar
 
       # Upload Discovery Server source files
       - name: Upload Discovery Server source
@@ -62,7 +64,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: docker-compose
-          path: docker-compose.yml
+          path: docker-compose-ec2.yml
 
       # Upload root pom.xml
       - name: Upload root pom file
@@ -95,6 +97,7 @@ jobs:
           path: keys/
           if-no-files-found: error
 
+  # we build react here in the GitHub actions
   react-build:
     needs: java-build
     runs-on: ubuntu-latest
@@ -177,12 +180,12 @@ jobs:
           echo "Starting file copy..."
           
           # Copy all artifacts with error handling
-          scp -v artifacts/api-gateway-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/ || echo "Failed to copy api-gateway artifacts"
+#          scp -v artifacts/api-gateway-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/ || echo "Failed to copy api-gateway artifacts"
           scp -v -r artifacts/api-gateway-source/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/ || echo "Failed to copy api-gateway source"
-          scp -v artifacts/discovery-server-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/ || echo "Failed to copy discovery-server artifacts"
+#          scp -v artifacts/discovery-server-artifacts/*.jar $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/ || echo "Failed to copy discovery-server artifacts"
           scp -v -r artifacts/discovery-server-source/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/ || echo "Failed to copy discovery-server source"
           scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/ || echo "Failed to copy edge-service artifacts"
-          scp -v artifacts/docker-compose/docker-compose.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy docker-compose.yml"
+          scp -v artifacts/docker-compose/docker-compose-ec2.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy docker-compose-ec2.yml"
           scp -v artifacts/root-pom/pom.xml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy root pom.xml"
           
           # Modified .kube copy command
@@ -204,7 +207,7 @@ jobs:
             echo 'Edge Service files:'
             ls -la ~/deploy_temp/edge-service/
             echo 'Docker Compose file:'
-            ls -la ~/deploy_temp/docker-compose.yml
+            ls -la ~/deploy_temp/docker-compose-ec2.yml
             echo '.kube directory:'
             ls -la ~/deploy_temp/.kube/
             
@@ -231,7 +234,7 @@ jobs:
             cp -rv ~/deploy_temp/edge-service/* /var/www/linqra/edge-service/ || echo 'No edge-service files to copy'
             
             echo 'Copying Docker Compose file...'
-            cp -v ~/deploy_temp/docker-compose.yml /var/www/linqra/ || echo 'No docker-compose.yml to copy'
+            cp -v ~/deploy_temp/docker-compose-ec2.yml /var/www/linqra/docker-compose.yml || echo 'No docker-compose-ec2.yml to copy'
             
             echo 'Copying root pom.xml file...'
             cp -v ~/deploy_temp/pom.xml /var/www/linqra/ || echo 'No pom.xml to copy'
@@ -245,6 +248,11 @@ jobs:
             echo 'Setting final permissions...'
             sudo chown -R ubuntu:ubuntu /var/www/linqra
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
+
+            # Set proper permissions for HAProxy certificates
+            echo 'Setting HAProxy certificate permissions...'
+            sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;
+            sudo find /var/www/linqra/keys -type f -exec chmod 644 {} \;
 
             echo 'Final directory structure:'
             ls -la /var/www/linqra/

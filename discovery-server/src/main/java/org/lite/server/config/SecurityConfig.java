@@ -16,9 +16,11 @@ public class SecurityConfig {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/eureka/css/**", "/eureka/js/**", "/eureka/images/**").permitAll()
                         .anyRequest()
                         .permitAll()
-                );
+                )
+                .csrf(AbstractHttpConfigurer::disable);
 
 
         return http.build();

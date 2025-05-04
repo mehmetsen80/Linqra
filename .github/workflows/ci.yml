@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  java-build:
+  java-app:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +81,7 @@ jobs:
 
   # we build react here in the GitHub actions
   react-build:
-    needs: java-build
+    needs: java-app
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -123,7 +123,7 @@ jobs:
           path: edge-service/dist
 
   deploy:
-    needs: [java-build, react-build]
+    needs: [java-app, react-build]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
 
@@ -146,102 +146,47 @@ jobs:
           mkdir -p ~/.ssh
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
 
-          # Create structured temp directory
-          ssh $EC2_USERNAME@$EC2_HOST "
-            rm -rf ~/deploy_temp
-            mkdir -p ~/deploy_temp/.kube
-            mkdir -p ~/deploy_temp/api-gateway
-            mkdir -p ~/deploy_temp/edge-service
-            mkdir -p ~/deploy_temp/keys
-            mkdir -p ~/deploy_temp/discovery-server
-            echo 'Temporary directory structure ready'
-          "
-          
-          echo "Starting file copy..."
-          
-          # Copy all artifacts with error handling
-          scp -v -r artifacts/api-gateway-source/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/api-gateway/ || echo "Failed to copy api-gateway source"
-          scp -v -r artifacts/discovery-server-source/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/discovery-server/ || echo "Failed to copy discovery-server source"
-          scp -v -r artifacts/react-build/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/edge-service/ || echo "Failed to copy edge-service artifacts"
-          scp -v artifacts/docker-compose/docker-compose-ec2.yml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy docker-compose-ec2.yml"
-          scp -v artifacts/root-pom/pom.xml $EC2_USERNAME@$EC2_HOST:~/deploy_temp/ || echo "Failed to copy root pom.xml"
-          
-          # Modified .kube copy command
-          if [ -d "artifacts/kube-config" ]; then
-            scp -v -r artifacts/kube-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/.kube/ || echo "Failed to copy .kube directory contents"
-          else
-            echo "No .kube directory found in artifacts"
-          fi
-          
-          scp -v -r artifacts/keys-config/* $EC2_USERNAME@$EC2_HOST:~/deploy_temp/keys/ || echo "No keys directory to copy"
+          # Rsync main directories (only changed/new files)
+          rsync -avz --delete artifacts/api-gateway-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/api-gateway/
+          rsync -avz --delete artifacts/discovery-server-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/discovery-server/
+          rsync -avz --delete artifacts/react-build/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/edge-service/
 
-          # Deploy files with structured approach
+          # Use scp for sensitive or always-fresh files
+          scp -v artifacts/docker-compose/docker-compose-ec2.yml $EC2_USERNAME@$EC2_HOST:/var/www/linqra/docker-compose.yml
+          scp -v artifacts/root-pom/pom.xml $EC2_USERNAME@$EC2_HOST:/var/www/linqra/pom.xml
+
+          # .kube and keys (if needed, use scp or rsync as appropriate)
+          if [ -d "artifacts/kube-config" ]; then
+            rsync -avz --delete artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
+          fi
+          if [ -d "artifacts/keys-config" ]; then
+            rsync -avz --delete artifacts/keys-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/keys/
+          fi
+
+          # Set permissions
           ssh $EC2_USERNAME@$EC2_HOST "
-            echo 'Checking deploy_temp contents:'
-            echo 'API Gateway files:'
-            ls -la ~/deploy_temp/api-gateway/
-            echo 'Discovery Server files:'
-            ls -la ~/deploy_temp/discovery-server/
-            echo 'Edge Service files:'
-            ls -la ~/deploy_temp/edge-service/
-            echo 'Docker Compose file:'
-            ls -la ~/deploy_temp/docker-compose-ec2.yml
-            echo '.kube directory:'
-            ls -la ~/deploy_temp/.kube/
-            
-            echo 'Creating target directories with proper permissions...'
-            # Create base directory first
-            sudo mkdir -p /var/www/linqra
-            sudo chown ubuntu:ubuntu /var/www/linqra
-            
-            # Create and set permissions for subdirectories
-            for dir in api-gateway discovery-server edge-service .kube keys; do
-              sudo mkdir -p /var/www/linqra/\$dir
-              sudo chown ubuntu:ubuntu /var/www/linqra/\$dir
-            done
-            
-            echo 'Moving files to target directories...'
-            # Copy files with proper error handling
-            echo 'Copying API Gateway files...'
-            cp -rv ~/deploy_temp/api-gateway/* /var/www/linqra/api-gateway/ || echo 'No api-gateway files to copy'
-            
-            echo 'Copying Discovery Server files...'
-            cp -rv ~/deploy_temp/discovery-server/* /var/www/linqra/discovery-server/ || echo 'No discovery-server files to copy'
-            
-            echo 'Copying Edge Service files...'
-            cp -rv ~/deploy_temp/edge-service/* /var/www/linqra/edge-service/ || echo 'No edge-service files to copy'
-            
-            echo 'Copying Docker Compose file...'
-            cp -v ~/deploy_temp/docker-compose-ec2.yml /var/www/linqra/docker-compose.yml || echo 'No docker-compose-ec2.yml to copy'
-            
-            echo 'Copying root pom.xml file...'
-            cp -v ~/deploy_temp/pom.xml /var/www/linqra/ || echo 'No pom.xml to copy'
-            
-            echo 'Copying .kube files...'
-            sudo cp -rv ~/deploy_temp/.kube/. /var/www/linqra/.kube/ || echo 'No .kube files to copy'
-            
-            echo 'Copying keys files...'
-            sudo cp -rv ~/deploy_temp/keys/* /var/www/linqra/keys/ || echo 'No keys files to copy'
-            
-            echo 'Setting final permissions...'
             sudo chown -R ubuntu:ubuntu /var/www/linqra
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
-
-            # Set proper permissions for HAProxy certificates
-            echo 'Setting HAProxy certificate permissions...'
             sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;
             sudo find /var/www/linqra/keys -type f -exec chmod 644 {} \;
 
-            echo 'Final directory structure:'
-            ls -la /var/www/linqra/
-            echo 'Discovery Server contents:'
-            ls -la /var/www/linqra/discovery-server/
-            echo 'API Gateway contents:'
-            ls -la /var/www/linqra/api-gateway/
+            # Move to the deployment directory
+            cd /var/www/linqra
 
-            rm -rf ~/deploy_temp
-            
-            echo 'Deployment completed'
+            # Stop running containers
+            docker compose stop
+
+            # Prune unused images/containers/volumes/networks
+            docker system prune -a -f
+
+            # Check disk usage
+            df -hT
+
+            # Ensure the Docker network exists
+            docker network create linqra-network || true
+
+            # Build and start containers
+            sudo docker compose up -d --build
           "
 
   dependency-review:

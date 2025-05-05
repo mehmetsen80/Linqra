@@ -211,7 +211,8 @@ jobs:
 
             # Build and start containers
             echo "Building and starting containers"
-            sudo docker compose up -d --build
+            #sudo docker compose up -d --build
+            docker compose -f docker-compose.yml -p linqra up -d --build
 
             # Check if containers are running
             echo "Checking if containers are running"

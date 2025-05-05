@@ -42,7 +42,7 @@ spring:
         opaquetoken:
           introspection-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/token/introspect
           client-id: linqra-gateway-client
-          client-secret: r4MBE75Axgsiu143HGvgQ1qlK6B9LCj5
+          client-secret: ${KEYCLOAK_CLIENT_SECRET:r4MBE75Axgsiu143HGvgQ1qlK6B9LCj5}
         jwt:
           issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra
           jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/certs
@@ -103,6 +103,8 @@ eureka:
     enabled: true
     register-with-eureka: true
     fetch-registry: true
+    eureka-server-connect-timeout-seconds: 10
+    eureka-server-read-timeout-seconds: 10
   instance:
     hostname: ${EUREKA_INSTANCE_URL:localhost}
     instance-id: ${spring.application.name}:${instanceId:${random.value}}

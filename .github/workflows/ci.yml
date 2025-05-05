@@ -194,6 +194,12 @@ jobs:
           sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
           sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
 
+          # Check that HAProxy config and cert files exist on the EC2 host
+          ssh $EC2_USERNAME@$EC2_HOST "
+            ls -l /var/www/linqra/.kube/gateway/haproxy.cfg
+            ls -l /var/www/linqra/keys/haproxy/gateway-combined-container.pem
+          "
+
           echo "About to run SSH block"
           ssh $EC2_USERNAME@$EC2_HOST "
             # Set permissions

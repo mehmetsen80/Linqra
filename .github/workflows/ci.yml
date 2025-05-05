@@ -182,6 +182,15 @@ jobs:
             sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
           fi
 
+          # Ensure the parent directory is owned by pgadmin (UID 5050)
+          sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin
+          sudo chmod -R 755 /var/www/linqra/.kube/pgadmin
+
+          # Ensure the sessions directory is owned by pgadmin (UID 5050)
+          sudo mkdir -p /var/www/linqra/.kube/pgadmin/data/sessions
+          sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
+          sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
+
           echo "About to run SSH block"
           ssh $EC2_USERNAME@$EC2_HOST "
             # Set permissions
@@ -217,7 +226,7 @@ jobs:
 
             # Build and start containers
             echo "Building and starting containers"
-            sudo docker compose -f docker-compose.yml -p linqra up -d --build
+            sudo docker compose -f docker-compose.yml -p linqra up -d
 
             # Check if containers are running
             echo "Checking if containers are running"

@@ -239,7 +239,8 @@ services:
       REDIS_GATEWAY_URL: redis-service
       MONGO_GATEWAY_URL: "mongodb://root:mongopw@mongodb1:27017,mongodb2:27018,mongodb3:27019/admin?replicaSet=rs0"
       KEYCLOAK_GATEWAY_URL: keycloak-service
-      KEYCLOAK_GATEWAY_PORT: 8080
+      KEYCLOAK_GATEWAY_PORT: 8281/keycloak
+      KEYCLOAK_CLIENT_SECRET: RCX7Ppf7Jl5cGvNw8eDtcYkY5zvRggCk
       EUREKA_GATEWAY_URL: discovery-service
       EUREKA_INSTANCE_URL: api-gateway-service
       SLACK_ENABLED: "false"

@@ -182,11 +182,14 @@ jobs:
             sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
           fi
 
-          # Ensure the parent directory is owned by pgadmin (UID 5050)
+          # Ensure the parent directory exists
+          sudo mkdir -p /var/www/linqra/.kube/pgadmin/data
+
+          # Now set permissions
           sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin
           sudo chmod -R 755 /var/www/linqra/.kube/pgadmin
 
-          # Ensure the sessions directory is owned by pgadmin (UID 5050)
+          # Ensure the sessions directory exists and is owned by pgadmin
           sudo mkdir -p /var/www/linqra/.kube/pgadmin/data/sessions
           sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
           sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions

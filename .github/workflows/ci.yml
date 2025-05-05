@@ -188,7 +188,13 @@ jobs:
             sudo chown -R ubuntu:ubuntu /var/www/linqra
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
             sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;
-            sudo find /var/www/linqra/keys -type f -exec chmod 600 {} \;
+            sudo find /var/www/linqra/keys -type f ! -name 'mongo-keyfile' -exec chmod 600 {} \;
+
+            # Set correct permissions for mongo-keyfile
+            if [ -f /var/www/linqra/.kube/mongodb/mongo-keyfile ]; then
+              sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
+              sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
+            fi
 
             # Move to the deployment directory
             cd /var/www/linqra
@@ -211,7 +217,6 @@ jobs:
 
             # Build and start containers
             echo "Building and starting containers"
-            #sudo docker compose up -d --build
             sudo docker compose -f docker-compose.yml -p linqra up -d --build
 
             # Check if containers are running

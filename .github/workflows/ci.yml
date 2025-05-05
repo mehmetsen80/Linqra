@@ -157,7 +157,7 @@ jobs:
               --exclude 'mongodb/data1/' \
               --exclude 'mongodb/data2/' \
               --exclude 'mongodb/data3/' \
-              --exclude 'postgress/data/' \
+              --exclude 'postgres/data/' \
               --exclude 'pgadmin/data/' \
               --rsync-path="sudo rsync" artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
           fi
@@ -195,11 +195,11 @@ jobs:
 
             # Stop running containers
             echo "Stopping running containers"
-            docker compose stop
+            sudo docker compose stop
 
             # Prune unused images/containers/volumes/networks
             echo "Pruning unused images/containers/volumes/networks"
-            docker system prune -a -f
+            sudo docker system prune -a -f
 
             # Check disk usage
             echo "Checking disk usage"
@@ -207,12 +207,12 @@ jobs:
 
             # Ensure the Docker network exists
             echo "Ensuring the Docker network exists"
-            docker network create linqra-network || true
+            sudo docker network create linqra-network || true
 
             # Build and start containers
             echo "Building and starting containers"
             #sudo docker compose up -d --build
-            docker compose -f docker-compose.yml -p linqra up -d --build
+            sudo docker compose -f docker-compose.yml -p linqra up -d --build
 
             # Check if containers are running
             echo "Checking if containers are running"

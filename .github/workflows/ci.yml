@@ -202,7 +202,7 @@ jobs:
 
           # Ensure HAProxy cert file is readable by HAProxy in the container
           ssh $EC2_USERNAME@$EC2_HOST "
-            chmod 644 /var/www/linqra/keys/haproxy/gateway-combined-container.pem
+            sudo chmod 644 /var/www/linqra/keys/haproxy/gateway-combined-container.pem
           "
 
           echo "About to run SSH block"

@@ -97,13 +97,40 @@ const authService = {
   },
 
   handleSSOCallback: async (code) => {
-      try {
+    try {
+        console.log('Making SSO callback request with code:', code);
+        
         const response = await axiosInstance.post('/api/auth/sso/callback', { code });
+        console.log('SSO callback response:', response.data);
+        
         return response.data;
-      } catch (error) {
+    } catch (error) {
+        console.error('SSO callback error details:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status
+        });
+
+        // Check if it's a 400 error with "Code already in use"
+        if (error.response?.status === 400 && 
+            error.response?.data?.message?.includes("Code already in use")) {
+            return { 
+                error: "Code already in use",
+                type: "INVALID_AUTHENTICATION"
+            };
+        }
+
+        // If it's a 400 error but not "Code already in use"
+        if (error.response?.status === 400) {
+            return {
+                error: error.response?.data?.message || "Authentication failed",
+                type: "AUTHENTICATION_ERROR"
+            };
+        }
+
         throw error;
-      }
-    },
+    }
+  },
 
   refreshToken: async (refreshToken) => {
     try {

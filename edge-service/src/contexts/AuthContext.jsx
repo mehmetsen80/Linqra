@@ -353,14 +353,18 @@ export const AuthProvider = ({ children }) => {
 
   const handleSSOCallback = async (code) => {
     try {
-      console.log('Handling SSO callback with code:', code);
+      console.log('Starting SSO callback handling with code:', code);
       
       const response = await authService.handleSSOCallback(code);
       console.log('SSO callback response:', response);
 
       // First check for errors
       if (response.error) {
+        console.log('SSO callback error detected:', response.error);
+        
         if (response.error === "Code already in use") {
+          console.log('Code already in use, initiating new login flow');
+          
           // Clear any existing state before redirecting
           localStorage.removeItem('authState');
           sessionStorage.removeItem('oauth_state');
@@ -378,6 +382,8 @@ export const AuthProvider = ({ children }) => {
             timestamp
           }));
 
+          console.log('Redirecting to Keycloak with new state:', state);
+          
           // Force a fresh login by adding prompt=login and timestamp
           window.location.href = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=openid&prompt=login&timestamp=${timestamp}`;
           return;

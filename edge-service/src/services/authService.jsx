@@ -111,7 +111,7 @@ const authService = {
             status: error.response?.status
         });
 
-        // Check if it's a 400 error with "Code already in use"
+        // Keep the Code already in use check
         if (error.response?.status === 400 && 
             error.response?.data?.message?.includes("Code already in use")) {
             return { 
@@ -120,11 +120,11 @@ const authService = {
             };
         }
 
-        // If it's a 400 error but not "Code already in use"
-        if (error.response?.status === 400) {
+        // Handle timeout
+        if (error.code === 'ECONNABORTED') {
             return {
-                error: error.response?.data?.message || "Authentication failed",
-                type: "AUTHENTICATION_ERROR"
+                error: "Request timed out. Please try again.",
+                type: "TIMEOUT_ERROR"
             };
         }
 

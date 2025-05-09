@@ -373,6 +373,10 @@ export const AuthProvider = ({ children }) => {
           const realm = process.env.REACT_APP_KEYCLOAK_REALM;
           const clientId = process.env.REACT_APP_KEYCLOAK_CLIENT_ID;
           const redirectUri = encodeURIComponent(window.location.origin + '/callback');
+          console.log('Redirect URI:', {
+            original: window.location.origin + '/callback',
+            encoded: redirectUri
+          });
 
           // Generate new state with timestamp
           const state = Math.random().toString(36).substring(7);
@@ -385,7 +389,7 @@ export const AuthProvider = ({ children }) => {
           console.log('Redirecting to Keycloak with new state:', state);
           
           // Force a fresh login by adding prompt=login and timestamp
-          window.location.href = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=openid&prompt=login&timestamp=${timestamp}`;
+          window.location.href = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=openid&timestamp=${timestamp}`;
           return;
         }
         throw new Error(response.error);
@@ -477,6 +481,10 @@ export const AuthProvider = ({ children }) => {
     const keycloakUrl = process.env.REACT_APP_KEYCLOAK_URL;
     const clientId = process.env.REACT_APP_KEYCLOAK_CLIENT_ID;
     const redirectUri = encodeURIComponent(window.location.origin + '/callback');
+    console.log('Redirect URI:', {
+      original: window.location.origin + '/callback',
+      encoded: redirectUri
+    });
     const realm = process.env.REACT_APP_KEYCLOAK_REALM;
     
     // Build auth URL with state parameter and timestamp

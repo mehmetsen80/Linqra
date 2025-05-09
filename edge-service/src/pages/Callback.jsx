@@ -12,24 +12,12 @@ const Callback = () => {
       const code = searchParams.get('code');
       if (code) {
         try {
-          const result = await handleSSOCallback(code);
-          
-          if (result?.error) {
-            if (result.error === "Code already in use") {
-              // Let the AuthContext handle the redirect
-              return;
-            }
-            // Handle other authentication errors
-            console.error('Authentication error:', result.error);
-            navigate('/login');
-            return;
-          }
+          await handleSSOCallback(code);
           
           // If we get here, it was a successful login
           navigate('/dashboard');
         } catch (error) {
           console.error('SSO callback error:', error);
-          navigate('/login');
         }
       }
     };

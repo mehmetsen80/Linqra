@@ -149,13 +149,13 @@ logging:
     org.springframework.web.socket: INFO
     org.springframework.messaging: INFO
     org.springframework.security.web.server.authentication.AuthenticationWebFilter: ERROR
-    javax.net.ssl: ERROR
+    javax.net.ssl: OFF
     org.mongodb.driver: ERROR
     org.mongodb.driver.cluster: INFO
     org.mongodb.driver.connection: INFO
     org.mongodb.driver.protocol: INFO
     org.mongodb.driver.operation: INFO
-    org.lite.gateway.config: ERROR
+    org.lite.gateway: INFO
 
 notifications:
   email:

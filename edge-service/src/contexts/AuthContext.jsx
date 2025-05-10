@@ -355,6 +355,14 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('Starting SSO callback handling with code:', code);
       
+      // Add a check to prevent multiple processing of the same code
+      const processingKey = `processing_${code}`;
+      if (sessionStorage.getItem(processingKey)) {
+        console.log('Code already being processed, skipping');
+        return false;
+      }
+      sessionStorage.setItem(processingKey, 'true');
+
       const response = await authService.handleSSOCallback(code);
       console.log('SSO callback response:', response);
 
@@ -362,25 +370,34 @@ export const AuthProvider = ({ children }) => {
         console.log('SSO callback error detected:', response.error);
         
         if (response.error === "Code already in use") {
-          // Instead of redirecting, try to get the existing session
+          // Check for existing valid session
           const authState = localStorage.getItem('authState');
           if (authState) {
-            const parsed = JSON.parse(authState);
-            if (parsed.token && parsed.user) {
-              updateAuthState(parsed);
-              await loadEnvironment();
-              navigate('/dashboard');
-              return true;
+            try {
+              const parsed = JSON.parse(authState);
+              if (parsed.token && parsed.user) {
+                // Verify token is still valid
+                const decoded = jwtDecode(parsed.token);
+                if (decoded.exp > Date.now() / 1000) {
+                  updateAuthState(parsed);
+                  await loadEnvironment();
+                  navigate('/dashboard');
+                  return true;
+                }
+              }
+            } catch (e) {
+              console.error('Error parsing auth state:', e);
             }
           }
-          // Only redirect if we don't have a valid session
+          // Clear processing flag before redirecting
+          sessionStorage.removeItem(processingKey);
           navigate('/login');
           return false;
         }
         throw new Error(response.error);
       }
 
-      // Then check for success
+      // Rest of your existing code stays the same
       if (response.success) {
         const newAuthState = {
           token: response.token,
@@ -390,18 +407,19 @@ export const AuthProvider = ({ children }) => {
         };
 
         updateAuthState(newAuthState);
-
         await loadEnvironment();
-
+        
+        // Keep the setTimeout for state update
         setTimeout(() => {
           localStorage.setItem('lastLoginTime', new Date().toISOString());
           navigate('/dashboard');
         }, 100);
-
+        
         return true;
       }
 
-      // If neither error nor success, clear state and redirect to login
+      // Clear processing flag before final redirect
+      sessionStorage.removeItem(processingKey);
       updateAuthState(createAuthState(null, null, false));
       localStorage.removeItem('authState');
       navigate('/login');
@@ -409,7 +427,8 @@ export const AuthProvider = ({ children }) => {
 
     } catch (error) {
       console.error('SSO callback error:', error);
-      // Clear all auth state on error
+      // Clear processing flag on error
+      sessionStorage.removeItem(processingKey);
       updateAuthState(createAuthState(null, null, false));
       localStorage.removeItem('authState');
       localStorage.removeItem('lastLoginTime');

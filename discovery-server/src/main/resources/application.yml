@@ -32,3 +32,6 @@ server:
     trust-store-password: ${EUREKA_TRUST_STORE_PASSWORD}
 
 
+logging:
+  level:
+    javax.net.ssl: OFF

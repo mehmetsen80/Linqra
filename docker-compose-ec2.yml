@@ -248,6 +248,7 @@ services:
       SMTP_ENABLED: false
       SMTP_PASSWORD: 123456
       SMTP_USERNAME: abcdef
+      OAUTH2_REDIRECT_URI: https://linqra.com/callback
     volumes:
       - ./api-gateway:/app/api-gateway
       - ./keys:/app/keys

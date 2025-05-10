@@ -86,6 +86,7 @@ ENV KEYCLOAK_GATEWAY_PORT=8080
 ENV EUREKA_GATEWAY_URL=discovery-service
 ENV GATEWAY_API_HOST=api-gateway-service
 ENV GATEWAY_API_PORT=7777
+#ENV OAUTH2_REDIRECT_URI=https://linqra.com/callback
 
 # Expose the API gateway port
 EXPOSE 7777

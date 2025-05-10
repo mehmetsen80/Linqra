@@ -358,39 +358,24 @@ export const AuthProvider = ({ children }) => {
       const response = await authService.handleSSOCallback(code);
       console.log('SSO callback response:', response);
 
-      // First check for errors
       if (response.error) {
         console.log('SSO callback error detected:', response.error);
         
         if (response.error === "Code already in use") {
-          console.log('Code already in use, initiating new login flow');
-          
-          // Clear any existing state before redirecting
-          localStorage.removeItem('authState');
-          sessionStorage.removeItem('oauth_state');
-
-          const keycloakUrl = process.env.REACT_APP_KEYCLOAK_URL;
-          const realm = process.env.REACT_APP_KEYCLOAK_REALM;
-          const clientId = process.env.REACT_APP_KEYCLOAK_CLIENT_ID;
-          const redirectUri = encodeURIComponent(window.location.origin + '/callback');
-          console.log('Redirect URI:', {
-            original: window.location.origin + '/callback',
-            encoded: redirectUri
-          });
-
-          // Generate new state with timestamp
-          const state = Math.random().toString(36).substring(7);
-          const timestamp = Date.now();
-          sessionStorage.setItem('oauth_state', JSON.stringify({
-            value: state,
-            timestamp
-          }));
-
-          console.log('Redirecting to Keycloak with new state:', state);
-          
-          // Force a fresh login by adding prompt=login and timestamp
-          window.location.href = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=openid&timestamp=${timestamp}`;
-          return;
+          // Instead of redirecting, try to get the existing session
+          const authState = localStorage.getItem('authState');
+          if (authState) {
+            const parsed = JSON.parse(authState);
+            if (parsed.token && parsed.user) {
+              updateAuthState(parsed);
+              await loadEnvironment();
+              navigate('/dashboard');
+              return true;
+            }
+          }
+          // Only redirect if we don't have a valid session
+          navigate('/login');
+          return false;
         }
         throw new Error(response.error);
       }

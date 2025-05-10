@@ -10,8 +10,7 @@ public class CreateApiKeyRequest {
     
     @NotBlank(message = "Team ID is required")
     private String teamId;
-    
-    @NotBlank(message = "Creator username is required")
+
     private String createdBy;
     
     // Optional: if you want to support custom expiration

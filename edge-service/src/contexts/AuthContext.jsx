@@ -352,38 +352,39 @@ export const AuthProvider = ({ children }) => {
   };
 
   const handleSSOCallback = async (code) => {
-    // Define processingKey at the top level of the function
     const processingKey = `processing_${code}`;
     
     try {
       console.log('Starting SSO callback handling with code:', code);
       
       if (sessionStorage.getItem(processingKey)) {
-        console.log('Code already being processed, checking existing session');
-        // Check for existing valid session instead of just skipping
+        console.log('Code already being processed, waiting for result...');
+        // Wait a bit for the first request to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Check if we have a valid session after waiting
         const authState = localStorage.getItem('authState');
         if (authState) {
           try {
             const parsed = JSON.parse(authState);
             if (parsed.token && parsed.user) {
-              // Verify token is still valid
-              const decoded = jwtDecode(parsed.token);
-              if (decoded.exp > Date.now() / 1000) {
-                updateAuthState(parsed);
-                await loadEnvironment();
-                setTimeout(() => {
-                  localStorage.setItem('lastLoginTime', new Date().toISOString());
-                  navigate('/dashboard');
-                }, 100);
-                return true;
-              }
+              console.log('Found valid session after waiting');
+              updateAuthState(parsed);
+              await loadEnvironment();
+              setTimeout(() => {
+                localStorage.setItem('lastLoginTime', new Date().toISOString());
+                navigate('/dashboard');
+              }, 100);
+              return true;
             }
           } catch (e) {
             console.error('Error parsing auth state:', e);
           }
         }
+        console.log('No valid session found after waiting');
         return false;
       }
+      
       sessionStorage.setItem(processingKey, 'true');
 
       const response = await authService.handleSSOCallback(code);
@@ -393,7 +394,8 @@ export const AuthProvider = ({ children }) => {
         console.log('SSO callback error detected:', response.error);
         
         if (response.error === "Code already in use") {
-          // Check for existing valid session
+          // Wait a bit and check for session
+          await new Promise(resolve => setTimeout(resolve, 1000));
           const authState = localStorage.getItem('authState');
           if (authState) {
             try {
@@ -411,7 +413,6 @@ export const AuthProvider = ({ children }) => {
               console.error('Error parsing auth state:', e);
             }
           }
-          // Clear processing flag before redirecting
           sessionStorage.removeItem(processingKey);
           navigate('/login');
           return false;
@@ -438,7 +439,6 @@ export const AuthProvider = ({ children }) => {
         return true;
       }
 
-      // Clear processing flag before final redirect
       sessionStorage.removeItem(processingKey);
       updateAuthState(createAuthState(null, null, false));
       localStorage.removeItem('authState');
@@ -447,7 +447,6 @@ export const AuthProvider = ({ children }) => {
 
     } catch (error) {
       console.error('SSO callback error:', error);
-      // Clear processing flag on error
       sessionStorage.removeItem(processingKey);
       updateAuthState(createAuthState(null, null, false));
       localStorage.removeItem('authState');

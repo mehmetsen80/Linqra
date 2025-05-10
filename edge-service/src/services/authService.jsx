@@ -108,10 +108,19 @@ const authService = {
         console.error('SSO callback error details:', {
             message: error.message,
             response: error.response?.data,
-            status: error.response?.status
+            status: error.response?.status,
+            headers: error.response?.headers,
+            config: {
+                url: error.config?.url,
+                method: error.config?.method,
+                headers: error.config?.headers
+            }
         });
 
-        // Keep the Code already in use check
+        if (error.response?.data) {
+            console.error('Full error response:', error.response.data);
+        }
+
         if (error.response?.status === 400 && 
             error.response?.data?.message?.includes("Code already in use")) {
             return { 
@@ -120,7 +129,6 @@ const authService = {
             };
         }
 
-        // Handle timeout
         if (error.code === 'ECONNABORTED') {
             return {
                 error: "Request timed out. Please try again.",

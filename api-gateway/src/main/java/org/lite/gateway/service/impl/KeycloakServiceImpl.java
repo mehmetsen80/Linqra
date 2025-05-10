@@ -44,13 +44,13 @@ public class KeycloakServiceImpl implements KeycloakService {
 
     @Override
     public Mono<AuthResponse> handleCallback(String code) {
-        log.info("\n=== Starting OAuth Token Exchange ===\nFull code from callback: {}", code);
-        
+        long start = System.currentTimeMillis();
+        log.info("=== [Timing] SSO callback started at {} ===", start);
+
         return codeCacheService.isCodeUsed(code)
             .flatMap(isUsed -> {
                 if (isUsed) {
                     log.debug("Code already used, checking for existing session");
-                    // Try to find existing user session
                     return exchangeCodeForToken(code)
                         .flatMap(this::validateAndCreateSession)
                         .onErrorResume(error -> {
@@ -60,7 +60,6 @@ public class KeycloakServiceImpl implements KeycloakService {
                             ));
                         });
                 }
-                
                 return codeCacheService.markCodeAsUsed(code)
                     .flatMap(marked -> {
                         if (!marked) {
@@ -69,16 +68,17 @@ public class KeycloakServiceImpl implements KeycloakService {
                                 "Code already in use"
                             ));
                         }
-                        
                         return exchangeCodeForToken(code)
                             .flatMap(this::validateAndCreateSession);
                     });
-            });
+            })
+            .doOnSuccess(response -> log.info("=== [Timing] SSO callback finished in {} ms ===", System.currentTimeMillis() - start));
     }
 
     private Mono<KeycloakTokenResponse> exchangeCodeForToken(String code) {
-        log.debug("Starting token exchange for code: {}", code);
-        
+        long start = System.currentTimeMillis();
+        log.info("=== [Timing] Token exchange started at {} ===", start);
+
         return Mono.zip(
             keycloakProperties.getTokenUrl()
                 .doOnError(e -> log.error("Failed to get token URL: {}", e.getMessage())),
@@ -97,10 +97,6 @@ public class KeycloakServiceImpl implements KeycloakService {
             String redirectUri = tuple.getT4();
             
             log.info("Using redirect URI for token exchange: {}", redirectUri);
-            
-            if (tokenUrl == null || clientId == null || clientSecret == null || redirectUri == null) {
-                return Mono.error(new IllegalStateException("One or more OAuth2 properties are null"));
-            }
 
             log.info("\n=== OAuth Configuration ===\n" +
                 "Token URL: {}\n" +
@@ -151,11 +147,15 @@ public class KeycloakServiceImpl implements KeycloakService {
                     return response.bodyToMono(KeycloakTokenResponse.class);
                 })
                 .doOnNext(response -> log.info("Successfully received token response"))
-                .doOnError(error -> log.error("Error exchanging code for token", error));
+                .doOnError(error -> log.error("Error exchanging code for token", error))
+                .doFinally(signal -> log.info("=== [Timing] Token exchange finished in {} ms ===", System.currentTimeMillis() - start));
         });
     }
 
     private Mono<AuthResponse> validateAndCreateSession(KeycloakTokenResponse tokenResponse) {
+        long start = System.currentTimeMillis();
+        log.info("=== [Timing] validateAndCreateSession started at {} ===", start);
+
         return jwtService.extractClaims(tokenResponse.getAccessToken())
             .flatMap(claims -> {
                 String username = claims.get("preferred_username", String.class);
@@ -218,7 +218,8 @@ public class KeycloakServiceImpl implements KeycloakService {
                     .single()
                     .doOnSuccess(response -> log.info("SSO transaction completed successfully"))
                     .doOnError(e -> log.error("SSO transaction failed: {}", e.getMessage()));
-            });
+            })
+            .doFinally(signal -> log.info("=== [Timing] validateAndCreateSession finished in {} ms ===", System.currentTimeMillis() - start));
     }
 
     private String extractEmailFromToken(String token) {

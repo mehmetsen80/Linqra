@@ -96,6 +96,8 @@ public class KeycloakServiceImpl implements KeycloakService {
             String clientSecret = tuple.getT3();
             String redirectUri = tuple.getT4();
             
+            log.info("Using redirect URI for token exchange: {}", redirectUri);
+            
             if (tokenUrl == null || clientId == null || clientSecret == null || redirectUri == null) {
                 return Mono.error(new IllegalStateException("One or more OAuth2 properties are null"));
             }

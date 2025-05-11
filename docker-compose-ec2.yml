@@ -230,6 +230,7 @@ services:
       context: .
       dockerfile: ./.kube/gateway/Dockerfile
     environment:
+      SPRING_PROFILES_ACTIVE: ec2
       GATEWAY_TRUST_STORE: /app/gateway-truststore.jks
       GATEWAY_TRUST_STORE_PASSWORD: 123456
       GATEWAY_KEY_STORE: /app/gateway-keystore.jks

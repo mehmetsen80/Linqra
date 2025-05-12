@@ -223,7 +223,6 @@ services:
     depends_on:
       - api-gateway-service
 
-
   # API Gateway Service
   api-gateway-service:
     build:

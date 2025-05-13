@@ -216,7 +216,7 @@ public class LinqServiceImpl implements LinqService {
             }
         }
         
-        String url = baseUrl + "/" + target + "/" + path;
+        String url = baseUrl + "/r/" + target + "/" + path;
         log.info("Linq url: {}", url);
         
         // Add remaining params as query parameters

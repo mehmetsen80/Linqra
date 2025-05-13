@@ -312,6 +312,7 @@ public class SecurityConfig {
                                 && !path.startsWith("/analysis/")
                                 && !path.startsWith("/routes/")
                                 && !path.startsWith("/api/")
+                                && !path.startsWith("/r/")
                                 && !path.startsWith("/health/")
                                 && !path.startsWith("/fallback/")
                                 && !path.startsWith("/linq")){

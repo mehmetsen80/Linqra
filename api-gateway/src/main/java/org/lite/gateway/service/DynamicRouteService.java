@@ -30,6 +30,7 @@ public class DynamicRouteService {
         add("/ws-linqra/**");
         add("/metrics/**");
         add("/api/**");
+        add("/r/**");
         add("/favicon.ico");
         add("/fallback/**");
         add("/actuator/**");

@@ -10,7 +10,7 @@ function ModulesSection() {
     <div className="modules-section">
       <div className="section-header">
         <h2>Modules</h2>
-        <p className="text-muted">Access and manage different aspects of your API gateway</p>
+        <p className="text-muted">Access and manage different aspects of your AI App Store</p>
       </div>
 
       <div className="dashboard-grid">
@@ -21,7 +21,7 @@ function ModulesSection() {
             </div>
           </Link>
           <h3>API Routes</h3>
-          <p>Configure and manage your API gateway routes and policies</p>
+          <p>Configure and manage your API routes and policies</p>
           <Link to="/api-routes" className="card-link">
             Manage Routes <i className="fas fa-arrow-right"></i>
           </Link>
@@ -103,11 +103,39 @@ function ModulesSection() {
               <i className="fas fa-cog"></i>
             </div>
           </Link>
-          <h3>Settings</h3>
-          <p>Configure dashboard and monitoring preferences</p>
+          <h3>RAG</h3>
+          <p>Configure Retrieval Augmented Generation preferences</p>
           <span className="coming-soon-badge">Coming Soon</span>
           <button className="card-link" disabled>
-            Open Settings <i className="fas fa-arrow-right"></i>
+            Open RAG <i className="fas fa-arrow-right"></i>
+          </button>
+        </div>
+
+        <div className="dashboard-card disabled">
+          <Link to="/ai-models" className="card-icon-link">
+            <div className="card-icon">
+              <i className="fas fa-robot"></i>
+            </div>
+          </Link>
+          <h3>AI Models</h3>
+          <p>Manage and explore available AI models for your applications</p>
+          <span className="coming-soon-badge">Coming Soon</span>
+          <button className="card-link" disabled>
+            Explore Models <i className="fas fa-arrow-right"></i>
+          </button>
+        </div>
+
+        <div className="dashboard-card disabled">
+          <Link to="/tools" className="card-icon-link">
+            <div className="card-icon">
+              <i className="fas fa-toolbox"></i>
+            </div>
+          </Link>
+          <h3>Tools</h3>
+          <p>Connect and manage integrations like Google Drive, Excel, and PDF converters for your AI apps</p>
+          <span className="coming-soon-badge">Coming Soon</span>
+          <button className="card-link" disabled>
+            Explore Tools <i className="fas fa-arrow-right"></i>
           </button>
         </div>
       </div>

@@ -72,6 +72,20 @@ function Home() {
         </div>
       </div>
 
+      <div className="problem-section">
+      <h2>The Challenge of Modern AI Integration</h2>          
+        <div className="problem-intro">
+          <p>
+            Building AI Agents is complicated—Linqra makes it simple with a unified gateway and protocol for easy, secure deployment.
+          </p>
+        </div>
+        <ul className="problem-highlights">
+          <li><i className="fas fa-brain"></i> <strong>AI Agents, Simplified:</strong> Build autonomous, workflow-driven applications without the usual complexity.</li>
+          <li><i className="fas fa-network-wired"></i> <strong>Unified Workflows:</strong>  Orchestrate multi-step AI tasks easily with a single protocol and unified gateway.</li>
+          <li><i className="fas fa-lock"></i> <strong>Enterprise Security:</strong> Secure every step of your AI pipeline with built-in authentication and authorization.</li>
+        </ul>
+      </div>
+
       <div id="features" className="features-section">
         <h2>AI App Store with Enterprise-Grade Security</h2>
         <div className="features-grid">

@@ -133,11 +133,13 @@ function Login() {
               </Button>
             </Form>
 
-            <div className="mt-4 text-center">
+
+            {/* TODO: Uncomment this when we decide for the registration */}
+            {/* <div className="mt-4 text-center">
               <p className="mb-0">
                 Don't have an account? <Link to="/register" className="primary-link">Register</Link>
               </p>
-            </div>
+            </div> */}
           </div>
         </div>
       </div>

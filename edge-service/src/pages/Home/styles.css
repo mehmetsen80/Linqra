@@ -824,6 +824,9 @@ html {
   box-shadow: 0 2px 12px rgba(0,0,0,0.04);
   margin-bottom: 2rem;
   text-align: center;
+  max-width: 1000px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .problem-section h2 {
@@ -912,4 +915,134 @@ html {
 .problem-intro strong {
   color: var(--primary-color);
   font-weight: 700;
+}
+
+.sdk-coming-soon-section {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  padding: 3rem 1.5rem 2.5rem 1.5rem;
+  margin: 2.5rem auto 2.5rem auto;
+  max-width: 420px;
+  text-align: center;
+}
+
+.sdk-icon-wrapper {
+  margin-bottom: 1.5rem;
+}
+
+.sdk-big-icon {
+  font-size: 4rem;
+  color: var(--primary-color);
+  margin-bottom: 0.5rem;
+}
+
+.sdk-coming-soon-section h2 {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: var(--primary-color);
+}
+
+.sdk-coming-soon-section p {
+  font-size: 1.15rem;
+  color: #333;
+  margin-bottom: 1.2rem;
+}
+
+.sdk-coming-soon-btn {
+  display: inline-block;
+  background: #e0e0e0;
+  color: #888;
+  padding: 0.6rem 1.7rem;
+  border-radius: 20px;
+  font-size: 1.1rem;
+  margin-top: 0.5rem;
+  letter-spacing: 1px;
+  border: none;
+  cursor: not-allowed;
+  opacity: 0.7;
+  font-weight: 600;
+}
+
+.whats-different-section {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+  padding: 3rem 1.5rem 2.5rem 1.5rem;
+  margin: 3rem auto 3rem auto;
+  max-width: 1200px;
+  text-align: center;
+}
+
+.whats-different-section h2 {
+  color: var(--primary-color);
+  font-size: 2.2rem;
+  margin-bottom: 2rem;
+  font-weight: 700;
+}
+
+.comparison-table-wrapper {
+  overflow-x: auto;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 auto;
+  background: #f8f9fa;
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 1.05rem;
+}
+
+.comparison-table th,
+.comparison-table td {
+  padding: 1rem 0.75rem;
+  border-bottom: 1px solid #e0e0e0;
+  text-align: left;
+}
+
+.comparison-table th {
+  background: var(--primary-color);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
+}
+
+.comparison-table td:first-child {
+  font-weight: 500;
+  color: var(--primary-color);
+}
+
+.comparison-table tr:last-child td {
+  border-bottom: none;
+}
+
+@media (max-width: 600px) {
+  .whats-different-section {
+    padding: 1.5rem 0.5rem;
+  }
+  .comparison-table th,
+  .comparison-table td {
+    padding: 0.7rem 0.4rem;
+    font-size: 0.98rem;
+  }
+}
+
+.whats-different-section table td {
+  padding: 1rem;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  width: 33.33%; /* This ensures equal width for all columns */
+}
+
+/* If you want to ensure the first column (Feature) is slightly narrower */
+.whats-different-section table td:first-child {
+  width: 20%;
+}
+
+/* And make the Linqra and MCP columns equal width */
+.whats-different-section table td:nth-child(2),
+.whats-different-section table td:nth-child(3) {
+  width: 40%;
 }

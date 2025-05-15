@@ -30,7 +30,8 @@ function Home() {
           ) : (
             <div className="auth-links">
               <Link to="/login" className="auth-link">Login</Link>
-              <Link to="/register" className="auth-link">Register</Link>
+              {/* TODO: Uncomment this when we decide for the registration */}
+              {/* <Link to="/register" className="auth-link">Register</Link> */}
             </div>
           )}
         </div>
@@ -84,6 +85,19 @@ function Home() {
           <li><i className="fas fa-network-wired"></i> <strong>Unified Workflows:</strong>  Orchestrate multi-step AI tasks easily with a single protocol and unified gateway.</li>
           <li><i className="fas fa-lock"></i> <strong>Enterprise Security:</strong> Secure every step of your AI pipeline with built-in authentication and authorization.</li>
         </ul>
+      </div>
+
+      <div className="sdk-coming-soon-section">
+        <div className="sdk-icon-wrapper">
+          <i className="fas fa-cubes sdk-big-icon"></i>
+        </div>
+        <h2>Developer SDK</h2>
+        <p>
+          Build, extend, and integrate AI Agents even faster with the upcoming Linqra SDK for developers.
+        </p>
+        <button className="sdk-coming-soon-btn" disabled>
+          SDK Coming Soon
+        </button>
       </div>
 
       <div id="features" className="features-section">
@@ -221,6 +235,88 @@ Content-Type: application/json
               <p>One protocol for your entire AI pipeline</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="whats-different-section">
+        <h2>What's Different: Linqra vs. MCP</h2>
+        <div className="comparison-table-wrapper">
+          <table className="comparison-table">
+            <thead>
+              <tr>
+                <th>Feature</th>
+                <th>Linqra</th>
+                <th>MCP (Modal Context Protocol)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Gateway/API Layer</td>
+                <td>Yes</td>
+                <td>No</td>
+              </tr>
+              <tr>
+                <td>Workflow Orchestration</td>
+                <td>Seamless API conversion to Linq Protocol. Sequential/parallel steps coming via SDK, with visual designer planned</td>
+                <td>No (focus on tool interoperability) - Orchestration handled by external platforms (Zapier, n8n) or custom implementations</td>
+              </tr>
+              <tr>
+                <td>Security</td>
+                <td>Enterprise-grade with built-in OAuth 2.0, TLS, scopes, and Keycloak integration</td>
+                <td>Standardized security (OAuth 2.0, TLS, scopes) - implementation depends on server configuration</td>
+              </tr>
+              <tr>
+                <td>Dynamic Routing</td>
+                <td>Yes - Built-in dynamic routing with rule-based routing and service discovery for scalable AI app ecosystems</td>
+                <td>No - Routing handled by external gateways or platforms (e.g., Higress MCP in Go/Envoy)</td>
+              </tr>
+              <tr>
+                <td>Analytics/Monitoring</td>
+                <td>Yes - Built-in analytics with request latency, error rates, and AI model performance metrics</td>
+                <td>No - Monitoring requires external tools or custom implementation</td>
+              </tr>
+              <tr>
+                <td>Tool Integrations</td>
+                <td>Built-in support for external APIs, AI models, and SaaS tools (expanding integration ecosystem in development)</td>
+                <td>Extensive integrations with tools like Google Drive, Excel, Dropbox, Slack, and more via standardized MCP servers and automation platforms (e.g., Zapier, n8n, Composio)</td>
+              </tr>
+              <tr>
+                <td>Developer SDK</td>
+                <td>Coming soon - SDK development in progress, leveraging Linq Protocol for seamless API integration and workflow management</td>
+                <td>Yes - Composio SDK (JavaScript/TypeScript, Python) with support for 200+ tools, plus additional SDKs for specific MCP servers</td>
+              </tr>
+              <tr>
+                <td>Context Management</td>
+                <td>Advanced context management with multi-step workflow orchestration and state persistence</td>
+                <td>Advanced context management with standardized protocol for multi-modal AI applications</td>
+              </tr>
+              <tr>
+                <td>Interoperability</td>
+                <td>High (via gateway/protocol)</td>
+                <td>High (between AI models/services)</td>
+              </tr>
+              <tr>
+                <td>Use Case Focus</td>
+                <td>AI Agent deployment & workflow simplification</td>
+                <td>Multi-modal AI context/state handling</td>
+              </tr>
+              <tr>
+                <td>Architecture</td>
+                <td>Centralized logic with unified protocol (Linq Protocol) that orchestrates workflows through sequential steps</td>
+                <td>Distributed and decentralized logic across multiple MCP servers, each handling specific tool interactions independently</td>
+              </tr>
+              <tr>
+                <td>Deployment Model</td>
+                <td>Hybrid SaaS - Run on Linqra.com or self-hosted in your own network</td>
+                <td>Self-hosted only - Requires setting up MCP servers in your infrastructure</td>
+              </tr>
+              <tr>
+                <td>Platform Capabilities</td>
+                <td>AI App Store with team/organization management, unified API Routes for both traditional APIs and Linq Protocol endpoints</td>
+                <td>Protocol for tool interactions - No built-in app store or team management</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

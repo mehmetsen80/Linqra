@@ -245,15 +245,15 @@ Content-Type: application/json
             <thead>
               <tr>
                 <th>Feature</th>
-                <th>Linqra</th>
+                <th>Linqra (Linq Protocol)</th>
                 <th>MCP (Modal Context Protocol)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
                 <td>Gateway/API Layer</td>
-                <td>Yes</td>
-                <td>No</td>
+                <td>Yes - Centralized gateway with dynamic routing, resiliency, and unified API management</td>
+                <td>No - Protocol for AI-tool interactions, not a gateway layer</td>
               </tr>
               <tr>
                 <td>Workflow Orchestration</td>
@@ -314,6 +314,11 @@ Content-Type: application/json
                 <td>Platform Capabilities</td>
                 <td>AI App Store with team/organization management, unified API Routes for both traditional APIs and Linq Protocol endpoints</td>
                 <td>Protocol for tool interactions - No built-in app store or team management</td>
+              </tr>
+              <tr>
+                <td>RAG Support</td>
+                <td>Yes - Native RAG customization in development with planned configurable retrieval pipelines, embedding models, and centralized orchestration</td>
+                <td>Yes - Indirect support via standardized data retrieval and context-retrieval tools; relies on external RAG frameworks (e.g., LangChain) and distributed MCP servers</td>
               </tr>
             </tbody>
           </table>

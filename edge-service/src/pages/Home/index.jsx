@@ -245,8 +245,8 @@ Content-Type: application/json
             <thead>
               <tr>
                 <th>Feature</th>
-                <th>Linqra (Linq Protocol)</th>
-                <th>MCP (Modal Context Protocol)</th>
+                <th>Linqra Server (Linq Protocol)</th>
+                <th>MCP Server (Modal Context Protocol)</th>
               </tr>
             </thead>
             <tbody>

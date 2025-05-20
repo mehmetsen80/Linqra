@@ -202,6 +202,8 @@ public class ApiRouteLocatorImpl implements RouteLocator, ApplicationContextAwar
     }
 
     private String determineInteractionType(ServerWebExchange exchange, ApiMetric metric) {
+        log.info("determineInteractionType Headers:");
+        log.info(exchange.getRequest().getHeaders().toString());
         String fromService = exchange.getRequest().getHeaders().getFirst("X-Service-Name");
         if (fromService != null && !fromService.isEmpty()) {
             metric.setInteractionType("APP_TO_APP");

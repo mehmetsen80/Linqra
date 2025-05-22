@@ -2,12 +2,37 @@ import React from 'react';
 import { Modal, Badge, Card, Row, Col } from 'react-bootstrap';
 import { HiUserGroup, HiTemplate, HiClock, HiUser, HiUsers, HiLockClosed, HiOfficeBuilding, HiDocumentText } from 'react-icons/hi';
 import { formatDateTime } from '../../utils/dateUtils';
+import { showSuccessToast } from '../../utils/toastConfig';
 
 function TeamDetailsModal({ show, onHide, team }) {
   if (!team) return null;
 
-  const formatDate = (timestamp) => {
-    return new Date(timestamp).toLocaleString();
+  const formatDate = (dateInput) => {
+    if (!dateInput) return 'N/A';
+    
+    let date;
+    
+    if (Array.isArray(dateInput)) {
+      const [year, month, day, hour, minute, second] = dateInput;
+      date = new Date(year, month - 1, day, hour, minute, second);
+    } else {
+      date = new Date(dateInput);
+    }
+    
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date input:', dateInput);
+      return 'Invalid Date';
+    }
+    
+    // You can customize the format options
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   };
 
   return (
@@ -25,6 +50,30 @@ function TeamDetailsModal({ show, onHide, team }) {
       </Modal.Header>
       <Modal.Body>
         <Row className="g-4">
+          <Col md={12}>
+            <Card className="border-0 bg-light p-2">
+              <Card.Body>
+                <div className="d-flex align-items-center mb-3">
+                  <HiDocumentText className="text-primary me-2" size={24} />
+                  <h5 className="mb-0">Team ID</h5>
+                </div>
+                <div className="d-flex align-items-center">
+                  <code className="bg-white px-2 py-1 rounded me-2">{team.id}</code>
+                  <button 
+                    className="btn btn-sm btn-outline-primary"
+                    onClick={() => {
+                      navigator.clipboard.writeText(team.id);
+                      showSuccessToast('Team ID copied to clipboard');
+                    }}
+                  >
+                    <HiDocumentText size={16} className="me-1" />
+                    Copy
+                  </button>
+                </div>
+              </Card.Body>
+            </Card>
+          </Col>
+          
           <Col md={12}>
             <Card className="border-0 bg-light p-2">
               <Card.Body>

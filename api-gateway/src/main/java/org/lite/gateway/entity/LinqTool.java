@@ -19,7 +19,9 @@ public class LinqTool {
     private String target;            // e.g., "openai"
     private String endpoint;          // e.g., "https://api.openai.com/v1/chat/completions"
     private String method;            // e.g., "POST"
-    private Map<String, String> headers; // e.g., {"Authorization": "Bearer YOUR_API_KEY"}
+    private Map<String, String> headers; // e.g., {"Content-Type": "application/json"}
+    private String authType;          // e.g., "bearer", "api_key_query", "none"
+    private String apiKey;            // The API key for the service
     private List<String> supportedIntents; // e.g., ["generate", "summarize"]
-    private String team;              // e.g., "ai_team" (RBAC scope)
+    private String team;              // e.g., "67d0aeb17172416c411d419e" (team ID)
 }

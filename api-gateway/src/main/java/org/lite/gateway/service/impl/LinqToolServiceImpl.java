@@ -12,6 +12,7 @@ import org.lite.gateway.service.TeamContextService;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
@@ -48,9 +49,53 @@ public class LinqToolServiceImpl implements LinqToolService {
         }
 
         log.info("Saving LinqTool with target: {} for team: {}", linqTool.getTarget(), linqTool.getTeam());
-        return linqToolRepository.save(linqTool)
-                .doOnSuccess(saved -> log.info("Saved LinqTool with ID: {}", saved.getId()))
-                .doOnError(error -> log.error("Failed to save LinqTool: {}", error.getMessage()));
+        
+        return linqToolRepository.findByTargetAndTeam(linqTool.getTarget(), linqTool.getTeam())
+            .<LinqTool>flatMap(existingTool -> {
+                // Update existing tool
+                existingTool.setEndpoint(linqTool.getEndpoint());
+                existingTool.setMethod(linqTool.getMethod());
+                existingTool.setHeaders(linqTool.getHeaders());
+                existingTool.setAuthType(linqTool.getAuthType());
+                existingTool.setApiKey(linqTool.getApiKey());
+                existingTool.setSupportedIntents(linqTool.getSupportedIntents());
+                
+                log.info("Updating existing LinqTool with ID: {}", existingTool.getId());
+                return linqToolRepository.save(existingTool)
+                    .doOnSuccess(saved -> log.info("Updated LinqTool with ID: {}", saved.getId()))
+                    .doOnError(error -> log.error("Failed to update LinqTool: {}", error.getMessage()));
+            })
+            .switchIfEmpty(Mono.<LinqTool>defer(() -> {
+                // Create new tool
+                log.info("Creating new LinqTool for target: {} and team: {}", linqTool.getTarget(), linqTool.getTeam());
+                return linqToolRepository.save(linqTool)
+                    .doOnSuccess(saved -> log.info("Created new LinqTool with ID: {}", saved.getId()))
+                    .doOnError(error -> log.error("Failed to create LinqTool: {}", error.getMessage()));
+            }));
+    }
+
+    @Override
+    public Flux<LinqTool> findByTeamId(String teamId) {
+        log.info("Finding LinqTool configurations for team: {}", teamId);
+        return linqToolRepository.findByTeam(teamId)
+                .doOnNext(tool -> log.info("Found LinqTool configuration for team {}: target={}", teamId, tool.getTarget()))
+                .doOnComplete(() -> log.info("Completed fetching LinqTool configurations for team: {}", teamId))
+                .doOnError(error -> log.error("Error finding LinqTool configurations for team {}: {}", teamId, error.getMessage()));
+    }
+
+    @Override
+    public Mono<LinqTool> findByTargetAndTeam(String target, String teamId) {
+        log.info("Finding LinqTool configuration for target: {} and team: {}", target, teamId);
+        return linqToolRepository.findByTargetAndTeam(target, teamId)
+                .doOnSuccess(tool -> {
+                    if (tool != null) {
+                        log.info("Found LinqTool configuration for target: {} and team: {}", target, teamId);
+                    } else {
+                        log.warn("No LinqTool configuration found for target: {} and team: {}", target, teamId);
+                    }
+                })
+                .doOnError(error -> log.error("Error finding LinqTool configuration for target: {} and team: {}: {}", 
+                    target, teamId, error.getMessage()));
     }
 
     @Override
@@ -80,6 +125,11 @@ public class LinqToolServiceImpl implements LinqToolService {
                         default:
                             break;
                     }
+
+                    // Add cache-busting header
+                    headers.put("Cache-Control", "no-cache, no-store, must-revalidate");
+                    headers.put("Pragma", "no-cache");
+                    headers.put("Expires", "0");
 
                     return invokeToolService(method, url.get(), payload, headers);
                 })
@@ -144,14 +194,20 @@ public class LinqToolServiceImpl implements LinqToolService {
                 .uri(url)
                 .headers(httpHeaders -> headers.forEach(httpHeaders::add));
 
+        log.info("Making {} request to {} with headers: {}", method, url, headers);
         if ("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
+            log.info("Request payload: {}", payload);
             requestSpec.bodyValue(payload);
         }
 
         return requestSpec
                 .retrieve()
                 .bodyToMono(Object.class)
+                .doOnNext(response -> log.info("Received response from {}: {}", url, response))
                 .doOnError(error -> log.error("Error calling tool {}: {}", url, error.getMessage()))
-                .onErrorResume(error -> Mono.just(Map.of("error", error.getMessage())));
+                .onErrorResume(error -> {
+                    log.error("Error details for {}: {}", url, error);
+                    return Mono.just(Map.of("error", error.getMessage()));
+                });
     }
 }

@@ -44,7 +44,7 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
         ...prev,
         routeIdentifier: value,
         uri: `lb://${value}`,
-        path: `/${value}/**`,
+        path: `/r/${value}/**`,
         scope: `${value}.read`
       }));
       return;
@@ -299,7 +299,7 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
               name="path"
               value={formData.path}
               onChange={handleChange}
-              placeholder="/api/service/**"
+              placeholder="/r/inventory-service/**"
               required
             />
             <Form.Control.Feedback type="invalid">

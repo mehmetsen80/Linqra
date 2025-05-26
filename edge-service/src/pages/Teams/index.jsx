@@ -489,7 +489,7 @@ function Teams() {
                               disabled={team.status === 'INACTIVE'}
                             >
                               <HiKey className="me-1" /> 
-                              {team.openaiKey ? 'View Key' : 'Configure'}
+                              {team.linqTools?.some(tool => tool.target === 'openai') ? 'View Configuration' : 'Configure'}
                             </button>
                           </td>
                           <td>

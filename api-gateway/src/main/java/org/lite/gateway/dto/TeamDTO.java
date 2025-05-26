@@ -27,4 +27,5 @@ public class TeamDTO {
     private OrganizationDTO organization;
     private List<String> roles;
     private ApiKeyDTO apiKey;
+    private List<LinqToolDTO> linqTools;
 } 

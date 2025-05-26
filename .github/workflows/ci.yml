@@ -243,6 +243,7 @@ jobs:
             cd /var/www/linqra/scripts
             sudo ./generate-service-certs.sh inventory-service
             sudo ./generate-service-certs.sh product-service
+            sudo ./generate-service-certs.sh quotes-service
             # Add new services here
 
             # Generate HAProxy certificates

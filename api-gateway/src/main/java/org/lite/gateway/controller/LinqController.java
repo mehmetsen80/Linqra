@@ -8,6 +8,7 @@ import org.lite.gateway.dto.SwaggerEndpointInfo;
 import org.lite.gateway.dto.SwaggerSchemaInfo;
 import org.lite.gateway.dto.LinqProtocolExample;
 import org.lite.gateway.dto.ConvertToLinqProtocolRequest;
+import org.lite.gateway.service.LinqProtocolService;
 import org.lite.gateway.service.LinqService;
 import org.lite.gateway.service.ApiEndpointService;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,6 +30,7 @@ import java.util.stream.Collectors;
 public class LinqController {
 
     private final LinqService linqService;
+    private final LinqProtocolService linqProtocolService;
     private final ApiEndpointService apiEndpointService;
 
     @PostMapping
@@ -73,7 +75,7 @@ public class LinqController {
                             List<LinqProtocolExample> linqEndpoints = endpoints.stream()
                                 .map(endpointInfo -> {
                                     // Just pass the endpointInfo and routeIdentifier
-                                    return linqService.convertToLinqProtocol(
+                                    return linqProtocolService.convertToLinqProtocol(
                                         endpointInfo,
                                         request.getRouteIdentifier()
                                     ).block();

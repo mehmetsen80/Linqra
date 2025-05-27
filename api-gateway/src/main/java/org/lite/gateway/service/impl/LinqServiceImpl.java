@@ -11,10 +11,10 @@ import org.lite.gateway.repository.ApiRouteRepository;
 import org.lite.gateway.repository.LinqToolRepository;
 import org.lite.gateway.repository.TeamRouteRepository;
 import org.lite.gateway.service.LinqService;
-import org.lite.gateway.service.WorkflowService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.LinqToolService;
 import org.lite.gateway.service.LinqMicroService;
+import org.lite.gateway.service.LinqWorkflowService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -43,9 +43,6 @@ public class LinqServiceImpl implements LinqService {
     private final LinqToolRepository linqToolRepository;
 
     @NonNull
-    private final WorkflowService workflowService;
-
-    @NonNull
     private final TeamContextService teamContextService;
 
     @NonNull
@@ -53,6 +50,9 @@ public class LinqServiceImpl implements LinqService {
 
     @NonNull
     private final LinqMicroService linqMicroService;
+
+    @NonNull
+    private final LinqWorkflowService linqWorkflowService;
 
     @Value("${server.host:localhost}")
     private String gatewayHost;
@@ -76,7 +76,12 @@ public class LinqServiceImpl implements LinqService {
                     // Handle workflow requests
                     if (request.getQuery().getWorkflow() != null && !request.getQuery().getWorkflow().isEmpty()) {
                         log.info("Processing workflow request with {} steps", request.getQuery().getWorkflow().size());
-                        return workflowService.executeWorkflow(request);
+                        return linqWorkflowService.executeWorkflow(request)
+                            .flatMap(response -> 
+                                // Track the execution
+                                linqWorkflowService.trackExecution(request, response)
+                                    .thenReturn(response)
+                            );
                     }
 
                     // Existing logic for single requests

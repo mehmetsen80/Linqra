@@ -73,10 +73,15 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     public Mono<Void> deleteWorkflow(String workflowId) {
         return teamContextService.getTeamFromContext()
             .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
-                .flatMap(workflow -> workflowRepository.delete(workflow)
-                    .doOnSuccess(v -> log.info("Deleted workflow: {}", workflowId))
-                    .doOnError(error -> log.error("Error deleting workflow: {}", error.getMessage())))
-                .switchIfEmpty(Mono.error(new RuntimeException("Workflow not found or access denied"))));
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, 
+                    "Workflow not found or access denied")))
+                .flatMap(workflow -> {
+                    log.info("Deleting workflow: {}", workflow);
+                    return workflowRepository.delete(workflow)
+                        .doOnSuccess(v -> log.info("Deleted workflow: {}", workflowId))
+                        .doOnError(error -> log.error("Error deleting workflow: {}", error.getMessage()));
+                }));
     }
 
     @Override

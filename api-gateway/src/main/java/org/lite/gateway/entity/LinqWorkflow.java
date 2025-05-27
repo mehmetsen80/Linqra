@@ -24,4 +24,20 @@ public class LinqWorkflow {
     private LocalDateTime updatedAt;
     private String createdBy;
     private String updatedBy;
+
+    @Override
+    public String toString() {
+        return "LinqWorkflow{" +
+                "id='" + id + '\'' +
+                ", name='" + name + '\'' +
+                ", description='" + description + '\'' +
+                ", team='" + team + '\'' +
+                ", request=" + request +
+                ", isPublic=" + isPublic +
+                ", createdAt=" + createdAt +
+                ", updatedAt=" + updatedAt +
+                ", createdBy='" + createdBy + '\'' +
+                ", updatedBy='" + updatedBy + '\'' +
+                '}';
+    }
 }

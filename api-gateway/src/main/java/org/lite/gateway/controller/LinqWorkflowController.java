@@ -85,8 +85,14 @@ public class LinqWorkflowController {
                     ));
                 }
                 
+                // Set the workflowId in the request
+                if (request.getQuery() == null) {
+                    request.setQuery(new LinqRequest.Query());
+                }
+                request.getQuery().setWorkflowId(workflowId);
+                
                 // Fix the max.tokens issue in the workflow steps
-                if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
+                if (request.getQuery().getWorkflow() != null) {
                     request.getQuery().getWorkflow().forEach(step -> {
                         if (step.getToolConfig() != null && step.getToolConfig().getSettings() != null) {
                             Map<String, Object> settings = step.getToolConfig().getSettings();

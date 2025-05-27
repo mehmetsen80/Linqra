@@ -206,7 +206,7 @@ public class LinqToolServiceImpl implements LinqToolService {
                 .doOnNext(response -> log.info("Received response from {}: {}", url, response))
                 .doOnError(error -> log.error("Error calling tool {}: {}", url, error.getMessage()))
                 .onErrorResume(error -> {
-                    log.error("Error details for {}: {}", url, error);
+                    log.error("Error details for {}: {}", url, error.getMessage());
                     return Mono.just(Map.of("error", error.getMessage()));
                 });
     }

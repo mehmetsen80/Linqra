@@ -35,6 +35,15 @@ public class LinqController {
 
     @PostMapping
     public Mono<LinqResponse> handleLinqRequest(@RequestBody LinqRequest request) {
+        log.info("Received /linq request: {}", request);
+        log.info("Request link: {}", request.getLink());
+        log.info("Request query: {}", request.getQuery());
+        if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
+            log.info("Workflow steps: {}", request.getQuery().getWorkflow());
+            if (request.getQuery().getWorkflow().size() > 1) {
+                log.info("Step 2 toolConfig: {}", request.getQuery().getWorkflow().get(1).getToolConfig());
+            }
+        }
         return linqService.processLinqRequest(request);
     }
 

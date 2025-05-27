@@ -1,45 +1,173 @@
 package org.lite.gateway.service.impl;
 
-import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
+import org.lite.gateway.model.LinqWorkflowStats;
+import org.lite.gateway.model.ExecutionStatus;
+import org.lite.gateway.entity.LinqWorkflow;
+import org.lite.gateway.entity.LinqWorkflowExecution;
+import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
+import org.lite.gateway.repository.LinqWorkflowRepository;
 import org.lite.gateway.repository.LinqToolRepository;
-import org.lite.gateway.service.WorkflowService;
+import org.lite.gateway.service.LinqWorkflowService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.LinqToolService;
 import org.lite.gateway.service.LinqMicroService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-@Service
 @Slf4j
+@Service
 @RequiredArgsConstructor
-public class WorkflowServiceImpl implements WorkflowService {
-
-    @NonNull
-    private final LinqToolRepository linqToolRepository;
-
-    @NonNull
+public class LinqWorkflowServiceImpl implements LinqWorkflowService {
+    private final LinqWorkflowRepository workflowRepository;
+    private final LinqWorkflowExecutionRepository executionRepository;
     private final TeamContextService teamContextService;
-
-    @NonNull
+    private final LinqToolRepository linqToolRepository;
     private final LinqToolService linqToolService;
-
-    @NonNull
     private final LinqMicroService linqMicroService;
 
     @Override
+    public Mono<LinqWorkflow> createWorkflow(LinqWorkflow workflow) {
+        return teamContextService.getTeamFromContext()
+            .flatMap(teamId -> {
+                workflow.setTeam(teamId);
+                workflow.setCreatedAt(LocalDateTime.now());
+                workflow.setUpdatedAt(LocalDateTime.now());
+                return workflowRepository.save(workflow)
+                    .doOnSuccess(w -> log.info("Created new workflow: {}", w.getId()))
+                    .doOnError(error -> log.error("Error creating workflow: {}", error.getMessage()));
+            });
+    }
+
+    @Override
+    public Mono<LinqWorkflow> updateWorkflow(String workflowId, LinqWorkflow updatedWorkflow) {
+        return teamContextService.getTeamFromContext()
+            .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+                .flatMap(existingWorkflow -> {
+                    updatedWorkflow.setId(workflowId);
+                    updatedWorkflow.setTeam(teamId);
+                    updatedWorkflow.setCreatedAt(existingWorkflow.getCreatedAt());
+                    updatedWorkflow.setUpdatedAt(LocalDateTime.now());
+                    return workflowRepository.save(updatedWorkflow)
+                        .doOnSuccess(w -> log.info("Updated workflow: {}", w.getId()))
+                        .doOnError(error -> log.error("Error updating workflow: {}", error.getMessage()));
+                })
+                .switchIfEmpty(Mono.error(new RuntimeException("Workflow not found or access denied"))));
+    }
+
+    @Override
+    public Mono<Void> deleteWorkflow(String workflowId) {
+        return teamContextService.getTeamFromContext()
+            .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+                .flatMap(workflow -> workflowRepository.delete(workflow)
+                    .doOnSuccess(v -> log.info("Deleted workflow: {}", workflowId))
+                    .doOnError(error -> log.error("Error deleting workflow: {}", error.getMessage())))
+                .switchIfEmpty(Mono.error(new RuntimeException("Workflow not found or access denied"))));
+    }
+
+    @Override
+    public Flux<LinqWorkflow> getWorkflows() {
+        return teamContextService.getTeamFromContext()
+            .flatMapMany(teamId -> workflowRepository.findByTeam(teamId)
+                .doOnError(error -> log.error("Error fetching workflows: {}", error.getMessage())));
+    }
+
+    @Override
+    public Mono<LinqWorkflow> getWorkflow(String workflowId) {
+        return teamContextService.getTeamFromContext()
+            .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+                .doOnError(error -> log.error("Error fetching workflow: {}", error.getMessage()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Workflow not found or access denied"))));
+    }
+
+    @Override
+    public Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response) {
+        LinqWorkflowExecution execution = new LinqWorkflowExecution();
+        execution.setTeam(response.getMetadata().getTeam());
+        execution.setRequest(request);
+        execution.setResponse(response);
+        execution.setExecutedAt(LocalDateTime.now());
+        execution.setStatus(ExecutionStatus.SUCCESS);
+        
+        // Calculate duration from metadata if available
+        if (response.getMetadata() != null && response.getMetadata().getWorkflowMetadata() != null) {
+            long totalDuration = response.getMetadata().getWorkflowMetadata().stream()
+                .mapToLong(step -> step.getDurationMs() != null ? step.getDurationMs() : 0)
+                .sum();
+            execution.setDurationMs(totalDuration);
+        }
+        
+        if (request.getQuery() != null && request.getQuery().getWorkflowId() != null) {
+            execution.setWorkflowId(request.getQuery().getWorkflowId());
+        }
+        
+        return executionRepository.save(execution)
+            .doOnSuccess(e -> log.info("Tracked workflow execution: {}", e.getId()))
+            .doOnError(error -> log.error("Error tracking workflow execution: {}", error.getMessage()));
+    }
+
+    @Override
+    public Flux<LinqWorkflowExecution> getWorkflowExecutions(String workflowId) {
+        return executionRepository.findByWorkflowId(workflowId)
+            .doOnError(error -> log.error("Error fetching workflow executions: {}", error.getMessage()));
+    }
+
+    @Override
+    public Flux<LinqWorkflowExecution> getTeamExecutions(String teamId) {
+        return executionRepository.findByTeam(teamId)
+            .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
+    }
+
+    @Override
+    public Mono<LinqWorkflowExecution> getExecution(String executionId) {
+        return executionRepository.findById(executionId)
+            .doOnError(error -> log.error("Error fetching execution: {}", error.getMessage()))
+            .switchIfEmpty(Mono.error(new RuntimeException("Execution not found")));
+    }
+
+    @Override
+    public Flux<LinqWorkflow> searchWorkflows(String searchTerm) {
+        return workflowRepository.findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
+            searchTerm, searchTerm)
+            .doOnError(error -> log.error("Error searching workflows: {}", error.getMessage()));
+    }
+
+    @Override
+    public Mono<LinqWorkflowStats> getWorkflowStats(String workflowId) {
+        return executionRepository.findByWorkflowId(workflowId)
+            .collectList()
+            .map(executions -> {
+                LinqWorkflowStats stats = new LinqWorkflowStats();
+                stats.setTotalExecutions(executions.size());
+                stats.setSuccessfulExecutions((int) executions.stream()
+                    .filter(e -> e.getStatus() == ExecutionStatus.SUCCESS)
+                    .count());
+                stats.setFailedExecutions((int) executions.stream()
+                    .filter(e -> e.getStatus() == ExecutionStatus.FAILED)
+                    .count());
+                stats.setAverageExecutionTime(executions.stream()
+                    .mapToLong(e -> e.getDurationMs())
+                    .average()
+                    .orElse(0.0));
+                return stats;
+            })
+            .doOnError(error -> log.error("Error calculating workflow stats: {}", error.getMessage()));
+    }
+
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {
         List<LinqRequest.Query.WorkflowStep> steps = request.getQuery().getWorkflow();
         Map<Integer, Object> stepResults = new HashMap<>();
@@ -232,5 +360,4 @@ public class WorkflowServiceImpl implements WorkflowService {
         }
         return String.valueOf(result);
     }
-  
 }

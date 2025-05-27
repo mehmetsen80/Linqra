@@ -4,6 +4,7 @@ import lombok.Data;
 
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 @Data
 public class LinqRequest {
@@ -19,6 +20,7 @@ public class LinqRequest {
     @Data
     public static class Query {
         private String intent; // e.g., "random", "generate", "get_historical_saying"
+        private String workflowId;  // Add this field to link to predefined workflows
         private Map<String, Object> params; // e.g., {"prompt": "Hello"}
         private Object payload; // Request body for POST/PUT/PATCH
         private ToolConfig toolConfig; // For AI tools
@@ -39,6 +41,19 @@ public class LinqRequest {
             private Map<String, Object> params; // e.g., {"prompt": "{{step1.result.name}}"}
             private Object payload; // Request body, e.g., [{"role": "user", "content": "..."}]
             private ToolConfig toolConfig; // For AI tools
+
+            //Do not delete this, it's being used internally by the json
+            public void setToolConfig(ToolConfig toolConfig) {
+                if (toolConfig != null && toolConfig.getSettings() != null) {
+                    Map<String, Object> settings = new HashMap<>(toolConfig.getSettings());
+                    if (settings.containsKey("max.tokens")) {
+                        Object value = settings.remove("max.tokens");
+                        settings.put("max_tokens", value);
+                    }
+                    toolConfig.setSettings(settings);
+                }
+                this.toolConfig = toolConfig;
+            }
         }
     }
 }

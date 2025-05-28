@@ -24,6 +24,7 @@ public class LinqWorkflow {
     private LocalDateTime updatedAt;
     private String createdBy;
     private String updatedBy;
+    private Integer version = 1;            // Current version number
 
     @Override
     public String toString() {
@@ -38,6 +39,7 @@ public class LinqWorkflow {
                 ", updatedAt=" + updatedAt +
                 ", createdBy='" + createdBy + '\'' +
                 ", updatedBy='" + updatedBy + '\'' +
+                ", version=" + version +
                 '}';
     }
 }

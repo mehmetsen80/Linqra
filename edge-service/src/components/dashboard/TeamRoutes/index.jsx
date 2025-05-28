@@ -131,7 +131,7 @@ const TeamRoutes = () => {
         <Table responsive className="team-routes-table">
           <thead>
             <tr>
-              <th>Apps</th>
+              <th>Api Routes</th>
               <th>Method</th>
               <th>Path</th>
               <th>Permissions</th>

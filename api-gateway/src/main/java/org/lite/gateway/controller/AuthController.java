@@ -103,9 +103,20 @@ public class AuthController {
                     .flatMap(claims -> {
                         String username = claims.get("preferred_username", String.class);
                         String email = claims.get("email", String.class);
-                        List<String> roles = claims.get("realm_access", Map.class) != null ?
-                            ((Map<String, List<String>>) claims.get("realm_access", Map.class)).get("roles") :
-                            new ArrayList<>();
+                        
+                        // Get roles from claims, handling both Keycloak and standard format
+                        List<String> roles;
+                        if (claims.get("realm_access", Map.class) != null) {
+                            // Keycloak format
+                            roles = ((Map<String, List<String>>) claims.get("realm_access", Map.class)).get("roles");
+                        } else {
+                            // Standard format
+                            roles = (List<String>) claims.get("roles");
+                        }
+                        
+                        if (roles == null) {
+                            roles = new ArrayList<>();
+                        }
                         
                         Map<String, Object> user = new HashMap<>();
                         user.put("username", username);

@@ -8,9 +8,11 @@ import org.lite.gateway.model.LinqWorkflowStats;
 import org.lite.gateway.model.ExecutionStatus;
 import org.lite.gateway.entity.LinqWorkflow;
 import org.lite.gateway.entity.LinqWorkflowExecution;
+import org.lite.gateway.entity.LinqWorkflowVersion;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.lite.gateway.repository.LinqWorkflowRepository;
 import org.lite.gateway.repository.LinqToolRepository;
+import org.lite.gateway.repository.LinqWorkflowVersionRepository;
 import org.lite.gateway.service.LinqWorkflowService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.LinqToolService;
@@ -39,16 +41,36 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     private final LinqToolRepository linqToolRepository;
     private final LinqToolService linqToolService;
     private final LinqMicroService linqMicroService;
+    private final LinqWorkflowVersionRepository workflowVersionRepository;
 
     @Override
     public Mono<LinqWorkflow> createWorkflow(LinqWorkflow workflow) {
         return teamContextService.getTeamFromContext()
             .flatMap(teamId -> {
                 workflow.setTeam(teamId);
+                workflow.setVersion(1);
                 workflow.setCreatedAt(LocalDateTime.now());
                 workflow.setUpdatedAt(LocalDateTime.now());
+
+                // Create initial version
+                LinqWorkflowVersion initialVersion = LinqWorkflowVersion.builder()
+                    .workflowId(null) // Will be set after workflow is saved
+                    .team(teamId)
+                    .version(1)
+                    .request(workflow.getRequest())
+                    .createdAt(System.currentTimeMillis())
+                    .createdBy(workflow.getCreatedBy())
+                    .changeDescription("Initial version")
+                    .build();
+
                 return workflowRepository.save(workflow)
-                    .doOnSuccess(w -> log.info("Created new workflow: {}", w.getId()))
+                    .flatMap(savedWorkflow -> {
+                        // Set the workflowId in the version
+                        initialVersion.setWorkflowId(savedWorkflow.getId());
+                        return workflowVersionRepository.save(initialVersion)
+                            .thenReturn(savedWorkflow);
+                    })
+                    .doOnSuccess(w -> log.info("Created workflow: {} with initial version", w.getId()))
                     .doOnError(error -> log.error("Error creating workflow: {}", error.getMessage()));
             });
     }
@@ -77,9 +99,16 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                     HttpStatus.NOT_FOUND, 
                     "Workflow not found or access denied")))
                 .flatMap(workflow -> {
-                    log.info("Deleting workflow: {}", workflow);
-                    return workflowRepository.delete(workflow)
-                        .doOnSuccess(v -> log.info("Deleted workflow: {}", workflowId))
+                    log.info("Deleting workflow: {} and its versions", workflow);
+                    // First delete all versions
+                    return workflowVersionRepository.findByWorkflowIdAndTeam(workflowId, teamId)
+                        .flatMap(version -> workflowVersionRepository.delete(version))
+                        .then()
+                        .then(executionRepository.findByWorkflowIdAndTeam(workflowId, teamId)
+                            .flatMap(execution -> executionRepository.delete(execution))
+                            .then())
+                        .then(workflowRepository.delete(workflow))
+                        .doOnSuccess(v -> log.info("Deleted workflow: {} and its versions and executions", workflowId))
                         .doOnError(error -> log.error("Error deleting workflow: {}", error.getMessage()));
                 }));
     }
@@ -132,8 +161,9 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     }
 
     @Override
-    public Flux<LinqWorkflowExecution> getTeamExecutions(String teamId) {
-        return executionRepository.findByTeam(teamId)
+    public Flux<LinqWorkflowExecution> getTeamExecutions() {
+        return teamContextService.getTeamFromContext()
+            .flatMapMany(teamId -> executionRepository.findByTeam(teamId))
             .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
     }
 
@@ -364,5 +394,92 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
             }
         }
         return String.valueOf(result);
+    }
+
+    @Override
+    public Mono<LinqWorkflow> createNewVersion(String workflowId, LinqWorkflow updatedWorkflow) {
+        return teamContextService.getTeamFromContext()
+            .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+                .flatMap(workflow -> {
+                    // Create new version
+                    LinqWorkflowVersion newVersion = LinqWorkflowVersion.builder()
+                        .workflowId(workflowId)
+                        .team(teamId)
+                        .version(workflow.getVersion() + 1)
+                        .request(workflow.getRequest())
+                        .createdAt(System.currentTimeMillis())
+                        .createdBy(workflow.getUpdatedBy())
+                        .changeDescription("Version created at " + LocalDateTime.now())
+                        .build();
+
+                    // Update workflow with new data
+                    workflow.setVersion(newVersion.getVersion());
+                    workflow.setName(updatedWorkflow.getName());
+                    workflow.setDescription(updatedWorkflow.getDescription());
+                    workflow.setRequest(updatedWorkflow.getRequest());
+                    workflow.setPublic(updatedWorkflow.isPublic());
+                    workflow.setUpdatedAt(LocalDateTime.now());
+                    workflow.setUpdatedBy(updatedWorkflow.getUpdatedBy());
+
+                    return workflowVersionRepository.save(newVersion)
+                        .then(workflowRepository.save(workflow))
+                        .doOnSuccess(w -> log.info("Created new version {} for workflow: {}", 
+                            newVersion.getVersion(), w.getId()))
+                        .doOnError(error -> log.error("Error creating new version: {}", error.getMessage()));
+                })
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Workflow not found or access denied"))));
+    }
+
+    @Override
+    public Mono<LinqWorkflow> rollbackToVersion(String workflowId, String versionId) {
+        return teamContextService.getTeamFromContext()
+            .flatMap(teamId -> workflowVersionRepository.findById(versionId)
+                .filter(version -> version.getWorkflowId().equals(workflowId) && version.getTeam().equals(teamId))
+                .flatMap(version -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+                    .flatMap(workflow -> {
+                        // Create new version with rollback
+                        LinqWorkflowVersion newVersion = LinqWorkflowVersion.builder()
+                            .workflowId(workflowId)
+                            .team(teamId)
+                            .version(workflow.getVersion() + 1)
+                            .request(version.getRequest())
+                            .createdAt(System.currentTimeMillis())
+                            .createdBy(workflow.getUpdatedBy())
+                            .changeDescription("Rollback to version " + version.getVersion())
+                            .build();
+
+                        // Update workflow
+                        workflow.setVersion(newVersion.getVersion());
+                        workflow.setRequest(version.getRequest());
+                        workflow.setUpdatedAt(LocalDateTime.now());
+
+                        return workflowVersionRepository.save(newVersion)
+                            .then(workflowRepository.save(workflow))
+                            .doOnSuccess(w -> log.info("Rolled back workflow {} to version {}", 
+                                w.getId(), version.getVersion()))
+                            .doOnError(error -> log.error("Error rolling back workflow: {}", error.getMessage()));
+                    }))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Version not found or access denied"))));
+    }
+
+    @Override
+    public Flux<LinqWorkflowVersion> getVersionHistory(String workflowId) {
+        return teamContextService.getTeamFromContext()
+            .flatMapMany(teamId -> workflowVersionRepository.findByWorkflowIdAndTeam(workflowId, teamId)
+                .doOnError(error -> log.error("Error fetching version history: {}", error.getMessage()))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Workflow not found or access denied"))));
+    }
+
+    @Override
+    public Mono<LinqWorkflowVersion> getVersion(String workflowId, String versionId) {
+        return teamContextService.getTeamFromContext()
+            .flatMap(teamId -> workflowVersionRepository.findById(versionId)
+                .filter(version -> version.getWorkflowId().equals(workflowId) && version.getTeam().equals(teamId))
+                .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, "Version not found or access denied"))));
     }
 }

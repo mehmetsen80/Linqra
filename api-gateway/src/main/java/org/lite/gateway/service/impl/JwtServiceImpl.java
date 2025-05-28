@@ -49,7 +49,15 @@ public class JwtServiceImpl implements JwtService {
         claims.put("typ", "Refresh");
         claims.put("sub", username);
         claims.put("username", username);
-        return generateToken(claims, username, true);
+        
+        // Get user roles from repository
+        return userRepository.findByUsername(username)
+            .map(user -> {
+                claims.put("roles", user.getRoles());
+                return generateToken(claims, username, true);
+            })
+            .switchIfEmpty(Mono.just(generateToken(claims, username, true)))
+            .block();
     }
 
     private String generateToken(Map<String, Object> extraClaims, String username, boolean isRefresh) {

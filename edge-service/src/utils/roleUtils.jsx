@@ -17,11 +17,12 @@ export const isSuperAdmin = (user) => {
 };
 
 export const hasAdminAccess = (user, currentTeam) => {
-  if (!user) return false;
-  
+  if (!user || !currentTeam) return false;
+
   if (isSuperAdmin(user)) return true;
 
-  return currentTeam?.members?.some(
+  // Check if user is ADMIN in the current team
+  return currentTeam.members?.some(
     member => member.userId === user.id && member.role === ROLES.ADMIN
   );
 };

@@ -7,7 +7,7 @@ import java.util.Map;
 
 @Data
 public class LinqResponse {
-    private Object result; // Single request result or WorkflowResult for workflows
+    private Object result;  // Can be WorkflowResult, List, Map, or any other type
     private Metadata metadata;
 
     @Data
@@ -16,26 +16,29 @@ public class LinqResponse {
         private String status; // e.g., "success", "error"
         private String team;   // e.g., "67d0aeb17172416c411d419e"
         private boolean cacheHit; // e.g., false
-        private List<WorkflowStepMetadata> workflowMetadata; // Step-specific metadata
+        private List<WorkflowStepMetadata> workflowMetadata;  // Optional, only for workflow responses
     }
 
     @Data
     public static class WorkflowResult {
-        private List<StepResult> steps; // Results from each step
-        private Object finalResult; // Final answer, e.g., OpenAI's saying
+        private List<WorkflowStep> steps;
+        private String finalResult;
     }
 
     @Data
-    public static class StepResult {
+    public static class WorkflowStep {
         private int step; // Step number
         private String target; // e.g., "quotes-service"
         private Object result; // Step output, e.g., {"name": "Socrates"}
     }
 
+
+
     @Data
     public static class WorkflowStepMetadata {
-        private int step; // Step number
-        private String status; // e.g., "success", "error"
-        private Long durationMs; // Execution time
+        private int step;
+        private String status;
+        private long durationMs;
+        private String target;
     }
 }

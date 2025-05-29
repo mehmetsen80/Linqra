@@ -26,6 +26,7 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -140,7 +141,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
         // Calculate duration from metadata if available
         if (response.getMetadata() != null && response.getMetadata().getWorkflowMetadata() != null) {
             long totalDuration = response.getMetadata().getWorkflowMetadata().stream()
-                .mapToLong(step -> step.getDurationMs() != null ? step.getDurationMs() : 0)
+                .mapToLong(LinqResponse.WorkflowStepMetadata::getDurationMs)
                 .sum();
             execution.setDurationMs(totalDuration);
         }
@@ -187,6 +188,15 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
             .collectList()
             .map(executions -> {
                 LinqWorkflowStats stats = new LinqWorkflowStats();
+                
+                // Initialize maps
+                stats.setStepStats(new HashMap<>());
+                stats.setTargetStats(new HashMap<>());
+                stats.setModelStats(new HashMap<>());
+                stats.setHourlyExecutions(new HashMap<>());
+                stats.setDailyExecutions(new HashMap<>());
+                
+                // Overall stats
                 stats.setTotalExecutions(executions.size());
                 stats.setSuccessfulExecutions((int) executions.stream()
                     .filter(e -> e.getStatus() == ExecutionStatus.SUCCESS)
@@ -195,14 +205,91 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                     .filter(e -> e.getStatus() == ExecutionStatus.FAILED)
                     .count());
                 stats.setAverageExecutionTime(executions.stream()
-                    .mapToLong(e -> e.getDurationMs())
+                    .mapToLong(LinqWorkflowExecution::getDurationMs)
                     .average()
                     .orElse(0.0));
+                
+                // Process each execution
+                executions.forEach(execution -> {
+                    // Time-based stats
+                    String hour = execution.getExecutedAt().format(DateTimeFormatter.ofPattern("HH:00"));
+                    String day = execution.getExecutedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                    stats.getHourlyExecutions().merge(hour, 1, Integer::sum);
+                    stats.getDailyExecutions().merge(day, 1, Integer::sum);
+                    
+                    // Process steps
+                    if (execution.getResponse() != null && 
+                        execution.getResponse().getMetadata() != null && 
+                        execution.getResponse().getMetadata().getWorkflowMetadata() != null) {
+                        
+                        execution.getResponse().getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
+                            // Step stats
+                            LinqWorkflowStats.StepStats stepStats = stats.getStepStats().computeIfAbsent(stepMetadata.getStep(), k -> new LinqWorkflowStats.StepStats());
+                            stepStats.setTotalExecutions(stepStats.getTotalExecutions() + 1);
+                            if ("success".equals(stepMetadata.getStatus())) {
+                                stepStats.setSuccessfulExecutions(stepStats.getSuccessfulExecutions() + 1);
+                            } else {
+                                stepStats.setFailedExecutions(stepStats.getFailedExecutions() + 1);
+                            }
+                            stepStats.setAverageDurationMs(
+                                (stepStats.getAverageDurationMs() * (stepStats.getTotalExecutions() - 1) + 
+                                stepMetadata.getDurationMs()) / stepStats.getTotalExecutions()
+                            );
+                            
+                            // Target stats
+                            String target = stepMetadata.getTarget();
+                            LinqWorkflowStats.TargetStats targetStats = stats.getTargetStats().computeIfAbsent(target, k -> new LinqWorkflowStats.TargetStats());
+                            targetStats.setTotalExecutions(targetStats.getTotalExecutions() + 1);
+                            targetStats.setAverageDurationMs(
+                                (targetStats.getAverageDurationMs() * (targetStats.getTotalExecutions() - 1) + 
+                                stepMetadata.getDurationMs()) / targetStats.getTotalExecutions()
+                            );
+                            
+                            // Model stats for AI targets
+                            if (target.equals("openai") || target.equals("gemini")) {
+                                String model = execution.getRequest().getQuery().getWorkflow().stream()
+                                    .filter(step -> step.getStep() == stepMetadata.getStep())
+                                    .findFirst()
+                                    .map(step -> step.getToolConfig().getModel())
+                                    .orElse("unknown");
+                                
+                                LinqWorkflowStats.ModelStats modelStats = stats.getModelStats().computeIfAbsent(model, k -> new LinqWorkflowStats.ModelStats());
+                                modelStats.setTotalExecutions(modelStats.getTotalExecutions() + 1);
+                                modelStats.setAverageDurationMs(
+                                    (modelStats.getAverageDurationMs() * (modelStats.getTotalExecutions() - 1) + 
+                                    stepMetadata.getDurationMs()) / modelStats.getTotalExecutions()
+                                );
+                                
+                                // Token usage for OpenAI
+                                if (target.equals("openai") && execution.getResponse().getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
+                                    List<LinqResponse.WorkflowStep> steps = workflowResult.getSteps();
+                                    if (steps != null && steps.size() > stepMetadata.getStep()) {
+                                        LinqResponse.WorkflowStep step = steps.get(stepMetadata.getStep());
+                                        if (step.getResult() instanceof Map) {
+                                            Map<String, Object> result = (Map<String, Object>) step.getResult();
+                                            if (result.containsKey("usage")) {
+                                                Map<String, Object> usage = (Map<String, Object>) result.get("usage");
+                                                modelStats.setTotalPromptTokens(modelStats.getTotalPromptTokens() + 
+                                                    ((Number) usage.get("prompt_tokens")).longValue());
+                                                modelStats.setTotalCompletionTokens(modelStats.getTotalCompletionTokens() + 
+                                                    ((Number) usage.get("completion_tokens")).longValue());
+                                                modelStats.setTotalTokens(modelStats.getTotalTokens() + 
+                                                    ((Number) usage.get("total_tokens")).longValue());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+                
                 return stats;
             })
             .doOnError(error -> log.error("Error calculating workflow stats: {}", error.getMessage()));
     }
 
+    @Override
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {
         List<LinqRequest.Query.WorkflowStep> steps = request.getQuery().getWorkflow();
         Map<Integer, Object> stepResults = new HashMap<>();
@@ -268,6 +355,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                             meta.setStep(step.getStep());
                             meta.setStatus("success");
                             meta.setDurationMs(durationMs);
+                            meta.setTarget(step.getTarget());
                             stepMetadata.add(meta);
                             return Mono.just(response);
                         })
@@ -277,6 +365,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                             meta.setStep(step.getStep());
                             meta.setStatus("error");
                             meta.setDurationMs(durationMs);
+                            meta.setTarget(step.getTarget());
                             stepMetadata.add(meta);
                             log.error("Error in workflow step {}: {}", step.getStep(), error.getMessage());
                             return Mono.error(new ResponseStatusException(
@@ -291,9 +380,9 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
             teamContextService.getTeamFromContext().map(teamId -> {
                 // Build WorkflowResult
                 LinqResponse.WorkflowResult workflowResult = new LinqResponse.WorkflowResult();
-                List<LinqResponse.StepResult> stepResultList = steps.stream()
+                List<LinqResponse.WorkflowStep> stepResultList = steps.stream()
                         .map(step -> {
-                            LinqResponse.StepResult stepResult = new LinqResponse.StepResult();
+                            LinqResponse.WorkflowStep stepResult = new LinqResponse.WorkflowStep();
                             stepResult.setStep(step.getStep());
                             stepResult.setTarget(step.getTarget());
                             stepResult.setResult(stepResults.get(step.getStep()));
@@ -380,7 +469,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
         return String.valueOf(current);
     }
 
-    private Object extractFinalResult(Object result) {
+    private String extractFinalResult(Object result) {
         if (result instanceof Map<?, ?> resultMap) {
             Object choices = resultMap.get("choices");
             if (choices instanceof List<?> choiceList && !choiceList.isEmpty()) {
@@ -388,12 +477,13 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                 if (firstChoice instanceof Map<?, ?> choiceMap) {
                     Object message = choiceMap.get("message");
                     if (message instanceof Map<?, ?> messageMap) {
-                        return messageMap.get("content");
+                        Object content = messageMap.get("content");
+                        return content != null ? content.toString() : "";
                     }
                 }
             }
         }
-        return String.valueOf(result);
+        return result != null ? result.toString() : "";
     }
 
     @Override

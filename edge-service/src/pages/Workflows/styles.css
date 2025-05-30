@@ -296,3 +296,30 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.workflow-steps-preview {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.workflow-step-preview {
+    padding: 8px;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.workflow-step-preview:last-child {
+    border-bottom: none;
+}
+
+.workflow-step-preview .step-target {
+    font-weight: 500;
+    color: #495057;
+}
+
+.workflow-step-preview .step-intent {
+    font-size: 0.875rem;
+}

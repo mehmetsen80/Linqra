@@ -3,7 +3,7 @@ package org.lite.gateway.dto;
 import lombok.Data;
 
 import java.util.List;
-import java.util.Map;
+import java.time.LocalDateTime;
 
 @Data
 public class LinqResponse {
@@ -32,13 +32,12 @@ public class LinqResponse {
         private Object result; // Step output, e.g., {"name": "Socrates"}
     }
 
-
-
     @Data
     public static class WorkflowStepMetadata {
         private int step;
         private String status;
         private long durationMs;
         private String target;
+        private LocalDateTime executedAt;  // When the step was executed
     }
 }

@@ -356,6 +356,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                             meta.setStatus("success");
                             meta.setDurationMs(durationMs);
                             meta.setTarget(step.getTarget());
+                            meta.setExecutedAt(LocalDateTime.now());
                             stepMetadata.add(meta);
                             return Mono.just(response);
                         })
@@ -366,6 +367,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                             meta.setStatus("error");
                             meta.setDurationMs(durationMs);
                             meta.setTarget(step.getTarget());
+                            meta.setExecutedAt(LocalDateTime.now());
                             stepMetadata.add(meta);
                             log.error("Error in workflow step {}: {}", step.getStep(), error.getMessage());
                             return Mono.error(new ResponseStatusException(

@@ -18,7 +18,7 @@ import ViewToken from '../pages/ViewToken';
 import NonProdGuard from '../components/guards/NonProdGuard';
 import NotFound from '../components/common/NotFound';
 import AdminGuard from '../components/guards/AdminGuard';
-
+import Workflows from '../pages/Workflows';
 const AppRoutes = () => {
   return (
     <Routes>
@@ -41,6 +41,7 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/metrics" element={<Metrics />} />
         <Route path="/service-status" element={<ServiceStatus />} />
+        <Route path="/workflows" element={<Workflows />} />
         <Route 
           path="/teams" 
           element={

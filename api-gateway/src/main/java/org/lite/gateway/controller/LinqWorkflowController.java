@@ -216,7 +216,8 @@ public class LinqWorkflowController {
     public Flux<LinqWorkflowExecution> getWorkflowExecutions(@PathVariable String workflowId) {
         log.info("Fetching executions for workflow: {}", workflowId);
         return linqWorkflowService.getWorkflowExecutions(workflowId)
-            .doOnError(error -> log.error("Error fetching workflow executions: {}", error.getMessage()));
+            .doOnNext(e -> log.info("Execution fetched: {}", e.getId()))
+            .doOnError(error -> log.error("Error fetching executions: {}", error.getMessage()));
     }
 
     @GetMapping("/executions")

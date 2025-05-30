@@ -9,6 +9,7 @@ import TeamRoutes from '../../components/dashboard/TeamRoutes';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin } from '../../utils/roleUtils';
+import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import './styles.css';
 
 function Dashboard() {
@@ -16,7 +17,7 @@ function Dashboard() {
   const { user } = useAuth();
 
   if (loading) {
-    return null; // Or return a loading spinner if you prefer!
+    return <LoadingSpinner />;
   }
 
   if (!currentTeam && !isSuperAdmin(user)) {

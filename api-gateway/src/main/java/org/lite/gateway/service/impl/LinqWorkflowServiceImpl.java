@@ -136,7 +136,10 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
         execution.setRequest(request);
         execution.setResponse(response);
         execution.setExecutedAt(LocalDateTime.now());
-        execution.setStatus(ExecutionStatus.SUCCESS);
+        
+        // Set status based on metadata status
+        execution.setStatus("success".equals(response.getMetadata().getStatus()) ? 
+            ExecutionStatus.SUCCESS : ExecutionStatus.FAILED);
         
         // Calculate duration from metadata if available
         if (response.getMetadata() != null && response.getMetadata().getWorkflowMetadata() != null) {
@@ -151,7 +154,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
         }
         
         return executionRepository.save(execution)
-            .doOnSuccess(e -> log.info("Tracked workflow execution: {}", e.getId()))
+            .doOnSuccess(e -> log.info("Tracked workflow execution: {} with status: {}", e.getId(), e.getStatus()))
             .doOnError(error -> log.error("Error tracking workflow execution: {}", error.getMessage()));
     }
 
@@ -408,7 +411,33 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                 response.setMetadata(metadata);
                 return response;
             })
-        );
+        ).onErrorResume(error -> {
+            // Create error response
+            LinqResponse errorResponse = new LinqResponse();
+            LinqResponse.Metadata metadata = new LinqResponse.Metadata();
+            metadata.setSource("workflow");
+            metadata.setStatus("error");
+            metadata.setTeam(teamContextService.getTeamFromContext().block());
+            metadata.setCacheHit(false);
+            metadata.setWorkflowMetadata(stepMetadata);
+            errorResponse.setMetadata(metadata);
+            
+            // Set error result
+            LinqResponse.WorkflowResult errorResult = new LinqResponse.WorkflowResult();
+            errorResult.setSteps(steps.stream()
+                .map(step -> {
+                    LinqResponse.WorkflowStep stepResult = new LinqResponse.WorkflowStep();
+                    stepResult.setStep(step.getStep());
+                    stepResult.setTarget(step.getTarget());
+                    stepResult.setResult(stepResults.get(step.getStep()));
+                    return stepResult;
+                })
+                .collect(Collectors.toList()));
+            errorResult.setFinalResult(error.getMessage());
+            errorResponse.setResult(errorResult);
+            
+            return Mono.just(errorResponse);
+        });
     }
 
     private Map<String, Object> resolvePlaceholdersForMap(Map<String, Object> input, Map<Integer, Object> stepResults) {

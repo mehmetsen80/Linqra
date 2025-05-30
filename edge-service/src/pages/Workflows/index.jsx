@@ -12,6 +12,8 @@ import { Link } from 'react-router-dom';
 import { JsonView, allExpanded, darkStyles, defaultStyles } from 'react-json-view-lite';
 import 'react-json-view-lite/dist/index.css';
 import './styles.css';
+import ConfirmationModal from '../../components/common/ConfirmationModal';
+import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 
 function Workflows() {
     const { currentTeam, loading: teamLoading, selectedTeam } = useTeam();
@@ -25,6 +27,9 @@ function Workflows() {
     const [loadingExecutions, setLoadingExecutions] = useState(false);
     const [selectedExecution, setSelectedExecution] = useState(null);
     const [showExecutionModal, setShowExecutionModal] = useState(false);
+    const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
+    const [workflowToExecute, setWorkflowToExecute] = useState(null);
+    const [executing, setExecuting] = useState(false);
     const jsonViewerRef = useRef(null);
 
     useEffect(() => {
@@ -127,6 +132,44 @@ function Workflows() {
     const handleExecutionClick = (execution) => {
         setSelectedExecution(execution);
         setShowExecutionModal(true);
+    };
+
+    const handleExecuteClick = (workflow, e) => {
+        e.stopPropagation(); // Prevent row selection
+        setWorkflowToExecute(workflow);
+        setShowExecuteConfirm(true);
+    };
+
+    const handleExecuteConfirm = async () => {
+        if (!workflowToExecute) return;
+
+        try {
+            setExecuting(true);
+            const response = await workflowService.executeWorkflow(workflowToExecute.id);
+            if (response.success) {
+                showSuccessToast(response.message);
+                // Refresh executions if this workflow is currently selected
+                if (selectedWorkflow?.id === workflowToExecute.id) {
+                    loadWorkflowExecutions(workflowToExecute.id);
+                }
+            } else {
+                const errorMessage = response.details 
+                    ? `${response.error}: ${response.details}`
+                    : response.error;
+                showErrorToast(errorMessage);
+            }
+        } catch (err) {
+            console.error('Error executing workflow:', err);
+            const errorMessage = err.response?.data?.message || 
+                               err.response?.data?.error || 
+                               err.message || 
+                               'Failed to execute workflow';
+            showErrorToast(errorMessage);
+        } finally {
+            setExecuting(false);
+            setShowExecuteConfirm(false);
+            setWorkflowToExecute(null);
+        }
     };
 
     if (teamLoading) {
@@ -252,7 +295,12 @@ function Workflows() {
                             </td>
                             <td>
                                 <div className="action-buttons">
-                                    <Button variant="outline-primary" size="sm" className="me-2">
+                                    <Button 
+                                        variant="outline-primary" 
+                                        size="sm" 
+                                        className="me-2"
+                                        onClick={(e) => handleExecuteClick(workflow, e)}
+                                    >
                                         Execute
                                     </Button>
                                     <Button variant="outline-secondary" size="sm" className="me-2">
@@ -451,6 +499,50 @@ function Workflows() {
                     )}
                 </Modal.Body>
             </Modal>
+
+            {/* Execute Confirmation Modal */}
+            <ConfirmationModal
+                show={showExecuteConfirm}
+                onHide={() => setShowExecuteConfirm(false)}
+                onConfirm={handleExecuteConfirm}
+                title="Execute Workflow"
+                message={
+                    <div>
+                        <p>Are you sure you want to execute the workflow "{workflowToExecute?.name}"?</p>
+                        <div className="mt-3">
+                            <h6>Workflow Steps:</h6>
+                            <div className="workflow-steps-preview">
+                                {workflowToExecute?.request?.query?.workflow?.map((step, index) => (
+                                    <div key={index} className="workflow-step-preview">
+                                        <Badge bg="info" className="me-2">Step {index + 1}</Badge>
+                                        <span className="step-target">{step.target}</span>
+                                        {step.intent && (
+                                            <span className="step-intent ms-2 text-muted">
+                                                ({step.intent})
+                                            </span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                }
+                confirmLabel={executing ? (
+                    <>
+                        <Spinner
+                            as="span"
+                            animation="border"
+                            size="sm"
+                            role="status"
+                            aria-hidden="true"
+                            className="me-2"
+                        />
+                        Executing...
+                    </>
+                ) : "Execute"}
+                variant="primary"
+                disabled={executing}
+            />
         </div>
     );
 }

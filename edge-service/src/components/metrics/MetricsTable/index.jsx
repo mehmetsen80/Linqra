@@ -14,7 +14,7 @@ import {
     IconButton 
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import { formatDateTime } from '../../../utils/dateUtils';
+import { format } from 'date-fns';
 import './styles.css';
 
 const MetricsTable = ({ metrics = [] }) => {
@@ -30,6 +30,12 @@ const MetricsTable = ({ metrics = [] }) => {
         status: ''
     });
 
+    const formatDate = (dateArray) => {
+        if (!dateArray || dateArray.length < 7) return 'N/A';
+        const [year, month, day, hour, minute, second] = dateArray;
+        return format(new Date(year, month - 1, day, hour, minute, second), 'MMM d, yyyy HH:mm');
+    };
+
     const filteredMetrics = metrics.filter(metric => {
         return Object.keys(filters).every(key => {
             const filterValue = filters[key].toLowerCase();
@@ -41,7 +47,7 @@ const MetricsTable = ({ metrics = [] }) => {
             }
 
             if (key === 'timestamp') {
-                return formatDateTime(metric.timestamp)
+                return formatDate(metric.timestamp)
                     .toLowerCase()
                     .includes(filterValue);
             }
@@ -139,7 +145,7 @@ const MetricsTable = ({ metrics = [] }) => {
                                 }
                             }}
                         >
-                            <TableCell>{formatDateTime(metric.timestamp)}</TableCell>
+                            <TableCell>{formatDate(metric.timestamp)}</TableCell>
                             <TableCell>{metric.fromService}</TableCell>
                             <TableCell>{metric.toService}</TableCell>
                             <TableCell>{metric.routeIdentifier}</TableCell>

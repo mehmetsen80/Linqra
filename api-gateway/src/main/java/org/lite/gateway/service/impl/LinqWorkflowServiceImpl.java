@@ -102,11 +102,11 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                 .flatMap(workflow -> {
                     log.info("Deleting workflow: {} and its versions", workflow);
                     // First delete all versions
-                    return workflowVersionRepository.findByWorkflowIdAndTeam(workflowId, teamId)
-                        .flatMap(version -> workflowVersionRepository.delete(version))
+                    return workflowVersionRepository.findFirstByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
+                        .flatMap(workflowVersionRepository::delete)
                         .then()
                         .then(executionRepository.findByWorkflowIdAndTeam(workflowId, teamId)
-                            .flatMap(execution -> executionRepository.delete(execution))
+                            .flatMap(executionRepository::delete)
                             .then())
                         .then(workflowRepository.delete(workflow))
                         .doOnSuccess(v -> log.info("Deleted workflow: {} and its versions and executions", workflowId))
@@ -588,7 +588,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     @Override
     public Flux<LinqWorkflowVersion> getVersionHistory(String workflowId) {
         return teamContextService.getTeamFromContext()
-            .flatMapMany(teamId -> workflowVersionRepository.findByWorkflowIdAndTeam(workflowId, teamId)
+            .flatMapMany(teamId -> workflowVersionRepository.findByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
                 .doOnError(error -> log.error("Error fetching version history: {}", error.getMessage()))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "Workflow not found or access denied"))));

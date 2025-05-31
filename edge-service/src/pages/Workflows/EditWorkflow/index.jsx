@@ -4,12 +4,14 @@ import { useTeam } from '../../../contexts/TeamContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { isSuperAdmin } from '../../../utils/roleUtils';
 import workflowService from '../../../services/workflowService';
+import { teamService } from '../../../services/teamService';
 import './styles.css';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
-import { Form, Card, Spinner, Badge, Modal } from 'react-bootstrap';
+import { Form, Card, Spinner, Badge, Modal, Row, Col } from 'react-bootstrap';
 import Button from '../../../components/common/Button';
 import { format } from 'date-fns';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 function EditWorkflow() {
     const { workflowId } = useParams();
@@ -27,25 +29,29 @@ function EditWorkflow() {
     const [compareVersions, setCompareVersions] = useState({ version1: '', version2: '' });
     const [saving, setSaving] = useState(false);
     const [showMetadataModal, setShowMetadataModal] = useState(false);
+    const [teamDetails, setTeamDetails] = useState(null);
+    const [stats, setStats] = useState(null);
 
     useEffect(() => {
         if (currentTeam) {
             loadWorkflow();
             loadVersions();
+            loadStats();
         }
     }, [currentTeam]);
+
+    useEffect(() => {
+        if (workflow?.team) {
+            loadTeamDetails();
+        }
+    }, [workflow?.team]);
 
     const loadWorkflow = async () => {
         try {
             setLoading(true);
             const response = await workflowService.getWorkflowById(workflowId);
             if (response.success) {
-                // Get the latest version number from versions array
-                const latestVersion = versions[0]?.version;
-                setWorkflow({
-                    ...response.data,
-                    version: latestVersion
-                });
+                setWorkflow(response.data);
             } else {
                 setError(response.error);
             }
@@ -65,6 +71,28 @@ function EditWorkflow() {
             }
         } catch (err) {
             console.error('Error loading versions:', err);
+        }
+    };
+
+    const loadTeamDetails = async () => {
+        try {
+            const response = await teamService.getTeam(workflow.team);
+            if (response.success) {
+                setTeamDetails(response.data);
+            }
+        } catch (err) {
+            console.error('Error loading team details:', err);
+        }
+    };
+
+    const loadStats = async () => {
+        try {
+            const response = await workflowService.getWorkflowStats(workflowId);
+            if (response.success) {
+                setStats(response.data);
+            }
+        } catch (err) {
+            console.error('Error loading stats:', err);
         }
     };
 
@@ -157,7 +185,20 @@ function EditWorkflow() {
 
     const formatDate = (date) => {
         if (!date) return 'N/A';
-        return format(new Date(date), 'MMM d, yyyy HH:mm');
+        try {
+            let dateObj;
+            if (Array.isArray(date)) {
+                // Handle array format [year, month, day, hour, minute, second, nanoseconds]
+                dateObj = new Date(date[0], date[1] - 1, date[2], date[3], date[4], date[5]);
+            } else {
+                dateObj = new Date(date);
+            }
+            if (isNaN(dateObj.getTime())) return 'N/A';
+            return format(dateObj, 'MMM d, yyyy HH:mm');
+        } catch (err) {
+            console.error('Error formatting date:', err);
+            return 'N/A';
+        }
     };
 
     const highlightDifferences = (obj1, obj2, path = '') => {
@@ -309,36 +350,13 @@ function EditWorkflow() {
                         <Card.Body>
                             <Form onSubmit={(e) => e.preventDefault()}>
                                 <Form.Group className="mb-3">
-                                    <Form.Label>Name</Form.Label>
-                                    <Form.Control
-                                        type="text"
-                                        name="name"
-                                        value={workflow?.name || ''}
-                                        onChange={handleInputChange}
-                                        placeholder="Enter workflow name"
-                                    />
-                                </Form.Group>
-
-                                <Form.Group className="mb-3">
-                                    <Form.Label>Description</Form.Label>
-                                    <Form.Control
-                                        as="textarea"
-                                        name="description"
-                                        value={workflow?.description || ''}
-                                        onChange={handleInputChange}
-                                        placeholder="Enter workflow description"
-                                        rows={3}
-                                    />
-                                </Form.Group>
-
-                                <Form.Group className="mb-3">
                                     <Form.Label>Request</Form.Label>
                                     <Form.Control
                                         as="textarea"
                                         name="request"
                                         value={typeof workflow?.request === 'object' ? JSON.stringify(workflow.request, null, 2) : workflow?.request || ''}
                                         onChange={handleInputChange}
-                                        rows={30}
+                                        rows={25}
                                         className="font-monospace"
                                     />
                                 </Form.Group>
@@ -346,9 +364,9 @@ function EditWorkflow() {
                                 <div className="d-flex justify-content-between">
                                     <Button 
                                         variant="outline-secondary" 
-                                        onClick={() => setWorkflow(null)}
+                                        onClick={() => navigate(`/workflows/${workflowId}/design`)}
                                     >
-                                        Reset
+                                        Design
                                     </Button>
                                     <Button 
                                         variant="primary" 
@@ -373,9 +391,210 @@ function EditWorkflow() {
                             </Form>
                         </Card.Body>
                     </Card>
+
+                    <Card className="mb-4">
+                        <Card.Header>
+                            <h5 className="mb-0">Workflow Statistics</h5>
+                        </Card.Header>
+                        <Card.Body>
+                            {stats ? (
+                                <div>
+                                    <Row className="mb-4">
+                                        <Col md={3}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Total</h6>
+                                                    <h3>{stats.totalExecutions}</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                        <Col md={3}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Success</h6>
+                                                    <h3 className="text-success">{stats.successfulExecutions}</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                        <Col md={3}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Failed</h6>
+                                                    <h3 className="text-danger">{stats.failedExecutions}</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                        <Col md={3}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Avg Time</h6>
+                                                    <h3>{stats.averageExecutionTime.toFixed(2)}ms</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                    </Row>
+
+                                    <Row className="mb-4">
+                                        <Col md={6}>
+                                            <Card>
+                                                <Card.Body>
+                                                    <h6>Step Performance</h6>
+                                                    <ResponsiveContainer width="100%" height={300}>
+                                                        <BarChart data={Object.entries(stats.stepStats).map(([step, data]) => ({
+                                                            step: `Step ${step}`,
+                                                            duration: data.averageDurationMs,
+                                                            executions: data.totalExecutions
+                                                        }))}>
+                                                            <CartesianGrid strokeDasharray="3 3" />
+                                                            <XAxis dataKey="step" />
+                                                            <YAxis />
+                                                            <Tooltip />
+                                                            <Legend />
+                                                            <Bar dataKey="duration" name="Avg. Duration (ms)" fill="#8884d8" />
+                                                            <Bar dataKey="executions" name="Total Executions" fill="#82ca9d" />
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                        <Col md={6}>
+                                            <Card>
+                                                <Card.Body>
+                                                    <h6>Target Distribution</h6>
+                                                    <ResponsiveContainer width="100%" height={300}>
+                                                        <PieChart>
+                                                            <Pie
+                                                                data={Object.entries(stats.targetStats).map(([target, data]) => ({
+                                                                    name: target,
+                                                                    value: data.totalExecutions
+                                                                }))}
+                                                                dataKey="value"
+                                                                nameKey="name"
+                                                                cx="50%"
+                                                                cy="50%"
+                                                                outerRadius={100}
+                                                                label
+                                                            >
+                                                                {Object.entries(stats.targetStats).map((entry, index) => (
+                                                                    <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042'][index % 4]} />
+                                                                ))}
+                                                            </Pie>
+                                                            <Tooltip />
+                                                            <Legend />
+                                                        </PieChart>
+                                                    </ResponsiveContainer>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                    </Row>
+
+                                    <Row>
+                                        <Col md={12}>
+                                            <Card>
+                                                <Card.Body>
+                                                    <h6>Hourly Executions</h6>
+                                                    <ResponsiveContainer width="100%" height={400}>
+                                                        <BarChart data={Object.entries(stats.hourlyExecutions)
+                                                            .reduce((acc, [hour, count]) => {
+                                                                // Find the corresponding date from dailyExecutions
+                                                                const date = Object.keys(stats.dailyExecutions)[0]; // Get the first date since we have only one day
+                                                                const hourWithDate = `${date} ${hour}`;
+                                                                
+                                                                // Deduplicate entries by hour
+                                                                const existingEntry = acc.find(item => item.hour === hourWithDate);
+                                                                if (existingEntry) {
+                                                                    existingEntry.executions += count;
+                                                                } else {
+                                                                    acc.push({ 
+                                                                        hour: hourWithDate,
+                                                                        executions: count 
+                                                                    });
+                                                                }
+                                                                return acc;
+                                                            }, [])
+                                                            .sort((a, b) => {
+                                                                // Sort by hour
+                                                                const [aDate, aTime] = a.hour.split(' ');
+                                                                const [bDate, bTime] = b.hour.split(' ');
+                                                                const [aHours] = aTime.split(':').map(Number);
+                                                                const [bHours] = bTime.split(':').map(Number);
+                                                                return aHours - bHours;
+                                                            })}>
+                                                            <CartesianGrid strokeDasharray="3 3" />
+                                                            <XAxis 
+                                                                dataKey="hour" 
+                                                                angle={-45}
+                                                                textAnchor="end"
+                                                                height={80}
+                                                                interval={0}
+                                                                tick={{ fontSize: 12 }}
+                                                            />
+                                                            <YAxis />
+                                                            <Tooltip />
+                                                            <Legend />
+                                                            <Bar dataKey="executions" name="Executions" fill="#8884d8" />
+                                                        </BarChart>
+                                                    </ResponsiveContainer>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                    </Row>
+                                </div>
+                            ) : (
+                                <div className="text-center">
+                                    <Spinner animation="border" role="status">
+                                        <span className="visually-hidden">Loading stats...</span>
+                                    </Spinner>
+                                </div>
+                            )}
+                        </Card.Body>
+                    </Card>
                 </div>
 
                 <div className="col-md-4">
+                    <Card className="mb-4">
+                        <Card.Body className="workflow-details">
+                            <h5>Workflow Details</h5>
+                            <div className="detail-item">
+                                <div className="detail-label">ID</div>
+                                <div className="detail-value">{workflow?.id}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Version</div>
+                                <div className="detail-value">v{workflow?.version || 'N/A'}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Name</div>
+                                <div className="detail-value">{workflow?.name}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Description</div>
+                                <div className="detail-value">{workflow?.description}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Team</div>
+                                <div className="detail-value">
+                                    {teamDetails ? (
+                                        <div>
+                                            <div>{teamDetails.name}</div>
+                                            <small className="text-muted">ID: {workflow?.team}</small>
+                                        </div>
+                                    ) : (
+                                        workflow?.team
+                                    )}
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Created At</div>
+                                <div className="detail-value">{formatDate(workflow?.createdAt)}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Updated At</div>
+                                <div className="detail-value">{formatDate(workflow?.updatedAt)}</div>
+                            </div>
+                        </Card.Body>
+                    </Card>
+
                     <Card>
                         <Card.Header>
                             <h5 className="mb-0">Version History</h5>
@@ -386,7 +605,7 @@ function EditWorkflow() {
                                     <div className="d-flex justify-content-between align-items-center mb-2">
                                         <div className="d-flex align-items-center">
                                             <Badge bg="secondary" className="me-2">v{version.version}</Badge>
-                                            {version.version === versions[0]?.version && (
+                                            {version.version === workflow.version && (
                                                 <Badge bg="success">Current</Badge>
                                             )}
                                         </div>

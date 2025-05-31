@@ -208,6 +208,29 @@ const workflowService = {
                 details: actualError
             };
         }
+    },
+
+    getWorkflowStats: async (workflowId) => {
+        try {
+            const response = await axiosInstance.get(`/linq/workflows/${workflowId}/stats`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data
+            };
+        } catch (error) {
+            console.error('Error fetching workflow stats:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch workflow stats'
+            };
+        }
     }
 };
 

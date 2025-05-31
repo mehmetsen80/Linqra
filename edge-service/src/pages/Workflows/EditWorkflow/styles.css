@@ -5,7 +5,7 @@
 }
 
 .version-history {
-    max-height: 600px;
+    max-height: 500px;
     overflow-y: auto;
 }
 
@@ -180,13 +180,13 @@
 
 .vs-badge {
     display: inline-block;
-    padding: 0.5rem 1rem;
+    padding: 8px 16px;
     background-color: #6c757d;
-    color: white;
-    border-radius: 50%;
+    color: white !important;
+    border-radius: 20px;
     font-weight: bold;
-    font-size: 1.2rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    font-size: 1.1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .version-content {
@@ -240,5 +240,194 @@
     margin: 0;
     white-space: pre-wrap;
     word-break: break-word;
+}
+
+.workflow-details {
+    padding: 1rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.workflow-details h5 {
+    color: #2c3e50;
+    border-bottom: 2px solid #e9ecef;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+    position: sticky;
+    top: 0;
+    background-color: white;
+    z-index: 1;
+}
+
+/* Custom scrollbar for workflow details */
+.workflow-details::-webkit-scrollbar {
+    width: 8px;
+}
+
+.workflow-details::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.workflow-details::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.workflow-details::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.workflow-details .detail-item {
+    padding: 0.75rem;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    margin-bottom: 1rem;
+    background-color: #f8f9fa;
+}
+
+.workflow-details .detail-item:last-child {
+    margin-bottom: 0;
+}
+
+.workflow-details .detail-label {
+    color: #6c757d;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.workflow-details .detail-value {
+    color: #2c3e50;
+    font-size: 0.95rem;
+    word-break: break-all;
+}
+
+/* Stats card styling */
+.stats-card {
+    height: 120px;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+}
+
+.stats-card .card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+    height: 100%;
+}
+
+.stats-card h6 {
+    margin-bottom: 0.5rem;
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.stats-card h3 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+/* Version history styling */
+.version-history {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.version-history::-webkit-scrollbar {
+    width: 8px;
+}
+
+.version-history::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.version-history::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.version-history::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.version-item {
+    padding: 1rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.version-item:last-child {
+    border-bottom: none;
+}
+
+.version-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin: 0.5rem 0;
+}
+
+/* Compare modal styling */
+.compare-form {
+    padding: 1rem;
+}
+
+.version-selectors {
+    margin-bottom: 2rem;
+}
+
+.version-content {
+    height: 100%;
+    min-height: 500px;
+    overflow-y: auto;
+}
+
+.diff-view {
+    font-family: monospace;
+}
+
+.diff-section {
+    margin-bottom: 1.5rem;
+}
+
+.diff-title {
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.diff-content {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.diff-changed {
+    background-color: #fff3cd;
+}
+
+.json-key {
+    color: #0d6efd;
+}
+
+.json-value {
+    color: #198754;
+}
+
+.vs-badge {
+    display: inline-block;
+    padding: 8px 16px;
+    background-color: #6c757d;
+    color: white;
+    border-radius: 20px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 

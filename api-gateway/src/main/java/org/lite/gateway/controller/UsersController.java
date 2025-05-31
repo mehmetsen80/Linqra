@@ -19,6 +19,16 @@ public class UsersController {
     
     private final UserService userService;
 
+    @GetMapping("/{userId}")
+    public Mono<ResponseEntity<User>> getUserById(@PathVariable String userId) {
+        log.info("Fetching user by ID: {}", userId);
+        return userService.findById(userId)
+            .map(ResponseEntity::ok)
+            .defaultIfEmpty(ResponseEntity.notFound().build())
+            .doOnSuccess(user -> log.info("User fetched successfully: {}", userId))
+            .doOnError(error -> log.error("Error fetching user: {}", error.getMessage()));
+    }
+
     @GetMapping("/by-username/{username}")
     public Mono<ResponseEntity<User>> getUserByUsername(@PathVariable String username) {
         return userService.findByUsername(username)

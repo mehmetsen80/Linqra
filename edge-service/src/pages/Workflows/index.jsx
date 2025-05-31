@@ -8,7 +8,7 @@ import Button from '../../components/common/Button';
 import { HiPlus, HiChevronRight, HiPencilAlt, HiTrash } from 'react-icons/hi';
 import workflowService from '../../services/workflowService';
 import { format } from 'date-fns';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { JsonView, allExpanded, darkStyles, defaultStyles } from 'react-json-view-lite';
 import 'react-json-view-lite/dist/index.css';
 import './styles.css';
@@ -31,6 +31,7 @@ function Workflows() {
     const [workflowToExecute, setWorkflowToExecute] = useState(null);
     const [executing, setExecuting] = useState(false);
     const jsonViewerRef = useRef(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
         if (currentTeam) {
@@ -178,17 +179,17 @@ function Workflows() {
 
     if (!currentTeam && !isSuperAdmin(user)) {
         return (
-            <div className="workflows-container">
-                <Alert variant="info" className="no-team-alert">
-                    <Alert.Heading>No Team Access</Alert.Heading>
-                    <p>
-                        You currently don't have access to any team. Please contact your administrator 
-                        to get assigned to a team to view the workflows and access other features.
-                    </p>
-                </Alert>
-            </div>
+          <div className="workflows-container">
+            <Alert variant="info" className="no-team-alert">
+              <Alert.Heading>No Team Access</Alert.Heading>
+              <p>
+                You currently don't have access to any team. Please contact your administrator 
+                to get assigned to a team to view the workflows and access other features.
+              </p>
+            </Alert>
+          </div>
         );
-    }
+      }
 
     if (loading) {
         return (
@@ -303,7 +304,15 @@ function Workflows() {
                                     >
                                         Execute
                                     </Button>
-                                    <Button variant="outline-secondary" size="sm" className="me-2">
+                                    <Button 
+                                        variant="outline-secondary" 
+                                        size="sm" 
+                                        className="me-2"
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // Prevent row selection
+                                            navigate(`/workflows/${workflow.id}/edit`);
+                                        }}
+                                    >
                                         Edit
                                     </Button>
                                     <Button variant="outline-danger" size="sm">

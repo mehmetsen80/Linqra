@@ -231,6 +231,38 @@ const workflowService = {
                 error: error.response?.data?.message || 'Failed to fetch workflow stats'
             };
         }
+    },
+
+    validateRequest: async (request) => {
+        try {
+            console.log('Sending validation request:', request);
+            const response = await axiosInstance.post('/linq/workflows/validate', request, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            console.log('Validation response:', response.data);
+            
+            // Check if the response indicates validation failure
+            if (response.data && response.data.valid === false) {
+                return {
+                    success: true, // The request was successful, but validation failed
+                    data: response.data
+                };
+            }
+            
+            return { success: true, data: response.data };
+        } catch (error) {
+            console.error('Validation error:', error.response?.data || error);
+            return { 
+                success: false, 
+                error: error.response?.data?.errors || ['Failed to validate request'],
+                status: error.response?.status
+            };
+        }
     }
 };
 

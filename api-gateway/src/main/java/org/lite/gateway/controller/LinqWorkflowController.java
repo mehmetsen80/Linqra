@@ -15,6 +15,8 @@ import org.lite.gateway.service.TeamService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
 import org.lite.gateway.service.TeamContextService;
+import org.lite.gateway.validation.LinqRequestValidationService;
+import org.lite.gateway.validation.ValidationResult;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -35,6 +37,7 @@ public class LinqWorkflowController {
     private final UserContextService userContextService;
     private final UserService userService;
     private final TeamContextService teamContextService;
+    private final LinqRequestValidationService validationService;
 
     @PostMapping
     public Mono<ResponseEntity<?>> createWorkflow(
@@ -347,5 +350,20 @@ public class LinqWorkflowController {
         return linqWorkflowService.getVersion(workflowId, versionId)
             .doOnSuccess(v -> log.info("Fetched version: {} for workflow: {}", v.getId(), workflowId))
             .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()));
+    }
+
+    @PostMapping("/validate")
+    public Mono<ResponseEntity<ValidationResult>> validateRequest(@RequestBody LinqRequest request) {
+        log.info("Validating request: {}", request);
+        return Mono.just(validationService.validate(request))
+            .map(result -> {
+                if (!result.isValid()) {
+                    log.info("Validation failed: {}", result.getErrors());
+                    return ResponseEntity.badRequest().body(result);
+                }
+                log.info("Validation successful");
+                return ResponseEntity.ok(result);
+            })
+            .doOnError(error -> log.error("Error validating request: {}", error.getMessage()));
     }
 }

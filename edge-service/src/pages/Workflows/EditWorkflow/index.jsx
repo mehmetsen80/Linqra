@@ -306,6 +306,39 @@ function EditWorkflow() {
         }
     };
 
+    const handleValidate = async () => {
+        try {
+            const requestToValidate = typeof workflow.request === 'object' ? 
+                workflow.request : 
+                JSON.parse(workflow.request);
+
+            console.log('Sending request for validation:', requestToValidate);
+            
+            const response = await workflowService.validateRequest(requestToValidate);
+            console.log('Validation response:', response);
+
+            if (response.success) {
+                if (response.data && response.data.errors && response.data.errors.length > 0) {
+                    // If the backend returned validation errors
+                    const errorMessage = Array.isArray(response.data.errors) ? 
+                        response.data.errors.join('\n') : 
+                        response.data.errors;
+                    showErrorToast(errorMessage);
+                } else {
+                    showSuccessToast('Request validation successful');
+                }
+            } else {
+                const errorMessage = Array.isArray(response.error) ? 
+                    response.error.join('\n') : 
+                    response.error;
+                showErrorToast(errorMessage);
+            }
+        } catch (err) {
+            console.error('Validation error:', err);
+            showErrorToast('Failed to validate request: ' + err.message);
+        }
+    };
+
     if (loading) {
         return (
             <div className="d-flex justify-content-center align-items-center" style={{ height: '200px' }}>
@@ -364,9 +397,9 @@ function EditWorkflow() {
                                 <div className="d-flex justify-content-between">
                                     <Button 
                                         variant="outline-secondary" 
-                                        onClick={() => navigate(`/workflows/${workflowId}/design`)}
+                                        onClick={handleValidate}
                                     >
-                                        Design
+                                        Validate
                                     </Button>
                                     <Button 
                                         variant="primary" 

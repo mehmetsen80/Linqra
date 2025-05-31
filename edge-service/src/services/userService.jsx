@@ -23,6 +23,21 @@ const userService = {
                 status: error.response?.status
             };
         }
+    },
+
+    getUserById: async (userId) => {
+        try {
+            const response = await axiosInstance.get(`/api/users/${userId}`);
+            return { data: response.data };
+        } catch (error) {
+            if (error.response?.status === 404) {
+                return { error: `User with ID "${userId}" not found` };
+            }
+            return { 
+                error: error.response?.data?.message || 'Failed to fetch user',
+                status: error.response?.status
+            };
+        }
     }
 };
 

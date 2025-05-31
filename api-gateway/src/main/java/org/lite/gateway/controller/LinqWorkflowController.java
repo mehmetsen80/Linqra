@@ -261,8 +261,8 @@ public class LinqWorkflowController {
             .flatMap(workflow -> userContextService.getCurrentUsername(exchange)
                 .flatMap(userService::findByUsername)
                 .flatMap(user -> {
-
-                    //service-account-linqra-gateway-client
+                    // Set the user ID in the updatedWorkflow
+                    updatedWorkflow.setUpdatedBy(user.getUsername());
 
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {

@@ -101,8 +101,8 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                     "Workflow not found or access denied")))
                 .flatMap(workflow -> {
                     log.info("Deleting workflow: {} and its versions", workflow);
-                    // First delete all versions
-                    return workflowVersionRepository.findFirstByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
+                    // Delete all versions
+                    return workflowVersionRepository.findByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
                         .flatMap(workflowVersionRepository::delete)
                         .then()
                         .then(executionRepository.findByWorkflowIdAndTeam(workflowId, teamId)
@@ -521,33 +521,39 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     public Mono<LinqWorkflow> createNewVersion(String workflowId, LinqWorkflow updatedWorkflow) {
         return teamContextService.getTeamFromContext()
             .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
-                .flatMap(workflow -> {
-                    // Create new version
-                    LinqWorkflowVersion newVersion = LinqWorkflowVersion.builder()
-                        .workflowId(workflowId)
-                        .team(teamId)
-                        .version(workflow.getVersion() + 1)
-                        .request(workflow.getRequest())
-                        .createdAt(System.currentTimeMillis())
-                        .createdBy(workflow.getUpdatedBy())
-                        .changeDescription("Version created at " + LocalDateTime.now())
-                        .build();
+                .flatMap(workflow -> 
+                    // Get the latest version number
+                    workflowVersionRepository.findFirstByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
+                        .map(latestVersion -> latestVersion.getVersion() + 1)
+                        .defaultIfEmpty(1)
+                        .flatMap(newVersionNumber -> {
+                            // Create new version
+                            LinqWorkflowVersion newVersion = LinqWorkflowVersion.builder()
+                                .workflowId(workflowId)
+                                .team(teamId)
+                                .version(newVersionNumber)
+                                .request(updatedWorkflow.getRequest())
+                                .createdAt(System.currentTimeMillis())
+                                .createdBy(updatedWorkflow.getUpdatedBy())
+                                .changeDescription("Version created at " + LocalDateTime.now())
+                                .build();
 
-                    // Update workflow with new data
-                    workflow.setVersion(newVersion.getVersion());
-                    workflow.setName(updatedWorkflow.getName());
-                    workflow.setDescription(updatedWorkflow.getDescription());
-                    workflow.setRequest(updatedWorkflow.getRequest());
-                    workflow.setPublic(updatedWorkflow.isPublic());
-                    workflow.setUpdatedAt(LocalDateTime.now());
-                    workflow.setUpdatedBy(updatedWorkflow.getUpdatedBy());
+                            // Update workflow with new data
+                            workflow.setVersion(newVersionNumber);
+                            workflow.setName(updatedWorkflow.getName());
+                            workflow.setDescription(updatedWorkflow.getDescription());
+                            workflow.setRequest(updatedWorkflow.getRequest());
+                            workflow.setPublic(updatedWorkflow.isPublic());
+                            workflow.setUpdatedAt(LocalDateTime.now());
+                            workflow.setUpdatedBy(updatedWorkflow.getUpdatedBy());
 
-                    return workflowVersionRepository.save(newVersion)
-                        .then(workflowRepository.save(workflow))
-                        .doOnSuccess(w -> log.info("Created new version {} for workflow: {}", 
-                            newVersion.getVersion(), w.getId()))
-                        .doOnError(error -> log.error("Error creating new version: {}", error.getMessage()));
-                })
+                            return workflowVersionRepository.save(newVersion)
+                                .then(workflowRepository.save(workflow))
+                                .doOnSuccess(w -> log.info("Created new version {} for workflow: {}", 
+                                    newVersion.getVersion(), w.getId()))
+                                .doOnError(error -> log.error("Error creating new version: {}", error.getMessage()));
+                        })
+                )
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "Workflow not found or access denied"))));
     }

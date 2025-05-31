@@ -228,5 +228,22 @@ export const teamService = {
     } catch (error) {
       return { error: error.response?.data?.message || error.message };
     }
+  },
+
+  // Get team by ID
+  getTeam: async (teamId) => {
+    try {
+      const response = await axiosInstance.get(`/api/teams/${teamId}`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error fetching team:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to fetch team'
+      };
+    }
   }
 }; 

@@ -17,6 +17,7 @@ import org.lite.gateway.service.LinqWorkflowService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.LinqToolService;
 import org.lite.gateway.service.LinqMicroService;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -105,7 +106,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                     return workflowVersionRepository.findByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
                         .flatMap(workflowVersionRepository::delete)
                         .then()
-                        .then(executionRepository.findByWorkflowIdAndTeam(workflowId, teamId)
+                        .then(executionRepository.findByWorkflowIdAndTeam(workflowId, teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
                             .flatMap(executionRepository::delete)
                             .then())
                         .then(workflowRepository.delete(workflow))
@@ -160,14 +161,14 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
 
     @Override
     public Flux<LinqWorkflowExecution> getWorkflowExecutions(String workflowId) {
-        return executionRepository.findByWorkflowId(workflowId)
+        return executionRepository.findByWorkflowId(workflowId, Sort.by(Sort.Direction.DESC, "executedAt"))
             .doOnError(error -> log.error("Error fetching workflow executions: {}", error.getMessage()));
     }
 
     @Override
     public Flux<LinqWorkflowExecution> getTeamExecutions() {
         return teamContextService.getTeamFromContext()
-            .flatMapMany(teamId -> executionRepository.findByTeam(teamId))
+            .flatMapMany(teamId -> executionRepository.findByTeam(teamId, Sort.by(Sort.Direction.DESC, "executedAt")))
             .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
     }
 
@@ -187,7 +188,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
 
     @Override
     public Mono<LinqWorkflowStats> getWorkflowStats(String workflowId) {
-        return executionRepository.findByWorkflowId(workflowId)
+        return executionRepository.findByWorkflowId(workflowId, Sort.by(Sort.Direction.DESC, "executedAt"))
             .collectList()
             .map(executions -> {
                 LinqWorkflowStats stats = new LinqWorkflowStats();

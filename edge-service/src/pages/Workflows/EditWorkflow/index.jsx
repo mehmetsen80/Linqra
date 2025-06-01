@@ -12,6 +12,7 @@ import { Form, Card, Spinner, Badge, Modal, Row, Col, OverlayTrigger, Tooltip } 
 import Button from '../../../components/common/Button';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import ExecutionDetailsModal from '../../../components/workflows/ExecutionDetailsModal';
 
 function EditWorkflow() {
     const { workflowId } = useParams();
@@ -31,6 +32,10 @@ function EditWorkflow() {
     const [showMetadataModal, setShowMetadataModal] = useState(false);
     const [teamDetails, setTeamDetails] = useState(null);
     const [stats, setStats] = useState(null);
+    const [loadingExecutions, setLoadingExecutions] = useState(true);
+    const [executions, setExecutions] = useState([]);
+    const [showExecutionModal, setShowExecutionModal] = useState(false);
+    const [selectedExecution, setSelectedExecution] = useState(null);
 
     console.log('Debug - User:', user);
     console.log('Debug - Current Team:', currentTeam);
@@ -41,11 +46,18 @@ function EditWorkflow() {
     const canEditWorkflow = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
     console.log('Debug - Can Edit Workflow:', canEditWorkflow);
 
+    const canAccessWorkflow = 
+        // If workflow is private
+        (!workflow?.public && (isSuperAdmin(user) || hasAdminAccess(user, currentTeam))) ||
+        // If workflow is public
+        (workflow?.public && (isSuperAdmin(user) || hasAdminAccess(user, currentTeam) || currentTeam?.id === workflow?.team));
+
     useEffect(() => {
         if (currentTeam) {
             loadWorkflow();
             loadVersions();
             loadStats();
+            loadExecutions();
         }
     }, [currentTeam]);
 
@@ -54,6 +66,13 @@ function EditWorkflow() {
             loadTeamDetails();
         }
     }, [workflow?.team]);
+
+    useEffect(() => {
+        if (workflow && !canAccessWorkflow) {
+            navigate('/workflows');
+            showErrorToast('You do not have access to this workflow');
+        }
+    }, [workflow, canAccessWorkflow]);
 
     const loadWorkflow = async () => {
         try {
@@ -102,6 +121,20 @@ function EditWorkflow() {
             }
         } catch (err) {
             console.error('Error loading stats:', err);
+        }
+    };
+
+    const loadExecutions = async () => {
+        try {
+            setLoadingExecutions(true);
+            const response = await workflowService.getWorkflowExecutions(workflowId);
+            if (response.success) {
+                setExecutions(response.data);
+            }
+        } catch (err) {
+            console.error('Error loading executions:', err);
+        } finally {
+            setLoadingExecutions(false);
         }
     };
 
@@ -348,6 +381,11 @@ function EditWorkflow() {
         }
     };
 
+    const handleExecutionClick = (execution) => {
+        setSelectedExecution(execution);
+        setShowExecutionModal(true);
+    };
+
     if (loading) {
         return (
             <div className="d-flex justify-content-center align-items-center" style={{ height: '200px' }}>
@@ -371,12 +409,24 @@ function EditWorkflow() {
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h2>Edit Workflow</h2>
                 <div className="d-flex gap-2">
-                    <Button 
-                        variant="outline-primary" 
-                        onClick={() => setShowMetadataModal(true)}
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="edit-details-tooltip">
+                                {canEditWorkflow ? 'Edit workflow name and description' : 'Only team admins can edit workflow details'}
+                            </Tooltip>
+                        }
                     >
-                        Edit Workflow Details
-                    </Button>
+                        <div>
+                            <Button 
+                                variant="outline-primary" 
+                                onClick={() => setShowMetadataModal(true)}
+                                disabled={!canEditWorkflow}
+                            >
+                                Edit Workflow Details
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
                     <Button 
                         variant="outline-secondary" 
                         onClick={() => navigate('/workflows')}
@@ -648,7 +698,7 @@ function EditWorkflow() {
                         </Card.Body>
                     </Card>
 
-                    <Card>
+                    <Card className="mb-4">
                         <Card.Header>
                             <h5 className="mb-0">Version History</h5>
                         </Card.Header>
@@ -682,18 +732,79 @@ function EditWorkflow() {
                                                 >
                                                     Compare
                                                 </Button>
-                                                <Button
-                                                    variant="outline-primary"
-                                                    size="sm"
-                                                    onClick={() => handleRollbackClick(version)}
+                                                <OverlayTrigger
+                                                    placement="top"
+                                                    overlay={
+                                                        <Tooltip id="rollback-tooltip">
+                                                            {canEditWorkflow ? 'Rollback to this version' : 'Only team admins can rollback versions'}
+                                                        </Tooltip>
+                                                    }
                                                 >
-                                                    Rollback
-                                                </Button>
+                                                    <div>
+                                                        <Button
+                                                            variant="outline-primary"
+                                                            size="sm"
+                                                            onClick={() => handleRollbackClick(version)}
+                                                            disabled={!canEditWorkflow}
+                                                        >
+                                                            Rollback
+                                                        </Button>
+                                                    </div>
+                                                </OverlayTrigger>
                                             </div>
                                         )}
                                     </div>
                                 </div>
                             ))}
+                        </Card.Body>
+                    </Card>
+
+                    <Card>
+                        <Card.Header>
+                            <h5 className="mb-0">Execution Pipeline</h5>
+                        </Card.Header>
+                        <Card.Body>
+                            {loadingExecutions ? (
+                                <div className="text-center">
+                                    <Spinner animation="border" role="status">
+                                        <span className="visually-hidden">Loading executions...</span>
+                                    </Spinner>
+                                </div>
+                            ) : (
+                                <div className="edit-workflow-execution-pipeline">
+                                    {executions.map((execution, index) => (
+                                        <OverlayTrigger
+                                            key={execution._id?.$oid || execution.id || execution._id}
+                                            placement="top"
+                                            overlay={
+                                                <Tooltip id={`tooltip-${execution._id?.$oid || execution.id || execution._id}`}>
+                                                    Executed at: {formatDate(execution.executedAt?.$date || execution.executedAt)}
+                                                </Tooltip>
+                                            }
+                                        >
+                                            <div 
+                                                className="edit-workflow-execution-item"
+                                                onClick={() => handleExecutionClick(execution)}
+                                            >
+                                                <div className="edit-workflow-execution-header">
+                                                    <div className="edit-workflow-execution-number">#{executions.length - index}</div>
+                                                    <div className="edit-workflow-execution-status">
+                                                        <Badge bg={execution.status === 'SUCCESS' ? 'success' : 'danger'}>
+                                                            {execution.status}
+                                                        </Badge>
+                                                    </div>
+                                                </div>
+                                                <div className="edit-workflow-execution-duration">
+                                                    {execution.durationMs?.$numberLong || execution.durationMs}ms
+                                                </div>
+                                                <div className="edit-workflow-execution-result">
+                                                    {execution.response?.result?.finalResult}
+                                                </div>
+                                            </div>
+                                        </OverlayTrigger>
+                                    ))}
+                                </div>
+                            )}
                         </Card.Body>
                     </Card>
                 </div>
@@ -853,17 +964,61 @@ function EditWorkflow() {
                                 rows={3}
                             />
                         </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Visibility</Form.Label>
+                            <div>
+                                <Form.Check
+                                    type="switch"
+                                    id="visibility-switch"
+                                    label={workflow?.public ? "Public - Accessible by all teams" : "Private - Only accessible by your team"}
+                                    checked={workflow?.public || false}
+                                    onChange={(e) => setWorkflow(prev => ({
+                                        ...prev,
+                                        public: e.target.checked
+                                    }))}
+                                    disabled={!canEditWorkflow}
+                                />
+                                <Form.Text className="text-muted">
+                                    {workflow?.public 
+                                        ? "Public workflows can be viewed and executed by all teams, but only your team's admins can edit them."
+                                        : "Private workflows are only accessible to your team members."}
+                                </Form.Text>
+                            </div>
+                        </Form.Group>
                     </Form>
                 </Modal.Body>
                 <Modal.Footer>
                     <Button variant="secondary" onClick={() => setShowMetadataModal(false)}>
                         Cancel
                     </Button>
-                    <Button variant="primary" onClick={handleMetadataSave}>
-                        Save Changes
-                    </Button>
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="metadata-save-tooltip">
+                                {canEditWorkflow ? 'Save workflow details' : 'Only team admins can save workflow details'}
+                            </Tooltip>
+                        }
+                    >
+                        <div>
+                            <Button 
+                                variant="primary" 
+                                onClick={handleMetadataSave}
+                                disabled={!canEditWorkflow}
+                            >
+                                Save Changes
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
                 </Modal.Footer>
             </Modal>
+
+            {/* Execution Details Modal */}
+            <ExecutionDetailsModal
+                show={showExecutionModal}
+                onHide={() => setShowExecutionModal(false)}
+                execution={selectedExecution}
+            />
         </div>
     );
 }

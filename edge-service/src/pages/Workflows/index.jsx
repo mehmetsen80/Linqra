@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Alert, Table, Badge, Spinner, Breadcrumb, Card, Row, Col, Modal, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { isSuperAdmin } from '../../utils/roleUtils';
+import { isSuperAdmin, hasAdminAccess } from '../../utils/roleUtils';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
 import { HiPlus, HiChevronRight, HiPencilAlt, HiTrash } from 'react-icons/hi';
@@ -13,11 +13,13 @@ import { JsonView, allExpanded, darkStyles, defaultStyles } from 'react-json-vie
 import 'react-json-view-lite/dist/index.css';
 import './styles.css';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
+import ExecutionDetailsModal from '../../components/workflows/ExecutionDetailsModal';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 
 function Workflows() {
     const { currentTeam, loading: teamLoading, selectedTeam } = useTeam();
     const { user } = useAuth();
+    const canEditWorkflow = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
     const [workflows, setWorkflows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -246,9 +248,23 @@ function Workflows() {
                         </Breadcrumb.Item>
                     </Breadcrumb>
 
-                    <Button variant="primary">
-                        <HiPlus /> Create Workflow
-                    </Button>
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="create-workflow-tooltip">
+                                {canEditWorkflow ? 'Create a new workflow' : 'Only team admins can create workflows'}
+                            </Tooltip>
+                        }
+                    >
+                        <div>
+                            <Button 
+                                variant="primary"
+                                disabled={!canEditWorkflow}
+                            >
+                                <HiPlus /> Create Workflow
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
                 </Card.Header>
             </Card>
 
@@ -296,28 +312,73 @@ function Workflows() {
                             </td>
                             <td>
                                 <div className="action-buttons">
-                                    <Button 
-                                        variant="outline-primary" 
-                                        size="sm" 
-                                        className="me-2"
-                                        onClick={(e) => handleExecuteClick(workflow, e)}
+                                    <OverlayTrigger
+                                        placement="top"
+                                        overlay={
+                                            <Tooltip id={`execute-tooltip-${workflow.id}`}>
+                                                {workflow.public || currentTeam?.id === workflow.team 
+                                                    ? 'Execute this workflow' 
+                                                    : 'This workflow is private and not accessible to your team'}
+                                            </Tooltip>
+                                        }
                                     >
-                                        Execute
-                                    </Button>
-                                    <Button 
-                                        variant="outline-secondary" 
-                                        size="sm" 
-                                        className="me-2"
-                                        onClick={(e) => {
-                                            e.stopPropagation(); // Prevent row selection
-                                            navigate(`/workflows/${workflow.id}/edit`);
-                                        }}
+                                        <div>
+                                            <Button 
+                                                variant="outline-primary" 
+                                                size="sm" 
+                                                className="me-2"
+                                                onClick={(e) => handleExecuteClick(workflow, e)}
+                                                disabled={!workflow.public && currentTeam?.id !== workflow.team}
+                                            >
+                                                Execute
+                                            </Button>
+                                        </div>
+                                    </OverlayTrigger>
+                                    <OverlayTrigger
+                                        placement="top"
+                                        overlay={
+                                            <Tooltip id={`edit-tooltip-${workflow.id}`}>
+                                                {isSuperAdmin(user) || hasAdminAccess(user, { id: workflow.team })
+                                                    ? 'Edit this workflow' 
+                                                    : workflow.public 
+                                                        ? 'View this workflow (read-only)'
+                                                        : 'Only team admins can edit workflows'}
+                                            </Tooltip>
+                                        }
                                     >
-                                        Edit
-                                    </Button>
-                                    <Button variant="outline-danger" size="sm">
-                                        Delete
-                                    </Button>
+                                        <div>
+                                            <Button 
+                                                variant="outline-secondary" 
+                                                size="sm" 
+                                                className="me-2"
+                                                onClick={(e) => {
+                                                    e.stopPropagation(); // Prevent row selection
+                                                    navigate(`/workflows/${workflow.id}/edit`);
+                                                }}
+                                                disabled={!workflow.public && !isSuperAdmin(user) && !hasAdminAccess(user, { id: workflow.team })}
+                                            >
+                                                Edit
+                                            </Button>
+                                        </div>
+                                    </OverlayTrigger>
+                                    <OverlayTrigger
+                                        placement="top"
+                                        overlay={
+                                            <Tooltip id={`delete-tooltip-${workflow.id}`}>
+                                                {canEditWorkflow ? 'Delete this workflow' : 'Only team admins can delete workflows'}
+                                            </Tooltip>
+                                        }
+                                    >
+                                        <div>
+                                            <Button 
+                                                variant="outline-danger" 
+                                                size="sm"
+                                                disabled={!canEditWorkflow}
+                                            >
+                                                Delete
+                                            </Button>
+                                        </div>
+                                    </OverlayTrigger>
                                 </div>
                             </td>
                         </tr>
@@ -420,94 +481,11 @@ function Workflows() {
             )}
 
             {/* Execution Details Modal */}
-            <Modal 
-                show={showExecutionModal} 
+            <ExecutionDetailsModal
+                show={showExecutionModal}
                 onHide={() => setShowExecutionModal(false)}
-                size="lg"
-                centered
-            >
-                <Modal.Header closeButton>
-                    <Modal.Title>Execution Details</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    {selectedExecution && (
-                        <div className="execution-details">
-                            <div className="mb-3">
-                                <h6>Status</h6>
-                                <Badge bg={selectedExecution.status === 'SUCCESS' ? 'success' : 'danger'}>
-                                    {selectedExecution.status}
-                                </Badge>
-                            </div>
-                            <div className="mb-3">
-                                <h6>Duration</h6>
-                                <p>{selectedExecution.durationMs?.$numberLong || selectedExecution.durationMs}ms</p>
-                            </div>
-                            <div className="mb-3">
-                                <h6>Executed At</h6>
-                                <p>{formatDate(selectedExecution.executedAt?.$date || selectedExecution.executedAt)}</p>
-                            </div>
-                            <div className="mb-3">
-                                <h6>Final Result</h6>
-                                <p className="final-result">
-                                    {selectedExecution.response?.result?.finalResult}
-                                </p>
-                            </div>
-
-                            {/* Step Pipeline */}
-                            <div className="mb-4">
-                                <h6>Step Pipeline</h6>
-                                <div className="step-pipeline">
-                                    {selectedExecution.response?.result?.steps?.map((step, index) => {
-                                        const stepMetadata = selectedExecution.response?.metadata?.workflowMetadata?.find(
-                                            meta => meta.step === step.step
-                                        );
-                                        return (
-                                            <OverlayTrigger
-                                                key={step.step}
-                                                placement="top"
-                                                overlay={
-                                                    <Tooltip id={`tooltip-step-${step.step}`}>
-                                                        Duration: {stepMetadata?.durationMs?.$numberLong || stepMetadata?.durationMs}ms
-                                                        <br />
-                                                        Executed at: {formatDate(stepMetadata?.executedAt?.$date || stepMetadata?.executedAt)}
-                                                    </Tooltip>
-                                                }
-                                            >
-                                                <div className="step-pipeline-item">
-                                                    <div className="step-pipeline-status">
-                                                        <Badge bg={stepMetadata?.status === 'success' ? 'success' : 'danger'}>
-                                                            Step {step.step}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="step-pipeline-target">
-                                                        {step.target}
-                                                    </div>
-                                                    <div className="step-pipeline-result">
-                                                        {step.result?.content || 
-                                                         step.result?.fullName || 
-                                                         JSON.stringify(step.result).slice(0, 50) + '...'}
-                                                    </div>
-                                                </div>
-                                            </OverlayTrigger>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            <div>
-                                <h6>Full Execution Data</h6>
-                                <div className="json-viewer" style={{ height: '400px' }}>
-                                    <JsonView 
-                                        data={selectedExecution} 
-                                        shouldExpandNode={allExpanded}
-                                        style={defaultStyles}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </Modal.Body>
-            </Modal>
+                execution={selectedExecution}
+            />
 
             {/* Execute Confirmation Modal */}
             <ConfirmationModal

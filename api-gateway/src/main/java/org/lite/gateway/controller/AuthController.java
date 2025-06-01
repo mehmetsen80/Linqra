@@ -58,11 +58,24 @@ public class AuthController {
 
     @PostMapping("/sso/callback")
     public Mono<ResponseEntity<Object>> handleCallback(@RequestBody KeycloakCallbackRequest request) {
-        log.info("Received SSO callback with code: {}", request.code());
+        log.info("=== SSO Callback Request Received ===");
+        log.info("Request code: {}", request.code());
+        
         return keycloakService.handleCallback(request.code())
-                .doOnSuccess(response -> log.info("SSO callback successful: {}", response))
-                .doOnError(error -> log.error("SSO callback failed", error))
-                .<ResponseEntity<Object>>map(ResponseEntity::ok)
+                .doOnSubscribe(s -> log.info("Starting SSO callback processing"))
+                .doOnSuccess(response -> {
+                    log.info("SSO callback successful");
+                    log.info("Response contains id_token: {}", response.getIdToken() != null);
+                    log.info("Response user: {}", response.getUser());
+                })
+                .doOnError(error -> {
+                    log.error("SSO callback failed", error);
+                    log.error("Error details: {}", error.getMessage());
+                })
+                .<ResponseEntity<Object>>map(response -> {
+                    log.info("Mapping response to ResponseEntity");
+                    return ResponseEntity.ok(response);
+                })
                 .onErrorResume(e -> {
                     log.error("Error processing SSO callback", e);
                     return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST)

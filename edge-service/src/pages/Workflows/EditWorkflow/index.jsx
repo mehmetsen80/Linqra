@@ -2,16 +2,16 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTeam } from '../../../contexts/TeamContext';
 import { useAuth } from '../../../contexts/AuthContext';
-import { isSuperAdmin } from '../../../utils/roleUtils';
+import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
 import workflowService from '../../../services/workflowService';
 import { teamService } from '../../../services/teamService';
 import './styles.css';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
-import { Form, Card, Spinner, Badge, Modal, Row, Col } from 'react-bootstrap';
+import { Form, Card, Spinner, Badge, Modal, Row, Col, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import Button from '../../../components/common/Button';
 import { format } from 'date-fns';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 function EditWorkflow() {
     const { workflowId } = useParams();
@@ -31,6 +31,15 @@ function EditWorkflow() {
     const [showMetadataModal, setShowMetadataModal] = useState(false);
     const [teamDetails, setTeamDetails] = useState(null);
     const [stats, setStats] = useState(null);
+
+    console.log('Debug - User:', user);
+    console.log('Debug - Current Team:', currentTeam);
+    console.log('Debug - Selected Team:', selectedTeam);
+    console.log('Debug - Is Super Admin:', isSuperAdmin(user));
+    console.log('Debug - Has Admin Access:', hasAdminAccess(user, currentTeam));
+
+    const canEditWorkflow = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
+    console.log('Debug - Can Edit Workflow:', canEditWorkflow);
 
     useEffect(() => {
         if (currentTeam) {
@@ -401,25 +410,36 @@ function EditWorkflow() {
                                     >
                                         Validate
                                     </Button>
-                                    <Button 
-                                        variant="primary" 
-                                        onClick={() => setShowConfirmModal(true)}
-                                        disabled={saving}
+                                    <OverlayTrigger
+                                        placement="top"
+                                        overlay={
+                                            <Tooltip id="save-tooltip">
+                                                {canEditWorkflow ? 'Save changes to create a new version' : 'Only team admins can save changes'}
+                                            </Tooltip>
+                                        }
                                     >
-                                        {saving ? (
-                                            <>
-                                                <Spinner
-                                                    as="span"
-                                                    animation="border"
-                                                    size="sm"
-                                                    role="status"
-                                                    aria-hidden="true"
-                                                    className="me-2"
-                                                />
-                                                Saving...
-                                            </>
-                                        ) : 'Save Changes'}
-                                    </Button>
+                                        <div>
+                                            <Button 
+                                                variant="primary" 
+                                                onClick={() => setShowConfirmModal(true)}
+                                                disabled={saving || !canEditWorkflow}
+                                            >
+                                                {saving ? (
+                                                    <>
+                                                        <Spinner
+                                                            as="span"
+                                                            animation="border"
+                                                            size="sm"
+                                                            role="status"
+                                                            aria-hidden="true"
+                                                            className="me-2"
+                                                        />
+                                                        Saving...
+                                                    </>
+                                                ) : 'Save Changes'}
+                                            </Button>
+                                        </div>
+                                    </OverlayTrigger>
                                 </div>
                             </Form>
                         </Card.Body>

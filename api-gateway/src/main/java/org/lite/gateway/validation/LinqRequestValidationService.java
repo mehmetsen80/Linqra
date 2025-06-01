@@ -12,6 +12,7 @@ import org.lite.gateway.validation.validator.ToolConfigValidator;
 import org.lite.gateway.validation.validator.ActionValidator;
 import org.lite.gateway.validation.validator.LinqRequestSchemaValidator;
 import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
@@ -25,6 +26,7 @@ public class LinqRequestValidationService {
     private final StepValidator stepValidator;
     private final ToolConfigValidator toolConfigValidator;
     private final LinqRequestSchemaValidator schemaValidator;
+    private final ObjectMapper objectMapper;
 
     private static final String OUR_PACKAGE_PREFIX = "org.lite.gateway";
 
@@ -33,30 +35,20 @@ public class LinqRequestValidationService {
         ValidationResult result = new ValidationResult();
         List<String> errors = new ArrayList<>();
 
-        // If it's already a LinqRequest object, skip schema validation
-        if (request instanceof LinqRequest) {
-            log.info("Request is already a LinqRequest object, skipping schema validation");
-            try {
-                validateObject(request, errors);
-            } catch (IllegalAccessException e) {
-                log.error("Error during validation: ", e);
-                errors.add("Error during validation: " + e.getMessage());
-            }
-        } else {
-            // For raw JSON objects, validate schema first
-            ValidationResult schemaResult = schemaValidator.validateSchema(request);
-            if (!schemaResult.isValid()) {
-                log.info("Schema validation failed: {}", schemaResult.getErrors());
-                return schemaResult;
-            }
+        // Validate schema first
+        ValidationResult schemaResult = schemaValidator.validateSchema(request);
+        log.info("Schema validation result: {}", schemaResult);
+        if (!schemaResult.isValid()) {
+            log.info("Schema validation failed: {}", schemaResult.getErrors());
+            return schemaResult;
+        }
 
-            // Then validate the object structure
-            try {
-                validateObject(request, errors);
-            } catch (IllegalAccessException e) {
-                log.error("Error during validation: ", e);
-                errors.add("Error during validation: " + e.getMessage());
-            }
+        // Then validate the object structure
+        try {
+            validateObject(request, errors);
+        } catch (IllegalAccessException e) {
+            log.error("Error during validation: ", e);
+            errors.add("Error during validation: " + e.getMessage());
         }
 
         if (!errors.isEmpty()) {

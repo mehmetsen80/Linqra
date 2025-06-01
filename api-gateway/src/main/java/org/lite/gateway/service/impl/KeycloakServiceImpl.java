@@ -144,7 +144,18 @@ public class KeycloakServiceImpl implements KeycloakService {
                             });
                     }
                     log.info("Token request successful");
-                    return response.bodyToMono(KeycloakTokenResponse.class);
+                    return response.bodyToMono(String.class)
+                        .doOnNext(json -> log.info("Raw token response: {}", json))
+                        .flatMap(json -> {
+                            try {
+                                KeycloakTokenResponse tokenResponse = objectMapper.readValue(json, KeycloakTokenResponse.class);
+                                log.info("Parsed token response - Has id_token: {}", tokenResponse.getIdToken() != null);
+                                return Mono.just(tokenResponse);
+                            } catch (Exception e) {
+                                log.error("Failed to parse token response", e);
+                                return Mono.error(e);
+                            }
+                        });
                 })
                 .doOnNext(response -> log.info("Successfully received token response"))
                 .doOnError(error -> log.error("Error exchanging code for token", error))
@@ -155,6 +166,7 @@ public class KeycloakServiceImpl implements KeycloakService {
     private Mono<AuthResponse> validateAndCreateSession(KeycloakTokenResponse tokenResponse) {
         long start = System.currentTimeMillis();
         log.info("=== [Timing] validateAndCreateSession started at {} ===", start);
+        log.info("Token response contains id_token: {}", tokenResponse.getIdToken() != null);
 
         return jwtService.extractClaims(tokenResponse.getAccessToken())
             .flatMap(claims -> {
@@ -176,13 +188,17 @@ public class KeycloakServiceImpl implements KeycloakService {
                         userMap.put("id", existingUser.getId());
                         userMap.put("authType", "SSO");
 
-                        return Mono.just(AuthResponse.builder()
+                        AuthResponse response = AuthResponse.builder()
                             .token(tokenResponse.getAccessToken())
                             .refreshToken(tokenResponse.getRefreshToken())
+                            .idToken(tokenResponse.getIdToken())
                             .user(userMap)
                             .message("Login successful")
                             .success(true)
-                            .build());
+                            .build();
+                        
+                        log.info("Created AuthResponse with id_token: {}", response.getIdToken() != null);
+                        return Mono.just(response);
                     })
                     .switchIfEmpty(
                         // Case 1: User doesn't exist, create and save new user
@@ -204,13 +220,17 @@ public class KeycloakServiceImpl implements KeycloakService {
                                 userMap.put("id", savedUser.getId());
                                 userMap.put("authType", "SSO");
 
-                                return AuthResponse.builder()
+                                AuthResponse response = AuthResponse.builder()
                                     .token(tokenResponse.getAccessToken())
                                     .refreshToken(tokenResponse.getRefreshToken())
+                                    .idToken(tokenResponse.getIdToken())
                                     .user(userMap)
                                     .message("User created and logged in successfully")
                                     .success(true)
                                     .build();
+                                
+                                log.info("Created AuthResponse with id_token: {}", response.getIdToken() != null);
+                                return response;
                             })
                     );
 
@@ -303,6 +323,7 @@ public class KeycloakServiceImpl implements KeycloakService {
                             return AuthResponse.builder()
                                 .token(response.getAccessToken())
                                 .refreshToken(response.getRefreshToken())
+                                .idToken(response.getIdToken())
                                 .user(user)
                                 .success(true)
                                 .build();
@@ -330,6 +351,7 @@ public class KeycloakServiceImpl implements KeycloakService {
 record KeycloakTokenResponse(
     String accessToken,
     String refreshToken,
+    String idToken,
     String tokenType,
     Integer expiresIn
 ) {
@@ -338,6 +360,9 @@ record KeycloakTokenResponse(
     
     @JsonProperty("refresh_token")
     public String getRefreshToken() { return refreshToken; }
+    
+    @JsonProperty("id_token")
+    public String getIdToken() { return idToken; }
     
     @JsonProperty("token_type")
     public String getTokenType() { return tokenType; }

@@ -26,6 +26,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import java.util.Optional;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
+import com.fasterxml.jackson.databind.JsonNode;
 
 @Slf4j
 @RestController
@@ -37,44 +40,116 @@ public class LinqWorkflowController {
     private final UserContextService userContextService;
     private final UserService userService;
     private final TeamContextService teamContextService;
-    private final LinqRequestValidationService validationService;
+    private final LinqRequestValidationService linqRequestValidationService;
+    private final ObjectMapper objectMapper;
 
     @PostMapping
     public Mono<ResponseEntity<?>> createWorkflow(
-        @RequestBody LinqWorkflow workflow,
+        @RequestBody String rawRequest,
         ServerWebExchange exchange
     ) {
-        log.info("Creating new workflow: {}", workflow.getName());
-        return userContextService.getCurrentUsername(exchange)
-            .flatMap(userService::findByUsername)
-            .flatMap(user -> {
-                // For SUPER_ADMIN, proceed directly
-                if (user.getRoles().contains("SUPER_ADMIN")) {
-                    return linqWorkflowService.createWorkflow(workflow)
-                        .map(ResponseEntity::ok);
-                }
-                
-                // For non-SUPER_ADMIN users, check team role
-                return teamContextService.getTeamFromContext()
-                    .flatMap(teamId -> teamService.hasRole(teamId, user.getId(), "ADMIN")
-                        .flatMap(isAdmin -> {
-                            if (!isAdmin) {
-                                return Mono.just(ResponseEntity
-                                    .status(HttpStatus.FORBIDDEN)
-                                    .body(ErrorResponse.fromErrorCode(
-                                        ErrorCode.FORBIDDEN,
-                                        "Only team administrators can create workflows",
-                                        HttpStatus.FORBIDDEN.value()
-                                    )));
-                            }
-                            return linqWorkflowService.createWorkflow(workflow)
-                                .map(ResponseEntity::ok);
-                        }));
-            })
-            .doOnSuccess(w -> Optional.ofNullable(w.getBody())
-                .map(body -> (LinqWorkflow) body)
-                .ifPresent(savedWorkflow -> log.info("Workflow created successfully: {}", savedWorkflow.getId())))
-            .doOnError(error -> log.error("Error creating workflow: {}", error.getMessage()));
+        log.info("Creating new workflow with request: {}", rawRequest);
+        
+        try {
+            // First validate the raw JSON
+            ValidationResult validationResult = linqRequestValidationService.validate(rawRequest);
+            if (!validationResult.isValid()) {
+                return Mono.just(ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                        ErrorCode.VALIDATION_ERROR,
+                        "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
+                        HttpStatus.BAD_REQUEST.value()
+                    )));
+            }
+
+            // Then check if it's a LinqRequest structure
+            JsonNode rootNode = objectMapper.readTree(rawRequest);
+            LinqWorkflow workflow = new LinqWorkflow();
+            
+            if (rootNode.has("link") && rootNode.has("query")) {
+                // It's a LinqRequest structure
+                LinqRequest request = objectMapper.readValue(rawRequest, LinqRequest.class);
+                workflow.setRequest(request);
+            } else if (rootNode.has("request")) {
+                // It's a LinqWorkflow structure
+                workflow = objectMapper.readValue(rawRequest, LinqWorkflow.class);
+            } else {
+                return Mono.just(ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                        ErrorCode.VALIDATION_ERROR,
+                        "Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)",
+                        HttpStatus.BAD_REQUEST.value()
+                    )));
+            }
+            
+            return validateAndCreateWorkflow(workflow, exchange);
+        } catch (Exception e) {
+            return Mono.just(ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.fromErrorCode(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Error processing request: " + e.getMessage(),
+                    HttpStatus.BAD_REQUEST.value()
+                )));
+        }
+    }
+
+    private Mono<ResponseEntity<?>> validateAndCreateWorkflow(LinqWorkflow workflow, ServerWebExchange exchange) {
+        try {
+            // Validate the request part
+            ValidationResult validationResult = linqRequestValidationService.validate(workflow.getRequest());
+            if (!validationResult.isValid()) {
+                return Mono.just(ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                        ErrorCode.VALIDATION_ERROR,
+                        "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
+                        HttpStatus.BAD_REQUEST.value()
+                    )));
+            }
+
+            return userContextService.getCurrentUsername(exchange)
+                .flatMap(userService::findByUsername)
+                .flatMap(user -> {
+                    // For SUPER_ADMIN, proceed directly
+                    if (user.getRoles().contains("SUPER_ADMIN")) {
+                        return linqWorkflowService.createWorkflow(workflow)
+                            .map(ResponseEntity::ok);
+                    }
+                    
+                    // For non-SUPER_ADMIN users, check team role
+                    return teamContextService.getTeamFromContext()
+                        .flatMap(teamId -> teamService.hasRole(teamId, user.getId(), "ADMIN")
+                            .flatMap(isAdmin -> {
+                                if (!isAdmin) {
+                                    return Mono.just(ResponseEntity
+                                        .status(HttpStatus.FORBIDDEN)
+                                        .body(ErrorResponse.fromErrorCode(
+                                            ErrorCode.FORBIDDEN,
+                                            "Only team administrators can create workflows",
+                                            HttpStatus.FORBIDDEN.value()
+                                        )));
+                                }
+                                return linqWorkflowService.createWorkflow(workflow)
+                                    .map(ResponseEntity::ok);
+                            }));
+                })
+                .doOnSuccess(w -> Optional.ofNullable(w.getBody())
+                    .map(body -> (LinqWorkflow) body)
+                    .ifPresent(savedWorkflow -> log.info("Workflow created successfully: {}", savedWorkflow.getId())))
+                .doOnError(error -> log.error("Error creating workflow: {}", error.getMessage()));
+        } catch (Exception e) {
+            log.error("Error processing request: ", e);
+            return Mono.just(ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.fromErrorCode(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Error processing request: " + e.getMessage(),
+                    HttpStatus.BAD_REQUEST.value()
+                )));
+        }
     }
 
     @PutMapping("/{workflowId}")
@@ -253,46 +328,141 @@ public class LinqWorkflowController {
             .doOnError(error -> log.error("Error fetching workflow stats: {}", error.getMessage()));
     }
 
+    @PostMapping("/validate")
+    public Mono<ValidationResult> validateWorkflow(@RequestBody String rawRequest) {
+        log.info("Validating workflow request: {}", rawRequest);
+        
+        try {
+            // First validate the raw JSON
+            ValidationResult validationResult = linqRequestValidationService.validate(rawRequest);
+            if (!validationResult.isValid()) {
+                return Mono.just(validationResult);
+            }
+
+            // Then check if it's a LinqRequest structure
+            JsonNode rootNode = objectMapper.readTree(rawRequest);
+            if (rootNode.has("link") && rootNode.has("query")) {
+                // It's a LinqRequest structure
+                LinqRequest request = objectMapper.readValue(rawRequest, LinqRequest.class);
+                return Mono.just(linqRequestValidationService.validate(request));
+            } else if (rootNode.has("request")) {
+                // It's a LinqWorkflow structure
+                LinqWorkflow workflow = objectMapper.readValue(rawRequest, LinqWorkflow.class);
+                return Mono.just(linqRequestValidationService.validate(workflow.getRequest()));
+            } else {
+                ValidationResult result = new ValidationResult();
+                result.setValid(false);
+                result.setErrors(List.of("Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)"));
+                return Mono.just(result);
+            }
+        } catch (Exception e) {
+            ValidationResult result = new ValidationResult();
+            result.setValid(false);
+            result.setErrors(List.of("Error processing request: " + e.getMessage()));
+            return Mono.just(result);
+        }
+    }
+
     @PostMapping("/{workflowId}/versions")
     public Mono<ResponseEntity<?>> createNewVersion(
         @PathVariable String workflowId,
-        @RequestBody LinqWorkflow updatedWorkflow,
+        @RequestBody String rawRequest,
         ServerWebExchange exchange
     ) {
         log.info("Creating new version for workflow: {}", workflowId);
-        return linqWorkflowService.getWorkflow(workflowId)
-            .flatMap(workflow -> userContextService.getCurrentUsername(exchange)
+        
+        try {
+            // First check if it's a LinqRequest structure
+            JsonNode rootNode = objectMapper.readTree(rawRequest);
+            LinqWorkflow updatedWorkflow = new LinqWorkflow();
+            
+            if (rootNode.has("link") && rootNode.has("query")) {
+                // It's a LinqRequest structure
+                LinqRequest request = objectMapper.readValue(rawRequest, LinqRequest.class);
+                updatedWorkflow.setRequest(request);
+            } else if (rootNode.has("request")) {
+                // It's a LinqWorkflow structure
+                updatedWorkflow = objectMapper.readValue(rawRequest, LinqWorkflow.class);
+            } else {
+                return Mono.just(ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                        ErrorCode.VALIDATION_ERROR,
+                        "Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)",
+                        HttpStatus.BAD_REQUEST.value()
+                    )));
+            }
+            
+            return validateAndCreateNewVersion(workflowId, updatedWorkflow, exchange);
+        } catch (Exception e) {
+            return Mono.just(ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.fromErrorCode(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Error processing request: " + e.getMessage(),
+                    HttpStatus.BAD_REQUEST.value()
+                )));
+        }
+    }
+
+    private Mono<ResponseEntity<?>> validateAndCreateNewVersion(
+        String workflowId,
+        LinqWorkflow updatedWorkflow,
+        ServerWebExchange exchange
+    ) {
+        try {
+            // Validate the request part
+            ValidationResult validationResult = linqRequestValidationService.validate(updatedWorkflow.getRequest());
+            if (!validationResult.isValid()) {
+                return Mono.just(ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                        ErrorCode.VALIDATION_ERROR,
+                        "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
+                        HttpStatus.BAD_REQUEST.value()
+                    )));
+            }
+
+            return userContextService.getCurrentUsername(exchange)
                 .flatMap(userService::findByUsername)
                 .flatMap(user -> {
-                    // Set the user ID in the updatedWorkflow
-                    updatedWorkflow.setUpdatedBy(user.getUsername());
-
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqWorkflowService.createNewVersion(workflowId, updatedWorkflow)
-                            .map(w -> ResponseEntity.ok(w));
+                            .map(ResponseEntity::ok);
                     }
                     
                     // For non-SUPER_ADMIN users, check team role
-                    return teamService.hasRole(workflow.getTeam(), user.getId(), "ADMIN")
-                        .flatMap(isAdmin -> {
-                            if (!isAdmin) {
-                                return Mono.just(ResponseEntity
-                                    .status(HttpStatus.FORBIDDEN)
-                                    .body(ErrorResponse.fromErrorCode(
-                                        ErrorCode.FORBIDDEN,
-                                        "Only team administrators can create new versions",
-                                        HttpStatus.FORBIDDEN.value()
-                                    )));
-                            }
-                            return linqWorkflowService.createNewVersion(workflowId, updatedWorkflow)
-                                .map(w -> ResponseEntity.ok(w));
-                        });
-                }))
-            .doOnSuccess(w -> Optional.ofNullable(w.getBody())
-                .map(body -> (LinqWorkflow) body)
-                .ifPresent(newVersion -> log.info("Created new version for workflow: {}", newVersion.getId())))
-            .doOnError(error -> log.error("Error creating new version: {}", error.getMessage()));
+                    return teamContextService.getTeamFromContext()
+                        .flatMap(teamId -> teamService.hasRole(teamId, user.getId(), "ADMIN")
+                            .flatMap(isAdmin -> {
+                                if (!isAdmin) {
+                                    return Mono.just(ResponseEntity
+                                        .status(HttpStatus.FORBIDDEN)
+                                        .body(ErrorResponse.fromErrorCode(
+                                            ErrorCode.FORBIDDEN,
+                                            "Only team administrators can create new workflow versions",
+                                            HttpStatus.FORBIDDEN.value()
+                                        )));
+                                }
+                                return linqWorkflowService.createNewVersion(workflowId, updatedWorkflow)
+                                    .map(ResponseEntity::ok);
+                            }));
+                })
+                .doOnSuccess(w -> Optional.ofNullable(w.getBody())
+                    .map(body -> (LinqWorkflow) body)
+                    .ifPresent(savedWorkflow -> log.info("New workflow version created successfully: {}", savedWorkflow.getId())))
+                .doOnError(error -> log.error("Error creating new workflow version: {}", error.getMessage()));
+        } catch (Exception e) {
+            log.error("Error processing request: ", e);
+            return Mono.just(ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.fromErrorCode(
+                    ErrorCode.VALIDATION_ERROR,
+                    "Error processing request: " + e.getMessage(),
+                    HttpStatus.BAD_REQUEST.value()
+                )));
+        }
     }
 
     @PostMapping("/{workflowId}/versions/{versionId}/rollback")
@@ -350,20 +520,5 @@ public class LinqWorkflowController {
         return linqWorkflowService.getVersion(workflowId, versionId)
             .doOnSuccess(v -> log.info("Fetched version: {} for workflow: {}", v.getId(), workflowId))
             .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()));
-    }
-
-    @PostMapping("/validate")
-    public Mono<ResponseEntity<ValidationResult>> validateRequest(@RequestBody LinqRequest request) {
-        log.info("Validating request: {}", request);
-        return Mono.just(validationService.validate(request))
-            .map(result -> {
-                if (!result.isValid()) {
-                    log.info("Validation failed: {}", result.getErrors());
-                    return ResponseEntity.badRequest().body(result);
-                }
-                log.info("Validation successful");
-                return ResponseEntity.ok(result);
-            })
-            .doOnError(error -> log.error("Error validating request: {}", error.getMessage()));
     }
 }

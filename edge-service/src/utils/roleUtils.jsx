@@ -23,7 +23,7 @@ export const hasAdminAccess = (user, currentTeam) => {
 
   // Check if user is ADMIN in the current team
   return currentTeam.members?.some(
-    member => member.userId === user.id && member.role === ROLES.ADMIN
+    member => member.username === user.username && member.role === ROLES.ADMIN
   );
 };
 

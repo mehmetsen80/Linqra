@@ -288,6 +288,30 @@ const workflowService = {
                 error: error.response?.data?.message || 'Failed to create workflow'
             };
         }
+    },
+
+    deleteWorkflow: async (workflowId) => {
+        try {
+            const response = await axiosInstance.delete(`/linq/workflows/${workflowId}`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data,
+                message: 'Workflow deleted successfully'
+            };
+        } catch (error) {
+            console.error('Error deleting workflow:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to delete workflow'
+            };
+        }
     }
 };
 

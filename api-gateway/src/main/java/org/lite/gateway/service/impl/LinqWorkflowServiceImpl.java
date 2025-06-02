@@ -118,7 +118,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     @Override
     public Flux<LinqWorkflow> getWorkflows() {
         return teamContextService.getTeamFromContext()
-            .flatMapMany(teamId -> workflowRepository.findByTeam(teamId)
+            .flatMapMany(teamId -> workflowRepository.findByTeamOrderByCreatedAtDesc(teamId)
                 .doOnError(error -> log.error("Error fetching workflows: {}", error.getMessage())));
     }
 

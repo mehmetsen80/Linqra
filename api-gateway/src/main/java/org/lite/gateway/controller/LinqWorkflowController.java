@@ -113,6 +113,10 @@ public class LinqWorkflowController {
             return userContextService.getCurrentUsername(exchange)
                 .flatMap(userService::findByUsername)
                 .flatMap(user -> {
+                    // Set createdBy and updatedBy
+                    workflow.setCreatedBy(user.getUsername());
+                    workflow.setUpdatedBy(user.getUsername());
+                    
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqWorkflowService.createWorkflow(workflow)
@@ -163,6 +167,10 @@ public class LinqWorkflowController {
             .flatMap(existingWorkflow -> userContextService.getCurrentUsername(exchange)
                 .flatMap(userService::findByUsername)
                 .flatMap(user -> {
+                    // Set updatedBy
+                    workflow.setUpdatedBy(user.getUsername());
+                    workflow.setCreatedBy(existingWorkflow.getCreatedBy()); // Preserve original creator
+                    
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqWorkflowService.updateWorkflow(workflowId, workflow)
@@ -426,6 +434,9 @@ public class LinqWorkflowController {
             return userContextService.getCurrentUsername(exchange)
                 .flatMap(userService::findByUsername)
                 .flatMap(user -> {
+                    // Set updatedBy for the new version
+                    updatedWorkflow.setUpdatedBy(user.getUsername());
+                    
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqWorkflowService.createNewVersion(workflowId, updatedWorkflow)

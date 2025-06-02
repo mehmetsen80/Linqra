@@ -15,6 +15,7 @@ import './styles.css';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import ExecutionDetailsModal from '../../components/workflows/ExecutionDetailsModal';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
+import CreateWorkflowModal from '../../components/workflows/CreateWorkflowModal';
 
 function Workflows() {
     const { currentTeam, loading: teamLoading, selectedTeam } = useTeam();
@@ -34,6 +35,7 @@ function Workflows() {
     const [executing, setExecuting] = useState(false);
     const jsonViewerRef = useRef(null);
     const navigate = useNavigate();
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
     useEffect(() => {
         if (currentTeam) {
@@ -175,6 +177,10 @@ function Workflows() {
         }
     };
 
+    const handleCreateSuccess = () => {
+        loadWorkflows();
+    };
+
     if (teamLoading) {
         return <LoadingSpinner />;
     }
@@ -260,6 +266,7 @@ function Workflows() {
                             <Button 
                                 variant="primary"
                                 disabled={!canEditWorkflow}
+                                onClick={() => setShowCreateModal(true)}
                             >
                                 <HiPlus /> Create Workflow
                             </Button>
@@ -338,7 +345,7 @@ function Workflows() {
                                         placement="top"
                                         overlay={
                                             <Tooltip id={`edit-tooltip-${workflow.id}`}>
-                                                {isSuperAdmin(user) || hasAdminAccess(user, { id: workflow.team })
+                                                {isSuperAdmin(user) || hasAdminAccess(user, currentTeam)
                                                     ? 'Edit this workflow' 
                                                     : workflow.public 
                                                         ? 'View this workflow (read-only)'
@@ -355,7 +362,7 @@ function Workflows() {
                                                     e.stopPropagation(); // Prevent row selection
                                                     navigate(`/workflows/${workflow.id}/edit`);
                                                 }}
-                                                disabled={!workflow.public && !isSuperAdmin(user) && !hasAdminAccess(user, { id: workflow.team })}
+                                                disabled={!canEditWorkflow && !workflow.public}
                                             >
                                                 Edit
                                             </Button>
@@ -529,6 +536,13 @@ function Workflows() {
                 ) : "Execute"}
                 variant="primary"
                 disabled={executing}
+            />
+
+            {/* Create Workflow Modal */}
+            <CreateWorkflowModal
+                show={showCreateModal}
+                onHide={() => setShowCreateModal(false)}
+                onSuccess={handleCreateSuccess}
             />
         </div>
     );

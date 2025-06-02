@@ -263,6 +263,31 @@ const workflowService = {
                 status: error.response?.status
             };
         }
+    },
+
+    createWorkflow: async (workflowData) => {
+        console.log('Creating workflow:', workflowData);
+        try {
+            const response = await axiosInstance.post('/linq/workflows', workflowData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data,
+                message: 'Workflow created successfully'
+            };
+        } catch (error) {
+            console.error('Error creating workflow:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to create workflow'
+            };
+        }
     }
 };
 

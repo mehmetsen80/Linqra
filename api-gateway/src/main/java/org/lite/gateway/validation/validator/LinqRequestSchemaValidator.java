@@ -58,9 +58,24 @@ public class LinqRequestSchemaValidator {
             return;
         }
 
+        // First check if this is a LinqWorkflow structure
+        if (rootNode.has("request")) {
+            JsonNode requestNode = rootNode.get("request");
+            if (!requestNode.isObject()) {
+                errors.add("Request field must be a JSON object");
+                return;
+            }
+            validateRequestNode(requestNode, errors);
+        } else {
+            // If no request field, validate as direct LinqRequest
+            validateRequestNode(rootNode, errors);
+        }
+    }
+
+    private void validateRequestNode(JsonNode requestNode, List<String> errors) {
         // Validate link object
-        if (rootNode.has("link")) {
-            JsonNode linkNode = rootNode.get("link");
+        if (requestNode.has("link")) {
+            JsonNode linkNode = requestNode.get("link");
             if (!linkNode.isObject()) {
                 errors.add("Link must be a JSON object");
             } else {
@@ -76,8 +91,8 @@ public class LinqRequestSchemaValidator {
         }
 
         // Validate query object
-        if (rootNode.has("query")) {
-            JsonNode queryNode = rootNode.get("query");
+        if (requestNode.has("query")) {
+            JsonNode queryNode = requestNode.get("query");
             if (!queryNode.isObject()) {
                 errors.add("Query must be a JSON object");
             } else {
@@ -118,16 +133,15 @@ public class LinqRequestSchemaValidator {
             return;
         }
 
-        // Check for invalid fields at root level
-        rootNode.fields().forEachRemaining(entry -> {
-            if (!hasField(LinqRequest.class, entry.getKey())) {
-                errors.add("Invalid field in root object: '" + entry.getKey() + "'. Valid fields are: " + getFieldNames(LinqRequest.class));
-            }
-        });
+        // Check if this is a LinqWorkflow structure
+        JsonNode nodeToValidate = rootNode.has("request") ? rootNode.get("request") : rootNode;
+        validateLinkAndQuery(nodeToValidate, errors);
+    }
 
+    private void validateLinkAndQuery(JsonNode node, List<String> errors) {
         // Validate link
-        if (rootNode.has("link")) {
-            JsonNode linkNode = rootNode.get("link");
+        if (node.has("link")) {
+            JsonNode linkNode = node.get("link");
             if (!linkNode.isObject()) {
                 errors.add("Link must be a JSON object");
             } else {
@@ -138,8 +152,8 @@ public class LinqRequestSchemaValidator {
         }
 
         // Validate query
-        if (rootNode.has("query")) {
-            JsonNode queryNode = rootNode.get("query");
+        if (node.has("query")) {
+            JsonNode queryNode = node.get("query");
             if (!queryNode.isObject()) {
                 errors.add("Query must be a JSON object");
             } else {
@@ -276,27 +290,15 @@ public class LinqRequestSchemaValidator {
             }
         });
 
-        // Validate settings if present
-        if (toolConfigNode.has("settings")) {
-            JsonNode settingsNode = toolConfigNode.get("settings");
-            if (!settingsNode.isObject()) {
-                errors.add("Settings in toolConfig of workflow step " + (stepIndex + 1) + " must be a JSON object");
-            } else {
-                validateSettings(settingsNode, stepIndex, errors);
-            }
+        // Validate required fields
+        if (!toolConfigNode.has("model")) {
+            errors.add("ToolConfig in workflow step " + (stepIndex + 1) + " must contain 'model' field");
         }
-    }
-
-    private void validateSettings(JsonNode settingsNode, int stepIndex, List<String> errors) {
-        // For settings, we'll keep the hardcoded set since it's a Map<String, Object>
-        List<String> validSettingsFields = List.of("temperature", "maxOutputTokens");
-
-        // Check for invalid fields
-        settingsNode.fields().forEachRemaining(entry -> {
-            if (!validSettingsFields.contains(entry.getKey())) {
-                errors.add("Invalid field in settings of workflow step " + (stepIndex + 1) + ": '" + entry.getKey() + "'. Valid fields are: " + String.join(", ", validSettingsFields));
-            }
-        });
+        if (!toolConfigNode.has("settings")) {
+            errors.add("ToolConfig in workflow step " + (stepIndex + 1) + " must contain 'settings' field");
+        } else if (!toolConfigNode.get("settings").isObject()) {
+            errors.add("Settings in toolConfig of workflow step " + (stepIndex + 1) + " must be a JSON object");
+        }
     }
 
     private boolean hasField(Class<?> clazz, String fieldName) {

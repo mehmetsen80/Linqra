@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin, hasAdminAccess } from '../../utils/roleUtils';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
-import { HiPlus, HiChevronRight, HiPencilAlt, HiTrash } from 'react-icons/hi';
+import { HiPlus, HiPlay, HiPencilAlt, HiTrash } from 'react-icons/hi';
 import workflowService from '../../services/workflowService';
 import { format } from 'date-fns';
 import { Link, useNavigate } from 'react-router-dom';
@@ -36,6 +36,9 @@ function Workflows() {
     const jsonViewerRef = useRef(null);
     const navigate = useNavigate();
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [workflowToDelete, setWorkflowToDelete] = useState(null);
+    const [deleteError, setDeleteError] = useState(null);
 
     useEffect(() => {
         if (currentTeam) {
@@ -181,6 +184,36 @@ function Workflows() {
         loadWorkflows();
     };
 
+    const handleDeleteClick = (workflow) => {
+        setWorkflowToDelete(workflow);
+        setShowDeleteModal(true);
+    };
+
+    const handleDeleteConfirm = async () => {
+        try {
+            const response = await workflowService.deleteWorkflow(workflowToDelete.id);
+            if (response.success) {
+                // Remove the deleted workflow from the list
+                setWorkflows(workflows.filter(w => w.id !== workflowToDelete.id));
+                setShowDeleteModal(false);
+                setWorkflowToDelete(null);
+                setDeleteError(null);
+                showSuccessToast('Workflow deleted successfully');
+            } else {
+                const errorMessage = response.error || 'Failed to delete workflow';
+                setDeleteError(errorMessage);
+                showErrorToast(errorMessage);
+            }
+        } catch (error) {
+            const errorMessage = error.response?.data?.message || 
+                               error.response?.data?.error || 
+                               error.message || 
+                               'Failed to delete workflow';
+            setDeleteError(errorMessage);
+            showErrorToast(errorMessage);
+        }
+    };
+
     if (teamLoading) {
         return <LoadingSpinner />;
     }
@@ -280,10 +313,10 @@ function Workflows() {
                     <tr>
                         <th>ID</th>
                         <th>Name</th>
-                        <th>Description</th>
                         <th>Steps</th>
                         <th>Version</th>
                         <th>Last Updated</th>
+                        <th>Created By</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
@@ -300,7 +333,6 @@ function Workflows() {
                                 <code className="text-muted">{workflow.id}</code>
                             </td>
                             <td>{workflow.name}</td>
-                            <td>{workflow.description || 'No description'}</td>
                             <td>
                                 <Badge bg="info">
                                     {getStepCount(workflow)} steps
@@ -312,6 +344,7 @@ function Workflows() {
                                 </Badge>
                             </td>
                             <td>{formatDate(workflow.updatedAt)}</td>
+                            <td>{workflow.createdBy || 'N/A'}</td>
                             <td>
                                 <Badge bg={workflow.public ? "success" : "warning"}>
                                     {workflow.public ? "Public" : "Private"}
@@ -337,7 +370,7 @@ function Workflows() {
                                                 onClick={(e) => handleExecuteClick(workflow, e)}
                                                 disabled={!workflow.public && currentTeam?.id !== workflow.team}
                                             >
-                                                Execute
+                                                <HiPlay className="me-1" /> Execute
                                             </Button>
                                         </div>
                                     </OverlayTrigger>
@@ -364,7 +397,7 @@ function Workflows() {
                                                 }}
                                                 disabled={!canEditWorkflow && !workflow.public}
                                             >
-                                                Edit
+                                                <HiPencilAlt className="me-1" /> Edit
                                             </Button>
                                         </div>
                                     </OverlayTrigger>
@@ -381,8 +414,9 @@ function Workflows() {
                                                 variant="outline-danger" 
                                                 size="sm"
                                                 disabled={!canEditWorkflow}
+                                                onClick={() => handleDeleteClick(workflow)}
                                             >
-                                                Delete
+                                                <HiTrash className="me-1" /> Delete
                                             </Button>
                                         </div>
                                     </OverlayTrigger>
@@ -544,6 +578,28 @@ function Workflows() {
                 onHide={() => setShowCreateModal(false)}
                 onSuccess={handleCreateSuccess}
             />
+
+            {/* Delete Confirmation Modal */}
+            <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)}>
+                <Modal.Header closeButton>
+                    <Modal.Title>Confirm Delete</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    {deleteError ? (
+                        <div className="alert alert-danger">{deleteError}</div>
+                    ) : (
+                        <p>Are you sure you want to delete this workflow? This action cannot be undone.</p>
+                    )}
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+                        Cancel
+                    </Button>
+                    <Button variant="danger" onClick={handleDeleteConfirm}>
+                        Delete
+                    </Button>
+                </Modal.Footer>
+            </Modal>
         </div>
     );
 }

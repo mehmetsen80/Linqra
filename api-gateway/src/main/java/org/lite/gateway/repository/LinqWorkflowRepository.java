@@ -13,4 +13,5 @@ public interface LinqWorkflowRepository extends ReactiveMongoRepository<LinqWork
     Mono<LinqWorkflow> findByIdAndTeam(String id, String teamId);
     Flux<LinqWorkflow> findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
         String name, String description);
+    Flux<LinqWorkflow> findByTeamOrderByCreatedAtDesc(String teamId);
 }

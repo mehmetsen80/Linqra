@@ -29,6 +29,7 @@ import java.util.Optional;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.lite.gateway.dto.TeamWorkflowStats;
 
 @Slf4j
 @RestController
@@ -531,5 +532,13 @@ public class LinqWorkflowController {
         return linqWorkflowService.getVersion(workflowId, versionId)
             .doOnSuccess(v -> log.info("Fetched version: {} for workflow: {}", v.getId(), workflowId))
             .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()));
+    }
+
+    @GetMapping("/team/stats")
+    public Mono<TeamWorkflowStats> getTeamStats() {
+        log.info("Fetching team workflow statistics");
+        return linqWorkflowService.getTeamStats()
+            .doOnSuccess(stats -> log.info("Team workflow statistics fetched successfully"))
+            .doOnError(error -> log.error("Error fetching team workflow statistics: {}", error.getMessage()));
     }
 }

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
+import org.lite.gateway.dto.TeamWorkflowStats;
 import org.lite.gateway.model.LinqWorkflowStats;
 import org.lite.gateway.model.ExecutionStatus;
 import org.lite.gateway.entity.LinqWorkflow;
@@ -148,6 +149,33 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                 .mapToLong(LinqResponse.WorkflowStepMetadata::getDurationMs)
                 .sum();
             execution.setDurationMs(totalDuration);
+            
+            // Set token usage for AI models
+            response.getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
+                if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini")) {
+                    // Get token usage from the step's result if available
+                    if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
+                        workflowResult.getSteps().stream()
+                            .filter(step -> step.getStep() == stepMetadata.getStep())
+                            .findFirst()
+                            .ifPresent(step -> {
+                                if (step.getResult() instanceof Map<?, ?> resultMap) {
+                                    LinqResponse.WorkflowStepMetadata.TokenUsage tokenUsage = new LinqResponse.WorkflowStepMetadata.TokenUsage();
+                                    
+                                    // Extract token counts from the result
+                                    if (resultMap.containsKey("usage")) {
+                                        Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
+                                        tokenUsage.setPromptTokens(((Number) usage.get("prompt_tokens")).longValue());
+                                        tokenUsage.setCompletionTokens(((Number) usage.get("completion_tokens")).longValue());
+                                        tokenUsage.setTotalTokens(((Number) usage.get("total_tokens")).longValue());
+                                    }
+                                    
+                                    stepMetadata.setTokenUsage(tokenUsage);
+                                }
+                            });
+                    }
+                }
+            });
         }
         
         if (request.getQuery() != null && request.getQuery().getWorkflowId() != null) {
@@ -609,5 +637,146 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                 .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "Version not found or access denied"))));
+    }
+
+    @Override
+    public Mono<TeamWorkflowStats> getTeamStats() {
+        return getTeamExecutions()
+            .collectList()
+            .flatMap(executions -> {
+                TeamWorkflowStats stats = new TeamWorkflowStats();
+                
+                // Initialize maps
+                stats.setWorkflowStats(new HashMap<>());
+                stats.setStepStats(new HashMap<>());
+                stats.setTargetStats(new HashMap<>());
+                stats.setModelStats(new HashMap<>());
+                stats.setHourlyExecutions(new HashMap<>());
+                stats.setDailyExecutions(new HashMap<>());
+                
+                // Calculate overall execution stats
+                stats.setTotalExecutions(executions.size());
+                stats.setSuccessfulExecutions((int) executions.stream()
+                    .filter(e -> e.getStatus() == ExecutionStatus.SUCCESS)
+                    .count());
+                stats.setFailedExecutions((int) executions.stream()
+                    .filter(e -> e.getStatus() == ExecutionStatus.FAILED)
+                    .count());
+                
+                // Calculate average execution time
+                double avgTime = executions.stream()
+                    .mapToLong(LinqWorkflowExecution::getDurationMs)
+                    .average()
+                    .orElse(0.0);
+                stats.setAverageExecutionTime(avgTime);
+                
+                // Get unique workflow IDs
+                Set<String> workflowIds = executions.stream()
+                    .map(LinqWorkflowExecution::getWorkflowId)
+                    .collect(Collectors.toSet());
+                
+                // Fetch workflow names
+                return Flux.fromIterable(workflowIds)
+                    .flatMap(workflowId -> workflowRepository.findById(workflowId)
+                        .map(workflow -> new AbstractMap.SimpleEntry<>(workflowId, workflow.getName())))
+                    .collectMap(Map.Entry::getKey, Map.Entry::getValue)
+                    .map(workflowNames -> {
+                        // Process each execution
+                        for (LinqWorkflowExecution execution : executions) {
+                            // Time-based stats
+                            String hour = execution.getExecutedAt().format(DateTimeFormatter.ofPattern("HH:00"));
+                            String day = execution.getExecutedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                            stats.getHourlyExecutions().merge(hour, 1, Integer::sum);
+                            stats.getDailyExecutions().merge(day, 1, Integer::sum);
+                            
+                            // Update workflow stats
+                            TeamWorkflowStats.WorkflowStats workflowStats = stats.getWorkflowStats()
+                                .computeIfAbsent(execution.getWorkflowId(), k -> {
+                                    TeamWorkflowStats.WorkflowStats ws = new TeamWorkflowStats.WorkflowStats();
+                                    ws.setWorkflowId(k);
+                                    ws.setWorkflowName(workflowNames.get(k));
+                                    ws.setStepStats(new HashMap<>());
+                                    return ws;
+                                });
+                            workflowStats.incrementExecutions(execution.getStatus() == ExecutionStatus.SUCCESS);
+                            
+                            // Update step stats from workflow metadata
+                            if (execution.getResponse() != null && 
+                                execution.getResponse().getMetadata() != null && 
+                                execution.getResponse().getMetadata().getWorkflowMetadata() != null) {
+                                
+                                execution.getResponse().getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
+                                    // Step stats
+                                    TeamWorkflowStats.StepStats stepStats = stats.getStepStats()
+                                        .computeIfAbsent(String.valueOf(stepMetadata.getStep()), k -> {
+                                            TeamWorkflowStats.StepStats ss = new TeamWorkflowStats.StepStats();
+                                            ss.setStepNumber(stepMetadata.getStep());
+                                            return ss;
+                                        });
+                                    stepStats.incrementExecutions("success".equals(stepMetadata.getStatus()));
+                                    
+                                    // Update most common target and intent
+                                    stepStats.setMostCommonTarget(stepMetadata.getTarget());
+                                    String intent = execution.getRequest().getQuery().getWorkflow().stream()
+                                        .filter(step -> step.getStep() == stepMetadata.getStep())
+                                        .findFirst()
+                                        .map(step -> step.getIntent())
+                                        .orElse("unknown");
+                                    stepStats.setMostCommonIntent(intent);
+                                    
+                                    // Update workflow's step stats
+                                    TeamWorkflowStats.StepStats workflowStepStats = workflowStats.getStepStats()
+                                        .computeIfAbsent(String.valueOf(stepMetadata.getStep()), k -> {
+                                            TeamWorkflowStats.StepStats ss = new TeamWorkflowStats.StepStats();
+                                            ss.setStepNumber(stepMetadata.getStep());
+                                            return ss;
+                                        });
+                                    workflowStepStats.incrementExecutions("success".equals(stepMetadata.getStatus()));
+                                    workflowStepStats.setMostCommonTarget(stepMetadata.getTarget());
+                                    workflowStepStats.setMostCommonIntent(intent);
+                                    
+                                    // Target stats
+                                    TeamWorkflowStats.TargetStats targetStats = stats.getTargetStats()
+                                        .computeIfAbsent(stepMetadata.getTarget(), k -> {
+                                            TeamWorkflowStats.TargetStats ts = new TeamWorkflowStats.TargetStats();
+                                            ts.setTarget(k);
+                                            ts.setIntentCounts(new HashMap<>());
+                                            return ts;
+                                        });
+                                    targetStats.incrementExecutions("success".equals(stepMetadata.getStatus()));
+                                    
+                                    // Update intent counts
+                                    targetStats.getIntentCounts().merge(intent, 1, Integer::sum);
+                                    
+                                    // Model stats for AI targets
+                                    if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini")) {
+                                        String model = execution.getRequest().getQuery().getWorkflow().stream()
+                                            .filter(step -> step.getStep() == stepMetadata.getStep())
+                                            .findFirst()
+                                            .map(step -> step.getToolConfig().getModel())
+                                            .orElse("unknown");
+                                        
+                                        TeamWorkflowStats.ModelStats modelStats = stats.getModelStats()
+                                            .computeIfAbsent(model, k -> {
+                                                TeamWorkflowStats.ModelStats ms = new TeamWorkflowStats.ModelStats();
+                                                ms.setModel(k);
+                                                return ms;
+                                            });
+                                        modelStats.incrementExecutions("success".equals(stepMetadata.getStatus()));
+                                        
+                                        // Update token counts if available
+                                        if (stepMetadata.getTokenUsage() != null) {
+                                            modelStats.setTotalPromptTokens(modelStats.getTotalPromptTokens() + stepMetadata.getTokenUsage().getPromptTokens());
+                                            modelStats.setTotalCompletionTokens(modelStats.getTotalCompletionTokens() + stepMetadata.getTokenUsage().getCompletionTokens());
+                                            modelStats.setTotalTokens(modelStats.getTotalTokens() + stepMetadata.getTokenUsage().getTotalTokens());
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        
+                        return stats;
+                    });
+            });
     }
 }

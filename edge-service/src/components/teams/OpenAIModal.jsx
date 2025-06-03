@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Card, Row, Col, Form, Button, Spinner } from 'react-bootstrap';
+import { Modal, Form, Alert, Spinner } from 'react-bootstrap';
 import { HiKey } from 'react-icons/hi';
+import { SiOpenai } from 'react-icons/si';
 import { linqToolService } from '../../services/linqToolService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
+import Button from '../../components/common/Button';
 
 const initialFormData = {
   target: 'openai',
@@ -11,7 +13,6 @@ const initialFormData = {
   headers: {
     'Content-Type': 'application/json'
   },
-  headersText: JSON.stringify({ 'Content-Type': 'application/json' }, null, 2),
   authType: 'bearer',
   apiKey: '',
   supportedIntents: ['generate', 'summarize', 'translate'],
@@ -22,7 +23,6 @@ const initialFormData = {
 function OpenAIModal({ show, onHide, team }) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
-  const [headersText, setHeadersText] = useState(JSON.stringify({ 'Content-Type': 'application/json' }, null, 2));
 
   // Reset form when modal is hidden
   useEffect(() => {
@@ -51,13 +51,9 @@ function OpenAIModal({ show, onHide, team }) {
         setFormData(prev => ({
           ...prev,
           endpoint: config.endpoint,
-          method: config.method,
-          authType: config.authType,
-          headers: config.headers,
           apiKey: config.apiKey,
           supportedIntents: config.supportedIntents
         }));
-        setHeadersText(JSON.stringify(config.headers, null, 2));
       }
     } catch (error) {
       console.error('Error fetching configuration:', error);
@@ -93,9 +89,9 @@ function OpenAIModal({ show, onHide, team }) {
       const config = {
         target: 'openai',
         endpoint: formData.endpoint,
-        method: formData.method,
-        authType: formData.authType,
-        headers: formData.headers,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        authType: 'bearer',
         apiKey: formData.apiKey,
         supportedIntents: formData.supportedIntents,
         team: formData.teamId
@@ -111,33 +107,6 @@ function OpenAIModal({ show, onHide, team }) {
     }
   };
 
-  const handleHeadersChange = (e) => {
-    setHeadersText(e.target.value);
-    try {
-      const parsedHeaders = JSON.parse(e.target.value);
-      setFormData(prev => ({
-        ...prev,
-        headers: parsedHeaders
-      }));
-    } catch (error) {
-      // Invalid JSON, don't update formData
-    }
-  };
-
-  const handleHeadersBlur = () => {
-    try {
-      const parsedHeaders = JSON.parse(headersText);
-      setFormData(prev => ({
-        ...prev,
-        headers: parsedHeaders
-      }));
-    } catch (error) {
-      showErrorToast('Invalid JSON format for headers');
-      // Reset to last valid state
-      setHeadersText(JSON.stringify(formData.headers, null, 2));
-    }
-  };
-
   const handleCopyApiKey = () => {
     navigator.clipboard.writeText(formData.apiKey);
     showSuccessToast('API key copied to clipboard');
@@ -147,192 +116,105 @@ function OpenAIModal({ show, onHide, team }) {
     <Modal show={show} onHide={onHide} size="lg">
       <Modal.Header closeButton>
         <Modal.Title>
+          <SiOpenai className="me-2" size={24} />
           OpenAI Configuration
           <span className="ms-2 text-muted">- {team.name}</span>
         </Modal.Title>
       </Modal.Header>
-      <Modal.Body>
-        {loading ? (
-          <div className="text-center">
-            <Spinner animation="border" />
-          </div>
-        ) : (
-          <Form>
-            <Row className="g-4">
-              {/* Target Field (Readonly) */}
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Target</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={formData.target || ''}
-                    readOnly
-                    disabled
-                  />
-                </Form.Group>
-              </Col>
+      <Form onSubmit={handleSave}>
+        <Modal.Body>
+          {loading ? (
+            <div className="text-center">
+              <Spinner animation="border" />
+            </div>
+          ) : (
+            <>
+              <Alert variant="info">
+                Configure OpenAI API settings for team: <strong>{team.name}</strong>
+              </Alert>
 
-              {/* Endpoint Field */}
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Endpoint</Form.Label>
+              <Form.Group className="mb-3">
+                <Form.Label>API Key</Form.Label>
+                <div className="d-flex gap-2">
                   <Form.Control
-                    type="text"
-                    value={formData.endpoint || ''}
-                    onChange={(e) => setFormData({...formData, endpoint: e.target.value})}
+                    type="password"
+                    value={formData.apiKey || ''}
+                    onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
+                    placeholder="Enter your OpenAI API key"
+                    required
                   />
-                </Form.Group>
-              </Col>
+                  <button 
+                    type="button"
+                    className="btn btn-outline-primary"
+                    onClick={handleCopyApiKey}
+                    disabled={!formData.apiKey}
+                  >
+                    <HiKey size={16} className="me-1" />
+                    Copy
+                  </button>
+                </div>
+                <Form.Text className="text-muted">
+                  Your API key will be securely stored and used for OpenAI API requests.
+                </Form.Text>
+              </Form.Group>
 
-              {/* Method Field (Readonly) */}
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Method</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={formData.method || ''}
-                    readOnly
-                    disabled
-                  />
-                </Form.Group>
-              </Col>
-
-              {/* Auth Type Field (Readonly) */}
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Auth Type</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={formData.authType || ''}
-                    readOnly
-                    disabled
-                  />
-                </Form.Group>
-              </Col>
-
-              {/* Headers Field */}
-              <Col md={12}>
-                <Form.Group>
-                  <Form.Label>Headers</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={3}
-                    value={headersText}
-                    onChange={handleHeadersChange}
-                    onBlur={handleHeadersBlur}
-                    placeholder='{
-  "Content-Type": "application/json",
-  "Custom-Header": "value"
-}'
-                  />
-                  <Form.Text className="text-muted">
-                    Enter headers as a JSON object with key-value pairs
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-
-              {/* API Key Field */}
-              <Col md={12}>
-                <Card className="border-0 bg-light p-2">
-                  <Card.Body>
-                    <div className="d-flex align-items-center mb-3">
-                      <HiKey className="text-primary me-2" size={24} />
-                      <h5 className="mb-0">API Key</h5>
-                    </div>
-                    <div className="d-flex gap-2">
-                      <Form.Control
-                        type="text"
-                        value={formData.apiKey || ''}
-                        onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                        placeholder="Enter your OpenAI API key"
-                      />
-                      <button 
-                        type="button"
-                        className="btn btn-outline-primary"
-                        onClick={handleCopyApiKey}
-                        disabled={!formData.apiKey}
-                      >
-                        <HiKey size={16} className="me-1" />
-                        Copy
-                      </button>
-                    </div>
-                  </Card.Body>
-                </Card>
-              </Col>
-
-              {/* Supported Intents Field */}
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Supported Intents</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={(formData.supportedIntents || []).join(', ')}
-                    onChange={(e) => {
-                      const intents = e.target.value.split(',').map(i => i.trim());
-                      setFormData({...formData, supportedIntents: intents});
-                    }}
-                    placeholder="generate, summarize, translate"
-                  />
-                  <Form.Text className="text-muted">
-                    Enter intents separated by commas
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-
-              {/* Team ID Field (Readonly) */}
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Team ID</Form.Label>
-                  <Form.Control
-                    type="text"
-                    value={formData.teamId || ''}
-                    readOnly
-                    disabled
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-          </Form>
-        )}
-      </Modal.Body>
-      <Modal.Footer className="d-flex justify-content-between">
-        <div>
-          <Button 
-            variant="secondary" 
-            onClick={onHide}
-            className="btn-cancel"
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-        </div>
-        <div>
-          <Button 
-            variant="primary" 
-            onClick={handleSave}
-            className="btn-save"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <Spinner
-                  as="span"
-                  animation="border"
-                  size="sm"
-                  role="status"
-                  aria-hidden="true"
-                  className="me-2"
+              <Form.Group className="mb-3">
+                <Form.Label>Endpoint</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={formData.endpoint || ''}
+                  onChange={(e) => setFormData({...formData, endpoint: e.target.value})}
+                  placeholder="Enter the OpenAI API endpoint"
+                  required
                 />
-                Saving...
-              </>
-            ) : team.linqTools?.some(tool => tool.target === 'openai') ? (
-              'Save Configuration'
-            ) : (
-              'Create OpenAI Configuration'
-            )}
-          </Button>
-        </div>
-      </Modal.Footer>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Supported Intents</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={(formData.supportedIntents || []).join(', ')}
+                  onChange={(e) => {
+                    const intents = e.target.value.split(',').map(i => i.trim());
+                    setFormData({...formData, supportedIntents: intents});
+                  }}
+                  placeholder="generate, summarize, translate"
+                  required
+                />
+                <Form.Text className="text-muted">
+                  Enter intents separated by commas
+                </Form.Text>
+              </Form.Group>
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="d-flex justify-content-between">
+          <div>
+            <Button 
+              variant="secondary" 
+              onClick={onHide}
+              className="btn-cancel"
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+          </div>
+          <div>
+            <Button 
+              variant="primary" 
+              type="submit"
+              className="btn-save"
+              loading={loading}
+            >
+              {team?.linqTools?.some(tool => tool.target === 'openai') ? (
+                'Save Configuration'
+              ) : (
+                'Create OpenAI Configuration'
+              )}
+            </Button>
+          </div>
+        </Modal.Footer>
+      </Form>
     </Modal>
   );
 }

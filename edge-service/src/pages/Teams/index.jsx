@@ -8,8 +8,10 @@ import {
   HiTemplate, 
   HiRefresh, 
   HiTrash, 
-  HiKey 
+  HiKey,
+  HiSparkles 
 } from 'react-icons/hi';
+import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { Spinner, OverlayTrigger, Tooltip, Table } from 'react-bootstrap';
 import CreateTeamModal from '../../components/teams/CreateTeamModal';
 import TeamDetailsModal from '../../components/teams/TeamDetailsModal';
@@ -18,6 +20,7 @@ import TeamRoutesModal from '../../components/teams/TeamRoutesModal';
 import TeamEditModal from '../../components/teams/TeamEditModal';
 import TeamApiKeysModal from '../../components/teams/TeamApiKeysModal';
 import OpenAIModal from '../../components/teams/OpenAIModal';
+import GeminiModal from '../../components/teams/GeminiModal';
 import { teamService } from '../../services/teamService';
 import './styles.css';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
@@ -37,6 +40,7 @@ function Teams() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showApiKeysModal, setShowApiKeysModal] = useState(false);
   const [showOpenAIModal, setShowOpenAIModal] = useState(false);
+  const [showGeminiModal, setShowGeminiModal] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
     show: false,
     title: '',
@@ -397,6 +401,7 @@ function Teams() {
                     <th>Routes</th>
                     <th>API Keys</th>
                     <th>OpenAI</th>
+                    <th>Gemini</th>
                     <th>Status Action</th>
                     <th>Delete</th>
                   </tr>
@@ -488,8 +493,21 @@ function Teams() {
                               }}
                               disabled={team.status === 'INACTIVE'}
                             >
-                              <HiKey className="me-1" /> 
+                              <SiOpenai className="me-1" size={16} /> 
                               {team.linqTools?.some(tool => tool.target === 'openai') ? 'View Configuration' : 'Configure'}
+                            </button>
+                          </td>
+                          <td>
+                            <button 
+                              className="btn btn-sm btn-outline-info action-button"
+                              onClick={() => {
+                                setSelectedTeam(team);
+                                setShowGeminiModal(true);
+                              }}
+                              disabled={team.status === 'INACTIVE'}
+                            >
+                              <SiGoogle className="me-1" size={14} /> 
+                              {team.linqTools?.some(tool => tool.target === 'gemini') ? 'View Configuration' : 'Configure'}
                             </button>
                           </td>
                           <td>
@@ -587,6 +605,12 @@ function Teams() {
       <OpenAIModal
         show={showOpenAIModal}
         onHide={() => setShowOpenAIModal(false)}
+        team={selectedTeam}
+      />
+
+      <GeminiModal
+        show={showGeminiModal}
+        onHide={() => setShowGeminiModal(false)}
         team={selectedTeam}
       />
 

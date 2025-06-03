@@ -2,7 +2,7 @@ package org.lite.gateway.service;
 
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
-import org.lite.gateway.dto.ValidationResult;
+import org.lite.gateway.dto.TeamWorkflowStats;
 import org.lite.gateway.model.LinqWorkflowStats;
 import org.lite.gateway.entity.LinqWorkflow;
 import org.lite.gateway.entity.LinqWorkflowExecution;
@@ -27,4 +27,5 @@ public interface LinqWorkflowService {
     Mono<LinqWorkflow> rollbackToVersion(String workflowId, String versionId);
     Flux<LinqWorkflowVersion> getVersionHistory(String workflowId);
     Mono<LinqWorkflowVersion> getVersion(String workflowId, String versionId);
+    Mono<TeamWorkflowStats> getTeamStats();
 }

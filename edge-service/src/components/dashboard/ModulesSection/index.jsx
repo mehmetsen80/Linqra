@@ -80,6 +80,19 @@ function ModulesSection() {
                 Manage Organizations <i className="fas fa-arrow-right"></i>
               </Link>
             </div>
+
+            <div className="dashboard-card">
+              <Link to="/workflows" className="card-icon-link">
+                <div className="card-icon">
+                  <i className="fas fa-project-diagram"></i>
+                </div>
+              </Link>
+              <h3>Workflows</h3>
+              <p>Create and manage your workflow automations</p>
+              <Link to="/workflows" className="card-link">
+                Manage Workflows <i className="fas fa-arrow-right"></i>
+              </Link>
+            </div>
           </>
         )}
 

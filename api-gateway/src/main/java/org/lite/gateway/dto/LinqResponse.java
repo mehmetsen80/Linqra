@@ -39,5 +39,13 @@ public class LinqResponse {
         private long durationMs;
         private String target;
         private LocalDateTime executedAt;  // When the step was executed
+        private TokenUsage tokenUsage;     // Token usage for AI models
+        
+        @Data
+        public static class TokenUsage {
+            private long promptTokens;
+            private long completionTokens;
+            private long totalTokens;
+        }
     }
 }

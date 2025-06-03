@@ -7,6 +7,7 @@ import ModulesSection from '../../components/dashboard/ModulesSection';
 import ServiceUsagePie from '../../components/dashboard/ServiceUsagePie';
 import TeamRoutes from '../../components/dashboard/TeamRoutes';
 import Workflows from '../../components/dashboard/Workflows';
+import WorkflowsStats from '../../components/dashboard/WorkflowsStats';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin } from '../../utils/roleUtils';
@@ -41,6 +42,7 @@ function Dashboard() {
       <TeamRoutes />
       <StatsSection />
       <Workflows />
+      <WorkflowsStats />
       <div className="dashboard-charts">
         <LatencyChart />
         <ServiceUsagePie />

@@ -312,6 +312,29 @@ const workflowService = {
                 error: error.response?.data?.message || 'Failed to delete workflow'
             };
         }
+    },
+
+    getTeamStats: async () => {
+        try {
+            const response = await axiosInstance.get('/linq/workflows/team/stats', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data
+            };
+        } catch (error) {
+            console.error('Error fetching team workflow statistics:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch team workflow statistics'
+            };
+        }
     }
 };
 

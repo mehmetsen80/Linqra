@@ -6,9 +6,12 @@ import LatencyChart from '../../components/dashboard/LatencyChart';
 import ModulesSection from '../../components/dashboard/ModulesSection';
 import ServiceUsagePie from '../../components/dashboard/ServiceUsagePie';
 import TeamRoutes from '../../components/dashboard/TeamRoutes';
+import Workflows from '../../components/dashboard/Workflows';
+import WorkflowsStats from '../../components/dashboard/WorkflowsStats';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin } from '../../utils/roleUtils';
+import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import './styles.css';
 
 function Dashboard() {
@@ -16,7 +19,7 @@ function Dashboard() {
   const { user } = useAuth();
 
   if (loading) {
-    return null; // Or return a loading spinner if you prefer!
+    return <LoadingSpinner />;
   }
 
   if (!currentTeam && !isSuperAdmin(user)) {
@@ -38,6 +41,8 @@ function Dashboard() {
       <UserSummary />
       <TeamRoutes />
       <StatsSection />
+      <Workflows />
+      <WorkflowsStats />
       <div className="dashboard-charts">
         <LatencyChart />
         <ServiceUsagePie />

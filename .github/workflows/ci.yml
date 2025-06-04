@@ -72,6 +72,14 @@ jobs:
           path: keys/
           if-no-files-found: error
 
+      # Add this new step to upload scripts directory
+      - name: Upload scripts directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: scripts-config
+          path: scripts/
+          if-no-files-found: error
+
   # we build react here in the GitHub actions
   react-build:
     needs: java-app
@@ -103,8 +111,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '21.5.0'
-          cache: 'npm'
-          cache-dependency-path: './edge-service/package-lock.json'
 
       - name: Upgrade npm
         run: npm install -g npm@10.8.1
@@ -166,7 +172,7 @@ jobs:
           scp -v artifacts/docker-compose/docker-compose-ec2.yml $EC2_USERNAME@$EC2_HOST:/var/www/linqra/docker-compose.yml
           scp -v artifacts/root-pom/pom.xml $EC2_USERNAME@$EC2_HOST:/var/www/linqra/pom.xml
 
-          # .kube and keys (if needed, use scp or rsync as appropriate)
+          # .kube, keys, and scripts (if needed, use scp or rsync as appropriate)
           if [ -d "artifacts/kube-config" ]; then
             rsync -avz --delete \
               --exclude 'mongodb/data1/' \
@@ -178,6 +184,9 @@ jobs:
           fi
           if [ -d "artifacts/keys-config" ]; then
             rsync -avz --delete --rsync-path="sudo rsync" artifacts/keys-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/keys/
+          fi
+          if [ -d "artifacts/scripts-config" ]; then
+            rsync -avz --delete --rsync-path="sudo rsync" artifacts/scripts-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/scripts/
           fi
 
           # Set correct permissions for pgadmin
@@ -209,17 +218,6 @@ jobs:
           sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
           sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
 
-          # Check that HAProxy config and cert files exist on the EC2 host
-          ssh $EC2_USERNAME@$EC2_HOST "
-            ls -l /var/www/linqra/.kube/gateway/haproxy.cfg
-            ls -l /var/www/linqra/keys/haproxy/gateway-combined-container.pem
-          "
-
-          # Ensure HAProxy cert file is readable by HAProxy in the container
-          ssh $EC2_USERNAME@$EC2_HOST "
-            sudo chmod 644 /var/www/linqra/keys/haproxy/gateway-combined-container.pem
-          "
-
           echo "About to run SSH block"
           ssh $EC2_USERNAME@$EC2_HOST "
             # Set permissions
@@ -233,6 +231,28 @@ jobs:
               sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
               sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
             fi
+
+            # Ensure scripts are executable
+            sudo chmod +x /var/www/linqra/scripts/*.sh
+
+            # Generate certificates for services
+            # TODO: Make the new services dynamically without hardcoding, for now this is fine
+            echo 'Generating certificates for services'
+            cd /var/www/linqra/scripts
+            sudo ./generate-service-certs.sh inventory-service
+            sudo ./generate-service-certs.sh product-service
+            sudo ./generate-service-certs.sh quotes-service
+            # Add new services here
+
+            # Generate HAProxy certificates
+            echo 'Generating HAProxy certificates'
+            sudo ./generate-haproxy-certs.sh
+
+            # Verify SSL configuration
+            echo 'Verifying SSL configuration'
+            sudo ./verify-ssl-config.sh inventory-service
+            sudo ./verify-ssl-config.sh product-service
+            # Add new services here
 
             # Ensure HAProxy cert file is readable
             if [ -f /var/www/linqra/keys/haproxy/gateway-combined-container.pem ]; then

@@ -18,6 +18,8 @@ import ViewToken from '../pages/ViewToken';
 import NonProdGuard from '../components/guards/NonProdGuard';
 import NotFound from '../components/common/NotFound';
 import AdminGuard from '../components/guards/AdminGuard';
+import Workflows from '../pages/Workflows';
+import EditWorkflow from '../pages/Workflows/EditWorkflow';
 
 const AppRoutes = () => {
   return (
@@ -41,6 +43,8 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/metrics" element={<Metrics />} />
         <Route path="/service-status" element={<ServiceStatus />} />
+        <Route path="/workflows" element={<Workflows />} />
+        <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
         <Route 
           path="/teams" 
           element={

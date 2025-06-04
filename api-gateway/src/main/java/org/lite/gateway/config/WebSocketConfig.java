@@ -40,6 +40,12 @@ public class WebSocketConfig {
             @Override
             protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
                 try {
+                    // Check if there are any active sessions
+                    if (sessions.isEmpty()) {
+                        log.debug("No active WebSocket sessions, skipping message emission");
+                        return true;
+                    }
+
                     String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
                     Sinks.EmitResult result;
                     int attempts = 0;

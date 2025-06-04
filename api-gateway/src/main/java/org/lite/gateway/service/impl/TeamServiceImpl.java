@@ -36,6 +36,7 @@ public class TeamServiceImpl implements TeamService {
     private final OrganizationRepository organizationRepository;
     private final UserRepository userRepository;
     private final TransactionalOperator transactionalOperator;
+    private final LinqToolRepository linqToolRepository;
 
     private OrganizationDTO convertToOrganizationDTO(Organization org) {
         return OrganizationDTO.builder()
@@ -61,7 +62,7 @@ public class TeamServiceImpl implements TeamService {
 
         Mono<List<TeamRouteDTO>> routesListMono = teamRouteRepository
             .findByTeamId(team.getId())
-            .flatMap(teamRoute -> 
+            .<TeamRouteDTO>flatMap(teamRoute -> 
                 apiRouteRepository.findById(teamRoute.getRouteId())
                     .zipWith(orgMono)
                     .map(tuple -> {
@@ -92,7 +93,7 @@ public class TeamServiceImpl implements TeamService {
                             .assignedBy(teamRoute.getAssignedBy())
                             .build();
                     })
-                    .switchIfEmpty(Mono.defer(() -> 
+                    .switchIfEmpty(Mono.<TeamRouteDTO>defer(() -> 
                         orgMono.map(org -> {
                             TeamInfoDTO teamInfo = TeamInfoDTO.builder()
                                 .teamId(team.getId())
@@ -123,7 +124,22 @@ public class TeamServiceImpl implements TeamService {
                 .createdAt(apiKey.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime())
                 .build());
 
-        return Mono.zip(membersListMono, routesListMono, orgMono)
+        Mono<List<LinqToolDTO>> linqToolsMono = linqToolRepository
+            .findByTeam(team.getId())
+            .map(tool -> LinqToolDTO.builder()
+                .id(tool.getId())
+                .target(tool.getTarget())
+                .endpoint(tool.getEndpoint())
+                .method(tool.getMethod())
+                .headers(tool.getHeaders())
+                .authType(tool.getAuthType())
+                .apiKey(tool.getApiKey())
+                .supportedIntents(tool.getSupportedIntents())
+                .team(tool.getTeam())
+                .build())
+            .collectList();
+
+        return Mono.zip(membersListMono, routesListMono, orgMono, linqToolsMono)
             .flatMap(tuple -> {
                 TeamDTO.TeamDTOBuilder builder = TeamDTO.builder()
                     .id(team.getId())
@@ -136,7 +152,8 @@ public class TeamServiceImpl implements TeamService {
                     .updatedBy(team.getUpdatedBy())
                     .members(tuple.getT1())
                     .routes(tuple.getT2())
-                    .organization(tuple.getT3());
+                    .organization(tuple.getT3())
+                    .linqTools(tuple.getT4());
 
                 return apiKeyMono
                     .map(apiKey -> builder.apiKey(apiKey).build())
@@ -281,7 +298,7 @@ public class TeamServiceImpl implements TeamService {
                             .doOnSuccess(v -> log.info("Successfully deleted team: {}", teamId));
                     });
                 })
-                .switchIfEmpty(Mono.defer(() -> {
+                .switchIfEmpty(Mono.<Void>defer(() -> {
                     log.warn("Team not found for deletion: {}", teamId);
                     // If team doesn't exist, consider it as already deleted
                     return Mono.empty();

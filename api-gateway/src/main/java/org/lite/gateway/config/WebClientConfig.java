@@ -17,7 +17,10 @@ import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
+import io.netty.handler.ssl.SslContextBuilder;
+import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
 
+import javax.net.ssl.SSLException;
 import java.time.Duration;
 
 @Configuration
@@ -57,7 +60,16 @@ public class WebClientConfig {
             .doOnConnected(conn -> conn
                 .addHandlerLast(new ReadTimeoutHandler(5))
                 .addHandlerLast(new WriteTimeoutHandler(5)))
-            .secure()
+            .secure(spec -> {
+                try {
+                    spec.sslContext(SslContextBuilder
+                        .forClient()
+                        .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                        .build());
+                } catch (SSLException e) {
+                    throw new RuntimeException(e);
+                }
+            })
             .wiretap("reactor.netty.http.client.HttpClient", LogLevel.DEBUG)
             .option(ChannelOption.SO_KEEPALIVE, true)
             .option(ChannelOption.TCP_NODELAY, true);

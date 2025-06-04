@@ -8,8 +8,10 @@ import {
   HiTemplate, 
   HiRefresh, 
   HiTrash, 
-  HiKey 
+  HiKey,
+  HiSparkles 
 } from 'react-icons/hi';
+import { SiOpenai, SiGoogle } from 'react-icons/si';
 import { Spinner, OverlayTrigger, Tooltip, Table } from 'react-bootstrap';
 import CreateTeamModal from '../../components/teams/CreateTeamModal';
 import TeamDetailsModal from '../../components/teams/TeamDetailsModal';
@@ -17,6 +19,8 @@ import TeamMembersModal from '../../components/teams/TeamMembersModal';
 import TeamRoutesModal from '../../components/teams/TeamRoutesModal';
 import TeamEditModal from '../../components/teams/TeamEditModal';
 import TeamApiKeysModal from '../../components/teams/TeamApiKeysModal';
+import OpenAIModal from '../../components/teams/OpenAIModal';
+import GeminiModal from '../../components/teams/GeminiModal';
 import { teamService } from '../../services/teamService';
 import './styles.css';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
@@ -35,6 +39,8 @@ function Teams() {
   const [showRoutesModal, setShowRoutesModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showApiKeysModal, setShowApiKeysModal] = useState(false);
+  const [showOpenAIModal, setShowOpenAIModal] = useState(false);
+  const [showGeminiModal, setShowGeminiModal] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
     show: false,
     title: '',
@@ -387,13 +393,15 @@ function Teams() {
                 <thead>
                   <tr>
                     <th>Name</th>
-                    <th>Organization</th>
+                    {/* <th>Organization</th> */}
                     <th>Status</th>
                     <th>View</th>
                     <th>Edit</th>
                     <th>Members</th>
                     <th>Routes</th>
                     <th>API Keys</th>
+                    <th>OpenAI</th>
+                    <th>Gemini</th>
                     <th>Status Action</th>
                     <th>Delete</th>
                   </tr>
@@ -402,8 +410,8 @@ function Teams() {
                   {Object.entries(groupTeamsByOrganization(teams)).map(([orgId, org]) => (
                     <React.Fragment key={orgId}>
                       <tr className="table-group-header">
-                        <td colSpan="10" className="bg-light">
-                          <strong>{org.name}</strong>
+                        <td colSpan="11" className="bg-light">
+                          <strong>{org.name}</strong> (Organization)
                         </td>
                       </tr>
                       {org.teams.map(team => (
@@ -412,7 +420,7 @@ function Teams() {
                           className={team.status === 'INACTIVE' ? 'table-secondary' : ''}
                         >
                           <td>{team.name}</td>
-                          <td>{team.organization?.name || '-'}</td>
+                          {/* <td>{team.organization?.name || '-'}</td> */}
                           <td>
                             <span className={`badge ${team.status === 'ACTIVE' ? 'bg-success' : 'bg-secondary'}`}>
                               {team.status}
@@ -474,6 +482,32 @@ function Teams() {
                             >
                               <HiKey className="me-1" /> 
                               {team.apiKey ? 'View API Key' : 'Generate API Key'}
+                            </button>
+                          </td>
+                          <td>
+                            <button 
+                              className="btn btn-sm btn-outline-info action-button"
+                              onClick={() => {
+                                setSelectedTeam(team);
+                                setShowOpenAIModal(true);
+                              }}
+                              disabled={team.status === 'INACTIVE'}
+                            >
+                              <SiOpenai className="me-1" size={16} /> 
+                              {team.linqTools?.some(tool => tool.target === 'openai') ? 'View Configuration' : 'Configure'}
+                            </button>
+                          </td>
+                          <td>
+                            <button 
+                              className="btn btn-sm btn-outline-info action-button"
+                              onClick={() => {
+                                setSelectedTeam(team);
+                                setShowGeminiModal(true);
+                              }}
+                              disabled={team.status === 'INACTIVE'}
+                            >
+                              <SiGoogle className="me-1" size={14} /> 
+                              {team.linqTools?.some(tool => tool.target === 'gemini') ? 'View Configuration' : 'Configure'}
                             </button>
                           </td>
                           <td>
@@ -566,6 +600,18 @@ function Teams() {
         team={selectedTeam}
         onCreateApiKey={handleCreateApiKey}
         loading={operationLoading}
+      />
+
+      <OpenAIModal
+        show={showOpenAIModal}
+        onHide={() => setShowOpenAIModal(false)}
+        team={selectedTeam}
+      />
+
+      <GeminiModal
+        show={showGeminiModal}
+        onHide={() => setShowGeminiModal(false)}
+        team={selectedTeam}
       />
 
       <ConfirmationModal

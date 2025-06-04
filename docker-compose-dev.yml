@@ -181,9 +181,7 @@ services:
 #    build:
 #      context: .
 #      dockerfile: .kube/eureka/Dockerfile
-#    #    image: discovery-service:latest
 #    environment:
-#      SPRING_PROFILES_ACTIVE: dev
 #      EUREKA_KEY_STORE: eureka-keystore.jks
 #      EUREKA_KEY_STORE_PASSWORD: 123456
 #      EUREKA_TRUST_STORE: eureka-truststore.jks
@@ -218,6 +216,7 @@ services:
 #      context: .
 #      dockerfile: ./.kube/gateway/Dockerfile
 #    environment:
+#      SPRING_PROFILES_ACTIVE: dev
 #      GATEWAY_TRUST_STORE: /app/gateway-truststore.jks
 #      GATEWAY_TRUST_STORE_PASSWORD: 123456
 #      GATEWAY_KEY_STORE: /app/gateway-keystore.jks

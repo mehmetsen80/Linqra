@@ -8,6 +8,7 @@ import org.lite.gateway.dto.SwaggerEndpointInfo;
 import org.lite.gateway.dto.SwaggerSchemaInfo;
 import org.lite.gateway.dto.LinqProtocolExample;
 import org.lite.gateway.dto.ConvertToLinqProtocolRequest;
+import org.lite.gateway.service.LinqProtocolService;
 import org.lite.gateway.service.LinqService;
 import org.lite.gateway.service.ApiEndpointService;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,10 +30,20 @@ import java.util.stream.Collectors;
 public class LinqController {
 
     private final LinqService linqService;
+    private final LinqProtocolService linqProtocolService;
     private final ApiEndpointService apiEndpointService;
 
     @PostMapping
     public Mono<LinqResponse> handleLinqRequest(@RequestBody LinqRequest request) {
+        log.info("Received /linq request: {}", request);
+        log.info("Request link: {}", request.getLink());
+        log.info("Request query: {}", request.getQuery());
+        if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
+            log.info("Workflow steps: {}", request.getQuery().getWorkflow());
+            if (request.getQuery().getWorkflow().size() > 1) {
+                log.info("Step 2 toolConfig: {}", request.getQuery().getWorkflow().get(1).getToolConfig());
+            }
+        }
         return linqService.processLinqRequest(request);
     }
 
@@ -73,7 +84,7 @@ public class LinqController {
                             List<LinqProtocolExample> linqEndpoints = endpoints.stream()
                                 .map(endpointInfo -> {
                                     // Just pass the endpointInfo and routeIdentifier
-                                    return linqService.convertToLinqProtocol(
+                                    return linqProtocolService.convertToLinqProtocol(
                                         endpointInfo,
                                         request.getRouteIdentifier()
                                     ).block();

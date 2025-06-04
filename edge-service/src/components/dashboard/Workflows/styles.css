@@ -1,0 +1,84 @@
+/*
+ * TODO: Add styles for the Workflows component
+ */
+
+.dashboard-workflows {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.dashboard-section-title {
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-align: left;
+    padding-left: 0;
+}
+
+.dashboard-workflows-table {
+    margin-bottom: 0;
+}
+
+.dashboard-workflows-table th {
+    font-weight: 600;
+    color: #2c3e50;
+    border-bottom: 2px solid #e9ecef;
+    padding: 0.75rem;
+}
+
+.dashboard-workflows-table td {
+    padding: 0.75rem;
+    vertical-align: middle;
+}
+
+/* Column width distribution */
+.dashboard-workflows-table .col-name {
+    width: 20%;
+}
+
+.dashboard-workflows-table .col-steps {
+    width: 10%;
+}
+
+.dashboard-workflows-table .col-version {
+    width: 10%;
+}
+
+.dashboard-workflows-table .col-updated {
+    width: 20%;
+}
+
+.dashboard-workflows-table .col-created {
+    width: 15%;
+}
+
+.dashboard-workflows-table .col-status {
+    width: 15%;
+}
+
+.dashboard-workflows-table .col-actions {
+    width: 10%;
+    text-align: center;
+}
+
+.dashboard-workflow-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.dashboard-workflows-loading,
+.dashboard-workflows-error {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+}
+
+.dashboard-workflows-error {
+    color: #dc3545;
+}

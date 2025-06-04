@@ -97,7 +97,7 @@ management:
 eureka:
   client:
     service-url:
-      defaultZone: https://${EUREKA_GATEWAY_URL:localhost}:8761/eureka/eureka
+      defaultZone: https://${EUREKA_GATEWAY_URL:localhost}:8761/eureka/eureka/
     enabled: true
     register-with-eureka: true
     fetch-registry: true

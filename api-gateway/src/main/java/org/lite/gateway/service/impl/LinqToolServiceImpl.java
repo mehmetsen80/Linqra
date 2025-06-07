@@ -133,20 +133,17 @@ public class LinqToolServiceImpl implements LinqToolService {
 
                     return invokeToolService(method, url.get(), payload, headers);
                 })
-                .flatMap(result ->
-                        teamContextService.getTeamFromContext()
-                                .map(team -> {
-                                    LinqResponse response = new LinqResponse();
-                                    response.setResult(result);
-                                    LinqResponse.Metadata metadata = new LinqResponse.Metadata();
-                                    metadata.setSource(tool.getTarget());
-                                    metadata.setStatus("success");
-                                    metadata.setTeam(team);
-                                    metadata.setCacheHit(false);
-                                    response.setMetadata(metadata);
-                                    return response;
-                                })
-                );
+                .map(result -> {
+                    LinqResponse response = new LinqResponse();
+                    response.setResult(result);
+                    LinqResponse.Metadata metadata = new LinqResponse.Metadata();
+                    metadata.setSource(tool.getTarget());
+                    metadata.setStatus("success");
+                    metadata.setTeam(tool.getTeam());
+                    metadata.setCacheHit(false);
+                    response.setMetadata(metadata);
+                    return response;
+                });
     }
 
     private String buildToolUrl(LinqTool tool, LinqRequest request) {

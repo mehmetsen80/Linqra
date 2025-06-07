@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Document(collection = "linq_workflows")
 @Data
@@ -25,6 +26,8 @@ public class LinqWorkflow {
     private String createdBy;
     private String updatedBy;
     private Integer version = 1;            // Current version number
+    private boolean hasAsyncSteps;          // Whether the workflow contains async steps
+    private List<String> asyncStepIds;      // List of step IDs that should be executed asynchronously
 
     @Override
     public String toString() {
@@ -40,6 +43,8 @@ public class LinqWorkflow {
                 ", createdBy='" + createdBy + '\'' +
                 ", updatedBy='" + updatedBy + '\'' +
                 ", version=" + version +
+                ", hasAsyncSteps=" + hasAsyncSteps +
+                ", asyncStepIds=" + asyncStepIds +
                 '}';
     }
 }

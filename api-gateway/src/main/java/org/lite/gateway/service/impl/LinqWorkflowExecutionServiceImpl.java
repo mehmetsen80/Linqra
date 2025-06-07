@@ -106,69 +106,71 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), stepResults));
                 stepQuery.setPayload(resolvePlaceholders(step.getPayload(), stepResults));
                 stepQuery.setToolConfig(step.getToolConfig());
+                // Set the workflow steps in the query to enable caching
+                stepQuery.setWorkflow(steps);
                 stepRequest.setQuery(stepQuery);
 
                 // Execute the step
                 return teamContextService.getTeamFromContext()
-                        .switchIfEmpty(Mono.error(new ResponseStatusException(
-                            HttpStatus.UNAUTHORIZED, 
-                            "Team context not found. Please ensure you are authenticated with a valid team.")))
-                        .flatMap(teamId -> {
-                            log.info("Searching for tool with target: {} and team: {}", step.getTarget(), teamId);
-                            return linqToolRepository.findByTargetAndTeam(step.getTarget(), teamId)
-                                    .doOnNext(tool -> log.info("Found tool: {}", tool))
-                                    .doOnError(error -> log.error("Error finding tool: {}", error.getMessage()))
-                                    .doOnSuccess(tool -> {
-                                        if (tool == null) {
-                                            log.info("No tool found for target: {}", step.getTarget());
-                                        }
-                                    });
-                        })
-                        .doOnNext(tool -> log.info("About to execute tool request"))
-                        .flatMap(tool -> linqToolService.executeToolRequest(stepRequest, tool))
-                        .doOnNext(stepResponse -> log.info("Tool request executed successfully"))
-                        .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                            log.info("No tool found, executing microservice request");
-                            return linqMicroService.execute(stepRequest);
-                        }))
-                        .flatMap(stepResponse -> {
-                            // Check if the result contains an error
-                            if (stepResponse.getResult() instanceof Map<?, ?> resultMap && 
-                                resultMap.containsKey("error")) {
-                                return Mono.error(new ResponseStatusException(
-                                    HttpStatus.INTERNAL_SERVER_ERROR,
-                                    String.format("Workflow step %d failed: %s", 
-                                        step.getStep(), 
-                                        resultMap.get("error"))
-                                ));
-                            }
-                            
-                            stepResults.put(step.getStep(), stepResponse.getResult());
-                            long durationMs = Duration.between(start, Instant.now()).toMillis();
-                            LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
-                            meta.setStep(step.getStep());
-                            meta.setStatus("success");
-                            meta.setDurationMs(durationMs);
-                            meta.setTarget(step.getTarget());
-                            meta.setExecutedAt(LocalDateTime.now());
-                            stepMetadata.add(meta);
-                            return Mono.just(response);
-                        })
-                        .onErrorResume(error -> {
-                            long durationMs = Duration.between(start, Instant.now()).toMillis();
-                            LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
-                            meta.setStep(step.getStep());
-                            meta.setStatus("error");
-                            meta.setDurationMs(durationMs);
-                            meta.setTarget(step.getTarget());
-                            meta.setExecutedAt(LocalDateTime.now());
-                            stepMetadata.add(meta);
-                            log.error("Error in workflow step {}: {}", step.getStep(), error.getMessage());
+                    .switchIfEmpty(Mono.error(new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED, 
+                        "Team context not found. Please ensure you are authenticated with a valid team.")))
+                    .flatMap(teamId -> {
+                        log.info("Searching for tool with target: {} and team: {}", step.getTarget(), teamId);
+                        return linqToolRepository.findByTargetAndTeam(step.getTarget(), teamId)
+                            .doOnNext(tool -> log.info("Found tool: {}", tool))
+                            .doOnError(error -> log.error("Error finding tool: {}", error.getMessage()))
+                            .doOnSuccess(tool -> {
+                                if (tool == null) {
+                                    log.info("No tool found for target: {}", step.getTarget());
+                                }
+                            });
+                    })
+                    .doOnNext(tool -> log.info("About to execute tool request"))
+                    .flatMap(tool -> linqToolService.executeToolRequest(stepRequest, tool))
+                    .doOnNext(stepResponse -> log.info("Tool request executed successfully"))
+                    .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
+                        log.info("No tool found, executing microservice request");
+                        return linqMicroService.execute(stepRequest);
+                    }))
+                    .flatMap(stepResponse -> {
+                        // Check if the result contains an error
+                        if (stepResponse.getResult() instanceof Map<?, ?> resultMap && 
+                            resultMap.containsKey("error")) {
                             return Mono.error(new ResponseStatusException(
                                 HttpStatus.INTERNAL_SERVER_ERROR,
-                                String.format("Workflow step %d failed: %s", step.getStep(), error.getMessage())
+                                String.format("Workflow step %d failed: %s", 
+                                    step.getStep(), 
+                                    resultMap.get("error"))
                             ));
-                        });
+                        }
+                        
+                        stepResults.put(step.getStep(), stepResponse.getResult());
+                        long durationMs = Duration.between(start, Instant.now()).toMillis();
+                        LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                        meta.setStep(step.getStep());
+                        meta.setStatus("success");
+                        meta.setDurationMs(durationMs);
+                        meta.setTarget(step.getTarget());
+                        meta.setExecutedAt(LocalDateTime.now());
+                        stepMetadata.add(meta);
+                        return Mono.just(response);
+                    })
+                    .onErrorResume(error -> {
+                        long durationMs = Duration.between(start, Instant.now()).toMillis();
+                        LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                        meta.setStep(step.getStep());
+                        meta.setStatus("error");
+                        meta.setDurationMs(durationMs);
+                        meta.setTarget(step.getTarget());
+                        meta.setExecutedAt(LocalDateTime.now());
+                        stepMetadata.add(meta);
+                        log.error("Error in workflow step {}: {}", step.getStep(), error.getMessage());
+                        return Mono.error(new ResponseStatusException(
+                            HttpStatus.INTERNAL_SERVER_ERROR,
+                            String.format("Workflow step %d failed: %s", step.getStep(), error.getMessage())
+                        ));
+                    });
             });
         }
 

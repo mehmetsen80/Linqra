@@ -22,7 +22,7 @@ public class AsyncQueueConfig {
     
     @Bean
     @Qualifier("asyncStepStatusRedisTemplate")
-    public ReactiveRedisTemplate<String, LinqResponse.AsyncStepStatus> asyncStepStatusRedisTemplate(
+    public ReactiveRedisTemplate<String, LinqResponse.QueuedWorkflowStep> asyncStepStatusRedisTemplate(
             @Qualifier("redisConnectionFactory") ReactiveRedisConnectionFactory connectionFactory) {
         log.info("Initializing asyncStepStatusRedisTemplate");
         
@@ -32,13 +32,13 @@ public class AsyncQueueConfig {
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         
         // Create serializer with ObjectMapper in constructor
-        Jackson2JsonRedisSerializer<LinqResponse.AsyncStepStatus> serializer = 
-            new Jackson2JsonRedisSerializer<>(mapper, LinqResponse.AsyncStepStatus.class);
+        Jackson2JsonRedisSerializer<LinqResponse.QueuedWorkflowStep> serializer = 
+            new Jackson2JsonRedisSerializer<>(mapper, LinqResponse.QueuedWorkflowStep.class);
         
-        RedisSerializationContext.RedisSerializationContextBuilder<String, LinqResponse.AsyncStepStatus> builder =
+        RedisSerializationContext.RedisSerializationContextBuilder<String, LinqResponse.QueuedWorkflowStep> builder =
             RedisSerializationContext.newSerializationContext(new StringRedisSerializer());
         
-        RedisSerializationContext<String, LinqResponse.AsyncStepStatus> context = 
+        RedisSerializationContext<String, LinqResponse.QueuedWorkflowStep> context = 
             builder.value(serializer).build();
         
         return new ReactiveRedisTemplate<>(connectionFactory, context);

@@ -19,16 +19,9 @@ public interface QueuedWorkflowService {
      * Get the status of a workflow step
      * @param workflowId The ID of the workflow
      * @param stepId The ID of the step
-     * @return Mono<AsyncStepStatus> containing the current status of the step
+     * @return Mono<LinqResponse.QueuedWorkflowStep> containing the current status of the step
      */
-    Mono<LinqResponse.AsyncStepStatus> getStepStatus(String workflowId, String stepId);
-
-    /**
-     * Get all async steps for a workflow
-     * @param workflowId The ID of the workflow
-     * @return Mono containing a map of step IDs to their statuses
-     */
-    Mono<Map<String, LinqResponse.AsyncStepStatus>> getAllAsyncSteps(String workflowId);
+    Mono<LinqResponse.QueuedWorkflowStep> getAsyncStepStatus(String workflowId, String stepId);
 
     /**
      * Cancel an async step if it's not completed
@@ -37,6 +30,13 @@ public interface QueuedWorkflowService {
      * @return Mono<Void> indicating completion of the cancel operation
      */
     Mono<Void> cancelAsyncStep(String workflowId, String stepId);
+
+    /**
+     * Get all async steps for a workflow
+     * @param workflowId The ID of the workflow
+     * @return Mono containing a map of step IDs to their statuses
+     */
+    Mono<Map<String, LinqResponse.QueuedWorkflowStep>> getAllAsyncSteps(String workflowId);
 
     /**
      * Process the async step queue by polling for new tasks and executing them

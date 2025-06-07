@@ -81,7 +81,7 @@ const ExecutionDetailsModal = ({
                                     >
                                         <div className="step-pipeline-item">
                                             <div className="step-pipeline-status">
-                                                <Badge bg={stepMetadata?.status === 'success' ? 'success' : 'danger'}>
+                                                <Badge bg={(stepMetadata?.status === 'success' || stepMetadata?.status === 'completed') ? 'success' : 'danger'}>
                                                     Step {step.step}
                                                 </Badge>
                                             </div>

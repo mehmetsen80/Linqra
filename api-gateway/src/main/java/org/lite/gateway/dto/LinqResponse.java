@@ -18,19 +18,7 @@ public class LinqResponse {
         private String team;   // e.g., "67d0aeb17172416c411d419e"
         private boolean cacheHit; // e.g., false
         private List<WorkflowStepMetadata> workflowMetadata;  // Optional, only for workflow responses
-        private List<AsyncStepStatus> asyncSteps;  // Status of async steps
-    }
-
-    @Data
-    public static class AsyncStepStatus {
-        private String stepId;
-        private String status;  // "pending", "processing", "completed", "failed"
-        private String message;
-        private String error;
-        private Object result;
-        private LocalDateTime queuedAt;
-        private LocalDateTime completedAt;
-        private LocalDateTime cancelledAt;
+        private List<QueuedWorkflowStep> asyncSteps;  // Status of async steps
     }
 
     @Data
@@ -50,6 +38,7 @@ public class LinqResponse {
         private Map<String, Object> params; // Step parameters
         private String action; // Step action
         private String intent; // Step intent
+        private String executionId; // Unique identifier for this execution of the step
     }
 
     @Data
@@ -70,5 +59,19 @@ public class LinqResponse {
             private long completionTokens;
             private long totalTokens;
         }
+    }
+
+    @Data
+    public static class QueuedWorkflowStep {
+        private String workflowId;
+        private String stepId;
+        private String executionId;
+        private String status;
+        private String message;
+        private Object result;
+        private String error;
+        private LocalDateTime queuedAt;
+        private LocalDateTime completedAt;
+        private LocalDateTime cancelledAt;
     }
 }

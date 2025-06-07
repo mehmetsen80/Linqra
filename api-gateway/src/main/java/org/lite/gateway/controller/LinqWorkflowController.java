@@ -282,9 +282,12 @@ public class LinqWorkflowController {
                 }
                 request.getQuery().setWorkflowId(workflowId);
                 
+                // Store the workflow steps for each individual request
+                List<LinqRequest.Query.WorkflowStep> workflowSteps = request.getQuery().getWorkflow();
+                
                 // Fix the max.tokens issue in the workflow steps
-                if (request.getQuery().getWorkflow() != null) {
-                    request.getQuery().getWorkflow().forEach(step -> {
+                if (workflowSteps != null) {
+                    workflowSteps.forEach(step -> {
                         if (step.getToolConfig() != null && step.getToolConfig().getSettings() != null) {
                             Map<String, Object> settings = step.getToolConfig().getSettings();
                             if (settings.containsKey("max.tokens")) {
@@ -296,10 +299,8 @@ public class LinqWorkflowController {
                 }
                 
                 return workflowExecutionService.executeWorkflow(request)
-                    .flatMap(response -> 
-                        workflowExecutionService.trackExecution(request, response)
-                            .thenReturn(response)
-                    );
+                    .flatMap(response -> workflowExecutionService.trackExecution(request, response)
+                        .thenReturn(response));
             })
             .doOnSuccess(r -> log.info("Workflow executed successfully: {}", workflowId))
             .doOnError(error -> log.error("Error executing workflow: {}", error.getMessage()));

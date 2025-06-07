@@ -51,8 +51,15 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                     .flatMap(savedWorkflow -> {
                         // Set the workflowId in the version
                         initialVersion.setWorkflowId(savedWorkflow.getId());
+                        
+                        // Set the workflowId in the request's query
+                        if (savedWorkflow.getRequest() != null && 
+                            savedWorkflow.getRequest().getQuery() != null) {
+                            savedWorkflow.getRequest().getQuery().setWorkflowId(savedWorkflow.getId());
+                        }
+                        
                         return workflowVersionRepository.save(initialVersion)
-                            .thenReturn(savedWorkflow);
+                            .then(workflowRepository.save(savedWorkflow));
                     })
                     .doOnSuccess(w -> log.info("Created workflow: {} with initial version", w.getId()))
                     .doOnError(error -> log.error("Error creating workflow: {}", error.getMessage()));

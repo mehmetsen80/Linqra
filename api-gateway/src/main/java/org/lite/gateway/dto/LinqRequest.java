@@ -66,6 +66,8 @@ public class LinqRequest {
             @ValidToolConfig
             private ToolConfig toolConfig; // For AI tools
 
+            private Boolean async; // Whether this step should be executed asynchronously
+
             //Do not delete this, it's being used internally by the json
             public void setToolConfig(ToolConfig toolConfig) {
                 if (toolConfig != null && toolConfig.getSettings() != null) {

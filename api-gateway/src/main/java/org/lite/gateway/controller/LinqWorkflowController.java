@@ -11,6 +11,8 @@ import org.lite.gateway.entity.LinqWorkflow;
 import org.lite.gateway.entity.LinqWorkflowExecution;
 import org.lite.gateway.entity.LinqWorkflowVersion;
 import org.lite.gateway.service.LinqWorkflowService;
+import org.lite.gateway.service.LinqWorkflowExecutionService;
+import org.lite.gateway.service.LinqWorkflowVersionService;
 import org.lite.gateway.service.TeamService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
@@ -30,6 +32,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.lite.gateway.dto.TeamWorkflowStats;
+import org.lite.gateway.service.LinqWorkflowStatsService;
 
 @Slf4j
 @RestController
@@ -37,12 +40,15 @@ import org.lite.gateway.dto.TeamWorkflowStats;
 @RequiredArgsConstructor
 public class LinqWorkflowController {
     private final LinqWorkflowService linqWorkflowService;
+    private final LinqWorkflowVersionService linqWorkflowVersionService;
+    private final LinqWorkflowExecutionService workflowExecutionService;
     private final TeamService teamService;
     private final UserContextService userContextService;
     private final UserService userService;
     private final TeamContextService teamContextService;
     private final LinqRequestValidationService linqRequestValidationService;
     private final ObjectMapper objectMapper;
+    private final LinqWorkflowStatsService linqWorkflowStatsService;
 
     @PostMapping
     public Mono<ResponseEntity<?>> createWorkflow(
@@ -237,10 +243,10 @@ public class LinqWorkflowController {
     }
 
     @GetMapping
-    public Flux<LinqWorkflow> getWorkflows() {
+    public Flux<LinqWorkflow> getAllWorkflows() {
         log.info("Fetching all workflows");
-        return linqWorkflowService.getWorkflows()
-            .doOnError(error -> log.error("Error fetching workflows: {}", error.getMessage()));
+        return linqWorkflowService.getAllWorkflows()
+            .doOnError(error -> log.error("Error getting all workflows: {}", error.getMessage()));
     }
 
     @GetMapping("/{workflowId}")
@@ -289,9 +295,9 @@ public class LinqWorkflowController {
                     });
                 }
                 
-                return linqWorkflowService.executeWorkflow(request)
+                return workflowExecutionService.executeWorkflow(request)
                     .flatMap(response -> 
-                        linqWorkflowService.trackExecution(request, response)
+                        workflowExecutionService.trackExecution(request, response)
                             .thenReturn(response)
                     );
             })
@@ -302,7 +308,7 @@ public class LinqWorkflowController {
     @GetMapping("/{workflowId}/executions")
     public Flux<LinqWorkflowExecution> getWorkflowExecutions(@PathVariable String workflowId) {
         log.info("Fetching executions for workflow: {}", workflowId);
-        return linqWorkflowService.getWorkflowExecutions(workflowId)
+        return workflowExecutionService.getWorkflowExecutions(workflowId)
             .doOnNext(e -> log.info("Execution fetched: {}", e.getId()))
             .doOnError(error -> log.error("Error fetching executions: {}", error.getMessage()));
     }
@@ -310,14 +316,14 @@ public class LinqWorkflowController {
     @GetMapping("/executions")
     public Flux<LinqWorkflowExecution> getTeamExecutions() {
         log.info("Fetching executions for current team");
-        return linqWorkflowService.getTeamExecutions()
+        return workflowExecutionService.getTeamExecutions()
             .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
     }
 
     @GetMapping("/executions/{executionId}")
     public Mono<LinqWorkflowExecution> getExecution(@PathVariable String executionId) {
         log.info("Fetching execution: {}", executionId);
-        return linqWorkflowService.getExecution(executionId)
+        return workflowExecutionService.getExecution(executionId)
             .doOnSuccess(e -> log.info("Execution fetched successfully: {}", e.getId()))
             .doOnError(error -> log.error("Error fetching execution: {}", error.getMessage()));
     }
@@ -332,8 +338,7 @@ public class LinqWorkflowController {
     @GetMapping("/{workflowId}/stats")
     public Mono<LinqWorkflowStats> getWorkflowStats(@PathVariable String workflowId) {
         log.info("Fetching stats for workflow: {}", workflowId);
-        return linqWorkflowService.getWorkflowStats(workflowId)
-            .doOnSuccess(s -> log.info("Stats fetched successfully for workflow: {}", workflowId))
+        return linqWorkflowStatsService.getWorkflowStats(workflowId)
             .doOnError(error -> log.error("Error fetching workflow stats: {}", error.getMessage()));
     }
 
@@ -440,7 +445,7 @@ public class LinqWorkflowController {
                     
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
-                        return linqWorkflowService.createNewVersion(workflowId, updatedWorkflow)
+                        return linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflow)
                             .map(ResponseEntity::ok);
                     }
                     
@@ -457,7 +462,7 @@ public class LinqWorkflowController {
                                             HttpStatus.FORBIDDEN.value()
                                         )));
                                 }
-                                return linqWorkflowService.createNewVersion(workflowId, updatedWorkflow)
+                                return linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflow)
                                     .map(ResponseEntity::ok);
                             }));
                 })
@@ -490,7 +495,7 @@ public class LinqWorkflowController {
                 .flatMap(user -> {
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
-                        return linqWorkflowService.rollbackToVersion(workflowId, versionId)
+                        return linqWorkflowVersionService.rollbackToVersion(workflowId, versionId)
                             .map(w -> ResponseEntity.ok(w));
                     }
                     
@@ -506,7 +511,7 @@ public class LinqWorkflowController {
                                         HttpStatus.FORBIDDEN.value()
                                     )));
                             }
-                            return linqWorkflowService.rollbackToVersion(workflowId, versionId)
+                            return linqWorkflowVersionService.rollbackToVersion(workflowId, versionId)
                                 .map(w -> ResponseEntity.ok(w));
                         });
                 }))
@@ -519,7 +524,7 @@ public class LinqWorkflowController {
     @GetMapping("/{workflowId}/versions")
     public Flux<LinqWorkflowVersion> getVersionHistory(@PathVariable String workflowId) {
         log.info("Fetching version history for workflow: {}", workflowId);
-        return linqWorkflowService.getVersionHistory(workflowId)
+        return linqWorkflowVersionService.getVersionHistory(workflowId)
             .doOnError(error -> log.error("Error fetching version history: {}", error.getMessage()));
     }
 
@@ -529,16 +534,16 @@ public class LinqWorkflowController {
         @PathVariable String versionId
     ) {
         log.info("Fetching version: {} for workflow: {}", versionId, workflowId);
-        return linqWorkflowService.getVersion(workflowId, versionId)
+        return linqWorkflowVersionService.getVersion(workflowId, versionId)
             .doOnSuccess(v -> log.info("Fetched version: {} for workflow: {}", v.getId(), workflowId))
             .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()));
     }
 
     @GetMapping("/team/stats")
-    public Mono<TeamWorkflowStats> getTeamStats() {
+    public Mono<ResponseEntity<TeamWorkflowStats>> getTeamStats() {
         log.info("Fetching team workflow statistics");
-        return linqWorkflowService.getTeamStats()
-            .doOnSuccess(stats -> log.info("Team workflow statistics fetched successfully"))
+        return linqWorkflowStatsService.getTeamStats()
+            .map(ResponseEntity::ok)
             .doOnError(error -> log.error("Error fetching team workflow statistics: {}", error.getMessage()));
     }
 }

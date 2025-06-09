@@ -51,7 +51,7 @@ function Home() {
             rel="noopener noreferrer"
             className="version-badge"
           >
-            v0.2
+            v0.3
           </a>
           <div className="hero-separator"></div>
           <div className="cta-buttons">
@@ -69,6 +69,12 @@ function Home() {
             >
               Learn More
             </a>
+            <Link 
+              to="/linq-protocol"
+              className="cta-button secondary"
+            >
+              Linq Protocol
+            </Link>
           </div>
         </div>
       </div>

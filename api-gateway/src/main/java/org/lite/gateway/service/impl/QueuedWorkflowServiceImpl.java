@@ -333,7 +333,7 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
             .then();
     }
 
-    @Scheduled(fixedDelay = 1000) // Poll every second
+    @Scheduled(fixedDelay = 5000) // Poll every 5 seconds
     public void processQueue() {
         log.info("Checking async step queue...");
         asyncStepQueueRedisTemplate.opsForList().leftPop(QUEUE_KEY)

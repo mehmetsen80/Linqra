@@ -1,0 +1,140 @@
+.basics-container {
+  max-width: 100%;
+  padding: 0 1rem;
+}
+
+.basics-container h2 {
+  color: var(--primary-color);
+  margin-bottom: 2rem;
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.error-overview {
+  margin-bottom: 2rem;
+}
+
+.error-overview p {
+  color: #666;
+  line-height: 1.6;
+  font-size: 1.1rem;
+}
+
+.error-types {
+  margin-bottom: 2rem;
+}
+
+.error-types h3 {
+  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.error-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 1.5rem;
+}
+
+.error-section:last-child {
+  margin-bottom: 0;
+}
+
+.error-section h4 {
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.error-section p {
+  color: #666;
+  margin-top: 1rem;
+  line-height: 1.6;
+}
+
+pre {
+  background-color: #2c3e50;
+  color: #fff;
+  padding: 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+
+pre code {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.error-handling-tips {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  margin-bottom: 2rem;
+}
+
+.error-handling-tips h3 {
+  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.error-handling-tips ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.error-handling-tips li {
+  margin-bottom: 0.75rem;
+  color: #666;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+}
+
+.error-handling-tips li:last-child {
+  margin-bottom: 0;
+}
+
+.error-handling-tips code {
+  background: #f8f9fa;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
+  color: var(--primary-color);
+}
+
+.error-example {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.error-example h3 {
+  color: var(--primary-color);
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .error-section,
+  .error-handling-tips,
+  .error-example {
+    padding: 1rem;
+  }
+
+  pre {
+    font-size: 0.8rem;
+  }
+} 

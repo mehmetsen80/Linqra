@@ -1,7 +1,6 @@
 import React from 'react';
 import { Modal, Badge, Card, Row, Col } from 'react-bootstrap';
 import { HiUserGroup, HiTemplate, HiClock, HiUser, HiUsers, HiLockClosed, HiOfficeBuilding, HiDocumentText } from 'react-icons/hi';
-import { formatDateTime } from '../../utils/dateUtils';
 import { showSuccessToast } from '../../utils/toastConfig';
 
 function TeamDetailsModal({ show, onHide, team }) {

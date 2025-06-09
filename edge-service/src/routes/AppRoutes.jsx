@@ -20,6 +20,11 @@ import NotFound from '../components/common/NotFound';
 import AdminGuard from '../components/guards/AdminGuard';
 import Workflows from '../pages/Workflows';
 import EditWorkflow from '../pages/Workflows/EditWorkflow';
+import LinqProtocol from '../pages/LinqProtocol';
+import Basics from '../pages/LinqProtocol/Basics';
+import RequestStructure from '../pages/LinqProtocol/Basics/RequestStructure';
+import ResponseFormat from '../pages/LinqProtocol/Basics/ResponseFormat';
+import ErrorHandling from '../pages/LinqProtocol/Basics/ErrorHandling';
 
 const AppRoutes = () => {
   return (
@@ -29,6 +34,15 @@ const AppRoutes = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/callback" element={<Callback />} />
+      
+      {/* Linq Protocol Routes */}
+      <Route path="/linq-protocol" element={<LinqProtocol />}>
+        <Route index element={<Basics />} />
+        <Route path="basics" element={<Basics />} />
+        <Route path="basics/request-structure" element={<RequestStructure />} />
+        <Route path="basics/response-format" element={<ResponseFormat />} />
+        <Route path="basics/error-handling" element={<ErrorHandling />} />
+      </Route>
 
       {/* Protected Routes - All under AdminLayout */}
       <Route
@@ -45,6 +59,7 @@ const AppRoutes = () => {
         <Route path="/service-status" element={<ServiceStatus />} />
         <Route path="/workflows" element={<Workflows />} />
         <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
+        
         <Route 
           path="/teams" 
           element={

@@ -8,5 +8,5 @@ import java.lang.annotation.Target;
 @Target({ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ValidAction {
-    String message() default "Invalid action. Must be one of: delete, fetch, create, update, patch, options, head, generate";
+    String message() default "Invalid action. Must be one of: delete, fetch, create, update, patch, options, head, generate, execute";
 } 

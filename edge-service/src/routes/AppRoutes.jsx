@@ -37,7 +37,7 @@ const AppRoutes = () => {
       
       {/* Linq Protocol Routes */}
       <Route path="/linq-protocol" element={<LinqProtocol />}>
-        <Route index element={<Basics />} />
+        <Route index element={<Navigate to="/linq-protocol/basics" replace />} />
         <Route path="basics" element={<Basics />} />
         <Route path="basics/request-structure" element={<RequestStructure />} />
         <Route path="basics/response-format" element={<ResponseFormat />} />

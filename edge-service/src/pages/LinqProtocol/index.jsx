@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, Outlet, NavLink } from 'react-router-dom';
+import { FaBook } from 'react-icons/fa';
 import './styles.css';
 
 function LinqProtocol() {
@@ -31,7 +32,7 @@ function LinqProtocol() {
                     <nav className="protocol-navigation">
                         <div className="nav-section">
                             <h3 className="nav-section-title">
-                                <span className="section-icon">📚</span>
+                                <span className="section-icon"><FaBook /></span>
                                 Basics
                             </h3>
                             <nav>

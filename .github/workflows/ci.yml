@@ -287,6 +287,13 @@ jobs:
             docker ps
           "
 
+      - name: Post Install SSH Key
+        if: always()
+        run: |
+          if [ -n "${SSH_AUTH_SOCK:-}" ]; then
+            eval "$(ssh-agent -k)" || true
+          fi
+
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

@@ -14,6 +14,8 @@ import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Primary;
 
 @Configuration
 @Slf4j
@@ -26,8 +28,9 @@ public class RedisConfig {
     private int redisPort;
 
     @Bean
-    public ReactiveStringRedisTemplate reactiveStringRedisTemplate(ReactiveRedisConnectionFactory connectionFactory) {
-        return new ReactiveStringRedisTemplate(connectionFactory);
+    public ReactiveStringRedisTemplate reactiveStringRedisTemplate(
+            @Qualifier("redisConnectionFactory") RedisConnectionFactory connectionFactory) {
+        return new ReactiveStringRedisTemplate((ReactiveRedisConnectionFactory) connectionFactory);
     }
 
     // Define the Redis Pub/Sub topic for route updates
@@ -58,6 +61,7 @@ public class RedisConfig {
 
     // Configure Redis connection factory using injected host and port
     @Bean
+    @Primary
     public RedisConnectionFactory redisConnectionFactory() {
         log.info("Connecting to Redis at {}:{}", redisHost, redisPort);
         LettuceConnectionFactory factory = new LettuceConnectionFactory(redisHost, redisPort);

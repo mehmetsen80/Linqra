@@ -1046,3 +1046,17 @@ html {
 .whats-different-section table td:nth-child(3) {
   width: 40%;
 }
+
+.learn-more-link {
+  display: inline-block;
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+  margin-top: 1rem;
+  transition: all 0.3s ease;
+}
+
+.learn-more-link:hover {
+  color: var(--primary-color-dark);
+  transform: translateX(5px);
+}

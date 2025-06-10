@@ -551,7 +551,20 @@ function EditWorkflow() {
                                                             <CartesianGrid strokeDasharray="3 3" />
                                                             <XAxis dataKey="step" />
                                                             <YAxis />
-                                                            <Tooltip />
+                                                            <RechartsTooltip 
+                                                                formatter={(value, name) => {
+                                                                    if (name === 'duration') {
+                                                                        return [`${value.toFixed(2)}ms`, 'Avg. Duration'];
+                                                                    }
+                                                                    return [value, 'Total Executions'];
+                                                                }}
+                                                                contentStyle={{
+                                                                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                                    border: '1px solid #ccc',
+                                                                    borderRadius: '4px',
+                                                                    padding: '10px'
+                                                                }}
+                                                            />
                                                             <Legend />
                                                             <Bar dataKey="duration" name="Avg. Duration (ms)" fill="#8884d8" />
                                                             <Bar dataKey="executions" name="Total Executions" fill="#82ca9d" />
@@ -582,7 +595,20 @@ function EditWorkflow() {
                                                                     <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042'][index % 4]} />
                                                                 ))}
                                                             </Pie>
-                                                            <Tooltip />
+                                                            <RechartsTooltip 
+                                                                formatter={(value, name) => {
+                                                                    const total = Object.values(stats.targetStats)
+                                                                        .reduce((sum, data) => sum + data.totalExecutions, 0);
+                                                                    const percentage = ((value / total) * 100).toFixed(1);
+                                                                    return [`${value} executions (${percentage}%)`, name];
+                                                                }}
+                                                                contentStyle={{
+                                                                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                                    border: '1px solid #ccc',
+                                                                    borderRadius: '4px',
+                                                                    padding: '10px'
+                                                                }}
+                                                            />
                                                             <Legend />
                                                         </PieChart>
                                                     </ResponsiveContainer>
@@ -633,7 +659,19 @@ function EditWorkflow() {
                                                                 tick={{ fontSize: 12 }}
                                                             />
                                                             <YAxis />
-                                                            <Tooltip />
+                                                            <RechartsTooltip 
+                                                                formatter={(value) => [`${value} executions`, 'Executions']}
+                                                                labelFormatter={(label) => {
+                                                                    const [date, time] = label.split(' ');
+                                                                    return `${date}\n${time}`;
+                                                                }}
+                                                                contentStyle={{
+                                                                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                                    border: '1px solid #ccc',
+                                                                    borderRadius: '4px',
+                                                                    padding: '10px'
+                                                                }}
+                                                            />
                                                             <Legend />
                                                             <Bar dataKey="executions" name="Executions" fill="#8884d8" />
                                                         </BarChart>

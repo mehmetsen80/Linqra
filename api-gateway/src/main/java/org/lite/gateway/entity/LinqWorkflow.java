@@ -7,6 +7,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Collections;
+import java.util.stream.Collectors;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 @Document(collection = "linq_workflows")
 @Data
@@ -25,6 +29,39 @@ public class LinqWorkflow {
     private String createdBy;
     private String updatedBy;
     private Integer version = 1;            // Current version number
+
+    /**
+     * Checks if the workflow contains any async steps.
+     * This is a computed property that is not serialized to JSON.
+     * The async status is determined by the 'async' field in each step.
+     * 
+     * @return true if any step has async=true
+     */
+    public boolean hasAsyncSteps() {
+        return request != null && 
+               request.getQuery() != null && 
+               request.getQuery().getWorkflow() != null &&
+               request.getQuery().getWorkflow().stream()
+                   .anyMatch(step -> Boolean.TRUE.equals(step.getAsync()));
+    }
+
+    /**
+     * Gets the step numbers of all async steps
+     * @return List of step numbers that are async
+     */
+    @JsonIgnore
+    public List<Integer> getAsyncStepNumbers() {
+        if (request == null || 
+            request.getQuery() == null || 
+            request.getQuery().getWorkflow() == null) {
+            return Collections.emptyList();
+        }
+        
+        return request.getQuery().getWorkflow().stream()
+            .filter(step -> Boolean.TRUE.equals(step.getAsync()))
+            .map(LinqRequest.Query.WorkflowStep::getStep)
+            .collect(Collectors.toList());
+    }
 
     @Override
     public String toString() {

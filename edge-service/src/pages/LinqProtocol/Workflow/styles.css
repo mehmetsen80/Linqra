@@ -1,0 +1,183 @@
+.workflow-overview {
+    max-width: 100%;
+    padding: 2rem;
+}
+
+.workflow-overview h2 {
+    color: var(--primary-color);
+    font-size: 2.3rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    text-align: center;
+    position: relative;
+    padding-bottom: 1rem;
+}
+
+.workflow-overview h2::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 4px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+}
+
+.workflow-section {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 2rem;
+}
+
+.workflow-section h3 {
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.workflow-section p {
+    color: #666;
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+.feature-list,
+.structure-list,
+.use-cases-list,
+.getting-started-list {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.feature-list li,
+.structure-list li,
+.use-cases-list li {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    border: 1px solid #e9ecef;
+}
+
+.feature-list li:hover,
+.structure-list li:hover,
+.use-cases-list li:hover {
+    background: #f8f9fa;
+    transform: translateX(4px);
+    border-color: var(--primary-color);
+}
+
+.feature-list li strong,
+.structure-list li strong,
+.use-cases-list li strong {
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.structure-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0.5rem 0 0 0;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.structure-list ul li {
+    background: #f8f9fa;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    color: #666;
+    border: 1px solid #e9ecef;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.structure-list ul li::before {
+    content: "→";
+    color: var(--primary-color);
+    margin-right: 0.5rem;
+    font-weight: bold;
+}
+
+.structure-list ul li:hover {
+    transform: none;
+    background: #fff;
+    border-color: var(--primary-color);
+}
+
+.getting-started-list {
+    counter-reset: step-counter;
+}
+
+.getting-started-list li {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    position: relative;
+    padding-left: 3rem;
+    border: 1px solid #e9ecef;
+}
+
+.getting-started-list li::before {
+    counter-increment: step-counter;
+    content: counter(step-counter);
+    position: absolute;
+    left: 1rem;
+    width: 1.5rem;
+    height: 1.5rem;
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.workflow-section a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.workflow-section a:hover {
+    color: var(--primary-color-dark);
+    text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+    .workflow-overview {
+        padding: 1rem;
+    }
+    
+    .workflow-section {
+        padding: 1rem;
+    }
+    
+    .workflow-overview h2 {
+        font-size: 2rem;
+    }
+    
+    .workflow-section h3 {
+        font-size: 1.3rem;
+    }
+} 

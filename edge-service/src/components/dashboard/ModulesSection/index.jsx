@@ -53,6 +53,19 @@ function ModulesSection() {
           </Link>
         </div>
 
+        <div className="dashboard-card">
+          <Link to="/linq-protocol" className="card-icon-link">
+            <div className="card-icon">
+              <i className="fas fa-link"></i>
+            </div>
+          </Link>
+          <h3>Linq Protocol</h3>
+          <p>Learn about the Linq Protocol and how to use it</p>
+          <Link to="/linq-protocol" className="card-link">
+            Learn More <i className="fas fa-arrow-right"></i>
+          </Link>
+        </div>
+
         {isAdmin && (
           <>
             <div className="dashboard-card">

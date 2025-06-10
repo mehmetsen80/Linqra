@@ -1,0 +1,177 @@
+.workflow-create {
+    max-width: 100%;
+    padding: 2rem;
+}
+
+.workflow-create h2 {
+    color: var(--primary-color);
+    font-size: 2.3rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    text-align: center;
+    position: relative;
+    padding-bottom: 1rem;
+}
+
+.workflow-create h2::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 4px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+}
+
+.workflow-section {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    margin-bottom: 2rem;
+}
+
+.workflow-section h3 {
+    color: var(--primary-color);
+    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.workflow-section p {
+    color: #666;
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 1.5rem;
+}
+
+/* Remove bullet points from all ul elements */
+.workflow-section ul {
+    list-style: none !important;
+    padding: 0 !important;
+}
+
+.structure-list {
+    list-style: none !important;
+    padding: 0;
+    margin: 1rem 0;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.structure-list li {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    border: 1px solid #e9ecef;
+    list-style: none !important;
+    position: relative;
+}
+
+.structure-list li::before {
+    content: none !important;
+    display: none !important;
+}
+
+.structure-list li:hover {
+    background: #f8f9fa;
+    transform: translateX(4px);
+    border-color: var(--primary-color);
+}
+
+.structure-list li strong {
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+/* Target all ul elements within structure-list */
+.structure-list li ul {
+    list-style: none !important;
+    padding: 0 !important;
+    margin: 0.5rem 0 0 0;
+    display: grid;
+    gap: 0.5rem;
+}
+
+/* Target all li elements within ul elements in structure-list */
+.structure-list li ul li {
+    background: #f8f9fa;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    color: #666;
+    border: 1px solid #e9ecef;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    list-style: none !important;
+    position: relative;
+}
+
+.structure-list li ul li::before {
+    content: none !important;
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: absolute !important;
+    left: -9999px !important;
+}
+
+.structure-list li ul li:hover {
+    transform: none;
+    background: #fff;
+    border-color: var(--primary-color);
+}
+
+.endpoint-box {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    margin: 1rem 0;
+    border: 1px solid #e9ecef;
+}
+
+.endpoint-box code {
+    color: var(--primary-color);
+    font-family: monospace;
+    font-size: 1rem;
+}
+
+.code-example {
+    background-color: #1E1E1E;
+    border-radius: 8px;
+    padding: 0;
+    margin: 1rem 0;
+    overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .workflow-create {
+        padding: 1rem;
+    }
+    
+    .workflow-section {
+        padding: 1rem;
+    }
+    
+    .workflow-create h2 {
+        font-size: 2rem;
+    }
+    
+    .workflow-section h3 {
+        font-size: 1.3rem;
+    }
+} 

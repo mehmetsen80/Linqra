@@ -51,6 +51,7 @@ const Header = () => {
             <Nav.Link as={NavLink} to="/service-status">Service Status</Nav.Link>
             <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/workflows">Workflows</Nav.Link>
+            
           </Nav>
           {user ? (
             <div className="d-flex align-items-center gap-3">
@@ -61,6 +62,8 @@ const Header = () => {
             <div className="d-flex">
               <Nav.Link href="#" onClick={(e) => handleNavClick('/login', e)}>Login</Nav.Link>
               <Nav.Link href="#" onClick={(e) => handleNavClick('/register', e)}>Register</Nav.Link>
+              <span className="nav-separator"> | </span>
+            <Nav.Link as={NavLink} to="/protocol">Linq Protocol</Nav.Link>
             </div>
           )}
         </Navbar.Collapse>

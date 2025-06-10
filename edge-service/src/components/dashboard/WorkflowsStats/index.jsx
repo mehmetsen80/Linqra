@@ -143,7 +143,25 @@ const WorkflowsStats = () => {
                                 legend: {
                                     position: 'top',
                                 },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return `Executions: ${context.raw}`;
+                                        },
+                                        title: function(context) {
+                                            return `Hour: ${context[0].label}`;
+                                        }
+                                    }
+                                }
                             },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        precision: 0
+                                    }
+                                }
+                            }
                         }}
                     />
                 </div>
@@ -174,7 +192,7 @@ const WorkflowsStats = () => {
                                         }
                                     }
                                 }
-                            },
+                            }
                         }}
                     />
                 </div>
@@ -200,7 +218,7 @@ const WorkflowsStats = () => {
                                         }
                                     }
                                 }
-                            },
+                            }
                         }}
                     />
                 </div>
@@ -215,7 +233,25 @@ const WorkflowsStats = () => {
                                 legend: {
                                     position: 'top',
                                 },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const value = context.raw || 0;
+                                            return `Tokens: ${value.toLocaleString()}`;
+                                        }
+                                    }
+                                }
                             },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value.toLocaleString();
+                                        }
+                                    }
+                                }
+                            }
                         }}
                     />
                 </div>

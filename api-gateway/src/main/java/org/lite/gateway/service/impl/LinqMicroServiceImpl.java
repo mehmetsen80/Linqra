@@ -63,30 +63,62 @@ public class LinqMicroServiceImpl implements LinqMicroService {
             return executeLinqRequest(request);
         }
 
+        // Check if this is a fetch action
         if ("fetch".equalsIgnoreCase(action)) {
-            String cacheKey = generateCacheKey(request);
-            return Mono.fromCallable(() -> redisTemplate.opsForValue().get(cacheKey))
-                    .filter(Objects::nonNull)
-                    .map(value -> {
-                        try {
-                            LinqResponse response = objectMapper.readValue(value, LinqResponse.class);
-                            response.getMetadata().setCacheHit(true);
-                            return response;
-                        } catch (Exception e) {
-                            throw new RuntimeException("Failed to deserialize cached LinqResponse", e);
-                        }
-                    })
-                    .switchIfEmpty(
+            // First check if this is part of a workflow step
+            if (request.getQuery() != null && request.getQuery().getWorkflow() != null && !request.getQuery().getWorkflow().isEmpty()) {
+                // Find the current step
+                LinqRequest.Query.WorkflowStep currentStep = request.getQuery().getWorkflow().stream()
+                    .filter(step -> step.getTarget().equals(request.getLink().getTarget()) &&
+                                  step.getAction().equals(request.getLink().getAction()))
+                    .findFirst()
+                    .orElse(null);
+
+                // Check if caching is enabled for this step
+                if (currentStep != null && 
+                    currentStep.getCacheConfig() != null && 
+                    currentStep.getCacheConfig().isEnabled()) {
+                    
+                    // Use custom cache key if provided, otherwise generate one
+                    String cacheKey = currentStep.getCacheConfig().getKey() != null ? 
+                        currentStep.getCacheConfig().getKey() : 
+                        generateCacheKey(request);
+                    
+                    log.info("Checking cache for workflow step with key: {}", cacheKey);
+                    
+                    return Mono.fromCallable(() -> redisTemplate.opsForValue().get(cacheKey))
+                        .filter(Objects::nonNull)
+                        .map(value -> {
+                            try {
+                                log.info("Cache hit for workflow step with key: {}", cacheKey);
+                                LinqResponse response = objectMapper.readValue(value, LinqResponse.class);
+                                response.getMetadata().setCacheHit(true);
+                                return response;
+                            } catch (Exception e) {
+                                log.error("Failed to deserialize cached LinqResponse", e);
+                                throw new RuntimeException("Failed to deserialize cached LinqResponse", e);
+                            }
+                        })
+                        .switchIfEmpty(
                             executeLinqRequest(request)
-                                    .doOnNext(response -> {
-                                        try {
-                                            String jsonResponse = objectMapper.writeValueAsString(response);
-                                            redisTemplate.opsForValue().set(cacheKey, jsonResponse, Duration.ofMinutes(5));
-                                        } catch (Exception e) {
-                                            throw new RuntimeException("Failed to serialize LinqResponse for cache", e);
-                                        }
-                                    })
-                    );
+                                .doOnNext(response -> {
+                                    try {
+                                        log.info("Cache miss for workflow step with key: {}, storing in cache", cacheKey);
+                                        String jsonResponse = objectMapper.writeValueAsString(response);
+                                        Duration ttl = currentStep.getCacheConfig().getTtlAsDuration();
+                                        redisTemplate.opsForValue().set(cacheKey, jsonResponse, ttl);
+                                    } catch (Exception e) {
+                                        log.error("Failed to serialize LinqResponse for cache", e);
+                                        throw new RuntimeException("Failed to serialize LinqResponse for cache", e);
+                                    }
+                                })
+                        );
+                }
+            }
+
+            // If caching is not explicitly enabled, execute without caching
+            log.info("Caching not enabled for request, executing directly");
+            return executeLinqRequest(request);
         }
 
         return executeLinqRequest(request);

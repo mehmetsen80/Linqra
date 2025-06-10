@@ -5,10 +5,12 @@ import org.lite.gateway.validation.annotations.Required;
 import org.lite.gateway.validation.annotations.ValidStep;
 import org.lite.gateway.validation.annotations.ValidToolConfig;
 import org.lite.gateway.validation.annotations.ValidAction;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.time.Duration;
 
 @Data
 public class LinqRequest {
@@ -65,6 +67,29 @@ public class LinqRequest {
             
             @ValidToolConfig
             private ToolConfig toolConfig; // For AI tools
+
+            private Boolean async; // Whether this step should be executed asynchronously
+
+            private CacheConfig cacheConfig; // Cache configuration for this step
+
+            @Data
+            public static class CacheConfig {
+                private boolean enabled = false; // Whether caching is enabled for this step
+                private String ttl; // Time-to-live in seconds
+                private String key; // Custom cache key (optional)
+
+                @JsonIgnore
+                public Duration getTtlAsDuration() {
+                    if (ttl == null) {
+                        return Duration.ofMinutes(5); // Default 5 minutes
+                    }
+                    try {
+                        return Duration.ofSeconds(Long.parseLong(ttl));
+                    } catch (NumberFormatException e) {
+                        return Duration.ofMinutes(5); // Default to 5 minutes if parsing fails
+                    }
+                }
+            }
 
             //Do not delete this, it's being used internally by the json
             public void setToolConfig(ToolConfig toolConfig) {

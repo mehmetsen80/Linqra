@@ -22,7 +22,12 @@ const exampleTemplate = {
                     "intent": "/api/people/random",
                     "params": {},
                     "payload": null,
-                    "toolConfig": null
+                    "toolConfig": null,
+                    "cacheConfig": {
+                        "enabled": false,
+                        "ttl": "86400",  // 24 hours in seconds
+                        "key": "historical_people_cache"
+                    }
                 },
                 {
                     "step": 2,

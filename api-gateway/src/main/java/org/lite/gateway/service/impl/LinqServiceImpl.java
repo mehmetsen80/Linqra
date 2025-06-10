@@ -15,6 +15,7 @@ import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.LinqToolService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.LinqWorkflowService;
+import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
@@ -54,6 +55,9 @@ public class LinqServiceImpl implements LinqService {
     @NonNull
     private final LinqWorkflowService linqWorkflowService;
 
+    @NonNull
+    private final LinqWorkflowExecutionService workflowExecutionService;
+
     @Value("${server.host:localhost}")
     private String gatewayHost;
 
@@ -76,10 +80,10 @@ public class LinqServiceImpl implements LinqService {
                     // Handle workflow requests
                     if (request.getQuery().getWorkflow() != null && !request.getQuery().getWorkflow().isEmpty()) {
                         log.info("Processing workflow request with {} steps", request.getQuery().getWorkflow().size());
-                        return linqWorkflowService.executeWorkflow(request)
+                        return workflowExecutionService.executeWorkflow(request)
                             .flatMap(response -> 
                                 // Track the execution
-                                linqWorkflowService.trackExecution(request, response)
+                                workflowExecutionService.trackExecution(request, response)
                                     .thenReturn(response)
                             );
                     }

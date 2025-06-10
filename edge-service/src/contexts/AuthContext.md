@@ -27,4 +27,5 @@ The application uses a context-based authentication system with JWT tokens.
 
 ## Public Routes
 - /login
-- /register 
+- /register
+- /linq-protocol 

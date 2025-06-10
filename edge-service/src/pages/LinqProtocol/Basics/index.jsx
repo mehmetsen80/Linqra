@@ -68,6 +68,19 @@ const Basics = () => {
           <p>
             Linq Protocol provides a higher-level abstraction for service communication. While the gateway architecture uses <code>/r/servicename</code> endpoints, Linq Protocol unifies all interactions through a single <code>POST /linq</code> endpoint with a standardized schema.
           </p>
+
+          <ul className="api-examples">
+            <li>
+              <code>POST /linq</code> - Sends a Linq Protocol request
+            </li>
+            <li>
+              <code>link</code> - Defines the target service and action to perform
+            </li>
+            <li>
+              <code>query</code> - Specifies the API endpoint and parameters
+            </li>
+          </ul>
+
           <p>
             For example, when you make a Linq Protocol request, it internally routes through the appropriate <code>/r/servicename</code> endpoint while providing a consistent interface for all services.
           </p>

@@ -1,3 +1,11 @@
+/* @font-face {
+  font-family: 'Font Awesome 5 Brands';
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/fa-brands-400.woff2') format('woff2'),
+       url('/fonts/fa-brands-400.ttf') format('truetype');
+}
+
 /*TODO: Add styles for LinqProtocol page*/
 .linq-protocol-page {
   padding: 20px;
@@ -212,15 +220,15 @@ pre code {
 }
 
 @media (max-width: 768px) {
-  .hero-section {
+  .hero-section-protocol {
     padding: 4rem 1rem;
   }
 
-  .hero-section h1 {
+  .hero-section-protocol h1 {
     font-size: 2.5rem;
   }
 
-  .hero-text {
+  .hero-section-protocol  h2 {
     font-size: 1.1rem;
   }
 
@@ -247,18 +255,19 @@ pre code {
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
 }
 
-.hero-section {
-  padding: 6rem 2rem;
+.hero-section-protocol {
+  padding: 0.7rem 2rem;
   text-align: center;
   position: relative;
   color: white;
   border-top-left-radius: 20px;
   border-top-right-radius: 20px;
   overflow: hidden;
+  margin-bottom: 3rem;
 }
 
 /* Base gradient */
-.hero-section::before {
+.hero-section-protocol::before {
   content: '';
   position: absolute;
   top: 0;
@@ -274,7 +283,7 @@ pre code {
 }
 
 /* Math notebook grid pattern */
-.hero-section::after {
+.hero-section-protocol::after {
   content: '';
   position: absolute;
   top: 0;
@@ -301,18 +310,14 @@ pre code {
   z-index: 2;
 }
 
-/* Ensure content stays on top */
-.hero-section > * {
+.hero-content-protocol {
+  max-width: 800px;
+  margin: 0 auto;
   position: relative;
   z-index: 3;
 }
 
-.hero-content {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.hero-section h1 {
+.hero-content-protocol h1 {
   font-size: 4rem;
   margin-top: 3rem;
   margin-bottom: 1.5rem;
@@ -324,14 +329,12 @@ pre code {
   line-height: 1.2;
 }
 
-.hero-text {
-  font-size: 1.25rem;
-  margin-bottom: 2rem;
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
-  color: white;
+.hero-text-protocol {
+  font-size: 1.2rem;
   line-height: 1.6;
+  margin-bottom: 2rem;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .hero-separator {
@@ -346,3 +349,59 @@ pre code {
       transparent
   );
 }
+
+.top-nav-protocol {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 2rem;
+    z-index: 10;
+    margin-top: 5rem;
+    margin-right: 5rem;
+  }
+  
+  .nav-links-protocol {
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 30px;
+    backdrop-filter: blur(4px);
+  }
+  
+  .auth-links {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: 0.5rem;
+  }
+  
+  .nav-links-protocol .auth-link {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  .nav-links-protocol a {
+    color: white;
+    text-decoration: none;
+    font-weight: 500;
+    opacity: 0.9;
+    transition: opacity 0.2s;
+  }
+  
+  .nav-links-protocol .auth-link:hover {
+    background: rgba(255, 255, 255, 0.2);
+    opacity: 1;
+  }
+  
+  @media (max-width: 768px) {
+    .top-nav-protocol {
+      padding: 1rem;
+      margin-top: 2.5rem;
+    }
+    
+    .nav-links-protocol {
+      padding: 0.25rem 0.75rem;
+    }
+  }

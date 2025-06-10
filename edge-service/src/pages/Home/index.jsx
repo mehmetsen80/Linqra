@@ -61,14 +61,14 @@ function Home() {
             >
               Explore AI Apps
             </button>
-            <a 
+            {/* <a 
               href="https://docs.linqra.com"
               className="cta-button secondary"
               target="_blank" 
               rel="noopener noreferrer"
             >
               Learn More
-            </a>
+            </a> */}
             <Link 
               to="/linq-protocol"
               className="cta-button secondary"
@@ -85,6 +85,12 @@ function Home() {
           <p>
             Building AI Agents is complicated—Linqra makes it simple with a unified gateway and protocol for easy, secure deployment.
           </p>
+          <Link 
+            to="/linq-protocol"
+            className="learn-more-link"
+          >
+            Learn more about Linq Protocol →
+          </Link>
         </div>
         <ul className="problem-highlights">
           <li><i className="fas fa-brain"></i> <strong>AI Agents, Simplified:</strong> Build autonomous, workflow-driven applications without the usual complexity.</li>

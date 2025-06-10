@@ -25,6 +25,10 @@ import Basics from '../pages/LinqProtocol/Basics';
 import RequestStructure from '../pages/LinqProtocol/Basics/RequestStructure';
 import ResponseFormat from '../pages/LinqProtocol/Basics/ResponseFormat';
 import ErrorHandling from '../pages/LinqProtocol/Basics/ErrorHandling';
+import WorkflowOverview from '../pages/LinqProtocol/Workflow';
+import WorkflowCreate from '../pages/LinqProtocol/Workflow/Create';
+import WorkflowExecute from '../pages/LinqProtocol/Workflow/Execute';
+import WorkflowExamples from '../pages/LinqProtocol/Workflow/Examples';
 
 const AppRoutes = () => {
   return (
@@ -42,6 +46,12 @@ const AppRoutes = () => {
         <Route path="basics/request-structure" element={<RequestStructure />} />
         <Route path="basics/response-format" element={<ResponseFormat />} />
         <Route path="basics/error-handling" element={<ErrorHandling />} />
+        
+        {/* Workflow Routes */}
+        <Route path="workflow" element={<WorkflowOverview />} />
+        <Route path="workflow/create" element={<WorkflowCreate />} />
+        <Route path="workflow/execute" element={<WorkflowExecute />} />
+        <Route path="workflow/examples" element={<WorkflowExamples />} />
       </Route>
 
       {/* Protected Routes - All under AdminLayout */}

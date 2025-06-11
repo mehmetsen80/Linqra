@@ -116,7 +116,7 @@ public class LinqServiceImpl implements LinqService {
         String routeIdentifier = request.getLink().getTarget();
 
         // List of AI service targets that should bypass permission checks
-        Set<String> bypassTargets = Set.of("openai", "mistral", "huggingface", "gemini", "workflow");
+        Set<String> bypassTargets = Set.of("openai", "mistral", "huggingface", "gemini", "workflow", "openai-embed",  "gemini-embed");
 
         // If the target is in our bypass list, return immediately
         if (bypassTargets.contains(routeIdentifier)) {

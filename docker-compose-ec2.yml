@@ -316,6 +316,8 @@ services:
       SMTP_PASSWORD: 123456
       SMTP_USERNAME: abcdef
       OAUTH2_REDIRECT_URI: https://linqra.com/callback
+      MILVUS_HOST: milvus-service
+      MILVUS_PORT: 19530
     volumes:
       - ./api-gateway:/app/api-gateway
       - ./keys:/app/keys

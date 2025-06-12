@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.service.ApiKeyService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -19,6 +20,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import java.util.Base64;
 import java.util.List;
+import org.springframework.core.io.buffer.DataBuffer;
 
 @Configuration
 @RequiredArgsConstructor
@@ -104,7 +106,15 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             .onErrorResume(ResponseStatusException.class, e -> {
                 if (!exchange.getResponse().isCommitted()) {
                     exchange.getResponse().setStatusCode(e.getStatusCode());
-                    return exchange.getResponse().setComplete();
+                    exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                    String errorBody = String.format(
+                        "{\"status\":%d,\"error\":\"%s\",\"message\":\"%s\"}",
+                        e.getStatusCode().value(),
+                        e.getStatusCode().toString(),
+                        e.getReason()
+                    );
+                    DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(errorBody.getBytes());
+                    return exchange.getResponse().writeWith(Mono.just(buffer));
                 }
                 return Mono.empty();
             });

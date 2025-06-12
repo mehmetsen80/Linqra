@@ -45,3 +45,7 @@ build/
 /.kube/pgadmin/data/**
 /.kube/redis/data/**
 /.kube/keycloak/data/**
+/.kube/chroma/data/**
+/.kube/milvus/data/**
+/.kube/etcd/data/**
+/.kube/minio/data/**

@@ -180,6 +180,10 @@ jobs:
               --exclude 'mongodb/data3/' \
               --exclude 'postgres/data/' \
               --exclude 'pgadmin/data/' \
+              --exclude 'chroma/data/' \
+              --exclude 'milvus/data/' \
+              --exclude 'etcd/data/' \
+              --exclude 'minio/data/' \
               --rsync-path="sudo rsync" artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
           fi
           if [ -d "artifacts/keys-config" ]; then

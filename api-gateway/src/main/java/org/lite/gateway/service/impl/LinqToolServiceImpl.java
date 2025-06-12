@@ -8,7 +8,6 @@ import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.LinqTool;
 import org.lite.gateway.repository.LinqToolRepository;
 import org.lite.gateway.service.LinqToolService;
-import org.lite.gateway.service.TeamContextService;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -28,9 +27,6 @@ public class LinqToolServiceImpl implements LinqToolService {
 
     @NonNull
     private final WebClient.Builder webClientBuilder;
-
-    @NonNull
-    private final TeamContextService teamContextService;
 
     @Override
     public Mono<LinqTool> saveLinqTool(LinqTool linqTool) {
@@ -171,6 +167,7 @@ public class LinqToolServiceImpl implements LinqToolService {
                 break;
             case "huggingface":
                 payload.put("inputs", request.getQuery().getParams().getOrDefault("prompt", ""));
+                payload.put("model", toolConfig != null && toolConfig.getModel() != null ? toolConfig.getModel() : "sentence-transformers/all-MiniLM-L6-v2");
                 payload.put("parameters", toolConfig != null ? toolConfig.getSettings() : new HashMap<>());
                 break;
             case "gemini":
@@ -178,6 +175,14 @@ public class LinqToolServiceImpl implements LinqToolService {
                 if (toolConfig != null && toolConfig.getSettings() != null) {
                     payload.put("generationConfig", toolConfig.getSettings());
                 }
+                break;
+            case "openai-embed":
+                payload.put("input", request.getQuery().getParams().getOrDefault("text", ""));
+                payload.put("model", toolConfig != null && toolConfig.getModel() != null ? toolConfig.getModel() : "text-embedding-ada-002");
+                break;
+            case "gemini-embed":
+                payload.put("content", Map.of("parts", List.of(Map.of("text", request.getQuery().getParams().getOrDefault("text", "")))));
+                payload.put("model", toolConfig != null && toolConfig.getModel() != null ? toolConfig.getModel() : "embedding-001");
                 break;
             default:
                 return request.getQuery().getPayload(); // Fallback to raw payload

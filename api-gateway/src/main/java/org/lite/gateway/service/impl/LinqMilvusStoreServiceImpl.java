@@ -1,11 +1,11 @@
 package org.lite.gateway.service.impl;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.service.LinqService;
 import org.lite.gateway.service.LinqToolService;
 import org.lite.gateway.service.LinqMilvusStoreService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import reactor.core.publisher.Flux;
@@ -33,11 +33,14 @@ import java.util.*;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
-    private static final String MILVUS_HOST = "localhost";
-    private static final int MILVUS_PORT = 19530;
+    private final String milvusHost;
+    private final int milvusPort;
+    private final LinqService linqService;
+    private final LinqToolService linqToolService;
+    private MilvusServiceClient milvusClient;
+
     private static final String EMBEDDING_FIELD = "embedding";
     private static final IndexType INDEX_TYPE = IndexType.HNSW;
     private static final MetricType METRIC_TYPE = MetricType.COSINE;
@@ -45,20 +48,27 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     private static final int INDEX_PARAM_EF_CONSTRUCTION = 64;
     private static final int SEARCH_PARAM_EF = 64;
 
-    private final LinqService linqService;
-    private final LinqToolService linqToolService;
-    private MilvusServiceClient milvusClient;
+    public LinqMilvusStoreServiceImpl(
+            @Value("${milvus.host:localhost}") String milvusHost,
+            @Value("${milvus.port:19530}") int milvusPort,
+            LinqService linqService,
+            LinqToolService linqToolService) {
+        this.milvusHost = milvusHost;
+        this.milvusPort = milvusPort;
+        this.linqService = linqService;
+        this.linqToolService = linqToolService;
+    }
 
     @PostConstruct
     public void init() {
         try {
             // Connect to Milvus
             ConnectParam connectParam = ConnectParam.newBuilder()
-                    .withHost(MILVUS_HOST)
-                    .withPort(MILVUS_PORT)
+                    .withHost(milvusHost)
+                    .withPort(milvusPort)
                     .build();
             milvusClient = new MilvusServiceClient(connectParam);
-            log.info("Connected to Milvus at {}:{}", MILVUS_HOST, MILVUS_PORT);
+            log.info("Connected to Milvus at {}:{}", milvusHost, milvusPort);
         } catch (Exception e) {
             log.error("Failed to initialize Milvus client: {}", e.getMessage(), e);
             throw new RuntimeException("Milvus initialization failed", e);

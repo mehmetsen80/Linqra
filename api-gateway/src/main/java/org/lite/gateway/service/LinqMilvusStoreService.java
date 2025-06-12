@@ -5,7 +5,7 @@ import java.util.Map;
 
 import reactor.core.publisher.Mono;
 
-public interface LinqVectorStoreService {
+public interface LinqMilvusStoreService {
     /**
      * Creates a new Milvus collection with the specified schema.
      *

@@ -225,7 +225,13 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                             });
                 })
                 .doOnError(error -> log.error("Error calling service {}: {}", url, error.getMessage()))
-                .onErrorResume(error -> Mono.just(Map.of("error", error.getMessage())));
+                .onErrorResume(error -> {
+                    String errorMessage = error.getMessage();
+                    if (errorMessage == null) {
+                        errorMessage = error.getClass().getSimpleName();
+                    }
+                    return Mono.just(Map.of("error", errorMessage));
+                });
     }
 
     private String generateCacheKey(LinqRequest request) {

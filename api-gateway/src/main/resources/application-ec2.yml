@@ -176,3 +176,7 @@ cors:
 jwt:
   secret: 3a98d4c7b6e5f2a1d8c9b4a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1
   expiration: 86400000 # 24 hours in milliseconds
+
+milvus:
+  host: ${MILVUS_HOST:localhost}
+  port: ${MILVUS_PORT:19530}

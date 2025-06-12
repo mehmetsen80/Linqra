@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.service.LinqService;
 import org.lite.gateway.service.LinqToolService;
-import org.lite.gateway.service.LinqVectorStoreService;
+import org.lite.gateway.service.LinqMilvusStoreService;
 import org.springframework.stereotype.Service;
 
 import reactor.core.publisher.Flux;
@@ -34,7 +34,7 @@ import java.util.*;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class LinqVectorStoreServiceImpl implements LinqVectorStoreService {
+public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     private static final String MILVUS_HOST = "localhost";
     private static final int MILVUS_PORT = 19530;

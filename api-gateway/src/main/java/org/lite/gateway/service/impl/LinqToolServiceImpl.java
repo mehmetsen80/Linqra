@@ -8,7 +8,6 @@ import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.LinqTool;
 import org.lite.gateway.repository.LinqToolRepository;
 import org.lite.gateway.service.LinqToolService;
-import org.lite.gateway.service.TeamContextService;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -28,9 +27,6 @@ public class LinqToolServiceImpl implements LinqToolService {
 
     @NonNull
     private final WebClient.Builder webClientBuilder;
-
-    @NonNull
-    private final TeamContextService teamContextService;
 
     @Override
     public Mono<LinqTool> saveLinqTool(LinqTool linqTool) {

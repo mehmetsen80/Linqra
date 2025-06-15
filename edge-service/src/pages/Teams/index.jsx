@@ -606,6 +606,7 @@ function Teams() {
         show={showOpenAIModal}
         onHide={() => setShowOpenAIModal(false)}
         team={selectedTeam}
+        onTeamUpdate={fetchTeams}
       />
 
       <GeminiModal

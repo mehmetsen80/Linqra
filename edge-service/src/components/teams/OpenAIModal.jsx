@@ -20,7 +20,7 @@ const initialFormData = {
   teamId: ''
 };
 
-function OpenAIModal({ show, onHide, team }) {
+function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
 
@@ -64,7 +64,9 @@ function OpenAIModal({ show, onHide, team }) {
 
   if (!team) return null;
 
-  const handleSave = async () => {
+  const handleSave = async (e) => {
+    e.preventDefault(); // Prevent form submission
+    
     // Validate required fields
     const requiredFields = {
       endpoint: 'Endpoint',
@@ -98,6 +100,9 @@ function OpenAIModal({ show, onHide, team }) {
       };
       await linqToolService.saveConfiguration(config);
       showSuccessToast('Configuration saved successfully');
+      if (onTeamUpdate) {
+        await onTeamUpdate();
+      }
       onHide();
     } catch (error) {
       showErrorToast('Failed to save configuration');

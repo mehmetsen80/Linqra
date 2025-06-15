@@ -101,14 +101,19 @@ eureka:
     enabled: true
     register-with-eureka: true
     fetch-registry: true
-    eureka-server-connect-timeout-seconds: 10
-    eureka-server-read-timeout-seconds: 10
+    eureka-server-connect-timeout-seconds: 30
+    eureka-server-read-timeout-seconds: 30
+    registry-fetch-interval-seconds: 10
+    instance-info-replication-interval-seconds: 15
+    initial-instance-info-replication-interval-seconds: 40
   instance:
     hostname: ${EUREKA_INSTANCE_URL:localhost}
     instance-id: ${spring.application.name}:${instanceId:${random.value}}
-    non-secure-port-enabled: false   # Disable non-secure HTTP port
-    secure-port-enabled: true        # Enable secure HTTPS port
+    non-secure-port-enabled: false
+    secure-port-enabled: true
     secure-port: ${server.port}
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30
 
 server:
   host: ${GATEWAY_API_HOST:localhost}  # Default to "localhost" unless overridden

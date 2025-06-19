@@ -105,6 +105,8 @@ public class LinqToolServiceImpl implements LinqToolService {
         String method = tool.getMethod();
         Object payload = buildToolPayload(request, tool);
 
+        log.info("Executing tool request - URL: {}, Method: {}, Payload: {}", url.get(), method, payload);
+
         return Mono.just(tool.getApiKey())
                 .flatMap(apiKey -> {
                     Map<String, String> headers = new HashMap<>(tool.getHeaders());
@@ -127,6 +129,7 @@ public class LinqToolServiceImpl implements LinqToolService {
                     headers.put("Pragma", "no-cache");
                     headers.put("Expires", "0");
 
+                    log.info("Request headers: {}", headers);
                     return invokeToolService(method, url.get(), payload, headers);
                 })
                 .map(result -> {
@@ -177,16 +180,19 @@ public class LinqToolServiceImpl implements LinqToolService {
                 }
                 break;
             case "openai-embed":
-                payload.put("input", request.getQuery().getParams().getOrDefault("text", ""));
-                payload.put("model", toolConfig != null && toolConfig.getModel() != null ? toolConfig.getModel() : "text-embedding-ada-002");
-                break;
-            case "gemini-embed":
-                payload.put("content", Map.of("parts", List.of(Map.of("text", request.getQuery().getParams().getOrDefault("text", "")))));
-                payload.put("model", toolConfig != null && toolConfig.getModel() != null ? toolConfig.getModel() : "embedding-001");
+                Object textParam = request.getQuery().getParams().getOrDefault("text", "");
+                String text = textParam != null ? textParam.toString() : "";
+                String model = toolConfig != null && toolConfig.getModel() != null ? toolConfig.getModel() : "text-embedding-ada-002";
+                payload.put("input", text);
+                payload.put("model", model);
+                log.info("Building OpenAI embedding payload - text: {}, model: {}", text, model);
                 break;
             default:
-                return request.getQuery().getPayload(); // Fallback to raw payload
+                payload.putAll(request.getQuery().getParams());
+                break;
         }
+
+        log.info("Built payload for {}: {}", target, payload);
         return payload;
     }
 

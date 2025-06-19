@@ -77,4 +77,16 @@ public interface LinqMilvusStoreService {
      * @return A Mono emitting a List of all collection information.
      */
     Mono<List<MilvusCollectionInfo>> listAllCollections();
+
+    /**
+     * Verify a record in the collection by searching for it using the text field
+     * @param collectionName The name of the collection
+     * @param textField The name of the text field to search
+     * @param text The text to search for
+     * @param teamId The team ID
+     * @param targetTool The embedding tool to use (e.g., "openai-embed")
+     * @param modelType The embedding model to use (e.g., "text-embedding-3-small")
+     * @return A Mono containing the verification results
+     */
+    Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType);
 }

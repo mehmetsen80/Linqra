@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.MilvusCreateCollectionRequest;
 import org.lite.gateway.dto.MilvusQueryRequest;
 import org.lite.gateway.dto.MilvusStoreRecordRequest;
+import org.lite.gateway.dto.MilvusVerifyRequest;
 import org.lite.gateway.dto.MilvusCollectionInfo;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.service.TeamService;
@@ -134,6 +135,31 @@ public class MilvusController {
             .filter(user -> user.getRoles().contains("SUPER_ADMIN"))
             .switchIfEmpty(Mono.error(new AccessDeniedException("Super admin access required")))
             .then(linqMilvusStoreService.listAllCollections())
+            .map(ResponseEntity::ok);
+    }
+
+    @PostMapping("/collections/{collectionName}/verify")
+    public Mono<ResponseEntity<Map<String, Object>>> verifyRecord(
+            @PathVariable String collectionName,
+            @RequestBody MilvusVerifyRequest request,
+            ServerWebExchange exchange) {
+        log.info("Verifying record in collection: {} for team: {}", collectionName, request.getTeamId());
+        return userContextService.getCurrentUsername(exchange)
+            .flatMap(userService::findByUsername)
+            .flatMap(user -> 
+                teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
+                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                    .switchIfEmpty(Mono.error(new AccessDeniedException(
+                        "Admin access required for team " + request.getTeamId())))
+                    .then(linqMilvusStoreService.verifyRecord(
+                        collectionName, 
+                        request.getTextField(), 
+                        request.getText(), 
+                        request.getTeamId(),
+                        request.getTargetTool() != null ? request.getTargetTool() : "openai-embed",
+                        request.getModelType() != null ? request.getModelType() : "text-embedding-3-small"
+                    ))
+            )
             .map(ResponseEntity::ok);
     }
 } 

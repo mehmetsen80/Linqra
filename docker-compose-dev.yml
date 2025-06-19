@@ -236,6 +236,18 @@ services:
       timeout: 3s
       retries: 3
 
+  # Attu UI for Milvus
+  attu-service:
+    image: zilliz/attu:v2.5
+    environment:
+      MILVUS_URL: milvus-service:19530
+    ports:
+      - "8000:3000"
+    networks:
+      - linqra-network
+    depends_on:
+      - milvus-service
+
 #  ##### ENABLE THIS FOR DOCKERIZATION FOR ALL REMAINING SERVICES
 #  # Discovery Server (Eureka)
 #  discovery-service:

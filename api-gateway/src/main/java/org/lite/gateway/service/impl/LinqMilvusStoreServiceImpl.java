@@ -27,8 +27,6 @@ import io.milvus.param.collection.HasCollectionParam;
 import io.milvus.param.R;
 import io.milvus.param.collection.DropCollectionParam;
 import io.milvus.param.collection.ShowCollectionsParam;
-import io.milvus.param.dml.QueryParam;
-import io.milvus.grpc.QueryResults;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
@@ -36,7 +34,6 @@ import io.milvus.grpc.DescribeCollectionResponse;
 import io.milvus.param.collection.DescribeCollectionParam;
 import io.milvus.grpc.KeyValuePair;
 import io.milvus.param.collection.AlterCollectionParam;
-import io.milvus.param.dml.DeleteParam;
 
 @Slf4j
 @Service

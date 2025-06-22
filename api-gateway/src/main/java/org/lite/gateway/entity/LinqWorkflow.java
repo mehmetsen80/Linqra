@@ -21,7 +21,7 @@ public class LinqWorkflow {
     private String id;
     private String name;                    // e.g., "Historical Saying Generator"
     private String description;             // e.g., "Generates inspirational sayings from historical figures"
-    private String team;                    // Team ID that owns this workflow
+    private String teamId;                  // Team ID that owns this workflow
     private LinqRequest request;            // The complete request template
     private boolean isPublic;               // Whether other teams can use this workflow
     private LocalDateTime createdAt;
@@ -69,7 +69,7 @@ public class LinqWorkflow {
                 "id='" + id + '\'' +
                 ", name='" + name + '\'' +
                 ", description='" + description + '\'' +
-                ", team='" + team + '\'' +
+                ", teamId='" + teamId + '\'' +
                 ", request=" + request +
                 ", isPublic=" + isPublic +
                 ", createdAt=" + createdAt +

@@ -88,7 +88,7 @@ public class LinqProtocolServiceImpl implements LinqProtocolService{
         LinqResponse.Metadata metadata = new LinqResponse.Metadata();
         metadata.setSource(routeIdentifier);
         metadata.setStatus("success");
-        metadata.setTeam("67d0aeb17172416c411d419e");
+        metadata.setTeamId("67d0aeb17172416c411d419e");
         metadata.setCacheHit(false);
         response.setMetadata(metadata);
 

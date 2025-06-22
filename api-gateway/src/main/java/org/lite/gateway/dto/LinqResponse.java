@@ -15,7 +15,7 @@ public class LinqResponse {
     public static class Metadata {
         private String source; // e.g., "quotes-service", "openai", "workflow"
         private String status; // e.g., "success", "error"
-        private String team;   // e.g., "67d0aeb17172416c411d419e"
+        private String teamId;   // e.g., "67d0aeb17172416c411d419e"
         private boolean cacheHit; // e.g., false
         private List<WorkflowStepMetadata> workflowMetadata;  // Optional, only for workflow responses
         private List<QueuedWorkflowStep> asyncSteps;  // Status of async steps
@@ -31,7 +31,6 @@ public class LinqResponse {
     @Data
     public static class WorkflowStep {
         private int step;
-        private String stepId;  // Unique identifier for the step
         private String target; // e.g., "quotes-service"
         private Object result; // Step output, e.g., {"name": "Socrates"}
         private boolean isAsync;  // Whether this step is executed asynchronously
@@ -44,7 +43,6 @@ public class LinqResponse {
     @Data
     public static class WorkflowStepMetadata {
         private int step;
-        private String stepId;  // Unique identifier for the step
         private String status;
         private long durationMs;
         private String target;

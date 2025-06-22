@@ -13,7 +13,7 @@ public class LinqWorkflowVersion {
     @Id
     private String id;
     private String workflowId;      // References the original workflow
-    private String team;            // Team ID for access control
+    private String teamId;            // Team ID for access control
     private Integer version;        // Version number
     private LinqRequest request;    // The request at this version
     private Long createdAt;         // Creation timestamp

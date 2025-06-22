@@ -59,8 +59,27 @@ public class MilvusController {
             @RequestBody MilvusStoreRecordRequest request,
             ServerWebExchange exchange) {
         log.info("Storing record in collection: {}", collectionName);
+        
+        // Check if this is a workflow step call with executedBy header
+        String executedBy = exchange.getRequest().getHeaders().getFirst("X-Executed-By");
+        if (executedBy != null) {
+            log.info("Using executedBy header for workflow step: {}", executedBy);
+            return executeStoreRecordWithUser(executedBy, collectionName, request);
+        }
+        
+        // Regular user authentication flow
         return userContextService.getCurrentUsername(exchange)
-            .flatMap(userService::findByUsername)
+            .flatMap(username -> executeStoreRecordWithUser(username, collectionName, request));
+    }
+
+    /**
+     * Helper method to execute store record with user authentication and authorization
+     */
+    private Mono<ResponseEntity<Map<String, String>>> executeStoreRecordWithUser(
+            String username, 
+            String collectionName, 
+            MilvusStoreRecordRequest request) {
+        return userService.findByUsername(username)
             .flatMap(user -> 
                 teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
                     .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))

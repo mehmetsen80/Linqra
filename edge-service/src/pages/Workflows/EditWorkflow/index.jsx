@@ -50,7 +50,7 @@ function EditWorkflow() {
         // If workflow is private
         (!workflow?.public && (isSuperAdmin(user) || hasAdminAccess(user, currentTeam))) ||
         // If workflow is public
-        (workflow?.public && (isSuperAdmin(user) || hasAdminAccess(user, currentTeam) || currentTeam?.id === workflow?.team));
+        (workflow?.public && (isSuperAdmin(user) || hasAdminAccess(user, currentTeam) || currentTeam?.id === workflow?.teamId));
 
     useEffect(() => {
         if (currentTeam) {
@@ -62,10 +62,10 @@ function EditWorkflow() {
     }, [currentTeam]);
 
     useEffect(() => {
-        if (workflow?.team) {
+        if (workflow?.teamId) {
             loadTeamDetails();
         }
-    }, [workflow?.team]);
+    }, [workflow?.teamId]);
 
     useEffect(() => {
         if (workflow && !canAccessWorkflow) {
@@ -104,7 +104,7 @@ function EditWorkflow() {
 
     const loadTeamDetails = async () => {
         try {
-            const response = await teamService.getTeam(workflow.team);
+            const response = await teamService.getTeam(workflow.teamId);
             if (response.success) {
                 setTeamDetails(response.data);
             }
@@ -718,10 +718,10 @@ function EditWorkflow() {
                                     {teamDetails ? (
                                         <div>
                                             <div>{teamDetails.name}</div>
-                                            <small className="text-muted">ID: {workflow?.team}</small>
+                                            <small className="text-muted">ID: {workflow?.teamId}</small>
                                         </div>
                                     ) : (
-                                        workflow?.team
+                                        workflow?.teamId
                                     )}
                                 </div>
                             </div>

@@ -6,7 +6,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface LinqWorkflowVersionRepository extends ReactiveMongoRepository<LinqWorkflowVersion, String> {
-    Flux<LinqWorkflowVersion> findByWorkflowIdAndTeamOrderByVersionDesc(String workflowId, String team);
-    Mono<LinqWorkflowVersion> findByWorkflowIdAndTeamAndVersion(String workflowId, String team, Integer version);
-    Mono<LinqWorkflowVersion> findFirstByWorkflowIdAndTeamOrderByVersionDesc(String workflowId, String team);
+    Flux<LinqWorkflowVersion> findByWorkflowIdAndTeamIdOrderByVersionDesc(String workflowId, String teamId);
+    Mono<LinqWorkflowVersion> findByWorkflowIdAndTeamIdAndVersion(String workflowId, String teamId, Integer version);
+    Mono<LinqWorkflowVersion> findFirstByWorkflowIdAndTeamIdOrderByVersionDesc(String workflowId, String teamId);
 } 

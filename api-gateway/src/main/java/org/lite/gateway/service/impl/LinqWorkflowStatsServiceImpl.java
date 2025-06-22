@@ -138,7 +138,7 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
     @Override
     public Mono<TeamWorkflowStats> getTeamStats() {
         return teamContextService.getTeamFromContext()
-            .flatMap(teamId -> executionRepository.findByTeam(teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
+            .flatMap(teamId -> executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
                 .collectList()
                 .flatMap(executions -> {
                     TeamWorkflowStats stats = new TeamWorkflowStats();

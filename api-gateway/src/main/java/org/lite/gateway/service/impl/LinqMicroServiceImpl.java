@@ -143,13 +143,13 @@ public class LinqMicroServiceImpl implements LinqMicroService {
         return invokeService(method, url, request)
                 .flatMap(result ->
                         teamContextService.getTeamFromContext()
-                                .map(team -> {
+                                .map(teamId -> {
                                     LinqResponse response = new LinqResponse();
                                     response.setResult(result);
                                     LinqResponse.Metadata metadata = new LinqResponse.Metadata();
                                     metadata.setSource(target);
                                     metadata.setStatus("success");
-                                    metadata.setTeam(team);
+                                    metadata.setTeamId(teamId);
                                     metadata.setCacheHit(false);
                                     response.setMetadata(metadata);
                                     return response;
@@ -169,7 +169,14 @@ public class LinqMicroServiceImpl implements LinqMicroService {
             }
         }
 
-        String url = baseUrl + "/r/" + target + "/" + path;
+        // Special handling for api-gateway target - call API directly without /r/ prefix
+        String url;
+        if ("api-gateway".equals(target)) {
+            url = baseUrl + "/" + path;
+        } else {
+            url = baseUrl + "/r/" + target + "/" + path;
+        }
+        
         log.info("Linq url: {}", url);
 
         // Add remaining params as query parameters
@@ -208,8 +215,16 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                         default -> throw new IllegalArgumentException("Method not supported: " + method);
                     };
 
+                    // Add API key header
+                    requestSpec = requestSpec.header("X-API-Key", apiKey);
+                    
+                    // Add executedBy header if present (for user context in workflow steps)
+                    if (request.getExecutedBy() != null) {
+                        requestSpec = requestSpec.header("X-Executed-By", request.getExecutedBy());
+                        log.debug("Added X-Executed-By header: {}", request.getExecutedBy());
+                    }
+
                     return requestSpec
-                            .header("X-API-Key", apiKey)
                             .exchangeToMono(response -> {
                                 if (response.statusCode().is2xxSuccessful()) {
                                     return response.bodyToMono(Object.class)

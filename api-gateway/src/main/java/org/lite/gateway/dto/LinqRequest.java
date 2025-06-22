@@ -6,6 +6,7 @@ import org.lite.gateway.validation.annotations.ValidStep;
 import org.lite.gateway.validation.annotations.ValidToolConfig;
 import org.lite.gateway.validation.annotations.ValidAction;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,8 @@ public class LinqRequest {
     
     @Required(message = "Query configuration is required")
     private Query query;
+    
+    private String executedBy; // Username of the user who initiated the workflow execution
 
     @Data
     public static class Link {
@@ -34,7 +37,8 @@ public class LinqRequest {
     public static class Query {
         private String intent; // e.g., "random", "generate", "get_historical_saying"
         private String workflowId;  // Add this field to link to predefined workflows
-        private Map<String, Object> params; // e.g., {"prompt": "Hello"}
+        @JsonInclude(JsonInclude.Include.ALWAYS)
+        private Map<String, Object> params = new HashMap<>();
         private Object payload; // Request body for POST/PUT/PATCH
         private ToolConfig toolConfig; // For AI tools
         

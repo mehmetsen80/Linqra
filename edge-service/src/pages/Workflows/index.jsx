@@ -356,7 +356,7 @@ function Workflows() {
                                         placement="top"
                                         overlay={
                                             <Tooltip id={`execute-tooltip-${workflow.id}`}>
-                                                {workflow.public || currentTeam?.id === workflow.team 
+                                                {workflow.public || currentTeam?.id === workflow.teamId
                                                     ? 'Execute this workflow' 
                                                     : 'This workflow is private and not accessible to your team'}
                                             </Tooltip>
@@ -368,7 +368,7 @@ function Workflows() {
                                                 size="sm" 
                                                 className="me-2"
                                                 onClick={(e) => handleExecuteClick(workflow, e)}
-                                                disabled={!workflow.public && currentTeam?.id !== workflow.team}
+                                                disabled={!workflow.public && currentTeam?.id !== workflow.teamId}
                                             >
                                                 <HiPlay className="me-1" /> Execute
                                             </Button>

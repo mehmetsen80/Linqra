@@ -93,7 +93,7 @@ public class LinqServiceImpl implements LinqService {
                             .doOnNext(team -> log.info("Got team from context: {}", team))
                             .flatMap(team -> {
                                 log.info("Searching for tool with target: {} and team: {}", request.getLink().getTarget(), team);
-                                return linqToolRepository.findByTargetAndTeam(request.getLink().getTarget(), team)
+                                return linqToolRepository.findByTargetAndTeamId(request.getLink().getTarget(), team)
                                         .doOnNext(tool -> log.info("Found tool: {}", tool))
                                         .doOnError(error -> log.error("Error finding tool: {}", error.getMessage()))
                                         .doOnSuccess(tool -> {
@@ -116,7 +116,7 @@ public class LinqServiceImpl implements LinqService {
         String routeIdentifier = request.getLink().getTarget();
 
         // List of AI service targets that should bypass permission checks
-        Set<String> bypassTargets = Set.of("openai", "mistral", "huggingface", "gemini", "workflow", "openai-embed",  "gemini-embed");
+        Set<String> bypassTargets = Set.of("openai", "mistral", "huggingface", "gemini", "workflow", "openai-embed",  "gemini-embed", "api-gateway");
 
         // If the target is in our bypass list, return immediately
         if (bypassTargets.contains(routeIdentifier)) {

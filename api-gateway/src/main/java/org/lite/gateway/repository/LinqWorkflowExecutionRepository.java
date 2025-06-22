@@ -10,7 +10,7 @@ import reactor.core.publisher.Mono;
 @Repository
 public interface LinqWorkflowExecutionRepository extends ReactiveMongoRepository<LinqWorkflowExecution, String> {
     Flux<LinqWorkflowExecution> findByWorkflowId(String workflowId, Sort sort);
-    Flux<LinqWorkflowExecution> findByTeam(String teamId, Sort sort);
-    Mono<LinqWorkflowExecution> findByIdAndTeam(String id, String teamId);
-    Flux<LinqWorkflowExecution> findByWorkflowIdAndTeam(String workflowId, String team, Sort sort);
+    Flux<LinqWorkflowExecution> findByTeamId(String teamId, Sort sort);
+    Mono<LinqWorkflowExecution> findByIdAndTeamId(String id, String teamId);
+    Flux<LinqWorkflowExecution> findByWorkflowIdAndTeamId(String workflowId, String teamId, Sort sort);
 }

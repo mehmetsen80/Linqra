@@ -31,7 +31,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     public Mono<LinqWorkflow> createWorkflow(LinqWorkflow workflow) {
         return teamContextService.getTeamFromContext()
             .flatMap(teamId -> {
-                workflow.setTeam(teamId);
+                workflow.setTeamId(teamId);
                 workflow.setVersion(1);
                 workflow.setCreatedAt(LocalDateTime.now());
                 workflow.setUpdatedAt(LocalDateTime.now());
@@ -39,7 +39,7 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
                 // Create initial version
                 LinqWorkflowVersion initialVersion = LinqWorkflowVersion.builder()
                     .workflowId(null) // Will be set after workflow is saved
-                    .team(teamId)
+                    .teamId(teamId)
                     .version(1)
                     .request(workflow.getRequest())
                     .createdAt(System.currentTimeMillis())
@@ -69,10 +69,10 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     @Override
     public Mono<LinqWorkflow> updateWorkflow(String workflowId, LinqWorkflow updatedWorkflow) {
         return teamContextService.getTeamFromContext()
-            .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+            .flatMap(teamId -> workflowRepository.findByIdAndTeamId(workflowId, teamId)
                 .flatMap(existingWorkflow -> {
                     updatedWorkflow.setId(workflowId);
-                    updatedWorkflow.setTeam(teamId);
+                    updatedWorkflow.setTeamId(teamId);
                     updatedWorkflow.setCreatedAt(existingWorkflow.getCreatedAt());
                     updatedWorkflow.setUpdatedAt(LocalDateTime.now());
                     return workflowRepository.save(updatedWorkflow)
@@ -85,17 +85,17 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     @Override
     public Mono<Void> deleteWorkflow(String workflowId) {
         return teamContextService.getTeamFromContext()
-            .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+            .flatMap(teamId -> workflowRepository.findByIdAndTeamId(workflowId, teamId)
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                     HttpStatus.NOT_FOUND, 
                     "Workflow not found or access denied")))
                 .flatMap(workflow -> {
                     log.info("Deleting workflow: {} and its versions", workflow);
                     // Delete all versions
-                    return workflowVersionRepository.findByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
+                    return workflowVersionRepository.findByWorkflowIdAndTeamIdOrderByVersionDesc(workflowId, teamId)
                         .flatMap(workflowVersionRepository::delete)
                         .then()
-                        .then(executionRepository.findByWorkflowIdAndTeam(workflowId, teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
+                        .then(executionRepository.findByWorkflowIdAndTeamId(workflowId, teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
                             .flatMap(executionRepository::delete)
                             .then())
                         .then(workflowRepository.delete(workflow))
@@ -107,14 +107,14 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     @Override
     public Flux<LinqWorkflow> getAllWorkflows() {
         return teamContextService.getTeamFromContext()
-            .flatMapMany(teamId -> workflowRepository.findByTeamOrderByCreatedAtDesc(teamId)
+            .flatMapMany(teamId -> workflowRepository.findByTeamIdOrderByCreatedAtDesc(teamId)
                 .doOnError(error -> log.error("Error fetching workflows: {}", error.getMessage())));
     }
 
     @Override
     public Mono<LinqWorkflow> getWorkflow(String workflowId) {
         return teamContextService.getTeamFromContext()
-            .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+            .flatMap(teamId -> workflowRepository.findByIdAndTeamId(workflowId, teamId)
                 .doOnError(error -> log.error("Error fetching workflow: {}", error.getMessage()))
                 .switchIfEmpty(Mono.error(new RuntimeException("Workflow not found or access denied"))));
     }

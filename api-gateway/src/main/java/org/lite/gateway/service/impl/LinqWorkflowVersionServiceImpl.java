@@ -26,17 +26,17 @@ public class LinqWorkflowVersionServiceImpl implements LinqWorkflowVersionServic
     @Override
     public Mono<LinqWorkflow> createNewVersion(String workflowId, LinqWorkflow updatedWorkflow) {
         return teamContextService.getTeamFromContext()
-            .flatMap(teamId -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+            .flatMap(teamId -> workflowRepository.findByIdAndTeamId(workflowId, teamId)
                 .flatMap(workflow -> 
                     // Get the latest version number
-                    workflowVersionRepository.findFirstByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
+                    workflowVersionRepository.findFirstByWorkflowIdAndTeamIdOrderByVersionDesc(workflowId, teamId)
                         .map(latestVersion -> latestVersion.getVersion() + 1)
                         .defaultIfEmpty(1)
                         .flatMap(newVersionNumber -> {
                             // Create new version
                             LinqWorkflowVersion newVersion = LinqWorkflowVersion.builder()
                                 .workflowId(workflowId)
-                                .team(teamId)
+                                .teamId(teamId)
                                 .version(newVersionNumber)
                                 .request(updatedWorkflow.getRequest())
                                 .createdAt(System.currentTimeMillis())
@@ -68,13 +68,13 @@ public class LinqWorkflowVersionServiceImpl implements LinqWorkflowVersionServic
     public Mono<LinqWorkflow> rollbackToVersion(String workflowId, String versionId) {
         return teamContextService.getTeamFromContext()
             .flatMap(teamId -> workflowVersionRepository.findById(versionId)
-                .filter(version -> version.getWorkflowId().equals(workflowId) && version.getTeam().equals(teamId))
-                .flatMap(version -> workflowRepository.findByIdAndTeam(workflowId, teamId)
+                .filter(version -> version.getWorkflowId().equals(workflowId) && version.getTeamId().equals(teamId))
+                .flatMap(version -> workflowRepository.findByIdAndTeamId(workflowId, teamId)
                     .flatMap(workflow -> {
                         // Create new version with rollback
                         LinqWorkflowVersion newVersion = LinqWorkflowVersion.builder()
                             .workflowId(workflowId)
-                            .team(teamId)
+                            .teamId(teamId)
                             .version(workflow.getVersion() + 1)
                             .request(version.getRequest())
                             .createdAt(System.currentTimeMillis())
@@ -100,7 +100,7 @@ public class LinqWorkflowVersionServiceImpl implements LinqWorkflowVersionServic
     @Override
     public Flux<LinqWorkflowVersion> getVersionHistory(String workflowId) {
         return teamContextService.getTeamFromContext()
-            .flatMapMany(teamId -> workflowVersionRepository.findByWorkflowIdAndTeamOrderByVersionDesc(workflowId, teamId)
+            .flatMapMany(teamId -> workflowVersionRepository.findByWorkflowIdAndTeamIdOrderByVersionDesc(workflowId, teamId)
                 .doOnError(error -> log.error("Error fetching version history: {}", error.getMessage()))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "Workflow not found or access denied"))));
@@ -110,7 +110,7 @@ public class LinqWorkflowVersionServiceImpl implements LinqWorkflowVersionServic
     public Mono<LinqWorkflowVersion> getVersion(String workflowId, String versionId) {
         return teamContextService.getTeamFromContext()
             .flatMap(teamId -> workflowVersionRepository.findById(versionId)
-                .filter(version -> version.getWorkflowId().equals(workflowId) && version.getTeam().equals(teamId))
+                .filter(version -> version.getWorkflowId().equals(workflowId) && version.getTeamId().equals(teamId))
                 .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                     HttpStatus.NOT_FOUND, "Version not found or access denied"))));

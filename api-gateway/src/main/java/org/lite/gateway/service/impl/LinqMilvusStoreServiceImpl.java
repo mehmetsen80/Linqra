@@ -94,7 +94,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withSchema(CollectionSchemaParam.newBuilder()
                             .withFieldTypes(fields)
                             .build());
-
+            
             milvusClient.createCollection(builder.build());
             log.info("Created Milvus collection: {}", collectionName);
 
@@ -228,22 +228,76 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                             // Convert values based on the field's data type from schema
                                             switch (fieldSchema.getDataType()) {
                                                 case Int64:
-                                                    convertedValue = ((Number) value).longValue();
+                                                    if (value instanceof String) {
+                                                        String strValue = ((String) value).trim();
+                                                        if (strValue.isEmpty()) {
+                                                            convertedValue = 0L; // Default value for empty string
+                                                        } else {
+                                                            convertedValue = Long.parseLong(strValue);
+                                                        }
+                                                    } else if (value instanceof Number) {
+                                                        convertedValue = ((Number) value).longValue();
+                                                    } else {
+                                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Long for field " + fieldName);
+                                                    }
                                                     break;
                                                 case Int32:
-                                                    convertedValue = ((Number) value).intValue();
+                                                    if (value instanceof String) {
+                                                        String strValue = ((String) value).trim();
+                                                        if (strValue.isEmpty()) {
+                                                            convertedValue = 0; // Default value for empty string
+                                                        } else {
+                                                            convertedValue = Integer.parseInt(strValue);
+                                                        }
+                                                    } else if (value instanceof Number) {
+                                                        convertedValue = ((Number) value).intValue();
+                                                    } else {
+                                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Integer for field " + fieldName);
+                                                    }
                                                     break;
                                                 case Float:
-                                                    convertedValue = ((Number) value).floatValue();
+                                                    if (value instanceof String) {
+                                                        String strValue = ((String) value).trim();
+                                                        if (strValue.isEmpty()) {
+                                                            convertedValue = 0.0f; // Default value for empty string
+                                                        } else {
+                                                            convertedValue = Float.parseFloat(strValue);
+                                                        }
+                                                    } else if (value instanceof Number) {
+                                                        convertedValue = ((Number) value).floatValue();
+                                                    } else {
+                                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Float for field " + fieldName);
+                                                    }
                                                     break;
                                                 case Double:
-                                                    convertedValue = ((Number) value).doubleValue();
+                                                    if (value instanceof String) {
+                                                        String strValue = ((String) value).trim();
+                                                        if (strValue.isEmpty()) {
+                                                            convertedValue = 0.0; // Default value for empty string
+                                                        } else {
+                                                            convertedValue = Double.parseDouble(strValue);
+                                                        }
+                                                    } else if (value instanceof Number) {
+                                                        convertedValue = ((Number) value).doubleValue();
+                                                    } else {
+                                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Double for field " + fieldName);
+                                                    }
                                                     break;
                                                 case VarChar:
                                                 case String:
                                                     convertedValue = value.toString();
                                                     break;
                                                 default:
+                                            }
+                                        } catch (NumberFormatException e) {
+                                            log.warn("Failed to parse number for field {} with value '{}': {}. Using default value.", fieldName, value, e.getMessage());
+                                            // Use default values for number fields when parsing fails
+                                            switch (fieldSchema.getDataType()) {
+                                                case Int64 -> convertedValue = 0L;
+                                                case Int32 -> convertedValue = 0;
+                                                case Float -> convertedValue = 0.0f;
+                                                case Double -> convertedValue = 0.0;
+                                                default -> convertedValue = value; // Keep original for non-numeric fields
                                             }
                                         } catch (Exception e) {
                                             log.warn("Failed to convert value for field {}: {}. Using original value.", fieldName, e.getMessage());

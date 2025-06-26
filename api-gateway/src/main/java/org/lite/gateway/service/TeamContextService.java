@@ -16,11 +16,15 @@ public class TeamContextService {
                 .map(SecurityContext::getAuthentication)
                 .map(Authentication::getPrincipal)
                 .flatMap(principal -> {
-                    if (principal instanceof Jwt) {
-                        Jwt jwt = (Jwt) principal;
+                    if (principal instanceof Jwt jwt) {
                         String teamId = jwt.getClaimAsString("teamId");
                         if (teamId == null) {
                             return Mono.error(new InvalidAuthenticationException("No team ID found in token"));
+                        }
+                        return Mono.just(teamId);
+                    } else if (principal instanceof String teamId) {
+                        if (teamId.trim().isEmpty()) {
+                            return Mono.error(new InvalidAuthenticationException("No team ID found in principal"));
                         }
                         return Mono.just(teamId);
                     }

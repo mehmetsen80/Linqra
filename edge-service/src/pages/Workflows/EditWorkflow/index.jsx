@@ -7,12 +7,14 @@ import workflowService from '../../../services/workflowService';
 import { teamService } from '../../../services/teamService';
 import './styles.css';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
+import ExecuteConfirmationModal from '../../../components/workflows/ExecuteConfirmationModal';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { Form, Card, Spinner, Badge, Modal, Row, Col, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import Button from '../../../components/common/Button';
 import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import ExecutionDetailsModal from '../../../components/workflows/ExecutionDetailsModal';
+import { HiPlay } from 'react-icons/hi';
 
 function EditWorkflow() {
     const { workflowId } = useParams();
@@ -36,6 +38,8 @@ function EditWorkflow() {
     const [executions, setExecutions] = useState([]);
     const [showExecutionModal, setShowExecutionModal] = useState(false);
     const [selectedExecution, setSelectedExecution] = useState(null);
+    const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
+    const [executing, setExecuting] = useState(false);
 
     console.log('Debug - User:', user);
     console.log('Debug - Current Team:', currentTeam);
@@ -50,7 +54,9 @@ function EditWorkflow() {
         // If workflow is private
         (!workflow?.public && (isSuperAdmin(user) || hasAdminAccess(user, currentTeam))) ||
         // If workflow is public
-        (workflow?.public && (isSuperAdmin(user) || hasAdminAccess(user, currentTeam) || currentTeam?.id === workflow?.team));
+        (workflow?.public && (isSuperAdmin(user) || hasAdminAccess(user, currentTeam) || currentTeam?.id === workflow?.teamId));
+
+    const canExecuteWorkflow = workflow?.public || currentTeam?.id === workflow?.teamId;
 
     useEffect(() => {
         if (currentTeam) {
@@ -62,10 +68,10 @@ function EditWorkflow() {
     }, [currentTeam]);
 
     useEffect(() => {
-        if (workflow?.team) {
+        if (workflow?.teamId) {
             loadTeamDetails();
         }
-    }, [workflow?.team]);
+    }, [workflow?.teamId]);
 
     useEffect(() => {
         if (workflow && !canAccessWorkflow) {
@@ -104,7 +110,7 @@ function EditWorkflow() {
 
     const loadTeamDetails = async () => {
         try {
-            const response = await teamService.getTeam(workflow.team);
+            const response = await teamService.getTeam(workflow.teamId);
             if (response.success) {
                 setTeamDetails(response.data);
             }
@@ -386,6 +392,27 @@ function EditWorkflow() {
         setShowExecutionModal(true);
     };
 
+    const handleExecute = async () => {
+        if (!workflow || !canExecuteWorkflow) return;
+
+        try {
+            setExecuting(true);
+            const response = await workflowService.executeWorkflow(workflowId);
+            if (response.success) {
+                showSuccessToast('Workflow execution started successfully');
+                loadExecutions();
+            } else {
+                showErrorToast(response.error || 'Failed to execute workflow');
+            }
+        } catch (err) {
+            console.error('Error executing workflow:', err);
+            showErrorToast('Failed to execute workflow');
+        } finally {
+            setExecuting(false);
+            setShowExecuteConfirm(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="d-flex justify-content-center align-items-center" style={{ height: '200px' }}>
@@ -409,6 +436,24 @@ function EditWorkflow() {
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h2>Edit Workflow</h2>
                 <div className="d-flex gap-2">
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="execute-tooltip">
+                                {canExecuteWorkflow ? 'Execute this workflow' : 'You do not have permission to execute this workflow'}
+                            </Tooltip>
+                        }
+                    >
+                        <div>
+                            <Button 
+                                variant="success" 
+                                onClick={() => setShowExecuteConfirm(true)}
+                                disabled={!canExecuteWorkflow}
+                            >
+                                <HiPlay className="me-1" /> Execute
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
                     <OverlayTrigger
                         placement="top"
                         overlay={
@@ -718,10 +763,10 @@ function EditWorkflow() {
                                     {teamDetails ? (
                                         <div>
                                             <div>{teamDetails.name}</div>
-                                            <small className="text-muted">ID: {workflow?.team}</small>
+                                            <small className="text-muted">ID: {workflow?.teamId}</small>
                                         </div>
                                     ) : (
-                                        workflow?.team
+                                        workflow?.teamId
                                     )}
                                 </div>
                             </div>
@@ -1056,6 +1101,15 @@ function EditWorkflow() {
                 show={showExecutionModal}
                 onHide={() => setShowExecutionModal(false)}
                 execution={selectedExecution}
+            />
+
+            {/* Execute Confirmation Modal */}
+            <ExecuteConfirmationModal
+                show={showExecuteConfirm}
+                onHide={() => setShowExecuteConfirm(false)}
+                onConfirm={handleExecute}
+                workflow={workflow}
+                executing={executing}
             />
         </div>
     );

@@ -33,6 +33,7 @@ import java.util.List;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.lite.gateway.dto.TeamWorkflowStats;
 import org.lite.gateway.service.LinqWorkflowStatsService;
+import java.util.HashMap;
 
 @Slf4j
 @RestController
@@ -124,28 +125,36 @@ public class LinqWorkflowController {
                     workflow.setCreatedBy(user.getUsername());
                     workflow.setUpdatedBy(user.getUsername());
                     
-                    // For SUPER_ADMIN, proceed directly
-                    if (user.getRoles().contains("SUPER_ADMIN")) {
-                        return linqWorkflowService.createWorkflow(workflow)
-                            .map(ResponseEntity::ok);
-                    }
-                    
-                    // For non-SUPER_ADMIN users, check team role
+                    // Get team from context and handle authorization
                     return teamContextService.getTeamFromContext()
-                        .flatMap(teamId -> teamService.hasRole(teamId, user.getId(), "ADMIN")
-                            .flatMap(isAdmin -> {
-                                if (!isAdmin) {
-                                    return Mono.just(ResponseEntity
-                                        .status(HttpStatus.FORBIDDEN)
-                                        .body(ErrorResponse.fromErrorCode(
-                                            ErrorCode.FORBIDDEN,
-                                            "Only team administrators can create workflows",
-                                            HttpStatus.FORBIDDEN.value()
-                                        )));
-                                }
-                                return linqWorkflowService.createWorkflow(workflow)
+                        .flatMap(teamId -> {
+                            // Set the teamId in the workflow entity
+                            workflow.setTeamId(teamId);
+                            
+                            // For SUPER_ADMIN, proceed directly
+                            if (user.getRoles().contains("SUPER_ADMIN")) {
+                                return addGlobalParamsToWorkflow(workflow)
+                                    .flatMap(linqWorkflowService::createWorkflow)
                                     .map(ResponseEntity::ok);
-                            }));
+                            }
+                            
+                            // For non-SUPER_ADMIN users, check team role
+                            return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                .flatMap(isAdmin -> {
+                                    if (!isAdmin) {
+                                        return Mono.just(ResponseEntity
+                                            .status(HttpStatus.FORBIDDEN)
+                                            .body(ErrorResponse.fromErrorCode(
+                                                ErrorCode.FORBIDDEN,
+                                                "Only team administrators can create workflows",
+                                                HttpStatus.FORBIDDEN.value()
+                                            )));
+                                    }
+                                    return addGlobalParamsToWorkflow(workflow)
+                                        .flatMap(linqWorkflowService::createWorkflow)
+                                        .map(ResponseEntity::ok);
+                                });
+                        });
                 })
                 .doOnSuccess(w -> Optional.ofNullable(w.getBody())
                     .map(body -> (LinqWorkflow) body)
@@ -185,7 +194,7 @@ public class LinqWorkflowController {
                     }
                     
                     // For non-SUPER_ADMIN users, check team role
-                    return teamService.hasRole(existingWorkflow.getTeam(), user.getId(), "ADMIN")
+                    return teamService.hasRole(existingWorkflow.getTeamId(), user.getId(), "ADMIN")
                         .flatMap(isAdmin -> {
                             if (!isAdmin) {
                                 return Mono.just(ResponseEntity
@@ -223,7 +232,7 @@ public class LinqWorkflowController {
                     }
                     
                     // For non-SUPER_ADMIN users, check team role
-                    return teamService.hasRole(workflow.getTeam(), user.getId(), "ADMIN")
+                    return teamService.hasRole(workflow.getTeamId(), user.getId(), "ADMIN")
                         .flatMap(isAdmin -> {
                             if (!isAdmin) {
                                 return Mono.just(ResponseEntity
@@ -260,7 +269,8 @@ public class LinqWorkflowController {
     @PostMapping("/{workflowId}/execute")
     public Mono<LinqResponse> executeWorkflow(
         @PathVariable String workflowId,
-        @RequestBody(required = false) Map<String, Object> variables
+        @RequestBody(required = false) Map<String, Object> variables,
+        ServerWebExchange exchange
     ) {
         log.info("Executing workflow: {} with variables: {}", workflowId, variables);
         return linqWorkflowService.getWorkflow(workflowId)
@@ -298,9 +308,16 @@ public class LinqWorkflowController {
                     });
                 }
                 
-                return workflowExecutionService.executeWorkflow(request)
-                    .flatMap(response -> workflowExecutionService.trackExecution(request, response)
-                        .thenReturn(response));
+                // Set the executedBy field from current user context using the exchange
+                return userContextService.getCurrentUsername(exchange)
+                    .flatMap(username -> {
+                        request.setExecutedBy(username);
+                        log.info("Setting executedBy to: {}", username);
+                        
+                        return workflowExecutionService.executeWorkflow(request)
+                            .flatMap(response -> workflowExecutionService.trackExecution(request, response)
+                                .thenReturn(response));
+                    });
             })
             .doOnSuccess(r -> log.info("Workflow executed successfully: {}", workflowId))
             .doOnError(error -> log.error("Error executing workflow: {}", error.getMessage()));
@@ -446,26 +463,33 @@ public class LinqWorkflowController {
                     
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
-                        return linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflow)
+                        return addGlobalParamsToWorkflow(updatedWorkflow)
+                            .flatMap(updatedWorkflowWithParams -> linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflowWithParams))
                             .map(ResponseEntity::ok);
                     }
                     
                     // For non-SUPER_ADMIN users, check team role
                     return teamContextService.getTeamFromContext()
-                        .flatMap(teamId -> teamService.hasRole(teamId, user.getId(), "ADMIN")
-                            .flatMap(isAdmin -> {
-                                if (!isAdmin) {
-                                    return Mono.just(ResponseEntity
-                                        .status(HttpStatus.FORBIDDEN)
-                                        .body(ErrorResponse.fromErrorCode(
-                                            ErrorCode.FORBIDDEN,
-                                            "Only team administrators can create new workflow versions",
-                                            HttpStatus.FORBIDDEN.value()
-                                        )));
-                                }
-                                return linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflow)
-                                    .map(ResponseEntity::ok);
-                            }));
+                        .flatMap(teamId -> {
+                            // Set the teamId in the workflow entity
+                            updatedWorkflow.setTeamId(teamId);
+                            
+                            return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                .flatMap(isAdmin -> {
+                                    if (!isAdmin) {
+                                        return Mono.just(ResponseEntity
+                                            .status(HttpStatus.FORBIDDEN)
+                                            .body(ErrorResponse.fromErrorCode(
+                                                ErrorCode.FORBIDDEN,
+                                                "Only team administrators can create new workflow versions",
+                                                HttpStatus.FORBIDDEN.value()
+                                            )));
+                                    }
+                                    return addGlobalParamsToWorkflow(updatedWorkflow)
+                                        .flatMap(updatedWorkflowWithParams -> linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflowWithParams))
+                                        .map(ResponseEntity::ok);
+                                });
+                        });
                 })
                 .doOnSuccess(w -> Optional.ofNullable(w.getBody())
                     .map(body -> (LinqWorkflow) body)
@@ -497,11 +521,11 @@ public class LinqWorkflowController {
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqWorkflowVersionService.rollbackToVersion(workflowId, versionId)
-                            .map(w -> ResponseEntity.ok(w));
+                            .map(ResponseEntity::ok);
                     }
                     
                     // For non-SUPER_ADMIN users, check team role
-                    return teamService.hasRole(workflow.getTeam(), user.getId(), "ADMIN")
+                    return teamService.hasRole(workflow.getTeamId(), user.getId(), "ADMIN")
                         .flatMap(isAdmin -> {
                             if (!isAdmin) {
                                 return Mono.just(ResponseEntity
@@ -546,5 +570,33 @@ public class LinqWorkflowController {
         return linqWorkflowStatsService.getTeamStats()
             .map(ResponseEntity::ok)
             .doOnError(error -> log.error("Error fetching team workflow statistics: {}", error.getMessage()));
+    }
+
+    /**
+     * Helper method to add teamId and userId to workflow query params if not already present
+     */
+    private Mono<LinqWorkflow> addGlobalParamsToWorkflow(LinqWorkflow workflow) {
+        if (workflow.getRequest() != null && 
+            workflow.getRequest().getQuery() != null && 
+            workflow.getTeamId() != null) {
+            
+            // Ensure params map exists
+            if (workflow.getRequest().getQuery().getParams() == null) {
+                workflow.getRequest().getQuery().setParams(new HashMap<>());
+            }
+            
+            // Add teamId to params if not already present
+            workflow.getRequest().getQuery().getParams().putIfAbsent("teamId", workflow.getTeamId());
+            
+            // Add userId to params if not already present (use createdBy or updatedBy)
+            String userId = workflow.getCreatedBy() != null ? workflow.getCreatedBy() : workflow.getUpdatedBy();
+            if (userId != null) {
+                workflow.getRequest().getQuery().getParams().putIfAbsent("userId", userId);
+            }
+            
+            log.info("Added teamId {} and userId {} to workflow params", workflow.getTeamId(), userId);
+        }
+        
+        return Mono.just(workflow);
     }
 }

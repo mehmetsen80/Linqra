@@ -34,7 +34,7 @@ public class LinqToolServiceImpl implements LinqToolService {
         if (linqTool.getTarget() == null || linqTool.getTarget().isEmpty()) {
             return Mono.error(new IllegalArgumentException("LinqTool target is required"));
         }
-        if (linqTool.getTeam() == null || linqTool.getTeam().isEmpty()) {
+        if (linqTool.getTeamId() == null || linqTool.getTeamId().isEmpty()) {
             return Mono.error(new IllegalArgumentException("LinqTool team ID is required"));
         }
         if (linqTool.getEndpoint() == null || linqTool.getEndpoint().isEmpty()) {
@@ -44,9 +44,9 @@ public class LinqToolServiceImpl implements LinqToolService {
             return Mono.error(new IllegalArgumentException("LinqTool method is required"));
         }
 
-        log.info("Saving LinqTool with target: {} for team: {}", linqTool.getTarget(), linqTool.getTeam());
+        log.info("Saving LinqTool with target: {} for team: {}", linqTool.getTarget(), linqTool.getTeamId());
         
-        return linqToolRepository.findByTargetAndTeam(linqTool.getTarget(), linqTool.getTeam())
+        return linqToolRepository.findByTargetAndTeamId(linqTool.getTarget(), linqTool.getTeamId())
             .<LinqTool>flatMap(existingTool -> {
                 // Update existing tool
                 existingTool.setEndpoint(linqTool.getEndpoint());
@@ -63,7 +63,7 @@ public class LinqToolServiceImpl implements LinqToolService {
             })
             .switchIfEmpty(Mono.<LinqTool>defer(() -> {
                 // Create new tool
-                log.info("Creating new LinqTool for target: {} and team: {}", linqTool.getTarget(), linqTool.getTeam());
+                log.info("Creating new LinqTool for target: {} and team: {}", linqTool.getTarget(), linqTool.getTeamId());
                 return linqToolRepository.save(linqTool)
                     .doOnSuccess(saved -> log.info("Created new LinqTool with ID: {}", saved.getId()))
                     .doOnError(error -> log.error("Failed to create LinqTool: {}", error.getMessage()));
@@ -73,7 +73,7 @@ public class LinqToolServiceImpl implements LinqToolService {
     @Override
     public Flux<LinqTool> findByTeamId(String teamId) {
         log.info("Finding LinqTool configurations for team: {}", teamId);
-        return linqToolRepository.findByTeam(teamId)
+        return linqToolRepository.findByTeamId(teamId)
                 .doOnNext(tool -> log.info("Found LinqTool configuration for team {}: target={}", teamId, tool.getTarget()))
                 .doOnComplete(() -> log.info("Completed fetching LinqTool configurations for team: {}", teamId))
                 .doOnError(error -> log.error("Error finding LinqTool configurations for team {}: {}", teamId, error.getMessage()));
@@ -82,7 +82,7 @@ public class LinqToolServiceImpl implements LinqToolService {
     @Override
     public Mono<LinqTool> findByTargetAndTeam(String target, String teamId) {
         log.info("Finding LinqTool configuration for target: {} and team: {}", target, teamId);
-        return linqToolRepository.findByTargetAndTeam(target, teamId)
+        return linqToolRepository.findByTargetAndTeamId(target, teamId)
                 .doOnSuccess(tool -> {
                     if (tool != null) {
                         log.info("Found LinqTool configuration for target: {} and team: {}", target, teamId);
@@ -138,7 +138,7 @@ public class LinqToolServiceImpl implements LinqToolService {
                     LinqResponse.Metadata metadata = new LinqResponse.Metadata();
                     metadata.setSource(tool.getTarget());
                     metadata.setStatus("success");
-                    metadata.setTeam(tool.getTeam());
+                    metadata.setTeamId(tool.getTeamId());
                     metadata.setCacheHit(false);
                     response.setMetadata(metadata);
                     return response;

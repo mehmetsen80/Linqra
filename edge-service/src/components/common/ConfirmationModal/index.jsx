@@ -19,6 +19,7 @@ const ConfirmationModal = ({
       show={show}
       onHide={onHide}
       centered
+      size="lg"
       animation={true}
       className="confirmation-modal"
     >

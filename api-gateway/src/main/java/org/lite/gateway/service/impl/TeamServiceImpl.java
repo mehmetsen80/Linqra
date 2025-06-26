@@ -125,7 +125,7 @@ public class TeamServiceImpl implements TeamService {
                 .build());
 
         Mono<List<LinqToolDTO>> linqToolsMono = linqToolRepository
-            .findByTeam(team.getId())
+            .findByTeamId(team.getId())
             .map(tool -> LinqToolDTO.builder()
                 .id(tool.getId())
                 .target(tool.getTarget())
@@ -135,7 +135,7 @@ public class TeamServiceImpl implements TeamService {
                 .authType(tool.getAuthType())
                 .apiKey(tool.getApiKey())
                 .supportedIntents(tool.getSupportedIntents())
-                .team(tool.getTeam())
+                .team(tool.getTeamId())
                 .build())
             .collectList();
 

@@ -8,10 +8,10 @@ import reactor.core.publisher.Mono;
 
 @Repository
 public interface LinqWorkflowRepository extends ReactiveMongoRepository<LinqWorkflow, String> {
-    Flux<LinqWorkflow> findByTeam(String teamId);
+    Flux<LinqWorkflow> findByTeamId(String teamId);
     Flux<LinqWorkflow> findByIsPublicTrue();
-    Mono<LinqWorkflow> findByIdAndTeam(String id, String teamId);
+    Mono<LinqWorkflow> findByIdAndTeamId(String id, String teamId);
     Flux<LinqWorkflow> findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
         String name, String description);
-    Flux<LinqWorkflow> findByTeamOrderByCreatedAtDesc(String teamId);
+    Flux<LinqWorkflow> findByTeamIdOrderByCreatedAtDesc(String teamId);
 }

@@ -2,6 +2,7 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.dto.TeamWorkflowStats;
 import org.lite.gateway.model.LinqWorkflowStats;
@@ -115,12 +116,26 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                             Map<String, Object> result = (Map<String, Object>) step.getResult();
                                             if (result.containsKey("usage")) {
                                                 Map<String, Object> usage = (Map<String, Object>) result.get("usage");
-                                                modelStats.setTotalPromptTokens(modelStats.getTotalPromptTokens() + 
-                                                    ((Number) usage.get("prompt_tokens")).longValue());
-                                                modelStats.setTotalCompletionTokens(modelStats.getTotalCompletionTokens() + 
-                                                    ((Number) usage.get("completion_tokens")).longValue());
-                                                modelStats.setTotalTokens(modelStats.getTotalTokens() + 
-                                                    ((Number) usage.get("total_tokens")).longValue());
+                                                
+                                                // Safely get token counts with null checks
+                                                Object promptTokensObj = usage.get("prompt_tokens");
+                                                Object completionTokensObj = usage.get("completion_tokens");
+                                                Object totalTokensObj = usage.get("total_tokens");
+                                                
+                                                if (promptTokensObj instanceof Number) {
+                                                    modelStats.setTotalPromptTokens(modelStats.getTotalPromptTokens() + 
+                                                        ((Number) promptTokensObj).longValue());
+                                                }
+                                                
+                                                if (completionTokensObj instanceof Number) {
+                                                    modelStats.setTotalCompletionTokens(modelStats.getTotalCompletionTokens() + 
+                                                        ((Number) completionTokensObj).longValue());
+                                                }
+                                                
+                                                if (totalTokensObj instanceof Number) {
+                                                    modelStats.setTotalTokens(modelStats.getTotalTokens() + 
+                                                        ((Number) totalTokensObj).longValue());
+                                                }
                                             }
                                         }
                                     }
@@ -138,7 +153,7 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
     @Override
     public Mono<TeamWorkflowStats> getTeamStats() {
         return teamContextService.getTeamFromContext()
-            .flatMap(teamId -> executionRepository.findByTeam(teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
+            .flatMap(teamId -> executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
                 .collectList()
                 .flatMap(executions -> {
                     TeamWorkflowStats stats = new TeamWorkflowStats();
@@ -217,7 +232,7 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                         String intent = execution.getRequest().getQuery().getWorkflow().stream()
                                             .filter(step -> step.getStep() == stepMetadata.getStep())
                                             .findFirst()
-                                            .map(step -> step.getIntent())
+                                            .map(LinqRequest.Query.WorkflowStep::getIntent)
                                             .orElse("unknown");
                                         stepStats.setMostCommonIntent(intent);
                                         

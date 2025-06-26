@@ -6,6 +6,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface LinqToolRepository extends ReactiveMongoRepository<LinqTool, String> {
-    Mono<LinqTool> findByTargetAndTeam(String target, String team);
-    Flux<LinqTool> findByTeam(String teamId);
+    Mono<LinqTool> findByTargetAndTeamId(String target, String teamId);
+    Flux<LinqTool> findByTeamId(String teamId);
 }

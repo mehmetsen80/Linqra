@@ -20,7 +20,7 @@ public class LinqWorkflowExecution {
     @Id
     private String id;
     private String workflowId;              // Reference to LinqWorkflow
-    private String team;                    // Team that executed this
+    private String teamId;                    // Team that executed this
     private LinqRequest request;            // The actual request that was executed
     private LinqResponse response;          // The complete response
     private LocalDateTime executedAt;

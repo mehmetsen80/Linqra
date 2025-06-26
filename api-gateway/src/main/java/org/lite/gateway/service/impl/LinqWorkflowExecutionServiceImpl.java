@@ -13,6 +13,7 @@ import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.LinqToolService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.QueuedWorkflowService;
+import org.lite.gateway.service.WorkflowExecutionContext;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -44,6 +45,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         List<LinqRequest.Query.WorkflowStep> steps = request.getQuery().getWorkflow();
         Map<Integer, Object> stepResults = new HashMap<>();
         List<LinqResponse.WorkflowStepMetadata> stepMetadata = new ArrayList<>();
+        Map<String, Object> globalParams = request.getQuery().getParams();
+        WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
 
         // Execute steps synchronously or asynchronously based on configuration
         Mono<LinqResponse> workflowMono = Mono.just(new LinqResponse());
@@ -63,7 +66,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     asyncStep.setAsync(true);
                     
                     // Queue the step for async execution
-                    return queuedWorkflowService.queueAsyncStep(request.getQuery().getWorkflowId(), String.valueOf(step.getStep()), asyncStep)
+                    return queuedWorkflowService.queueAsyncStep(request.getQuery().getWorkflowId(),step.getStep(), asyncStep)
                             .doOnSuccess(v -> log.info("Async step queued successfully for workflow {} step {}", 
                                 request.getQuery().getWorkflowId(), step.getStep()))
                             .doOnError(e -> {
@@ -103,12 +106,15 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
                 LinqRequest.Query stepQuery = new LinqRequest.Query();
                 stepQuery.setIntent(step.getIntent());
-                stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), stepResults));
-                stepQuery.setPayload(resolvePlaceholders(step.getPayload(), stepResults));
+                stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), context));
+                stepQuery.setPayload(resolvePlaceholders(step.getPayload(), context));
                 stepQuery.setToolConfig(step.getToolConfig());
                 // Set the workflow steps in the query to enable caching
                 stepQuery.setWorkflow(steps);
                 stepRequest.setQuery(stepQuery);
+                
+                // Copy the executedBy field to maintain user context
+                stepRequest.setExecutedBy(request.getExecutedBy());
 
                 // Execute the step
                 return teamContextService.getTeamFromContext()
@@ -117,7 +123,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         "Team context not found. Please ensure you are authenticated with a valid team.")))
                     .flatMap(teamId -> {
                         log.info("Searching for tool with target: {} and team: {}", step.getTarget(), teamId);
-                        return linqToolRepository.findByTargetAndTeam(step.getTarget(), teamId)
+                        return linqToolRepository.findByTargetAndTeamId(step.getTarget(), teamId)
                             .doOnNext(tool -> log.info("Found tool: {}", tool))
                             .doOnError(error -> log.error("Error finding tool: {}", error.getMessage()))
                             .doOnSuccess(tool -> {
@@ -202,7 +208,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     .anyMatch(meta -> "error".equals(meta.getStatus()) || "failed".equals(meta.getStatus()));
                 metadata.setStatus(hasFailedStep ? "error" : "success");
                 
-                metadata.setTeam(teamId);
+                metadata.setTeamId(teamId);
                 metadata.setCacheHit(false);
                 metadata.setWorkflowMetadata(stepMetadata);
                 response.setMetadata(metadata);
@@ -214,7 +220,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             LinqResponse.Metadata metadata = new LinqResponse.Metadata();
             metadata.setSource("workflow");
             metadata.setStatus("error");
-            metadata.setTeam(teamContextService.getTeamFromContext().block());
+            metadata.setTeamId(teamContextService.getTeamFromContext().block());
             metadata.setCacheHit(false);
             metadata.setWorkflowMetadata(stepMetadata);
             errorResponse.setMetadata(metadata);
@@ -240,7 +246,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     @Override
     public Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response) {
         LinqWorkflowExecution execution = new LinqWorkflowExecution();
-        execution.setTeam(response.getMetadata().getTeam());
+        execution.setTeamId(response.getMetadata().getTeamId());
         execution.setRequest(request);
         execution.setResponse(response);
         execution.setExecutedAt(LocalDateTime.now());
@@ -312,7 +318,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     @Override
     public Flux<LinqWorkflowExecution> getTeamExecutions() {
         return teamContextService.getTeamFromContext()
-            .flatMapMany(teamId -> executionRepository.findByTeam(teamId, Sort.by(Sort.Direction.DESC, "executedAt")))
+            .flatMapMany(teamId -> executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt")))
             .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
     }
 
@@ -327,7 +333,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     public Mono<Void> deleteExecution(String executionId) {
         return teamContextService.getTeamFromContext()
             .flatMap(teamId -> executionRepository.findById(executionId)
-                .filter(execution -> execution.getTeam().equals(teamId))
+                .filter(execution -> execution.getTeamId().equals(teamId))
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                     HttpStatus.NOT_FOUND, 
                     "Execution not found or access denied")))
@@ -336,21 +342,21 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     .doOnError(error -> log.error("Error deleting execution: {}", error.getMessage()))));
     }
 
-    private Map<String, Object> resolvePlaceholdersForMap(Map<String, Object> input, Map<Integer, Object> stepResults) {
+    private Map<String, Object> resolvePlaceholdersForMap(Map<String, Object> input, WorkflowExecutionContext context) {
         if (input == null) return new HashMap<>();
         Map<String, Object> resolved = new HashMap<>();
-        input.forEach((key, value) -> resolved.put(key, resolvePlaceholders(value, stepResults)));
+        input.forEach((key, value) -> resolved.put(key, resolvePlaceholders(value, context)));
         return resolved;
     }
 
-    private Object resolvePlaceholders(Object input, Map<Integer, Object> stepResults) {
+    private Object resolvePlaceholders(Object input, WorkflowExecutionContext context) {
         if (input == null) return null;
         if (input instanceof String stringInput) {
-            return resolvePlaceholder(stringInput, stepResults);
+            return resolvePlaceholder(stringInput, context);
         }
         if (input instanceof List<?> list) {
             return list.stream()
-                    .map(item -> resolvePlaceholders(item, stepResults))
+                    .map(item -> resolvePlaceholders(item, context))
                     .collect(Collectors.toList());
         }
         if (input instanceof Map<?, ?> map) {
@@ -358,24 +364,36 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     .collect(Collectors.toMap(
                             entry -> entry.getKey().toString(),
                             Map.Entry::getValue
-                    )), stepResults);
+                    )), context);
         }
         return input;
     }
 
-    private String resolvePlaceholder(String value, Map<Integer, Object> stepResults) {
+    private String resolvePlaceholder(String value, WorkflowExecutionContext context) {
         String result = value;
-        Pattern pattern = Pattern.compile("\\{\\{step(\\d+)\\.result(?:\\.([\\w.]+))?\\}\\}");
-        Matcher matcher = pattern.matcher(value);
-        while (matcher.find()) {
-            int stepNum = Integer.parseInt(matcher.group(1));
-            String path = matcher.group(2);
-            Object stepResult = stepResults.get(stepNum);
+        // Step result pattern - updated to handle complex JSON paths including arrays and nested objects
+        Pattern stepPattern = Pattern.compile("\\{\\{step(\\d+)\\.result(?:\\.([^}]+))?\\}\\}");
+        Matcher stepMatcher = stepPattern.matcher(value);
+        while (stepMatcher.find()) {
+            int stepNum = Integer.parseInt(stepMatcher.group(1));
+            String path = stepMatcher.group(2);
+            Object stepResult = context.getStepResults().get(stepNum);
             String replacement = "";
             if (stepResult != null) {
                 replacement = path != null ? extractValue(stepResult, path) : String.valueOf(stepResult);
             }
-            result = result.replace(matcher.group(0), replacement);
+            result = result.replace(stepMatcher.group(0), replacement);
+        }
+        // Global params pattern
+        Pattern paramsPattern = Pattern.compile("\\{\\{params\\.([\\w.]+)\\}\\}");
+        Matcher paramsMatcher = paramsPattern.matcher(result);
+        while (paramsMatcher.find()) {
+            String paramPath = paramsMatcher.group(1);
+            String replacement = "";
+            if (context.getGlobalParams() != null) {
+                replacement = extractValue(context.getGlobalParams(), paramPath);
+            }
+            result = result.replace(paramsMatcher.group(0), replacement);
         }
         return result;
     }
@@ -384,16 +402,45 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         String[] parts = path.split("\\.");
         Object current = obj;
         for (String part : parts) {
-            if (current instanceof Map<?, ?> map) {
-                current = map.get(part);
-            } else if (current instanceof List<?> list && part.matches("\\d+")) {
-                current = list.get(Integer.parseInt(part));
-            } else {
-                return "";
-            }
             if (current == null) return "";
+            
+            // Check if this part contains array access (e.g., "choices[0]")
+            if (part.contains("[")) {
+                String arrayName = part.substring(0, part.indexOf("["));
+                String indexStr = part.substring(part.indexOf("[") + 1, part.indexOf("]"));
+                
+                if (current instanceof Map<?, ?> map) {
+                    current = map.get(arrayName);
+                    if (current instanceof List<?> list && indexStr.matches("\\d+")) {
+                        int index = Integer.parseInt(indexStr);
+                        if (index >= 0 && index < list.size()) {
+                            current = list.get(index);
+                        } else {
+                            return "";
+                        }
+                    } else {
+                        return "";
+                    }
+                } else {
+                    return "";
+                }
+            } else {
+                // Regular property access
+                if (current instanceof Map<?, ?> map) {
+                    current = map.get(part);
+                } else if (current instanceof List<?> list && part.matches("\\d+")) {
+                    int index = Integer.parseInt(part);
+                    if (index >= 0 && index < list.size()) {
+                        current = list.get(index);
+                    } else {
+                        return "";
+                    }
+                } else {
+                    return "";
+                }
+            }
         }
-        return String.valueOf(current);
+        return current != null ? String.valueOf(current) : "";
     }
 
     private String extractFinalResult(Object result) {

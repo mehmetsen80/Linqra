@@ -25,5 +25,5 @@ public class LinqTool {
     private String authType;          // e.g., "bearer", "api_key_query", "none"
     private String apiKey;            // The API key for the service
     private List<String> supportedIntents; // e.g., ["generate", "summarize"]
-    private String team;              // e.g., "67d0aeb17172416c411d419e" (team ID)
+    private String teamId;              // e.g., "67d0aeb17172416c411d419e" (team ID)
 }

@@ -89,4 +89,43 @@ public interface LinqMilvusStoreService {
      * @return A Mono containing the verification results
      */
     Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType);
+
+    /**
+     * Verify a record in the collection by searching for it using the text field with metadata filtering
+     * @param collectionName The name of the collection
+     * @param textField The name of the text field to search
+     * @param text The text to search for
+     * @param teamId The team ID
+     * @param targetTool The embedding tool to use (e.g., "openai-embed")
+     * @param modelType The embedding model to use (e.g., "text-embedding-3-small")
+     * @param metadataFilters Optional metadata filters to apply before vector search
+     * @return A Mono containing the verification results with metadata
+     */
+    Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType, Map<String, Object> metadataFilters);
+
+    /**
+     * Search for multiple relevant records in the collection using semantic similarity
+     * @param collectionName The name of the collection
+     * @param textField The name of the text field to search
+     * @param text The text to search for
+     * @param teamId The team ID
+     * @param targetTool The embedding tool to use (e.g., "openai-embed")
+     * @param modelType The embedding model to use (e.g., "text-embedding-3-small")
+     * @param nResults The number of results to return (default: 10)
+     * @param metadataFilters Optional metadata filters to apply before vector search
+     * @return A Mono containing the search results with multiple records
+     */
+    Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType, int nResults, Map<String, Object> metadataFilters);
+
+    /**
+     * Search for multiple relevant records in the collection using semantic similarity (with default nResults=10)
+     * @param collectionName The name of the collection
+     * @param textField The name of the text field to search
+     * @param text The text to search for
+     * @param teamId The team ID
+     * @param targetTool The embedding tool to use (e.g., "openai-embed")
+     * @param modelType The embedding model to use (e.g., "text-embedding-3-small")
+     * @return A Mono containing the search results with multiple records
+     */
+    Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType);
 }

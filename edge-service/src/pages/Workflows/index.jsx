@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Alert, Table, Badge, Spinner, Breadcrumb, Card, Row, Col, Modal, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Alert, Table, Badge, Spinner, Breadcrumb, Card, Row, Col, Modal, OverlayTrigger, Tooltip, Form, InputGroup } from 'react-bootstrap';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin, hasAdminAccess } from '../../utils/roleUtils';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import Button from '../../components/common/Button';
-import { HiPlus, HiPlay, HiPencilAlt, HiTrash } from 'react-icons/hi';
+import { HiPlus, HiPlay, HiPencilAlt, HiTrash, HiEye } from 'react-icons/hi';
 import workflowService from '../../services/workflowService';
 import { format } from 'date-fns';
 import { Link, useNavigate } from 'react-router-dom';
@@ -16,6 +16,7 @@ import ConfirmationModal from '../../components/common/ConfirmationModal';
 import ExecutionDetailsModal from '../../components/workflows/ExecutionDetailsModal';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import CreateWorkflowModal from '../../components/workflows/CreateWorkflowModal';
+import ExecuteConfirmationModal from '../../components/workflows/ExecuteConfirmationModal';
 
 function Workflows() {
     const { currentTeam, loading: teamLoading, selectedTeam } = useTeam();
@@ -356,7 +357,7 @@ function Workflows() {
                                         placement="top"
                                         overlay={
                                             <Tooltip id={`execute-tooltip-${workflow.id}`}>
-                                                {workflow.public || currentTeam?.id === workflow.team 
+                                                {workflow.public || currentTeam?.id === workflow.teamId
                                                     ? 'Execute this workflow' 
                                                     : 'This workflow is private and not accessible to your team'}
                                             </Tooltip>
@@ -368,7 +369,7 @@ function Workflows() {
                                                 size="sm" 
                                                 className="me-2"
                                                 onClick={(e) => handleExecuteClick(workflow, e)}
-                                                disabled={!workflow.public && currentTeam?.id !== workflow.team}
+                                                disabled={!workflow.public && currentTeam?.id !== workflow.teamId}
                                             >
                                                 <HiPlay className="me-1" /> Execute
                                             </Button>
@@ -529,47 +530,12 @@ function Workflows() {
             />
 
             {/* Execute Confirmation Modal */}
-            <ConfirmationModal
+            <ExecuteConfirmationModal
                 show={showExecuteConfirm}
                 onHide={() => setShowExecuteConfirm(false)}
                 onConfirm={handleExecuteConfirm}
-                title="Execute Workflow"
-                message={
-                    <div>
-                        <p>Are you sure you want to execute the workflow "{workflowToExecute?.name}"?</p>
-                        <div className="mt-3">
-                            <h6>Workflow Steps:</h6>
-                            <div className="workflow-steps-preview">
-                                {workflowToExecute?.request?.query?.workflow?.map((step, index) => (
-                                    <div key={index} className="workflow-step-preview">
-                                        <Badge bg="info" className="me-2">Step {index + 1}</Badge>
-                                        <span className="step-target">{step.target}</span>
-                                        {step.intent && (
-                                            <span className="step-intent ms-2 text-muted">
-                                                ({step.intent})
-                                            </span>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                }
-                confirmLabel={executing ? (
-                    <>
-                        <Spinner
-                            as="span"
-                            animation="border"
-                            size="sm"
-                            role="status"
-                            aria-hidden="true"
-                            className="me-2"
-                        />
-                        Executing...
-                    </>
-                ) : "Execute"}
-                variant="primary"
-                disabled={executing}
+                workflow={workflowToExecute}
+                executing={executing}
             />
 
             {/* Create Workflow Modal */}

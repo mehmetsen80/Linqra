@@ -1,0 +1,214 @@
+.workflow-quotes {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.workflow-section {
+    margin-bottom: 4rem;
+}
+
+.workflow-section h2 {
+    font-size: 2.5rem;
+    color: var(--text-primary);
+    margin-bottom: 2rem;
+}
+
+.workflow-section h3 {
+    font-size: 1.8rem;
+    color: var(--text-primary);
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+}
+
+.workflow-section h4 {
+    font-size: 1.4rem;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
+.workflow-section p {
+    font-size: 1.1rem;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+}
+
+/* Features Grid */
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.feature-item {
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1.5rem;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.feature-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--primary-color);
+}
+
+.feature-icon {
+    color: var(--primary-color);
+    font-size: 1.2rem;
+    margin-bottom: 0.5rem;
+}
+
+.feature-item h4 {
+    margin: 0.5rem 0 0.75rem 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.feature-item p {
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* Documentation Section */
+.documentation-link {
+    margin-top: 1.5rem;
+}
+
+/* Alternative button style to avoid conflicts */
+.quotes-docs-button {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding: 0.75rem 1.5rem !important;
+    background-color: var(--primary-color) !important;
+    color: white !important;
+    text-decoration: none !important;
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    border: none !important;
+    cursor: pointer !important;
+    font-family: inherit !important;
+    font-size: inherit !important;
+}
+
+.quotes-docs-button:hover {
+    background-color: var(--primary-color-dark) !important;
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+    color: white !important;
+    text-decoration: none !important;
+}
+
+.quotes-docs-button .button-icon {
+    font-size: 1rem !important;
+    color: white !important;
+}
+
+.quotes-docs-button .external-icon {
+    font-size: 0.8rem !important;
+    opacity: 0.8 !important;
+    color: white !important;
+}
+
+/* Example Tabs */
+.example-tabs {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+}
+
+.tab {
+    flex: 0 0 calc(50% - 0.5rem);
+    min-width: 400px;
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.code-example {
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1rem 0;
+    overflow-x: auto;
+}
+
+.code-example pre {
+    margin: 0;
+    white-space: pre-wrap;
+}
+
+.code-example code {
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #ffffff;
+}
+
+/* Syntax highlighting for JSON */
+.code-example code .string { color: #a6e22e; }
+.code-example code .number { color: #ae81ff; }
+.code-example code .boolean { color: #f92672; }
+.code-example code .null { color: #f92672; }
+.code-example code .key { color: #66d9ef; }
+
+/* Main Title Styling */
+.workflow-quotes h2 {
+    color: var(--primary-color);
+    font-size: 2.3rem;
+    font-weight: 700;
+    margin-bottom: 2rem;
+    text-align: center;
+    position: relative;
+    padding-bottom: 1rem;
+}
+
+.workflow-quotes h2::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 4px;
+    background-color: var(--primary-color);
+    border-radius: 2px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .example-tabs {
+        flex-direction: column;
+        gap: 1rem;
+        overflow-x: visible;
+    }
+
+    .tab {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .features-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .code-example {
+        padding: 1rem;
+    }
+
+    .code-example code {
+        font-size: 0.8rem;
+    }
+}

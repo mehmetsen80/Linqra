@@ -34,6 +34,7 @@ import io.milvus.grpc.DescribeCollectionResponse;
 import io.milvus.param.collection.DescribeCollectionParam;
 import io.milvus.grpc.KeyValuePair;
 import io.milvus.param.collection.AlterCollectionParam;
+import io.milvus.grpc.FieldData;
 
 @Slf4j
 @Service
@@ -195,6 +196,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             // Add ID field with timestamp-based unique ID
                             long uniqueId = System.currentTimeMillis();
                             fields.add(new InsertParam.Field("id", Collections.singletonList(uniqueId)));
+                            
+                            // Add created_at field with the same timestamp
+                            fields.add(new InsertParam.Field("created_at", Collections.singletonList(uniqueId)));
                             
                             // Add embedding field
                             fields.add(new InsertParam.Field("embedding", Collections.singletonList(embedding)));
@@ -368,7 +372,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         if (data == null || data.isEmpty()) {
                             throw new IllegalStateException("No data received from OpenAI embedding service");
                         }
-                        List<Object> rawEmbedding = (List<Object>) data.get(0).get("embedding");
+                        List<Object> rawEmbedding = (List<Object>) data.getFirst().get("embedding");
                         return rawEmbedding.stream()
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
@@ -382,7 +386,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         if (data == null || data.isEmpty()) {
                             throw new IllegalStateException("No data received from Gemini embedding service");
                         }
-                        List<Object> rawEmbedding = (List<Object>) data.get(0).get("embedding");
+                        List<Object> rawEmbedding = (List<Object>) data.getFirst().get("embedding");
                         return rawEmbedding.stream()
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
@@ -619,7 +623,13 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     @Override
     public Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType) {
-        log.info("Verifying record in collection {} for team {} with text: {} using tool: {} and model: {}", collectionName, teamId, text, targetTool, modelType);
+        return verifyRecord(collectionName, textField, text, teamId, targetTool, modelType, null);
+    }
+
+    @Override
+    public Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType, Map<String, Object> metadataFilters) {
+        log.info("Verifying record in collection {} for team {} with text: {} using tool: {} and model: {} with filters: {}", 
+            collectionName, teamId, text, targetTool, modelType, metadataFilters);
         try {
             // First verify the collection belongs to the team
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
@@ -627,6 +637,13 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withCollectionName(collectionName)
                     .build()
             );
+            
+            // Log collection schema for debugging
+            log.info("Collection schema for {}: {}", collectionName, describeResponse.getData().getSchema());
+            log.info("Available fields:");
+            for (io.milvus.grpc.FieldSchema field : describeResponse.getData().getSchema().getFieldsList()) {
+                log.info("  - {}: {} (primary: {})", field.getName(), field.getDataType(), field.getIsPrimaryKey());
+            }
             
             boolean teamIdMatches = false;
             for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
@@ -644,30 +661,58 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             return getEmbedding(text, targetTool, modelType, teamId)
                 .flatMap(searchEmbedding -> {
                     try {
+                        // Build dynamic filter expression
+                        String filterExpression = buildFilterExpression(teamId, metadataFilters, textField);
+                        
+                        // Build dynamic out fields
+                        List<String> outFields = buildOutFields(textField, metadataFilters);
+                        
                         // Use vector search to find similar records
-                        SearchParam searchParam = SearchParam.newBuilder()
+                        SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
                             .withCollectionName(collectionName)
                             .withFloatVectors(List.of(searchEmbedding))
                             .withTopK(5)
                             .withMetricType(METRIC_TYPE)
                             .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
                             .withVectorFieldName(EMBEDDING_FIELD)
-                            .withOutFields(Arrays.asList("id", textField))
-                            .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}")
-                            .build();
+                            .withOutFields(outFields)
+                            .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
+                        
+                        // Only add filter expression if it's not empty
+                        if (!filterExpression.isEmpty()) {
+                            searchParamBuilder.withExpr(filterExpression);
+                        }
+                        
+                        SearchParam searchParam = searchParamBuilder.build();
 
-                        log.info("Executing semantic search for text: {}", text);
+                        log.info("Executing semantic search for text: {} with filter: {}", text, filterExpression);
                         SearchResults results = milvusClient.search(searchParam).getData();
                         
                         if (results == null || results.getResults().getNumQueries() == 0) {
                             log.info("No results found in semantic search");
-                            return Mono.just(Map.of("message", "No similar records found"));
+                            // Return consistent structure with null/empty values for missing data
+                            Map<String, Object> noResultsResponse = new HashMap<>();
+                            noResultsResponse.put("found", false);
+                            noResultsResponse.put("message", "No search results found");
+                            noResultsResponse.put("id", null);
+                            noResultsResponse.put(textField, null);
+                            noResultsResponse.put("distance", null);
+                            noResultsResponse.put("match_type", null);
+                            noResultsResponse.put("search_text", text);
+                            // Add empty metadata fields if any were requested
+                            if (metadataFilters != null) {
+                                for (String fieldName : metadataFilters.keySet()) {
+                                    noResultsResponse.put(fieldName, null);
+                                }
+                            }
+                            return Mono.just(noResultsResponse);
                         }
 
                         SearchResultData resultData = results.getResults();
                         List<Object> ids = new ArrayList<>();
                         List<Object> documents = new ArrayList<>();
                         List<Float> distances = new ArrayList<>();
+                        List<Map<String, Object>> metadataList = new ArrayList<>();
 
                         // Extract results using the correct field access method
                         for (int i = 0; i < resultData.getNumQueries(); i++) {
@@ -709,6 +754,22 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                 log.warn("Distance field not found in search results");
                                 distances.add(0.0f); // Default distance
                             }
+                            
+                            // Extract metadata fields
+                            Map<String, Object> metadata = new HashMap<>();
+                            for (String fieldName : outFields) {
+                                if (!fieldName.equals("id") && !fieldName.equals(textField)) {
+                                    var fieldData = resultData.getFieldsDataList().stream()
+                                        .filter(f -> f.getFieldName().equals(fieldName))
+                                        .findFirst()
+                                        .orElse(null);
+                                    if (fieldData != null) {
+                                        Object value = extractFieldValue(fieldData, i);
+                                        metadata.put(fieldName, value);
+                                    }
+                                }
+                            }
+                            metadataList.add(metadata);
                         }
 
                         // Find exact text match among semantic search results
@@ -719,16 +780,37 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         if (ids.isEmpty() || documents.isEmpty() || distances.isEmpty()) {
                             log.warn("No search results found - ids: {}, documents: {}, distances: {}", 
                                 ids.size(), documents.size(), distances.size());
-                            return Mono.just(Map.of("message", "No search results found"));
+                            // Return consistent structure with null/empty values for missing data
+                            Map<String, Object> noResultsResponse = new HashMap<>();
+                            noResultsResponse.put("found", false);
+                            noResultsResponse.put("message", "No search results found");
+                            noResultsResponse.put("id", null);
+                            noResultsResponse.put(textField, null);
+                            noResultsResponse.put("distance", null);
+                            noResultsResponse.put("match_type", null);
+                            noResultsResponse.put("search_text", text);
+                            // Add empty metadata fields if any were requested
+                            if (metadataFilters != null) {
+                                for (String fieldName : metadataFilters.keySet()) {
+                                    noResultsResponse.put(fieldName, null);
+                                }
+                            }
+                            return Mono.just(noResultsResponse);
                         }
                         
                         for (int i = 0; i < documents.size(); i++) {
                             String storedText = documents.get(i).toString();
                             if (storedText.equalsIgnoreCase(text)) {
+                                verification.put("found", true);
                                 verification.put("id", ids.get(i));
                                 verification.put(textField, storedText);
                                 verification.put("distance", distances.get(i));
                                 verification.put("match_type", "exact");
+                                verification.put("search_text", text);
+                                // Add metadata to response
+                                if (i < metadataList.size()) {
+                                    verification.putAll(metadataList.get(i));
+                                }
                                 foundExactMatch = true;
                                 log.info("Found exact match with distance: {}", distances.get(i));
                                 break;
@@ -737,11 +819,16 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
                         if (!foundExactMatch) {
                             // Return the most similar result
+                            verification.put("found", true);
                             verification.put("id", ids.getFirst());
                             verification.put(textField, documents.getFirst());
                             verification.put("distance", distances.getFirst());
                             verification.put("match_type", "semantic");
                             verification.put("search_text", text);
+                            // Add metadata to response
+                            if (!metadataList.isEmpty()) {
+                                verification.putAll(metadataList.getFirst());
+                            }
                             log.info("Found semantic match with distance: {}", distances.getFirst());
                         }
 
@@ -756,6 +843,281 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 
         } catch (Exception e) {
             log.error("Failed to verify record in collection {}: {}", collectionName, e.getMessage(), e);
+            return Mono.error(e);
+        }
+    }
+
+    /**
+     * Build dynamic filter expression for metadata filtering
+     */
+    private String buildFilterExpression(String teamId, Map<String, Object> metadataFilters) {
+        List<String> conditions = new ArrayList<>();
+        
+        // Note: Team filtering is optional since we already verify collection ownership
+        // If you need team filtering, uncomment the line below and ensure 'teamId' field exists in your schema
+        // conditions.add("teamId == \"" + teamId + "\"");
+        
+        // Add dynamic metadata filters
+        if (metadataFilters != null) {
+            for (Map.Entry<String, Object> filter : metadataFilters.entrySet()) {
+                String fieldName = filter.getKey();
+                Object value = filter.getValue();
+                
+                if (value != null) {
+                    if (value instanceof String) {
+                        conditions.add(fieldName + " == \"" + value + "\"");
+                    } else if (value instanceof Number) {
+                        conditions.add(fieldName + " == " + value);
+                    } else if (value instanceof Boolean) {
+                        conditions.add(fieldName + " == " + value);
+                    }
+                }
+            }
+        }
+        
+        return conditions.isEmpty() ? "" : String.join(" && ", conditions);
+    }
+
+    /**
+     * Build dynamic filter expression for metadata filtering with text field validation
+     */
+    private String buildFilterExpression(String teamId, Map<String, Object> metadataFilters, String textField) {
+        List<String> conditions = new ArrayList<>();
+        
+        // Add filter to exclude empty or null text fields
+        conditions.add(textField + " != \"\"");
+        conditions.add(textField + " != null");
+        
+        // Note: Team filtering is optional since we already verify collection ownership
+        // If you need team filtering, uncomment the line below and ensure 'teamId' field exists in your schema
+        // conditions.add("teamId == \"" + teamId + "\"");
+        
+        // Add dynamic metadata filters
+        if (metadataFilters != null) {
+            for (Map.Entry<String, Object> filter : metadataFilters.entrySet()) {
+                String fieldName = filter.getKey();
+                Object value = filter.getValue();
+                
+                if (value != null) {
+                    if (value instanceof String) {
+                        conditions.add(fieldName + " == \"" + value + "\"");
+                    } else if (value instanceof Number) {
+                        conditions.add(fieldName + " == " + value);
+                    } else if (value instanceof Boolean) {
+                        conditions.add(fieldName + " == " + value);
+                    }
+                }
+            }
+        }
+        
+        return String.join(" && ", conditions);
+    }
+
+    /**
+     * Build dynamic out fields list
+     */
+    private List<String> buildOutFields(String textField, Map<String, Object> metadataFilters) {
+        List<String> outFields = new ArrayList<>();
+        outFields.add("id");
+        outFields.add(textField);
+        
+        // Add metadata fields to the output
+        if (metadataFilters != null) {
+            outFields.addAll(metadataFilters.keySet());
+        }
+        
+        return outFields;
+    }
+
+    /**
+     * Extract field value based on data type
+     */
+    private Object extractFieldValue(FieldData fieldData, int index) {
+        if (fieldData.getScalars().hasStringData() && fieldData.getScalars().getStringData().getDataCount() > index) {
+            return fieldData.getScalars().getStringData().getData(index);
+        } else if (fieldData.getScalars().hasLongData() && fieldData.getScalars().getLongData().getDataCount() > index) {
+            return fieldData.getScalars().getLongData().getData(index);
+        } else if (fieldData.getScalars().hasFloatData() && fieldData.getScalars().getFloatData().getDataCount() > index) {
+            return fieldData.getScalars().getFloatData().getData(index);
+        } else if (fieldData.getScalars().hasDoubleData() && fieldData.getScalars().getDoubleData().getDataCount() > index) {
+            return fieldData.getScalars().getDoubleData().getData(index);
+        } else if (fieldData.getScalars().hasBoolData() && fieldData.getScalars().getBoolData().getDataCount() > index) {
+            return fieldData.getScalars().getBoolData().getData(index);
+        }
+        return null;
+    }
+
+    @Override
+    public Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType) {
+        return searchRecord(collectionName, textField, text, teamId, targetTool, modelType, 10, null);
+    }
+
+    @Override
+    public Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType, int nResults, Map<String, Object> metadataFilters) {
+        log.info("Searching records in collection {} for team {} with text: {} using tool: {} and model: {} with filters: {} and nResults: {}", 
+            collectionName, teamId, text, targetTool, modelType, metadataFilters, nResults);
+        try {
+            // First verify the collection belongs to the team
+            R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
+                DescribeCollectionParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .build()
+            );
+            
+            // Log collection schema for debugging
+            log.info("Collection schema for {}: {}", collectionName, describeResponse.getData().getSchema());
+            log.info("Available fields:");
+            for (io.milvus.grpc.FieldSchema field : describeResponse.getData().getSchema().getFieldsList()) {
+                log.info("  - {}: {} (primary: {})", field.getName(), field.getDataType(), field.getIsPrimaryKey());
+            }
+            
+            boolean teamIdMatches = false;
+            for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
+                if ("teamId".equals(property.getKey()) && teamId.equals(property.getValue())) {
+                    teamIdMatches = true;
+                    break;
+                }
+            }
+            
+            if (!teamIdMatches) {
+                return Mono.just(Map.of("message", "Collection does not belong to team " + teamId));
+            }
+
+            // Get embedding for the search text using dynamic tool and model
+            return getEmbedding(text, targetTool, modelType, teamId)
+                .flatMap(searchEmbedding -> {
+                    try {
+                        // Build dynamic filter expression
+                        String filterExpression = buildFilterExpression(teamId, metadataFilters);
+                        
+                        // Build dynamic out fields
+                        List<String> outFields = buildOutFields(textField, metadataFilters);
+                        
+                        // Use vector search to find similar records
+                        SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
+                            .withCollectionName(collectionName)
+                            .withFloatVectors(List.of(searchEmbedding))
+                            .withTopK(nResults)
+                            .withMetricType(METRIC_TYPE)
+                            .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
+                            .withVectorFieldName(EMBEDDING_FIELD)
+                            .withOutFields(outFields)
+                            .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
+                        
+                        // Only add filter expression if it's not empty
+                        if (!filterExpression.isEmpty()) {
+                            searchParamBuilder.withExpr(filterExpression);
+                        }
+                        
+                        SearchParam searchParam = searchParamBuilder.build();
+
+                        log.info("Executing semantic search for text: {} with filter: {} and nResults: {}", 
+                            text, filterExpression.isEmpty() ? "none" : filterExpression, nResults);
+                        SearchResults results = milvusClient.search(searchParam).getData();
+                        
+                        if (results == null || results.getResults().getNumQueries() == 0) {
+                            log.info("No results found in semantic search");
+                            // Return consistent structure for no results
+                            Map<String, Object> noResultsResponse = new HashMap<>();
+                            noResultsResponse.put("found", false);
+                            noResultsResponse.put("message", "No search results found");
+                            noResultsResponse.put("search_text", text);
+                            noResultsResponse.put("total_results", 0);
+                            noResultsResponse.put("results", new ArrayList<>());
+                            return Mono.just(noResultsResponse);
+                        }
+
+                        SearchResultData resultData = results.getResults();
+                        List<Map<String, Object>> searchResults = new ArrayList<>();
+
+                        // Extract results using the correct field access method
+                        for (int i = 0; i < resultData.getNumQueries(); i++) {
+                            Map<String, Object> record = new HashMap<>();
+                            
+                            // Get ID field
+                            var idFieldData = resultData.getFieldsDataList().stream()
+                                .filter(f -> f.getFieldName().equals("id"))
+                                .findFirst()
+                                .orElse(null);
+                            if (idFieldData != null && idFieldData.getScalars().hasLongData() && idFieldData.getScalars().getLongData().getDataCount() > i) {
+                                record.put("id", idFieldData.getScalars().getLongData().getData(i));
+                            }
+                            
+                            // Get text field
+                            var textFieldData = resultData.getFieldsDataList().stream()
+                                .filter(f -> f.getFieldName().equals(textField))
+                                .findFirst()
+                                .orElse(null);
+                            if (textFieldData != null && textFieldData.getScalars().hasStringData() && textFieldData.getScalars().getStringData().getDataCount() > i) {
+                                record.put(textField, textFieldData.getScalars().getStringData().getData(i));
+                            }
+                            
+                            // Get distance field
+                            var distanceField = resultData.getFieldsDataList().stream()
+                                .filter(f -> f.getFieldName().equals("distance"))
+                                .findFirst()
+                                .orElse(null);
+                            
+                            if (distanceField != null) {
+                                if (distanceField.getScalars().hasFloatData() && distanceField.getScalars().getFloatData().getDataCount() > i) {
+                                    record.put("distance", distanceField.getScalars().getFloatData().getData(i));
+                                } else if (distanceField.getScalars().hasDoubleData() && distanceField.getScalars().getDoubleData().getDataCount() > i) {
+                                    record.put("distance", (float) distanceField.getScalars().getDoubleData().getData(i));
+                                } else {
+                                    record.put("distance", 0.0f); // Default distance
+                                }
+                            } else {
+                                record.put("distance", 0.0f); // Default distance
+                            }
+                            
+                            // Determine match type based on similarity
+                            float distance = (Float) record.get("distance");
+                            if (distance < 0.1f) {
+                                record.put("match_type", "exact");
+                            } else if (distance < 0.3f) {
+                                record.put("match_type", "high_similarity");
+                            } else if (distance < 0.5f) {
+                                record.put("match_type", "medium_similarity");
+                            } else {
+                                record.put("match_type", "low_similarity");
+                            }
+                            
+                            // Extract metadata fields
+                            for (String fieldName : outFields) {
+                                if (!fieldName.equals("id") && !fieldName.equals(textField)) {
+                                    var fieldData = resultData.getFieldsDataList().stream()
+                                        .filter(f -> f.getFieldName().equals(fieldName))
+                                        .findFirst()
+                                        .orElse(null);
+                                    if (fieldData != null) {
+                                        Object value = extractFieldValue(fieldData, i);
+                                        record.put(fieldName, value);
+                                    }
+                                }
+                            }
+                            
+                            searchResults.add(record);
+                        }
+
+                        // Build the final response
+                        Map<String, Object> searchResponse = new HashMap<>();
+                        searchResponse.put("found", true);
+                        searchResponse.put("search_text", text);
+                        searchResponse.put("total_results", searchResults.size());
+                        searchResponse.put("results", searchResults);
+                        searchResponse.put("message", String.format("Found %d relevant records", searchResults.size()));
+
+                        log.info("Successfully searched records with {} results", searchResults.size());
+                        return Mono.just(searchResponse);
+                        
+                    } catch (Exception e) {
+                        log.error("Failed to perform semantic search: {}", e.getMessage(), e);
+                        return Mono.error(e);
+                    }
+                });
+                
+        } catch (Exception e) {
+            log.error("Failed to search records in collection {}: {}", collectionName, e.getMessage(), e);
             return Mono.error(e);
         }
     }

@@ -97,6 +97,14 @@ function LinqProtocol() {
                                             Examples
                                         </NavLink>
                                     </li>
+                                    <li>
+                                        <NavLink 
+                                            to="/linq-protocol/workflow/quotes"
+                                            className={({ isActive }) => isActive ? 'active' : ''}
+                                        >
+                                            Quotes Workflows
+                                        </NavLink>
+                                    </li>
                                 </ul>
                             </nav>
                         </div>

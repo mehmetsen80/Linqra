@@ -29,7 +29,7 @@ import WorkflowOverview from '../pages/LinqProtocol/Workflow';
 import WorkflowCreate from '../pages/LinqProtocol/Workflow/Create';
 import WorkflowExecute from '../pages/LinqProtocol/Workflow/Execute';
 import WorkflowExamples from '../pages/LinqProtocol/Workflow/Examples';
-
+import WorkflowQuotes from '../pages/LinqProtocol/Workflow/Quotes';
 const AppRoutes = () => {
   return (
     <Routes>
@@ -52,6 +52,7 @@ const AppRoutes = () => {
         <Route path="workflow/create" element={<WorkflowCreate />} />
         <Route path="workflow/execute" element={<WorkflowExecute />} />
         <Route path="workflow/examples" element={<WorkflowExamples />} />
+        <Route path="workflow/quotes" element={<WorkflowQuotes />} />
       </Route>
 
       {/* Protected Routes - All under AdminLayout */}

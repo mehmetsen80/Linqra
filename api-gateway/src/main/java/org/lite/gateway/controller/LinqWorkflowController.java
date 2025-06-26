@@ -133,8 +133,8 @@ public class LinqWorkflowController {
                             
                             // For SUPER_ADMIN, proceed directly
                             if (user.getRoles().contains("SUPER_ADMIN")) {
-                                return addTeamIdToWorkflowParams(workflow)
-                                    .flatMap(updatedWorkflow -> linqWorkflowService.createWorkflow(updatedWorkflow))
+                                return addGlobalParamsToWorkflow(workflow)
+                                    .flatMap(linqWorkflowService::createWorkflow)
                                     .map(ResponseEntity::ok);
                             }
                             
@@ -150,7 +150,7 @@ public class LinqWorkflowController {
                                                 HttpStatus.FORBIDDEN.value()
                                             )));
                                     }
-                                    return addTeamIdToWorkflowParams(workflow)
+                                    return addGlobalParamsToWorkflow(workflow)
                                         .flatMap(linqWorkflowService::createWorkflow)
                                         .map(ResponseEntity::ok);
                                 });
@@ -463,7 +463,7 @@ public class LinqWorkflowController {
                     
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
-                        return addTeamIdToWorkflowParams(updatedWorkflow)
+                        return addGlobalParamsToWorkflow(updatedWorkflow)
                             .flatMap(updatedWorkflowWithParams -> linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflowWithParams))
                             .map(ResponseEntity::ok);
                     }
@@ -485,7 +485,7 @@ public class LinqWorkflowController {
                                                 HttpStatus.FORBIDDEN.value()
                                             )));
                                     }
-                                    return addTeamIdToWorkflowParams(updatedWorkflow)
+                                    return addGlobalParamsToWorkflow(updatedWorkflow)
                                         .flatMap(updatedWorkflowWithParams -> linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflowWithParams))
                                         .map(ResponseEntity::ok);
                                 });
@@ -521,7 +521,7 @@ public class LinqWorkflowController {
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqWorkflowVersionService.rollbackToVersion(workflowId, versionId)
-                            .map(w -> ResponseEntity.ok(w));
+                            .map(ResponseEntity::ok);
                     }
                     
                     // For non-SUPER_ADMIN users, check team role
@@ -573,9 +573,9 @@ public class LinqWorkflowController {
     }
 
     /**
-     * Helper method to add teamId to workflow query params if not already present
+     * Helper method to add teamId and userId to workflow query params if not already present
      */
-    private Mono<LinqWorkflow> addTeamIdToWorkflowParams(LinqWorkflow workflow) {
+    private Mono<LinqWorkflow> addGlobalParamsToWorkflow(LinqWorkflow workflow) {
         if (workflow.getRequest() != null && 
             workflow.getRequest().getQuery() != null && 
             workflow.getTeamId() != null) {
@@ -588,7 +588,13 @@ public class LinqWorkflowController {
             // Add teamId to params if not already present
             workflow.getRequest().getQuery().getParams().putIfAbsent("teamId", workflow.getTeamId());
             
-            log.info("Added teamId {} to workflow params", workflow.getTeamId());
+            // Add userId to params if not already present (use createdBy or updatedBy)
+            String userId = workflow.getCreatedBy() != null ? workflow.getCreatedBy() : workflow.getUpdatedBy();
+            if (userId != null) {
+                workflow.getRequest().getQuery().getParams().putIfAbsent("userId", userId);
+            }
+            
+            log.info("Added teamId {} and userId {} to workflow params", workflow.getTeamId(), userId);
         }
         
         return Mono.just(workflow);

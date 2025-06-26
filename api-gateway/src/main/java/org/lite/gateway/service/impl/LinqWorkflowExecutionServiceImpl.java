@@ -371,8 +371,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
     private String resolvePlaceholder(String value, WorkflowExecutionContext context) {
         String result = value;
-        // Step result pattern
-        Pattern stepPattern = Pattern.compile("\\{\\{step(\\d+)\\.result(?:\\.([\\w.]+))?\\}\\}");
+        // Step result pattern - updated to handle complex JSON paths including arrays and nested objects
+        Pattern stepPattern = Pattern.compile("\\{\\{step(\\d+)\\.result(?:\\.([^}]+))?\\}\\}");
         Matcher stepMatcher = stepPattern.matcher(value);
         while (stepMatcher.find()) {
             int stepNum = Integer.parseInt(stepMatcher.group(1));
@@ -402,16 +402,45 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         String[] parts = path.split("\\.");
         Object current = obj;
         for (String part : parts) {
-            if (current instanceof Map<?, ?> map) {
-                current = map.get(part);
-            } else if (current instanceof List<?> list && part.matches("\\d+")) {
-                current = list.get(Integer.parseInt(part));
-            } else {
-                return "";
-            }
             if (current == null) return "";
+            
+            // Check if this part contains array access (e.g., "choices[0]")
+            if (part.contains("[")) {
+                String arrayName = part.substring(0, part.indexOf("["));
+                String indexStr = part.substring(part.indexOf("[") + 1, part.indexOf("]"));
+                
+                if (current instanceof Map<?, ?> map) {
+                    current = map.get(arrayName);
+                    if (current instanceof List<?> list && indexStr.matches("\\d+")) {
+                        int index = Integer.parseInt(indexStr);
+                        if (index >= 0 && index < list.size()) {
+                            current = list.get(index);
+                        } else {
+                            return "";
+                        }
+                    } else {
+                        return "";
+                    }
+                } else {
+                    return "";
+                }
+            } else {
+                // Regular property access
+                if (current instanceof Map<?, ?> map) {
+                    current = map.get(part);
+                } else if (current instanceof List<?> list && part.matches("\\d+")) {
+                    int index = Integer.parseInt(part);
+                    if (index >= 0 && index < list.size()) {
+                        current = list.get(index);
+                    } else {
+                        return "";
+                    }
+                } else {
+                    return "";
+                }
+            }
         }
-        return String.valueOf(current);
+        return current != null ? String.valueOf(current) : "";
     }
 
     private String extractFinalResult(Object result) {

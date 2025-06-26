@@ -6,6 +6,7 @@ import org.lite.gateway.dto.MilvusCreateCollectionRequest;
 import org.lite.gateway.dto.MilvusQueryRequest;
 import org.lite.gateway.dto.MilvusStoreRecordRequest;
 import org.lite.gateway.dto.MilvusVerifyRequest;
+import org.lite.gateway.dto.MilvusSearchRequest;
 import org.lite.gateway.dto.MilvusCollectionInfo;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.service.TeamService;
@@ -177,6 +178,52 @@ public class MilvusController {
                         request.getTeamId(),
                         request.getTargetTool() != null ? request.getTargetTool() : "openai-embed",
                         request.getModelType() != null ? request.getModelType() : "text-embedding-3-small"
+                    ))
+            )
+            .map(ResponseEntity::ok);
+    }
+
+    @PostMapping("/collections/{collectionName}/search")
+    public Mono<ResponseEntity<Map<String, Object>>> searchRecord(
+            @PathVariable String collectionName,
+            @RequestBody MilvusSearchRequest request,
+            ServerWebExchange exchange) {
+        log.info("Searching records in collection: {} for team: {}", collectionName, request.getTeamId());
+        
+        // Check if this is a workflow step call with executedBy header
+        String executedBy = exchange.getRequest().getHeaders().getFirst("X-Executed-By");
+        if (executedBy != null) {
+            log.info("Using executedBy header for workflow step: {}", executedBy);
+            return executeSearchRecordWithUser(executedBy, collectionName, request);
+        }
+        
+        // Regular user authentication flow
+        return userContextService.getCurrentUsername(exchange)
+            .flatMap(username -> executeSearchRecordWithUser(username, collectionName, request));
+    }
+
+    /**
+     * Helper method to execute search record with user authentication and authorization
+     */
+    private Mono<ResponseEntity<Map<String, Object>>> executeSearchRecordWithUser(
+            String username, 
+            String collectionName, 
+            MilvusSearchRequest request) {
+        return userService.findByUsername(username)
+            .flatMap(user -> 
+                teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
+                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                    .switchIfEmpty(Mono.error(new AccessDeniedException(
+                        "Admin access required for team " + request.getTeamId())))
+                    .then(linqMilvusStoreService.searchRecord(
+                        collectionName, 
+                        request.getTextField(), 
+                        request.getText(), 
+                        request.getTeamId(),
+                        request.getTargetTool() != null ? request.getTargetTool() : "openai-embed",
+                        request.getModelType() != null ? request.getModelType() : "text-embedding-3-small",
+                        request.getNResults() != null ? request.getNResults() : 10,
+                        request.getMetadataFilters()
                     ))
             )
             .map(ResponseEntity::ok);

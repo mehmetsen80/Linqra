@@ -65,11 +65,34 @@ const WorkflowQuotes = () => {
                         href="https://docs.linqra.com/linq-protocol/introduction" 
                         target="_blank" 
                         rel="noopener noreferrer"
-                        className="quotes-docs-button"
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            padding: '0.75rem 1.5rem',
+                            backgroundColor: 'var(--primary-color)',
+                            color: 'white',
+                            textDecoration: 'none',
+                            borderRadius: '8px',
+                            fontWeight: '500',
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.target.style.backgroundColor = 'var(--primary-color-dark)';
+                            e.target.style.transform = 'translateY(-2px)';
+                            e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.target.style.backgroundColor = 'var(--primary-color)';
+                            e.target.style.transform = 'translateY(0)';
+                            e.target.style.boxShadow = 'none';
+                        }}
                     >
-                        <FaBook className="button-icon" />
+                        <FaBook style={{ color: 'white' }} />
                         <span>View Full Documentation</span>
-                        <FaExternalLinkAlt className="external-icon" />
+                        <FaExternalLinkAlt style={{ color: 'white' }} />
                     </a>
                 </div>
             </div>

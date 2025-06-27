@@ -76,6 +76,10 @@ See the [LICENSE](./LICENSE) file for details.
 ```bash
 # Create collection for quotes (one-time setup)
 POST /api/milvus/collections
+Content-Type: application/json
+```
+
+```json
 {
   "collectionName": "famous_quotes_openai_text_embedding_3_small_1536",
   "schemaFields": [
@@ -102,7 +106,12 @@ First, create the workflow using the API:
 ```bash
 POST https://localhost:7777/linq/workflows
 Content-Type: application/json
+x-api-key: {api key}
+x-api-key-name: {api key name}
+Authorization: Bearer {Token}
+```
 
+```json
 {
     "name": "Quotes of Famous People",
     "description": "This is quotes application of famous people.",
@@ -446,7 +455,9 @@ Content-Type: application/json
 x-api-key: {api key}
 x-api-key-name: {api key name}
 Authorization: Bearer {Token}
+```
 
+```json
 {
     "name": "Quotes of Famous People",
     "description": "This is quotes application of famous people.",
@@ -856,7 +867,9 @@ Before using the Enhanced Historical Saying Generator Workflow, you need to crea
 ```bash
 POST /api/milvus/collections
 Content-Type: application/json
+```
 
+```json
 {
   "collectionName": "famous_quotes_openai_text_embedding_3_small_1536",
   "schemaFields": [
@@ -940,7 +953,9 @@ After creating the collection, you can verify it works by testing the verificati
 ```bash
 POST /api/milvus/collections/famous_quotes_openai_text_embedding_3_small_1536/verify
 Content-Type: application/json
+```
 
+```json
 {
     "textField": "quotetext",
     "text": "Creativity is intelligence having fun.",
@@ -970,7 +985,9 @@ Content-Type: application/json
 x-api-key: {api key}
 x-api-key-name: {api key name}
 Authorization: Bearer {Token}
+```
 
+```json
 {
     "name": "Smart Historical Saying Generator (RAG)",
     "description": "Generates inspirational sayings from historical figures using RAG for diversity and quality",
@@ -1256,7 +1273,9 @@ Content-Type: application/json
 x-api-key: {api key}
 x-api-key-name: {api key name}
 Authorization: Bearer {Token}
+```
 
+```json
 {
     "name": "Smart Historical Saying Generator (RAG)",
     "description": "Generates inspirational sayings from historical figures using RAG for diversity and quality",

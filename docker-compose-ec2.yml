@@ -258,7 +258,7 @@ services:
   attu-service:
     image: zilliz/attu:v2.5
     environment:
-      MILVUS_URL: milvus-service:19530
+      MILVUS_URL: localhost:19530
     ports:
       - "8000:3000"
     networks:
@@ -335,7 +335,7 @@ services:
       SMTP_PASSWORD: 123456
       SMTP_USERNAME: abcdef
       OAUTH2_REDIRECT_URI: https://linqra.com/callback
-      MILVUS_HOST: milvus-service
+      MILVUS_HOST: localhost
       MILVUS_PORT: 19530
     volumes:
       - ./api-gateway:/app/api-gateway

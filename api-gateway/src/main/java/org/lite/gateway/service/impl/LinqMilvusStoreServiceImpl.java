@@ -78,6 +78,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         try {
             R<Boolean> hasCollection = milvusClient.hasCollection(HasCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
+                    .withDatabaseName("default")
                     .build());
             
             if (hasCollection.getData()) {
@@ -92,6 +93,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withDescription(description != null ? description : "")
                     .withShardsNum(SHARDS_NUM)
                     .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
+                    .withDatabaseName("default")
                     .withSchema(CollectionSchemaParam.newBuilder()
                             .withFieldTypes(fields)
                             .build());
@@ -111,6 +113,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withFieldName(embeddingField)
                     .withIndexType(INDEX_TYPE)
                     .withMetricType(METRIC_TYPE)
+                    .withDatabaseName("default")
                     .withExtraParam("{\"M\":" + INDEX_PARAM_M + ",\"efConstruction\":" + INDEX_PARAM_EF_CONSTRUCTION + "}")
                     .build();
 
@@ -120,12 +123,14 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             // Load collection
             milvusClient.loadCollection(LoadCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
+                    .withDatabaseName("default")
                     .build());
             log.info("Loaded Milvus collection: {}", collectionName);
 
             // Set teamId as a collection property
             AlterCollectionParam alterParam = AlterCollectionParam.newBuilder()
                 .withCollectionName(collectionName)
+                .withDatabaseName("default")
                 .withProperty("teamId", teamId)
                 .build();
             milvusClient.alterCollection(alterParam);
@@ -522,7 +527,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     public Mono<List<MilvusCollectionInfo>> listCollections(String teamId) {
         log.info("Listing collections for team {}", teamId);
         try {
-            R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder().build());
+            R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
+                    .withDatabaseName("default")
+                    .build());
             List<String> allCollections = response.getData().getCollectionNamesList();
             
             // Filter collections in parallel using CompletableFuture
@@ -533,6 +540,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                             DescribeCollectionParam.newBuilder()
                                 .withCollectionName(collectionName)
+                                .withDatabaseName("default")
                                 .build()
                         );
                         
@@ -572,7 +580,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     public Mono<List<MilvusCollectionInfo>> listAllCollections() {
         log.info("Listing all collections");
         try {
-            R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder().build());
+            R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
+                    .withDatabaseName("default")
+                    .build());
             List<String> allCollections = response.getData().getCollectionNamesList();
             
             // Filter collections in parallel using CompletableFuture
@@ -583,6 +593,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                             DescribeCollectionParam.newBuilder()
                                 .withCollectionName(collectionName)
+                                .withDatabaseName("default")
                                 .build()
                         );
                         

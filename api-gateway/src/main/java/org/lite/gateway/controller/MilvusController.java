@@ -40,16 +40,23 @@ public class MilvusController {
         return userContextService.getCurrentUsername(exchange)
             .flatMap(userService::findByUsername)
             .flatMap(user -> 
-                teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
-                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
-                    .switchIfEmpty(Mono.error(new AccessDeniedException(
-                        "Admin access required for team " + request.getTeamId())))
-                    .then(linqMilvusStoreService.createCollection(
-                        request.getCollectionName(),
-                        request.getSchemaFields(),
-                        request.getDescription(),
-                        request.getTeamId()
-                    ))
+                // First check if the team exists
+                teamService.getTeamById(request.getTeamId())
+                    .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                        "Team with ID " + request.getTeamId() + " does not exist")))
+                    .then(
+                        // Then check if user has admin role for this team
+                        teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
+                            .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                            .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                "Admin access required for team " + request.getTeamId())))
+                            .then(linqMilvusStoreService.createCollection(
+                                request.getCollectionName(),
+                                request.getSchemaFields(),
+                                request.getDescription(),
+                                request.getTeamId()
+                            ))
+                    )
             )
             .map(ResponseEntity::ok);
     }

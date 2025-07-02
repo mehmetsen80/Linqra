@@ -24,9 +24,10 @@ public class MilvusConfig {
             ConnectParam connectParam = ConnectParam.newBuilder()
                     .withHost(milvusHost)
                     .withPort(milvusPort)
+                    .withDatabaseName("default")
                     .build();
             MilvusServiceClient client = new MilvusServiceClient(connectParam);
-            log.info("Successfully connected to Milvus at {}:{}", milvusHost, milvusPort);
+            log.info("Successfully connected to Milvus at {}:{} with database 'default'", milvusHost, milvusPort);
             return client;
         } catch (Exception e) {
             log.error("Failed to initialize Milvus client: {}", e.getMessage(), e);

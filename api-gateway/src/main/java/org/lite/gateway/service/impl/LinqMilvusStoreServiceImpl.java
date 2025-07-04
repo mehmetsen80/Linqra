@@ -35,6 +35,8 @@ import io.milvus.param.collection.DescribeCollectionParam;
 import io.milvus.grpc.KeyValuePair;
 import io.milvus.param.collection.AlterCollectionParam;
 import io.milvus.grpc.FieldData;
+import io.milvus.param.collection.GetCollectionStatisticsParam;
+import io.milvus.grpc.GetCollectionStatisticsResponse;
 
 @Slf4j
 @Service
@@ -1129,6 +1131,103 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 
         } catch (Exception e) {
             log.error("Failed to search records in collection {}: {}", collectionName, e.getMessage(), e);
+            return Mono.error(e);
+        }
+    }
+
+    @Override
+    public Mono<Map<String, Object>> getCollectionDetails() {
+        log.info("Getting detailed collection information");
+        try {
+            R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
+                    .build());
+            List<String> allCollections = response.getData().getCollectionNamesList();
+            
+            log.info("Found {} collections in current database context: {}", allCollections.size(), allCollections);
+            
+            Map<String, Object> result = new HashMap<>();
+            List<Map<String, Object>> collections = new ArrayList<>();
+            
+            for (String collectionName : allCollections) {
+                try {
+                    // Get collection properties
+                    R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
+                        DescribeCollectionParam.newBuilder()
+                            .withCollectionName(collectionName)
+                            .build()
+                    );
+                    
+                    Map<String, Object> collectionInfo = new HashMap<>();
+                    collectionInfo.put("name", collectionName);
+                    
+                    // Get teamId from properties
+                    for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
+                        if ("teamId".equals(property.getKey())) {
+                            collectionInfo.put("teamId", property.getValue());
+                            break;
+                        }
+                    }
+                    
+                    // Get schema information
+                    List<Map<String, Object>> fields = new ArrayList<>();
+                    for (io.milvus.grpc.FieldSchema field : describeResponse.getData().getSchema().getFieldsList()) {
+                        Map<String, Object> fieldInfo = new HashMap<>();
+                        fieldInfo.put("name", field.getName());
+                        fieldInfo.put("dataType", field.getDataType().name());
+                        fieldInfo.put("isPrimary", field.getIsPrimaryKey());
+                        if (field.getTypeParamsCount() > 0) {
+                            // Convert Protobuf type params to simple map
+                            Map<String, String> typeParams = new HashMap<>();
+                            for (KeyValuePair param : field.getTypeParamsList()) {
+                                typeParams.put(param.getKey(), param.getValue());
+                            }
+                            fieldInfo.put("typeParams", typeParams);
+                        }
+                        fields.add(fieldInfo);
+                    }
+                    collectionInfo.put("schema", fields);
+                    
+                    // Get collection statistics
+                    try {
+                        R<GetCollectionStatisticsResponse> statsResponse = milvusClient.getCollectionStatistics(
+                            GetCollectionStatisticsParam.newBuilder()
+                                .withCollectionName(collectionName)
+                                .withDatabaseName("default")
+                                .build()
+                        );
+                        // Extract row count from the response
+                        long rowCount = 0;
+                        for (KeyValuePair stat : statsResponse.getData().getStatsList()) {
+                            if ("row_count".equals(stat.getKey())) {
+                                rowCount = Long.parseLong(stat.getValue());
+                                break;
+                            }
+                        }
+                        collectionInfo.put("rowCount", rowCount);
+                    } catch (Exception e) {
+                        log.warn("Failed to get row count for collection {}: {}", collectionName, e.getMessage());
+                        collectionInfo.put("rowCount", "unknown");
+                    }
+                    
+                    collections.add(collectionInfo);
+                    
+                } catch (Exception e) {
+                    log.warn("Failed to get details for collection {}: {}", collectionName, e.getMessage());
+                    Map<String, Object> errorInfo = new HashMap<>();
+                    errorInfo.put("name", collectionName);
+                    errorInfo.put("error", e.getMessage());
+                    collections.add(errorInfo);
+                }
+            }
+            
+            result.put("collections", collections);
+            result.put("totalCollections", collections.size());
+            result.put("database", "default");
+            
+            log.info("Retrieved details for {} collections", collections.size());
+            return Mono.just(result);
+        } catch (Exception e) {
+            log.error("Failed to get collection details: {}", e.getMessage());
             return Mono.error(e);
         }
     }

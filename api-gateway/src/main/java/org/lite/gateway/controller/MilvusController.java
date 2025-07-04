@@ -165,6 +165,17 @@ public class MilvusController {
             .map(ResponseEntity::ok);
     }
 
+    @GetMapping("/collections/details")
+    public Mono<ResponseEntity<Map<String, Object>>> getCollectionDetails(ServerWebExchange exchange) {
+        log.info("Getting detailed collection information");
+        return userContextService.getCurrentUsername(exchange)
+            .flatMap(userService::findByUsername)
+            .filter(user -> user.getRoles().contains("SUPER_ADMIN"))
+            .switchIfEmpty(Mono.error(new AccessDeniedException("Super admin access required")))
+            .then(linqMilvusStoreService.getCollectionDetails())
+            .map(ResponseEntity::ok);
+    }
+
     @PostMapping("/collections/{collectionName}/verify")
     public Mono<ResponseEntity<Map<String, Object>>> verifyRecord(
             @PathVariable String collectionName,

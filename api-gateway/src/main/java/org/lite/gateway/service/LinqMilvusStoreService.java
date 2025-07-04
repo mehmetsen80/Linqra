@@ -128,4 +128,11 @@ public interface LinqMilvusStoreService {
      * @return A Mono containing the search results with multiple records
      */
     Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String targetTool, String modelType);
+
+    /**
+     * Lists all collections with detailed information including schema and statistics.
+     *
+     * @return A Mono emitting a map with detailed collection information.
+     */
+    Mono<Map<String, Object>> getCollectionDetails();
 }

@@ -1153,14 +1153,49 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .build());
             
             log.info("ShowCollections response status: {}", response.getStatus());
-            log.info("ShowCollections response message: {}", response.getMessage());
+            
+            // Check if the response is successful
+            if (response.getStatus() != 0) {
+                String errorMessage = response.getMessage();
+                if (errorMessage == null) {
+                    errorMessage = "Unknown error occurred while listing collections";
+                }
+                log.error("ShowCollections failed with status {}: {}", response.getStatus(), errorMessage);
+                
+                // Try without database specification as fallback
+                log.info("Trying showCollections without database specification as fallback");
+                R<ShowCollectionsResponse> fallbackResponse = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
+                        .build());
+                
+                if (fallbackResponse.getStatus() != 0) {
+                    String fallbackErrorMessage = fallbackResponse.getMessage();
+                    if (fallbackErrorMessage == null) {
+                        fallbackErrorMessage = "Unknown error occurred while listing collections";
+                    }
+                    log.error("Fallback ShowCollections also failed with status {}: {}", fallbackResponse.getStatus(), fallbackErrorMessage);
+                    return Mono.error(new RuntimeException("Failed to list collections: " + fallbackErrorMessage));
+                }
+                
+                if (fallbackResponse.getData() == null) {
+                    log.error("Fallback ShowCollections returned null data");
+                    return Mono.error(new RuntimeException("No data received from Milvus"));
+                }
+                
+                response = fallbackResponse;
+                log.info("Using fallback response without database specification");
+            }
+            
+            if (response.getData() == null) {
+                log.error("ShowCollections returned null data");
+                return Mono.error(new RuntimeException("No data received from Milvus"));
+            }
             
             List<String> allCollections = response.getData().getCollectionNamesList();
             
             log.info("Found {} collections in current database context: {}", allCollections.size(), allCollections);
             
             if (allCollections.isEmpty()) {
-                log.warn("No collections found in 'default' database. This might indicate a database context issue.");
+                log.warn("No collections found. This might indicate a database context issue.");
             }
             
             Map<String, Object> result = new HashMap<>();

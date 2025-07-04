@@ -195,6 +195,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                                 DescribeCollectionParam.newBuilder()
                                     .withCollectionName(collectionName)
+                                    .withDatabaseName("default")
                                     .build()
                             );
                             
@@ -416,6 +417,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withOutFields(Arrays.asList(outputFields))
                     .withExpr("teamId == \"" + teamId + "\"")  // Filter by teamId during search
                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}")
+                    .withDatabaseName("default")
                     .build();
 
             SearchResults results = milvusClient.search(searchParam).getData();
@@ -506,6 +508,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         try {
             R<Boolean> hasCollection = milvusClient.hasCollection(HasCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
+                    .withDatabaseName("default")
                     .build());
             
             if (!hasCollection.getData()) {
@@ -515,6 +518,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
             milvusClient.dropCollection(DropCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
+                    .withDatabaseName("default")
                     .build());
             log.info("Deleted collection {}", collectionName);
 
@@ -648,6 +652,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                 DescribeCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
+                    .withDatabaseName("default")
                     .build()
             );
             
@@ -689,7 +694,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
                             .withVectorFieldName(EMBEDDING_FIELD)
                             .withOutFields(outFields)
-                            .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
+                            .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}")
+                            .withDatabaseName("default");
                         
                         // Only add filter expression if it's not empty
                         if (!filterExpression.isEmpty()) {
@@ -974,6 +980,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                 DescribeCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
+                    .withDatabaseName("default")
                     .build()
             );
             
@@ -1015,7 +1022,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
                             .withVectorFieldName(EMBEDDING_FIELD)
                             .withOutFields(outFields)
-                            .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
+                            .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}")
+                            .withDatabaseName("default");
                         
                         // Only add filter expression if it's not empty
                         if (!filterExpression.isEmpty()) {
@@ -1139,11 +1147,21 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     public Mono<Map<String, Object>> getCollectionDetails() {
         log.info("Getting detailed collection information");
         try {
+            log.info("Calling showCollections with database 'default'");
             R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
+                    .withDatabaseName("default")
                     .build());
+            
+            log.info("ShowCollections response status: {}", response.getStatus());
+            log.info("ShowCollections response message: {}", response.getMessage());
+            
             List<String> allCollections = response.getData().getCollectionNamesList();
             
             log.info("Found {} collections in current database context: {}", allCollections.size(), allCollections);
+            
+            if (allCollections.isEmpty()) {
+                log.warn("No collections found in 'default' database. This might indicate a database context issue.");
+            }
             
             Map<String, Object> result = new HashMap<>();
             List<Map<String, Object>> collections = new ArrayList<>();
@@ -1154,6 +1172,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                         DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
+                            .withDatabaseName("default")
                             .build()
                     );
                     

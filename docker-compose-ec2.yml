@@ -256,20 +256,20 @@ services:
 
   # Attu UI for Milvus
   attu-service:
-    image: zilliz/attu:v2.5
+    build:
+      context: .
+      dockerfile: ./.kube/attu/Dockerfile
     environment:
       MILVUS_URL: milvus-service:19530
+      MILVUS_DATABASE: default
+      MILVUS_USERNAME: ""
+      MILVUS_PASSWORD: ""
+      MILVUS_USE_SSL: "false"
+      MILVUS_INSECURE: "true"
     ports:
       - "8000:3000"
     networks:
       - linqra-network
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-      restart_policy:
-        condition: on-failure
     depends_on:
       - milvus-service
 

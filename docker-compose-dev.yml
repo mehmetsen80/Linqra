@@ -238,7 +238,9 @@ services:
 
   # Attu UI for Milvus
   attu-service:
-    image: zilliz/attu:v2.5
+    build:
+      context: .
+      dockerfile: ./.kube/attu/Dockerfile
     environment:
       MILVUS_URL: milvus-service:19530
     ports:

@@ -222,8 +222,8 @@ services:
       COMMON_CFG_RETENTION_DURATION: 168h
       # Milvus authentication
       MILVUS_AUTH_ENABLED: "true"
-      MILVUS_USERNAME: ${MILVUS_USERNAME:}
-      MILVUS_PASSWORD: ${MILVUS_PASSWORD:}
+      MILVUS_USERNAME: ${MILVUS_USERNAME}
+      MILVUS_PASSWORD: ${MILVUS_PASSWORD}
     volumes:
       - ./.kube/milvus/data:/var/lib/milvus
     ports:

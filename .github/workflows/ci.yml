@@ -280,7 +280,7 @@ jobs:
 
             # Ensure the Docker network exists
             echo 'Ensuring the Docker network exists'
-            sudo docker network create linqra-network || true
+            sudo docker network ls | grep -q linqra-network || sudo docker network create linqra-network
 
             # Build and start containers
             echo 'Building and starting containers'

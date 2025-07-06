@@ -17,16 +17,30 @@ public class MilvusConfig {
     @Value("${milvus.port}")
     private int milvusPort;
 
+    @Value("${milvus.username:}")
+    private String milvusUsername;
+
+    @Value("${milvus.password:}")
+    private String milvusPassword;
+
     @Bean
     public MilvusServiceClient milvusServiceClient() {
         log.info("Initializing Milvus client with host: {} and port: {}", milvusHost, milvusPort);
         try {
-            ConnectParam connectParam = ConnectParam.newBuilder()
+            ConnectParam.Builder builder = ConnectParam.newBuilder()
                     .withHost(milvusHost)
                     .withPort(milvusPort)
-                    .withDatabaseName("default")
-                    .build();
-            MilvusServiceClient client = new MilvusServiceClient(connectParam);
+                    .withDatabaseName("default");
+            
+            // Add authentication if username and password are provided
+            if (milvusUsername != null && !milvusUsername.isEmpty()) {
+                builder.withAuthorization(milvusUsername, milvusPassword);
+                log.info("Using Milvus authentication with username: {}", milvusUsername);
+            } else {
+                log.info("Connecting to Milvus without authentication");
+            }
+            
+            MilvusServiceClient client = new MilvusServiceClient(builder.build());
             log.info("Successfully connected to Milvus at {}:{} with database 'default'", milvusHost, milvusPort);
             return client;
         } catch (Exception e) {

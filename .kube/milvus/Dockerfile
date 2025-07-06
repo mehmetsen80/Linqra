@@ -15,6 +15,10 @@ ENV COMMON_CFG_RETENTION_DURATION=168h
 # Enable Milvus authentication
 ENV MILVUS_AUTH_ENABLED=true
 
+# Set Milvus authentication credentials (will be overridden by docker-compose)
+ENV MILVUS_USERNAME=milvus_admin
+ENV MILVUS_PASSWORD=Linqra2024!
+
 # Expose ports
 EXPOSE 19530 9091
 

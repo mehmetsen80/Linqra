@@ -231,6 +231,10 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       COMMON_CFG_RETENTION_DURATION: 168h
+      # Milvus authentication
+      MILVUS_AUTH_ENABLED: "true"
+      MILVUS_USERNAME: ${MILVUS_USERNAME:}
+      MILVUS_PASSWORD: ${MILVUS_PASSWORD:}
     volumes:
       - ./.kube/milvus/data:/var/lib/milvus
     ports:
@@ -262,10 +266,11 @@ services:
     environment:
       MILVUS_URL: milvus-service:19530
       MILVUS_DATABASE: default
-      MILVUS_USERNAME: ""
-      MILVUS_PASSWORD: ""
       MILVUS_USE_SSL: "false"
       MILVUS_INSECURE: "true"
+      MILVUS_AUTH_ENABLED: "true"
+      MILVUS_AUTH_USERNAME: ${MILVUS_USERNAME}
+      MILVUS_AUTH_PASSWORD: ${MILVUS_PASSWORD}
     ports:
       - "8000:3000"
     networks:

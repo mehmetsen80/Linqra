@@ -17,10 +17,10 @@ public class MilvusConfig {
     @Value("${milvus.port}")
     private int milvusPort;
 
-    @Value("${milvus.username:}")
+    @Value("${milvus.username}")
     private String milvusUsername;
 
-    @Value("${milvus.password:}")
+    @Value("${milvus.password}")
     private String milvusPassword;
 
     @Bean

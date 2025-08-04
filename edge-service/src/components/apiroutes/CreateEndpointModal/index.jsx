@@ -1,7 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal } from 'react-bootstrap';
-import JSONEditor from 'react-json-editor-ajrm';
-import locale from 'react-json-editor-ajrm/locale/en';
 import Button from '../../common/Button';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import './styles.css';
@@ -9,7 +7,10 @@ import { apiEndpointService } from '../../../services/apiEndpointService';
 
 const CreateEndpointModal = ({ show, onHide, routeIdentifier, existingSwagger }) => {
   const [loading, setLoading] = useState(false);
-  const [jsonValue, setJsonValue] = useState(existingSwagger || {
+  const [validationError, setValidationError] = useState(null);
+  const [jsonText, setJsonText] = useState('');
+  
+  const defaultSwagger = {
     openapi: "3.1.0",
     info: {
       title: "API Endpoint",
@@ -42,16 +43,54 @@ const CreateEndpointModal = ({ show, onHide, routeIdentifier, existingSwagger })
         ApiKeyAuth: []
       }
     ]
-  });
+  };
 
-  const handleEditorChange = (event) => {
-    if (event.jsObject && !event.error) {
-      setJsonValue(JSON.parse(JSON.stringify(event.jsObject)));
+  const [jsonValue, setJsonValue] = useState(existingSwagger || defaultSwagger);
+
+  // Initialize JSON text when modal opens
+  useEffect(() => {
+    if (show) {
+      const initialJson = existingSwagger || defaultSwagger;
+      setJsonValue(initialJson);
+      setJsonText(JSON.stringify(initialJson, null, 2));
+      setValidationError(null);
+    }
+  }, [show, existingSwagger]);
+
+  const handleTextChange = (event) => {
+    const text = event.target.value;
+    setJsonText(text);
+    
+    try {
+      // Try to parse the JSON to validate it
+      const parsed = JSON.parse(text);
+      setJsonValue(parsed);
+      setValidationError(null);
+    } catch (error) {
+      // If parsing fails, don't update the state but don't throw
+      console.warn('JSON parsing failed during editing:', error);
+      setValidationError(error.message);
+    }
+  };
+
+  const formatJson = () => {
+    try {
+      const parsed = JSON.parse(jsonText);
+      const formatted = JSON.stringify(parsed, null, 2);
+      setJsonText(formatted);
+      setValidationError(null);
+    } catch (error) {
+      setValidationError('Cannot format invalid JSON');
     }
   };
 
   const isJsonValid = () => {
-    return jsonValue && Object.keys(jsonValue).length > 0;
+    try {
+      const parsed = JSON.parse(jsonText);
+      return parsed && Object.keys(parsed).length > 0;
+    } catch (error) {
+      return false;
+    }
   };
 
   const handleSubmit = async () => {
@@ -63,8 +102,11 @@ const CreateEndpointModal = ({ show, onHide, routeIdentifier, existingSwagger })
         return;
       }
 
+      // Parse the JSON text to validate it
+      const parsedJson = JSON.parse(jsonText);
+
       // Validate the JSON first
-      const isValid = await apiEndpointService.validateSwaggerJson(JSON.stringify(jsonValue));
+      const isValid = await apiEndpointService.validateSwaggerJson(JSON.stringify(parsedJson));
       if (!isValid) {
         showErrorToast('Invalid OpenAPI/Swagger specification');
         return;
@@ -73,7 +115,7 @@ const CreateEndpointModal = ({ show, onHide, routeIdentifier, existingSwagger })
       // Create the endpoint
       await apiEndpointService.createEndpoint(
         routeIdentifier,
-        JSON.stringify(jsonValue)
+        JSON.stringify(parsedJson)
       );
 
       showSuccessToast('Endpoint created successfully');
@@ -110,23 +152,41 @@ const CreateEndpointModal = ({ show, onHide, routeIdentifier, existingSwagger })
             the endpoint documentation and Linq Protocol conversion.
           </small>
         </div>
-        <JSONEditor
-          placeholder={jsonValue}
-          locale={locale}
-          height="500px"
-          width="100%"
-          onBlur={handleEditorChange}
-          theme={{
-            background: '#f8f9fa',
-            default: '#1e1e1e',
-            string: '#ce9178',
-            number: '#b5cea8',
-            colon: '#49b4bb',
-            keys: '#9cdcfe',
-            keys_whiteSpace: '#af74a5',
-            primitive: '#6b9955'
-          }}
-        />
+        
+        {validationError && (
+          <div className="alert alert-warning mb-3" role="alert">
+            <strong>Validation Warning:</strong> {validationError}
+            <br />
+            <small>You can continue editing, but please fix the JSON format before saving.</small>
+          </div>
+        )}
+        
+        <div className="json-editor-container">
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <small className="text-muted">Edit OpenAPI/Swagger JSON configuration</small>
+            <button
+              className="btn btn-sm btn-outline-secondary"
+              onClick={formatJson}
+              title="Format JSON"
+            >
+              <i className="fas fa-code"></i> Format
+            </button>
+          </div>
+          <textarea
+            className="form-control json-textarea"
+            value={jsonText}
+            onChange={handleTextChange}
+            rows={20}
+            style={{
+              fontFamily: 'monospace',
+              fontSize: '12px',
+              lineHeight: '1.4',
+              backgroundColor: '#f8f9fa',
+              border: '1px solid #dee2e6'
+            }}
+            placeholder="Enter OpenAPI/Swagger JSON configuration..."
+          />
+        </div>
       </Modal.Body>
 
       <Modal.Footer className="d-flex justify-content-between">
@@ -140,12 +200,13 @@ const CreateEndpointModal = ({ show, onHide, routeIdentifier, existingSwagger })
         </div>
         <div>
           <Button 
-            variant="primary" 
+            variant={validationError ? "warning" : "primary"}
             onClick={handleSubmit}
             loading={loading}
             disabled={!isJsonValid()}
+            title={validationError ? 'Save anyway (validation errors detected)' : 'Create endpoint'}
           >
-            Create Endpoint
+            {validationError ? 'Create Anyway' : 'Create Endpoint'}
           </Button>
         </div>
       </Modal.Footer>

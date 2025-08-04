@@ -656,6 +656,46 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .build()
             );
             
+            // Check if describeCollection was successful
+            if (describeResponse.getStatus() != 0) {
+                log.error("Failed to describe collection {}: status={}, message={}", 
+                    collectionName, describeResponse.getStatus(), describeResponse.getMessage());
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("found", false);
+                errorResponse.put("message", "Collection does not exist or access denied: " + describeResponse.getMessage());
+                errorResponse.put("id", null);
+                errorResponse.put(textField, null);
+                errorResponse.put("distance", null);
+                errorResponse.put("match_type", null);
+                errorResponse.put("search_text", text);
+                // Add empty metadata fields if any were requested
+                if (metadataFilters != null) {
+                    for (String fieldName : metadataFilters.keySet()) {
+                        errorResponse.put(fieldName, null);
+                    }
+                }
+                return Mono.just(errorResponse);
+            }
+            
+            if (describeResponse.getData() == null) {
+                log.error("Describe collection {} returned null data", collectionName);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("found", false);
+                errorResponse.put("message", "Collection does not exist or access denied");
+                errorResponse.put("id", null);
+                errorResponse.put(textField, null);
+                errorResponse.put("distance", null);
+                errorResponse.put("match_type", null);
+                errorResponse.put("search_text", text);
+                // Add empty metadata fields if any were requested
+                if (metadataFilters != null) {
+                    for (String fieldName : metadataFilters.keySet()) {
+                        errorResponse.put(fieldName, null);
+                    }
+                }
+                return Mono.just(errorResponse);
+            }
+            
             // Log collection schema for debugging
             log.info("Collection schema for {}: {}", collectionName, describeResponse.getData().getSchema());
             log.info("Available fields:");
@@ -672,7 +712,21 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
             
             if (!teamIdMatches) {
-                return Mono.just(Map.of("message", "Collection does not belong to team " + teamId));
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("found", false);
+                errorResponse.put("message", "Collection does not belong to team " + teamId);
+                errorResponse.put("id", null);
+                errorResponse.put(textField, null);
+                errorResponse.put("distance", null);
+                errorResponse.put("match_type", null);
+                errorResponse.put("search_text", text);
+                // Add empty metadata fields if any were requested
+                if (metadataFilters != null) {
+                    for (String fieldName : metadataFilters.keySet()) {
+                        errorResponse.put(fieldName, null);
+                    }
+                }
+                return Mono.just(errorResponse);
             }
 
             // Get embedding for the search text using dynamic tool and model
@@ -984,6 +1038,30 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .build()
             );
             
+            // Check if describeCollection was successful
+            if (describeResponse.getStatus() != 0) {
+                log.error("Failed to describe collection {}: status={}, message={}", 
+                    collectionName, describeResponse.getStatus(), describeResponse.getMessage());
+                return Mono.just(Map.of(
+                    "found", false,
+                    "message", "Collection does not exist or access denied: " + describeResponse.getMessage(),
+                    "search_text", text,
+                    "total_results", 0,
+                    "results", new ArrayList<>()
+                ));
+            }
+            
+            if (describeResponse.getData() == null) {
+                log.error("Describe collection {} returned null data", collectionName);
+                return Mono.just(Map.of(
+                    "found", false,
+                    "message", "Collection does not exist or access denied",
+                    "search_text", text,
+                    "total_results", 0,
+                    "results", new ArrayList<>()
+                ));
+            }
+            
             // Log collection schema for debugging
             log.info("Collection schema for {}: {}", collectionName, describeResponse.getData().getSchema());
             log.info("Available fields:");
@@ -1000,7 +1078,13 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
             
             if (!teamIdMatches) {
-                return Mono.just(Map.of("message", "Collection does not belong to team " + teamId));
+                return Mono.just(Map.of(
+                    "found", false,
+                    "message", "Collection does not belong to team " + teamId,
+                    "search_text", text,
+                    "total_results", 0,
+                    "results", new ArrayList<>()
+                ));
             }
 
             // Get embedding for the search text using dynamic tool and model

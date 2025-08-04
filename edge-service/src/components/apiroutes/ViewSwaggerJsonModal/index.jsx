@@ -15,6 +15,8 @@ const ViewSwaggerJsonModal = ({ show, onHide, json, onSave, endpoint, onVersionC
   const { currentTeam } = useTeam();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [validationError, setValidationError] = useState(null);
+  const [jsonText, setJsonText] = useState('');
   
   // Parse the JSON if it's a string, otherwise use as is
   const initialJson = useMemo(() => {
@@ -37,6 +39,8 @@ const ViewSwaggerJsonModal = ({ show, onHide, json, onSave, endpoint, onVersionC
     if (show) {
       const parsedJson = typeof json === 'string' ? JSON.parse(json) : json;
       setJsonValue(parsedJson);
+      setJsonText(JSON.stringify(parsedJson, null, 2));
+      setValidationError(null);
     }
   }, [show, json]);
 
@@ -46,18 +50,42 @@ const ViewSwaggerJsonModal = ({ show, onHide, json, onSave, endpoint, onVersionC
            (currentTeam?.roles && currentTeam.roles.includes('ADMIN'));
   }, [user, currentTeam]);
 
-  const handleEditorChange = (event) => {
-    if (event.jsObject && !event.error) {
-      setJsonValue(JSON.parse(JSON.stringify(event.jsObject)));
+  const handleTextChange = (event) => {
+    const text = event.target.value;
+    setJsonText(text);
+    
+    try {
+      // Try to parse the JSON to validate it
+      const parsed = JSON.parse(text);
+      setJsonValue(parsed);
+      setValidationError(null);
+    } catch (error) {
+      // If parsing fails, don't update the state but don't throw
+      console.warn('JSON parsing failed during editing:', error);
+      setValidationError(error.message);
+    }
+  };
+
+  const formatJson = () => {
+    try {
+      const parsed = JSON.parse(jsonText);
+      const formatted = JSON.stringify(parsed, null, 2);
+      setJsonText(formatted);
+      setValidationError(null);
+    } catch (error) {
+      setValidationError('Cannot format invalid JSON');
     }
   };
 
   const handleSave = async () => {
     setIsLoading(true);
     try {
+      // Parse the JSON text to validate it
+      const parsedJson = JSON.parse(jsonText);
+      
       await apiEndpointService.createNewVersion(endpoint.id, {
         ...endpoint,
-        swaggerJson: jsonValue
+        swaggerJson: parsedJson
       });
       
       showSuccessToast('New version created successfully');
@@ -76,7 +104,12 @@ const ViewSwaggerJsonModal = ({ show, onHide, json, onSave, endpoint, onVersionC
   };
 
   const isJsonValid = () => {
-    return jsonValue && Object.keys(jsonValue).length > 0;
+    try {
+      const parsed = JSON.parse(jsonText);
+      return parsed && Object.keys(parsed).length > 0;
+    } catch (error) {
+      return false;
+    }
   };
 
   return (
@@ -96,7 +129,12 @@ const ViewSwaggerJsonModal = ({ show, onHide, json, onSave, endpoint, onVersionC
           {canEdit && (
             <button
               className={`edit-toggle-btn ${isEditing ? 'active' : ''}`}
-              onClick={() => setIsEditing(!isEditing)}
+              onClick={() => {
+                setIsEditing(!isEditing);
+                if (!isEditing) {
+                  setValidationError(null);
+                }
+              }}
             >
               <i className={`fas fa-${isEditing ? 'eye' : 'edit'}`}></i>
               {isEditing ? ' Switch to View' : ' Switch to Edit'}
@@ -105,24 +143,68 @@ const ViewSwaggerJsonModal = ({ show, onHide, json, onSave, endpoint, onVersionC
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <JSONEditor
-          placeholder={jsonValue}
-          locale={locale}
-          height="500px"
-          width="100%"
-          onBlur={handleEditorChange}
-          viewOnly={!isEditing}
-          theme={{
-            background: '#f8f9fa',
-            default: '#1e1e1e',
-            string: '#ce9178',
-            number: '#b5cea8',
-            colon: '#49b4bb',
-            keys: '#9cdcfe',
-            keys_whiteSpace: '#af74a5',
-            primitive: '#6b9955'
-          }}
-        />
+        {validationError && isEditing && (
+          <div className="alert alert-warning mb-3" role="alert">
+            <strong>Validation Warning:</strong> {validationError}
+            <br />
+            <small>You can continue editing, but please fix the JSON format before saving.</small>
+          </div>
+        )}
+        
+        {!isEditing && (
+          <div className="alert alert-info mb-3" role="alert">
+            <i className="fas fa-eye"></i> <strong>View Mode:</strong> JSON is read-only. Click "Switch to Edit" to modify the configuration.
+          </div>
+        )}
+        
+        {isEditing ? (
+          <div className="json-editor-container">
+            <div className="d-flex justify-content-between align-items-center mb-2">
+              <small className="text-muted">Edit Swagger JSON configuration</small>
+              <button
+                className="btn btn-sm btn-outline-secondary"
+                onClick={formatJson}
+                title="Format JSON"
+              >
+                <i className="fas fa-code"></i> Format
+              </button>
+            </div>
+            <textarea
+              className="form-control json-textarea"
+              value={jsonText}
+              onChange={handleTextChange}
+              rows={20}
+              style={{
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                lineHeight: '1.4',
+                backgroundColor: '#f8f9fa',
+                border: '1px solid #dee2e6'
+              }}
+              placeholder="Enter Swagger JSON configuration..."
+            />
+          </div>
+        ) : (
+          <div className="json-viewer-container">
+            <JSONEditor
+              placeholder={jsonValue}
+              locale={locale}
+              height="500px"
+              width="100%"
+              viewOnly={true}
+              theme={{
+                background: '#f8f9fa',
+                default: '#333',
+                string: '#ce9178',
+                number: '#b5cea8',
+                colon: '#49b4bb',
+                keys: '#9cdcfe',
+                keys_whiteSpace: '#af74a5',
+                primitive: '#6b9955'
+              }}
+            />
+          </div>
+        )}
       </Modal.Body>
       <Modal.Footer>
         {isEditing && (
@@ -132,7 +214,9 @@ const ViewSwaggerJsonModal = ({ show, onHide, json, onSave, endpoint, onVersionC
                 variant="secondary"
                 onClick={() => {
                   setJsonValue(originalJson);
+                  setJsonText(JSON.stringify(originalJson, null, 2));
                   setIsEditing(false);
+                  setValidationError(null);
                 }}
               >
                 Cancel
@@ -140,12 +224,13 @@ const ViewSwaggerJsonModal = ({ show, onHide, json, onSave, endpoint, onVersionC
             </div>
             <div>
               <Button 
-                variant="primary" 
+                variant={validationError ? "warning" : "primary"}
                 onClick={handleSave}
                 disabled={!isJsonValid() || isLoading}
                 loading={isLoading}
+                title={validationError ? 'Save anyway (validation errors detected)' : 'Save changes'}
               >
-                Save Changes
+                {validationError ? 'Save Anyway' : 'Save Changes'}
               </Button>
             </div>
           </div>

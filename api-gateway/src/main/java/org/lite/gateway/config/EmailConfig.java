@@ -22,8 +22,16 @@ public class EmailConfig {
     @Value("${notifications.email.password}")
     private String password;
 
+    @Value("${notifications.email.enabled:false}")
+    private boolean emailEnabled;
+
     @Bean
     public JavaMailSender javaMailSender() {
+        if (!emailEnabled) {
+            // Return null when email is disabled to avoid SSL issues
+            return null;
+        }
+
         JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
         mailSender.setHost(host);
         mailSender.setPort(port);

@@ -34,7 +34,7 @@ public class NotificationService {
     }
 
     public void sendEmailAlert(String subject, String message) {
-        if (!emailEnabled) {
+        if (!emailEnabled || mailSender == null) {
             log.debug("Email notifications are disabled");
             return;
         }

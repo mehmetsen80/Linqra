@@ -22,6 +22,56 @@
   cursor: default;
 }
 
+/* JSON Viewer styles */
+.json-viewer {
+  background: #f8f9fa;
+  padding: 1rem;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 70vh;
+  overflow-y: auto;
+  user-select: text;
+  cursor: default;
+  pointer-events: auto;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  color: #333 !important;
+  border: 1px solid #dee2e6;
+}
+
+/* Style the scrollbar for the JSON viewer */
+.json-viewer::-webkit-scrollbar {
+  width: 8px;
+}
+
+.json-viewer::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.json-viewer::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.json-viewer::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Ensure the JSON viewer is never editable */
+.json-viewer:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.json-viewer::-moz-focus-inner {
+  border: 0;
+}
+
 .json-modal .modal-footer {
   border-top: 1px solid #dee2e6;
   padding: 1rem;

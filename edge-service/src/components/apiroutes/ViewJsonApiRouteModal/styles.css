@@ -8,6 +8,24 @@
   word-wrap: break-word;
   max-height: 70vh;
   overflow-y: auto;
+  user-select: text;
+  cursor: default;
+  pointer-events: auto;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  color: #333 !important;
+  border: 1px solid #dee2e6;
+}
+
+/* Ensure the JSON viewer is never editable */
+.json-viewer:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.json-viewer::-moz-focus-inner {
+  border: 0;
 }
 
 /* Style the scrollbar for the JSON viewer */
@@ -26,6 +44,46 @@
 }
 
 .json-viewer::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* New styles for the textarea-based JSON editor */
+.json-editor-container {
+  padding: 1rem;
+}
+
+.json-textarea {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace !important;
+  font-size: 0.9rem !important;
+  line-height: 1.4 !important;
+  background-color: #f8f9fa !important;
+  border: 1px solid #dee2e6 !important;
+  border-radius: 4px !important;
+  resize: vertical !important;
+  min-height: 400px !important;
+}
+
+.json-textarea:focus {
+  border-color: #80bdff !important;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+}
+
+/* Style the scrollbar for the textarea */
+.json-textarea::-webkit-scrollbar {
+  width: 8px;
+}
+
+.json-textarea::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.json-textarea::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+.json-textarea::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
 

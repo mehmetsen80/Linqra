@@ -51,7 +51,7 @@ function Home() {
             rel="noopener noreferrer"
             className="version-badge"
           >
-            v0.3
+            v0.4
           </a>
           <div className="hero-separator"></div>
           <div className="cta-buttons">

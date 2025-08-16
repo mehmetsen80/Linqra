@@ -3,7 +3,7 @@ import axiosInstance from './axiosInstance';
 export const apiEndpointService = {
   async createEndpoint(routeIdentifier, swaggerJson) {
     try {
-      const response = await axiosInstance.post('/api/v1/endpoints', {
+      const response = await axiosInstance.post('/api/endpoints', {
         routeIdentifier,
         swaggerJson,
         version: 1,
@@ -22,7 +22,7 @@ export const apiEndpointService = {
 
   async getEndpoint(id) {
     try {
-      const response = await axiosInstance.get(`/api/v1/endpoints/${id}`);
+      const response = await axiosInstance.get(`/api/endpoints/${id}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching endpoint:', error.response?.data?.message || error.message);
@@ -32,7 +32,7 @@ export const apiEndpointService = {
 
   async getEndpointsByRoute(routeIdentifier) {
     try {
-      const response = await axiosInstance.get(`/api/v1/endpoints/route/${routeIdentifier}`);
+      const response = await axiosInstance.get(`/api/endpoints/route/${routeIdentifier}`);
       return response.data;
     } catch (error) {
       console.error('Error getting endpoints by route:', error);
@@ -46,7 +46,7 @@ export const apiEndpointService = {
   async getEndpointVersion(routeIdentifier, version) {
     try {
       const response = await axiosInstance.get(
-        `/api/v1/endpoints/route/${routeIdentifier}/version/${version}`
+        `/api/endpoints/route/${routeIdentifier}/version/${version}`
       );
       return response.data;
     } catch (error) {
@@ -59,7 +59,7 @@ export const apiEndpointService = {
     try {
       // Ensure we're sending a clean, mutable copy of the data
       const cleanData = JSON.parse(JSON.stringify(endpointData));
-      const response = await axiosInstance.put(`/api/v1/endpoints/${id}`, cleanData);
+      const response = await axiosInstance.put(`/api/endpoints/${id}`, cleanData);
       return response.data;
     } catch (error) {
       console.error('Error updating endpoint:', error.response?.data?.message || error.message);
@@ -69,7 +69,7 @@ export const apiEndpointService = {
 
   async deleteEndpoint(id) {
     try {
-      await axiosInstance.delete(`/api/v1/endpoints/${id}`);
+      await axiosInstance.delete(`/api/endpoints/${id}`);
       return true;
     } catch (error) {
       console.error('Error deleting endpoint:', error.response?.data?.message || error.message);
@@ -81,7 +81,7 @@ export const apiEndpointService = {
     try {
       // Send the endpoint data directly, without the extra wrapper
       const response = await axiosInstance.post(
-        `/api/v1/endpoints/${id}/versions`,
+        `/api/endpoints/${id}/versions`,
         {
           id: endpointData.id,
           version: endpointData.version,
@@ -105,7 +105,7 @@ export const apiEndpointService = {
   async validateSwaggerJson(swaggerJson) {
     try {
       const response = await axiosInstance.post(
-        '/api/v1/endpoints/validate',
+        '/api/endpoints/validate',
         swaggerJson
       );
       return response.data;
@@ -121,7 +121,7 @@ export const apiEndpointService = {
       const swaggerData = typeof swaggerJson === 'string' ? JSON.parse(swaggerJson) : swaggerJson;
       
       // Make the API call to extract the information
-      const response = await axiosInstance.post('/api/v1/endpoints/extract-swagger', swaggerData);
+      const response = await axiosInstance.post('/api/endpoints/extract-swagger', swaggerData);
       return response.data;
     } catch (error) {
       console.error('Error extracting Swagger info:', error);
@@ -134,7 +134,7 @@ export const apiEndpointService = {
 
   async getEndpointVersions(routeIdentifier) {
     try {
-      const response = await axiosInstance.get(`/api/v1/endpoints/route/${routeIdentifier}/versions`);
+      const response = await axiosInstance.get(`/api/endpoints/route/${routeIdentifier}/versions`);
       return response.data;
     } catch (error) {
       console.error('Error fetching endpoint versions:', error.response?.data?.message || error.message);

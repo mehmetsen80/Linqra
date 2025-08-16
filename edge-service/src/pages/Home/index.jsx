@@ -79,6 +79,26 @@ function Home() {
         </div>
       </div>
 
+      {/* Linqra Integration Section: Java & Python AI Apps */}
+      <div className="linqra-integration-section">
+        <div className="integration-apps-grid">
+          <div className="integration-app-card">
+            <i className="fab fa-java"></i>
+            <h3>Java AI App</h3>
+            <p>
+              Seamlessly integrate your Java-based AI applications with Linqra. Enjoy unified workflows, secure deployment, and robust analytics for your enterprise Java solutions.
+            </p>
+          </div>
+          <div className="integration-app-card">
+            <i className="fab fa-python"></i>
+            <h3>Python AI App</h3>
+            <p>
+              Connect your Python AI models and workflows to Linqra for instant deployment, orchestration, and monitoring. Perfect for data science, ML, and automation projects.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="problem-section">
       <h2>The Challenge of Modern AI Integration</h2>          
         <div className="problem-intro">

@@ -1060,3 +1060,55 @@ html {
   color: var(--primary-color-dark);
   transform: translateX(5px);
 }
+
+/* Linqra Integration Section Styles */
+.linqra-integration-section {
+  margin: 3rem auto 2rem auto;
+  padding: 2rem 0;
+  background: #f8f9fa;
+  border-radius: 16px;
+  max-width: 900px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+}
+
+.integration-apps-grid {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.integration-app-card {
+  flex: 1 1 250px;
+  max-width: 350px;
+  min-width: 220px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  padding: 2rem;
+  text-align: center;
+  margin: 0.5rem 0;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.integration-app-card:hover {
+  box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+  transform: translateY(-4px) scale(1.03);
+}
+
+.integration-app-card i {
+  font-size: 64px;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .integration-apps-grid {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .integration-app-card {
+    max-width: 100%;
+  }
+}

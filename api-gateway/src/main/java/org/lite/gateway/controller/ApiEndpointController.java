@@ -22,7 +22,7 @@ import org.lite.gateway.dto.SwaggerSchemaInfo;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/endpoints")
+@RequestMapping("/api/endpoints")
 @RequiredArgsConstructor
 @Tag(name = "API Endpoints", description = "API Endpoint management operations")
 public class ApiEndpointController {

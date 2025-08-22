@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.util.AntPathMatcher;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -74,6 +75,13 @@ public class SecurityConfig {
     private final ReactiveClientRegistrationRepository customClientRegistrationRepository;
     private final ReactiveOAuth2AuthorizedClientService customAuthorizedClientService;
     private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
+
+    // List of public endpoints (Ant-style patterns allowed)
+    private static final List<String> PUBLIC_ENDPOINTS = List.of(
+            "/r/komunas-app/whatsapp/verify_webhook",
+            "/r/komunas-app/whatsapp/webhook"
+        // Add more public endpoints here as needed
+    );
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -273,6 +281,14 @@ public class SecurityConfig {
         log.info("Security check for path: {}", path);
         log.info("Checking authorization for path: {} with method: {}", path, 
             authorizationContext.getExchange().getRequest().getMethod());
+
+        // Allow public access to any endpoint in PUBLIC_ENDPOINTS
+        AntPathMatcher matcher = new AntPathMatcher();
+        boolean isPublic = PUBLIC_ENDPOINTS.stream().anyMatch(pattern -> matcher.match(pattern, path));
+        if (isPublic) {
+            log.info("Public access granted for endpoint: {}", path);
+            return Mono.just(new AuthorizationDecision(true));
+        }
 
         //1st step
         // Use the path matcher from the DynamicRouteService to check if the path is whitelisted.

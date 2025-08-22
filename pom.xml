@@ -6,7 +6,7 @@
 
     <groupId>org.lite</groupId>
     <artifactId>linqra</artifactId>
-    <version>0.4</version>
+    <version>0.5</version>
     <packaging>pom</packaging>
     <name>Linqra</name>
     <url>http://maven.apache.org</url>

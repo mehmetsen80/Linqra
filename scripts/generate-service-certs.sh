@@ -1,6 +1,9 @@
 #!/bin/bash
 # generate-service-certs.sh
 
+# i.e.
+# sudo ./generate-service-certs.sh komunas-app
+
 SERVICE_NAME=$1
 if [ -z "$SERVICE_NAME" ]; then
     echo "Usage: $0 <service-name>"

@@ -78,7 +78,6 @@ public class SecurityConfig {
 
     // List of public endpoints (Ant-style patterns allowed)
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
-            "/r/komunas-app/whatsapp/verify_webhook",
             "/r/komunas-app/whatsapp/webhook"
         // Add more public endpoints here as needed
     );

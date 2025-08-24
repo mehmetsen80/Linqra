@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
@@ -42,6 +43,13 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.util.AntPathMatcher;
+import java.time.Duration;
+import java.util.Objects;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.lite.gateway.entity.RoutePermission;
+import org.lite.gateway.repository.ApiRouteRepository;
+import org.lite.gateway.repository.TeamRouteRepository;
+import org.lite.gateway.service.TeamContextService;
 
 @Configuration
 @EnableWebFluxSecurity
@@ -75,6 +83,10 @@ public class SecurityConfig {
     private final ReactiveClientRegistrationRepository customClientRegistrationRepository;
     private final ReactiveOAuth2AuthorizedClientService customAuthorizedClientService;
     private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
+    private final RedisTemplate<String, String> redisTemplate;
+    private final ApiRouteRepository apiRouteRepository;
+    private final TeamRouteRepository teamRouteRepository;
+    private final TeamContextService teamContextService;
 
     // List of public endpoints (Ant-style patterns allowed)
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
@@ -295,17 +307,60 @@ public class SecurityConfig {
         boolean isWhitelisted = dynamicRouteService.isPathWhitelisted(path);
         log.info("Is path {} whitelisted? {}", path, isWhitelisted);
 
-//        String prefix = "/inventory/";
+        // Check if this is a health endpoint - these should be completely public
+        if (path.endsWith("/health") || path.endsWith("/health/")) {
+            log.info("Health endpoint detected, allowing public access: {}", path);
+            return Mono.just(new AuthorizationDecision(true));
+        }
+
+        // Check route permissions for /r/ paths only
+        if (path.startsWith("/r/")) {
+            log.info("Checking route permission for path: {}", path);
+            // For /r/ paths, we need to check route permissions as part of the authorization flow
+            // This will be handled in the dynamicPathAuthorization method
+            isWhitelisted = true; // Allow the path to proceed to route permission check
+        }
+
+//        String prefix = "/inventory-service/";
 //        String scopeKey = "";
 //        if (path.startsWith(prefix)) {
 //            scopeKey = prefix + "**";
 //        }
-        String scope = dynamicRouteService.getClientScope(getScopeKey(path));//i.e. inventory/** -> inventory-service.read
+        String scope = dynamicRouteService.getClientScope(getScopeKey(path));//i.e. inventory-service/** -> inventory-service.read
 
         //2nd step - check the realm access role
         //if whitelist passes, check for roles in the JWT token for secured paths
         if (isWhitelisted) {
-            return authenticationMono
+            // For /r/ paths, check route permissions first
+            if (path.startsWith("/r/")) {
+                log.info("Checking route permissions for path: {}", path);
+                return checkRoutePermission(path)
+                        .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path, hasPermission))
+                        .flatMap(hasPermission -> {
+                            if (!hasPermission) {
+                                log.warn("Route permission denied for: {}. Team does not have USE permission for this route.", path);
+                                return Mono.just(new AuthorizationDecision(false));
+                            }
+                            log.info("Route permission granted for: {}. Proceeding with JWT checks.", path);
+                            // Continue with JWT checks if route permission granted
+                            return continueWithJwtChecks(authenticationMono, path, scope);
+                        })
+                        .onErrorResume(error -> {
+                            log.error("Error checking route permissions for {}: {}", path, error.getMessage(), error);
+                            return Mono.just(new AuthorizationDecision(false));
+                        })
+                        .defaultIfEmpty(new AuthorizationDecision(false));
+            }
+            
+            // For non-route paths, continue with normal JWT checks
+            return continueWithJwtChecks(authenticationMono, path, scope);
+        }
+
+        return Mono.just(new AuthorizationDecision(false));
+    }
+
+    private Mono<AuthorizationDecision> continueWithJwtChecks(Mono<Authentication> authenticationMono, String path, String scope) {
+        return authenticationMono
                     .doOnNext(auth -> log.info("Evaluating JWT for path: {}", path))
                     .doOnError(error -> log.error("Error in authenticationMono: {}", error.toString()))
                     .filter(authentication -> authentication instanceof JwtAuthenticationToken) // Ensure it's a JWT auth token
@@ -373,9 +428,66 @@ public class SecurityConfig {
                         return new AuthorizationDecision(false);
                     })
                     .defaultIfEmpty(new AuthorizationDecision(false)); // Default to unauthorized if no valid authentication
+    }
+
+    private Mono<Boolean> checkRoutePermission(String path) {
+        Pattern routePattern = Pattern.compile("/r/([^/]+)/");
+        Matcher routeMatcher = routePattern.matcher(path);
+
+        if (!routeMatcher.find()) {
+            log.warn("No route identifier found in path: {}", path);
+            return Mono.just(false);
         }
 
-        return Mono.just(new AuthorizationDecision(false));
+        String routeIdentifier = routeMatcher.group(1);
+        log.info("Route identifier found: {}", routeIdentifier);
+
+        return teamContextService.getTeamFromContext()
+                .doOnNext(teamId -> log.info("Checking team {} permission for route: {}", teamId, routeIdentifier))
+                .flatMap(teamId -> {
+                    String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);
+                    log.info("Checking Redis cache for key: {}", permissionCacheKey);
+
+                    return Mono.fromCallable(() -> redisTemplate.opsForValue().get(permissionCacheKey))
+                            .filter(Objects::nonNull)
+                            .map(cachedPermission -> {
+                                boolean hasPermission = Boolean.parseBoolean(cachedPermission);
+                                log.info("Using cached permission for team {} route {}: {}", teamId, routeIdentifier, hasPermission);
+                                return hasPermission;
+                            })
+                            .switchIfEmpty(
+                                    apiRouteRepository.findByRouteIdentifier(routeIdentifier)
+                                            .doOnNext(apiRoute -> log.info("Found API route: {} with ID: {}", routeIdentifier, apiRoute.getId()))
+                                            .flatMap(apiRoute ->
+                                                    teamRouteRepository.findByTeamIdAndRouteId(teamId, apiRoute.getId())
+                                                            .doOnNext(teamRoute -> log.info("Found team route for team {} and route {}: {}", teamId, apiRoute.getId(), teamRoute.getPermissions()))
+                                                            .map(teamRoute -> {
+                                                                boolean hasUsePermission = teamRoute.getPermissions().contains(RoutePermission.USE);
+                                                                log.info("Team {} has USE permission for route {}: {}", teamId, routeIdentifier, hasUsePermission);
+                                                                
+                                                                // Cache the result
+                                                                redisTemplate.opsForValue().set(permissionCacheKey,
+                                                                        String.valueOf(hasUsePermission),
+                                                                        Duration.ofMinutes(5));
+                                                                log.info("Cached permission result for team {} route {}: {}", teamId, routeIdentifier, hasUsePermission);
+                                                                
+                                                                return hasUsePermission;
+                                                            })
+                                            )
+                                            .switchIfEmpty(Mono.defer(() -> {
+                                                log.warn("No API route found for identifier: {}", routeIdentifier);
+                                                return Mono.just(false);
+                                            }))
+                            );
+                })
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.warn("No team context found for path: {}", path);
+                    return Mono.just(false);
+                }))
+                .onErrorResume(error -> {
+                    log.error("Error checking route permissions for path {}: {}", path, error.getMessage(), error);
+                    return Mono.just(false);
+                });
     }
 
     @Bean

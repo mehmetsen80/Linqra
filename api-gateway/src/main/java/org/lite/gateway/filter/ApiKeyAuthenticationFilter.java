@@ -36,8 +36,13 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
 
-        // Skip API key for all non-linq
-        if (!path.startsWith("/linq")) {
+        // Skip API key for all non-linq and non-route paths
+        if (!path.startsWith("/linq") && !path.startsWith("/r/")) {
+            return chain.filter(exchange);
+        }
+
+        // Skip API key for health endpoints - these should be completely public
+        if (path.endsWith("/health") || path.endsWith("/health/")) {
             return chain.filter(exchange);
         }
 
@@ -126,13 +131,34 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             String payload = new String(Base64.getDecoder().decode(chunks[1]));
             JsonNode jsonNode = objectMapper.readTree(payload);
             
-            if (jsonNode.has("teams") && jsonNode.get("teams").isArray()) {
-                ArrayNode teamsArray = (ArrayNode) jsonNode.get("teams");
-                for (JsonNode team : teamsArray) {
-                    // Remove 'lm_' prefix from teamId if it exists
+            // First check if teamId claim exists and matches
+            if (jsonNode.has("teamId")) {
+                String tokenTeamId = jsonNode.get("teamId").asText();
+                if (teamId.equals(tokenTeamId)) {
+                    return true;
+                }
+            }
+            
+            // Then check teams array for backward compatibility
+            if (jsonNode.has("teams")) {
+                JsonNode teamsNode = jsonNode.get("teams");
+                
+                // Handle case where teams can be an array
+                if (teamsNode.isArray()) {
+                    ArrayNode teamsArray = (ArrayNode) teamsNode;
+                    for (JsonNode team : teamsArray) {
+                        // Remove 'lm_' prefix from teamId if it exists
+                        String normalizedTeamId = teamId.startsWith("lm_") ? 
+                            teamId.substring(3) : teamId;
+                        if (normalizedTeamId.equals(team.asText())) {
+                            return true;
+                        }
+                    }
+                } else if (teamsNode.isTextual()) {
+                    // Handle case where teams is a single string
                     String normalizedTeamId = teamId.startsWith("lm_") ? 
                         teamId.substring(3) : teamId;
-                    if (normalizedTeamId.equals(team.asText())) {
+                    if (normalizedTeamId.equals(teamsNode.asText())) {
                         return true;
                     }
                 }

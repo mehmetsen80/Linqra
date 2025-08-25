@@ -14,6 +14,8 @@ import Organizations from '../pages/Organizations';
 import ApiRoutes from '../pages/ApiRoutes';
 import ViewRoute from '../pages/ApiRoutes/ViewRoute';
 import Home from '../pages/Home';
+import PrivacyPolicy from '../pages/PrivacyPolicy';
+import TermsOfService from '../pages/TermsOfService';
 import ViewToken from '../pages/ViewToken';
 import NonProdGuard from '../components/guards/NonProdGuard';
 import NotFound from '../components/common/NotFound';
@@ -38,6 +40,8 @@ const AppRoutes = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/callback" element={<Callback />} />
+      <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+      <Route path="/terms-of-service" element={<TermsOfService />} />
       
       {/* Linq Protocol Routes */}
       <Route path="/linq-protocol" element={<LinqProtocol />}>

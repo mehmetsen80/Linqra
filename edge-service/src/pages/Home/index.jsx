@@ -510,7 +510,13 @@ Content-Type: application/json
 
       <footer className="footer">
         <div className="container">
-          <p className="copyright">&copy; 2025 Linqra. All rights reserved.</p>
+          <div className="footer-content">
+            <p className="copyright">&copy; 2025 Linqra. All rights reserved.</p>
+            <div className="footer-links">
+              <Link to="/privacy-policy" className="footer-link">Privacy Policy</Link>
+              <Link to="/terms-of-service" className="footer-link">Terms of Service</Link>
+            </div>
+          </div>
         </div>
       </footer>
 

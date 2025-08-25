@@ -45,7 +45,6 @@ import java.util.regex.Pattern;
 import org.springframework.util.AntPathMatcher;
 import java.time.Duration;
 import java.util.Objects;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.lite.gateway.entity.RoutePermission;
 import org.lite.gateway.repository.ApiRouteRepository;
 import org.lite.gateway.repository.TeamRouteRepository;
@@ -313,14 +312,6 @@ public class SecurityConfig {
             return Mono.just(new AuthorizationDecision(true));
         }
 
-        // Check route permissions for /r/ paths only
-        if (path.startsWith("/r/")) {
-            log.info("Checking route permission for path: {}", path);
-            // For /r/ paths, we need to check route permissions as part of the authorization flow
-            // This will be handled in the dynamicPathAuthorization method
-            isWhitelisted = true; // Allow the path to proceed to route permission check
-        }
-
 //        String prefix = "/inventory-service/";
 //        String scopeKey = "";
 //        if (path.startsWith(prefix)) {
@@ -332,7 +323,7 @@ public class SecurityConfig {
         //if whitelist passes, check for roles in the JWT token for secured paths
         if (isWhitelisted) {
             // For /r/ paths, check route permissions first
-            if (path.startsWith("/r/")) {
+            if (path.startsWith("/r/") && !path.contains("/whatsapp/webhook")) {
                 log.info("Checking route permissions for path: {}", path);
                 return checkRoutePermission(path)
                         .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path, hasPermission))

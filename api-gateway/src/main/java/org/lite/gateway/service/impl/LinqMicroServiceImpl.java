@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.dto.ApiKeyPair;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.service.LinqMicroService;
@@ -197,7 +198,8 @@ public class LinqMicroServiceImpl implements LinqMicroService {
 
     private Mono<Object> invokeService(String method, String url, LinqRequest request) {
         return apiKeyContextService.getApiKeyFromContext()
-                .flatMap(apiKey -> {
+                .flatMap(apiKeyPair -> {
+                    ApiKeyPair keyPair = (ApiKeyPair) apiKeyPair;
                     log.debug("Making {} request to {} with API key present", method, url);
                     WebClient webClient = webClientBuilder.build();
 
@@ -216,7 +218,9 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                     };
 
                     // Add API key header
-                    requestSpec = requestSpec.header("X-API-Key", apiKey);
+                    requestSpec = requestSpec
+                            .header("x-api-key", keyPair.getKey())
+                            .header("x-api-key-name", keyPair.getName());
                     
                     // Add executedBy header if present (for user context in workflow steps)
                     if (request.getExecutedBy() != null) {

@@ -24,7 +24,7 @@ public interface AgentOrchestrationService {
     /**
      * Update an existing agent
      */
-    Mono<Agent> updateAgent(String agentId, Agent agentUpdates, String teamId, String updatedBy);
+    Mono<Agent> updateAgent(String agentId, Agent agentUpdates);
     
     /**
      * Delete an agent (soft delete by setting enabled to false)
@@ -56,7 +56,7 @@ public interface AgentOrchestrationService {
     /**
      * Create a new task for an agent
      */
-    Mono<AgentTask> createTask(String agentId, AgentTask task, String teamId, String createdBy);
+    Mono<AgentTask> createTask(AgentTask task);
     
     /**
      * Update an existing task

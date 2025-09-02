@@ -63,10 +63,11 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     }
     
     @Override
-    public Mono<Agent> updateAgent(String agentId, Agent agentUpdates, String teamId, String updatedBy) {
-        log.info("Updating agent {} for team {}", agentId, teamId);
+    public Mono<Agent> updateAgent(String agentId, Agent agentUpdates) {
+        log.info("Updating agent {}", agentId);
         
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
                 .flatMap(existingAgent -> {
                     // Update only non-null fields
                     if (agentUpdates.getName() != null) existingAgent.setName(agentUpdates.getName());
@@ -82,7 +83,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
                     if (agentUpdates.getMaxRetries() > 0) existingAgent.setMaxRetries(agentUpdates.getMaxRetries());
                     if (agentUpdates.getTimeoutMinutes() != null) existingAgent.setTimeoutMinutes(agentUpdates.getTimeoutMinutes());
                     
-                    existingAgent.setUpdatedBy(updatedBy);
+                    existingAgent.setUpdatedBy(agentUpdates.getUpdatedBy());
                     existingAgent.onUpdate();
                     
                     return agentRepository.save(existingAgent);
@@ -95,7 +96,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     public Mono<Boolean> deleteAgent(String agentId, String teamId) {
         log.info("Deleting agent {} for team {}", agentId, teamId);
         
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     agent.setEnabled(false);
                     agent.setStatus(AgentStatus.DISABLED);
@@ -113,7 +116,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     public Mono<Agent> setAgentEnabled(String agentId, String teamId, boolean enabled) {
         log.info("Setting agent {} enabled={} for team {}", agentId, enabled, teamId);
         
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     agent.setEnabled(enabled);
                     if (enabled) {
@@ -150,15 +155,14 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     // ==================== TASK MANAGEMENT ====================
     
     @Override
-    public Mono<AgentTask> createTask(String agentId, AgentTask task, String teamId, String createdBy) {
-        log.info("Creating task '{}' for agent {} in team {}", task.getName(), agentId, teamId);
+    public Mono<AgentTask> createTask(AgentTask task) {
+        log.info("Creating task '{}' for agent {}", task.getName(), task.getAgentId());
         
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(task.getAgentId())
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
                 .flatMap(agent -> {
-                    task.setAgentId(agentId);
                     task.setAgentName(agent.getName());
-                    task.setCreatedBy(createdBy);
-                    task.setUpdatedBy(createdBy);
+                    task.setUpdatedBy(task.getCreatedBy());
                     task.onCreate();
                     
                     return agentTaskRepository.save(task)
@@ -371,7 +375,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     public Mono<Agent> scheduleAgent(String agentId, String cronExpression, String teamId) {
         log.info("Scheduling agent {} with cron: {} for team {}", agentId, cronExpression, teamId);
         
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     agent.setCronExpression(cronExpression);
                     agent.setAutoSchedule(true);
@@ -389,7 +395,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     public Mono<Agent> unscheduleAgent(String agentId, String teamId) {
         log.info("Unschedule agent {} for team {}", agentId, teamId);
         
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     agent.setCronExpression(null);
                     agent.setAutoSchedule(false);
@@ -431,7 +439,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Mono<Map<String, Object>> getAgentHealth(String agentId, String teamId) {
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     Map<String, Object> health = Map.of(
                             "agentId", agentId,
@@ -471,7 +481,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Mono<Map<String, Object>> getAgentPerformance(String agentId, String teamId, LocalDateTime from, LocalDateTime to) {
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .thenMany(agentExecutionRepository.findByAgentIdAndStartedAtBetween(agentId, from, to))
                 .collectList()
                 .map(executions -> {
@@ -602,7 +614,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     public Mono<Agent> resetAgentError(String agentId, String teamId, String resetBy) {
         log.info("Resetting error state for agent {} in team {}", agentId, teamId);
         
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     agent.markAsIdle();
                     agent.setUpdatedBy(resetBy);
@@ -657,7 +671,8 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Mono<Boolean> validateTeamAccess(String agentId, String teamId) {
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
                 .thenReturn(true)
                 .onErrorReturn(false);
     }
@@ -671,7 +686,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     public Mono<Agent> transferAgentOwnership(String agentId, String fromTeamId, String toTeamId, String transferredBy) {
         log.info("Transferring agent {} from team {} to team {}", agentId, fromTeamId, toTeamId);
         
-        return getAgentById(agentId, fromTeamId)
+        return agentRepository.findById(agentId)
+                .filter(agent -> fromTeamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     agent.setTeamId(toTeamId);
                     agent.setUpdatedBy(transferredBy);

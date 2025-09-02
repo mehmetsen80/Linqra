@@ -24,15 +24,11 @@ public class AgentTaskController {
     // ==================== TASK CRUD OPERATIONS ====================
     
     @PostMapping
-    public Mono<ResponseEntity<AgentTask>> createTask(
-            @RequestBody AgentTask task,
-            @RequestParam String agentId,
-            @RequestParam String teamId,
-            @RequestParam String createdBy) {
+    public Mono<ResponseEntity<AgentTask>> createTask(@RequestBody AgentTask task) {
         
-        log.info("Creating task '{}' for agent {} in team {}", task.getName(), agentId, teamId);
+        log.info("Creating task '{}' for agent {}", task.getName(), task.getAgentId());
         
-        return agentOrchestrationService.createTask(agentId, task, teamId, createdBy)
+        return agentOrchestrationService.createTask(task)
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }

@@ -59,7 +59,7 @@ public class AgentTask {
     // Execution Control
     private String cronExpression;          // "0 0 9 * * *" (daily at 9 AM) - if null, manual execution only
     private boolean autoExecute;            // true/false - can run automatically based on cron
-    private String executionTrigger;        // "cron", "manual", "event_driven", "workflow"
+    private String executionTrigger;        // "cron", "manual", "event_driven", "workflow", "agent_scheduled"
     
     // Task Logic & Implementation
     private String implementationType;      // "linq_protocol", "direct_api", "custom_script", "workflow_trigger"
@@ -99,15 +99,15 @@ public class AgentTask {
     public void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        status = AgentTaskStatus.PENDING;
-        enabled = true;
-        priority = 5;
-        maxRetries = 3;
-        timeoutMinutes = 30;
-        totalExecutions = 0;
-        successfulExecutions = 0;
-        failedExecutions = 0;
-        averageExecutionTime = 0.0;
+        if (status == null) status = AgentTaskStatus.PENDING;
+        if (!enabled) enabled = true; // Only set to true if not already set
+        if (priority == 0) priority = 5; // Only set default if not already set
+        if (maxRetries == 0) maxRetries = 3;
+        if (timeoutMinutes == 0) timeoutMinutes = 30;
+        if (totalExecutions == 0) totalExecutions = 0;
+        if (successfulExecutions == 0) successfulExecutions = 0;
+        if (failedExecutions == 0) failedExecutions = 0;
+        if (averageExecutionTime == 0.0) averageExecutionTime = 0.0;
     }
     
     public void onUpdate() {

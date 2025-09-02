@@ -48,13 +48,11 @@ public class AgentController {
     @PutMapping("/{agentId}")
     public Mono<ResponseEntity<Agent>> updateAgent(
             @PathVariable String agentId,
-            @RequestBody Agent agentUpdates,
-            @RequestParam String teamId,
-            @RequestParam String updatedBy) {
+            @RequestBody Agent agentUpdates) {
         
-        log.info("Updating agent {} for team {}", agentId, teamId);
+        log.info("Updating agent {}", agentId);
         
-        return agentOrchestrationService.updateAgent(agentId, agentUpdates, teamId, updatedBy)
+        return agentOrchestrationService.updateAgent(agentId, agentUpdates)
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }

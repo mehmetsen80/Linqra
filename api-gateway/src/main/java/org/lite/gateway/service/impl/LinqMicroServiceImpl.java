@@ -197,7 +197,19 @@ public class LinqMicroServiceImpl implements LinqMicroService {
     }
 
     private Mono<Object> invokeService(String method, String url, LinqRequest request) {
+        log.info("invokeService called for URL: {}", url);
         return apiKeyContextService.getApiKeyFromContext()
+                .doOnNext(apiKeyPair -> log.info("API key from context: {}", apiKeyPair != null ? "present" : "null"))
+                .doOnNext(apiKeyPair -> {
+                    if (apiKeyPair != null) {
+                        log.info("API key pair type: {}", apiKeyPair.getClass().getSimpleName());
+                        if (apiKeyPair instanceof ApiKeyPair) {
+                            ApiKeyPair keyPair = (ApiKeyPair) apiKeyPair;
+                            log.info("API key name: {}", keyPair.getName());
+                            log.info("API key key: {}", keyPair.getKey() != null ? "present" : "null");
+                        }
+                    }
+                })
                 .flatMap(apiKeyPair -> {
                     ApiKeyPair keyPair = (ApiKeyPair) apiKeyPair;
                     log.debug("Making {} request to {} with API key present", method, url);

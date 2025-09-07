@@ -2,6 +2,7 @@ package org.lite.gateway.controller;
 
 import org.lite.gateway.entity.Agent;
 import org.lite.gateway.enums.AgentStatus;
+import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.AgentOrchestrationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +20,7 @@ import java.util.Map;
 @Slf4j
 public class AgentController {
     
+    private final AgentService agentService;
     private final AgentOrchestrationService agentOrchestrationService;
     
     // ==================== AGENT CRUD OPERATIONS ====================
@@ -28,7 +30,7 @@ public class AgentController {
         
         log.info("Creating agent '{}' for team {}", agent.getName(), agent.getTeamId());
         
-        return agentOrchestrationService.createAgent(agent, agent.getTeamId(), agent.getCreatedBy())
+        return agentService.createAgent(agent, agent.getTeamId(), agent.getCreatedBy())
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }
@@ -40,7 +42,9 @@ public class AgentController {
         
         log.info("Getting agent {} for team {}", agentId, teamId);
         
-        return agentOrchestrationService.getAgentById(agentId, teamId)
+        return agentService.getAgentById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.notFound().build());
     }
@@ -52,7 +56,7 @@ public class AgentController {
         
         log.info("Updating agent {}", agentId);
         
-        return agentOrchestrationService.updateAgent(agentId, agentUpdates)
+        return agentService.updateAgent(agentId, agentUpdates)
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }
@@ -64,7 +68,7 @@ public class AgentController {
         
         log.info("Deleting agent {} for team {}", agentId, teamId);
         
-        return agentOrchestrationService.deleteAgent(agentId, teamId)
+        return agentService.deleteAgent(agentId, teamId)
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }
@@ -74,7 +78,7 @@ public class AgentController {
     @GetMapping("/team/{teamId}")
     public Flux<Agent> getAgentsByTeam(@PathVariable String teamId) {
         log.info("Getting all agents for team {}", teamId);
-        return agentOrchestrationService.getAgentsByTeam(teamId);
+        return agentService.getAgentsByTeam(teamId);
     }
     
     @GetMapping("/team/{teamId}/status/{status}")
@@ -83,7 +87,7 @@ public class AgentController {
             @PathVariable AgentStatus status) {
         
         log.info("Getting agents with status {} for team {}", status, teamId);
-        return agentOrchestrationService.getAgentsByTeamAndStatus(teamId, status);
+        return agentService.getAgentsByTeamAndStatus(teamId, status);
     }
     
     @GetMapping("/team/{teamId}/ready")
@@ -101,7 +105,7 @@ public class AgentController {
         
         log.info("Enabling agent {} for team {}", agentId, teamId);
         
-        return agentOrchestrationService.setAgentEnabled(agentId, teamId, true)
+        return agentService.setAgentEnabled(agentId, teamId, true)
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }
@@ -113,7 +117,7 @@ public class AgentController {
         
         log.info("Disabling agent {} for team {}", agentId, teamId);
         
-        return agentOrchestrationService.setAgentEnabled(agentId, teamId, false)
+        return agentService.setAgentEnabled(agentId, teamId, false)
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }
@@ -264,7 +268,9 @@ public class AgentController {
         
         log.info("Validating configuration for agent {} in team {}", agentId, teamId);
         
-        return agentOrchestrationService.getAgentById(agentId, teamId)
+        return agentService.getAgentById(agentId)
+                .filter(agent -> teamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> agentOrchestrationService.validateAgentConfiguration(agent))
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());

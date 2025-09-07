@@ -28,4 +28,11 @@ public class LinqWorkflowExecution {
     private ExecutionStatus status;         // SUCCESS, FAILED, etc.
     private Map<String, Object> variables;  // For storing any variables used in the execution
     private Long durationMs;  // Add this field to track execution duration
+    
+    // Agent execution tracking fields
+    private String agentId;                 // ID of the agent that triggered this execution
+    private String agentName;               // Name of the agent
+    private String agentTaskId;             // ID of the specific agent task
+    private String executionSource;         // "agent", "manual", "cron", "api", "scheduled"
+    private String agentExecutionId;        // Reference to AgentExecution entity
 }

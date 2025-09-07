@@ -4,6 +4,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import org.lite.gateway.enums.ExecutionType;
+import org.lite.gateway.enums.ExecutionStatus;
+import org.lite.gateway.enums.ExecutionResult;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
@@ -31,7 +34,7 @@ public class AgentExecution {
     // Execution Context
     private String teamId;                  // Team that owns this execution
     private String routeIdentifier;         // AI app route identifier
-    private String executionType;           // "scheduled", "manual", "event_driven", "workflow"
+    private ExecutionType executionType;    // SCHEDULED, MANUAL, EVENT_DRIVEN, WORKFLOW, AGENT_SCHEDULED
     private String triggerSource;           // What triggered this execution (cron, user, webhook, etc.)
     
     // Execution Timeline
@@ -41,8 +44,8 @@ public class AgentExecution {
     private Long executionDurationMs;       // Total execution time in milliseconds
     
     // Execution Status & Results
-    private String status;                  // "RUNNING", "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT"
-    private String result;                  // "SUCCESS", "PARTIAL_SUCCESS", "FAILURE", "SKIPPED"
+    private ExecutionStatus status;         // RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT
+    private ExecutionResult result;         // SUCCESS, PARTIAL_SUCCESS, FAILURE, SKIPPED, UNKNOWN
     private String errorMessage;            // Error message if execution failed
     private String errorCode;               // Error code for programmatic handling
     private String errorStack;              // Full error stack trace for debugging
@@ -123,8 +126,8 @@ public class AgentExecution {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
         retryCount = 0;
-        status = "RUNNING";
-        result = "UNKNOWN";
+        status = ExecutionStatus.RUNNING;
+        result = ExecutionResult.UNKNOWN;
     }
     
     public void onUpdate() {
@@ -133,21 +136,21 @@ public class AgentExecution {
     
     // Helper methods
     public boolean isCompleted() {
-        return "COMPLETED".equals(status) || "FAILED".equals(status) || 
-               "CANCELLED".equals(status) || "TIMEOUT".equals(status);
+        return status == ExecutionStatus.COMPLETED || status == ExecutionStatus.FAILED || 
+               status == ExecutionStatus.CANCELLED || status == ExecutionStatus.TIMEOUT;
     }
     
     public boolean isSuccessful() {
-        return "SUCCESS".equals(result);
+        return result == ExecutionResult.SUCCESS;
     }
     
     public boolean canRetry() {
-        return retryCount < maxRetries && "FAILED".equals(status);
+        return retryCount < maxRetries && status == ExecutionStatus.FAILED;
     }
     
     public void markAsCompleted() {
-        this.status = "COMPLETED";
-        this.result = "SUCCESS";
+        this.status = ExecutionStatus.COMPLETED;
+        this.result = ExecutionResult.SUCCESS;
         this.completedAt = LocalDateTime.now();
         if (this.startedAt != null) {
             this.executionDurationMs = java.time.Duration.between(this.startedAt, this.completedAt).toMillis();
@@ -155,8 +158,8 @@ public class AgentExecution {
     }
     
     public void markAsFailed(String error, String errorCode) {
-        this.status = "FAILED";
-        this.result = "FAILURE";
+        this.status = ExecutionStatus.FAILED;
+        this.result = ExecutionResult.FAILURE;
         this.errorMessage = error;
         this.errorCode = errorCode;
         this.completedAt = LocalDateTime.now();
@@ -166,8 +169,8 @@ public class AgentExecution {
     }
     
     public void markAsTimeout() {
-        this.status = "TIMEOUT";
-        this.result = "FAILURE";
+        this.status = ExecutionStatus.TIMEOUT;
+        this.result = ExecutionResult.FAILURE;
         this.errorMessage = "Execution timed out";
         this.errorCode = "TIMEOUT";
         this.completedAt = LocalDateTime.now();

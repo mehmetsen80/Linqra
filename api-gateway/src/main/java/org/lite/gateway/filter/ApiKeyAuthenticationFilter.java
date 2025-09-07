@@ -37,8 +37,8 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
 
-        // Skip API key for all non-linq and non-route paths
-        if (!path.startsWith("/linq") && (path.contains("/whatsapp/webhook") || !path.startsWith("/r/"))) {
+        // Skip API key for all non-linq, non-route, and non-agent-tasks paths
+        if (!path.startsWith("/linq") && !path.startsWith("/api/agent-tasks/") && (path.contains("/whatsapp/webhook") || !path.startsWith("/r/"))) {
             return chain.filter(exchange);
         }
 

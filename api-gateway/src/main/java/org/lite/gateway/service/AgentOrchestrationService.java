@@ -3,7 +3,6 @@ package org.lite.gateway.service;
 import org.lite.gateway.entity.Agent;
 import org.lite.gateway.entity.AgentTask;
 import org.lite.gateway.entity.AgentExecution;
-import org.lite.gateway.enums.AgentStatus;
 import org.lite.gateway.enums.AgentTaskStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -11,94 +10,27 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.springframework.web.server.ServerWebExchange;
 
 public interface AgentOrchestrationService {
     
     // ==================== AGENT MANAGEMENT ====================
     
-    /**
-     * Create a new agent
-     */
-    Mono<Agent> createAgent(Agent agent, String teamId, String createdBy);
-    
-    /**
-     * Update an existing agent
-     */
-    Mono<Agent> updateAgent(String agentId, Agent agentUpdates);
-    
-    /**
-     * Delete an agent (soft delete by setting enabled to false)
-     */
-    Mono<Boolean> deleteAgent(String agentId, String teamId);
-    
-    /**
-     * Enable/disable an agent
-     */
-    Mono<Agent> setAgentEnabled(String agentId, String teamId, boolean enabled);
-    
-    /**
-     * Get agent by ID with team validation
-     */
-    Mono<Agent> getAgentById(String agentId, String teamId);
-    
-    /**
-     * Get all agents for a team
-     */
-    Flux<Agent> getAgentsByTeam(String teamId);
-    
-    /**
-     * Get agents by status for a team
-     */
-    Flux<Agent> getAgentsByTeamAndStatus(String teamId, AgentStatus status);
-    
+
     // ==================== TASK MANAGEMENT ====================
-    
-    /**
-     * Create a new task for an agent
-     */
-    Mono<AgentTask> createTask(AgentTask task);
-    
-    /**
-     * Update an existing task
-     */
-    Mono<AgentTask> updateTask(String taskId, AgentTask taskUpdates, String teamId, String updatedBy);
-    
-    /**
-     * Delete a task
-     */
-    Mono<Boolean> deleteTask(String taskId, String teamId);
-    
-    /**
-     * Enable/disable a task
-     */
-    Mono<AgentTask> setTaskEnabled(String taskId, String teamId, boolean enabled);
-    
-    /**
-     * Get task by ID with team validation
-     */
-    Mono<AgentTask> getTaskById(String taskId, String teamId);
-    
-    /**
-     * Get all tasks for an agent
-     */
-    Flux<AgentTask> getTasksByAgent(String agentId, String teamId);
-    
-    /**
-     * Get tasks by status for an agent
-     */
-    Flux<AgentTask> getTasksByAgentAndStatus(String agentId, String teamId, AgentTaskStatus status);
+    // Task CRUD operations have been moved to AgentTaskService
     
     // ==================== EXECUTION MANAGEMENT ====================
     
     /**
      * Start execution of an agent task
      */
-    Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy);
+    Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy, ServerWebExchange exchange);
     
     /**
      * Execute a task manually (bypass scheduling)
      */
-    Mono<AgentExecution> executeTaskManually(String agentId, String taskId, String teamId, String executedBy);
+    Mono<AgentExecution> executeTaskManually(String agentId, String taskId, String teamId, String executedBy, ServerWebExchange exchange);
     
     /**
      * Cancel a running execution

@@ -3,13 +3,16 @@ package org.lite.gateway.service.impl;
 import org.lite.gateway.entity.Agent;
 import org.lite.gateway.entity.AgentTask;
 import org.lite.gateway.entity.AgentExecution;
+
 import org.lite.gateway.enums.AgentStatus;
-import org.lite.gateway.enums.AgentTaskStatus;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentExecutionRepository;
 import org.lite.gateway.service.AgentOrchestrationService;
-import org.lite.gateway.service.CronDescriptionService;
+
+import org.lite.gateway.service.LinqWorkflowService;
+import org.lite.gateway.service.LinqWorkflowExecutionService;
+import org.lite.gateway.dto.LinqRequest;
 import org.springframework.stereotype.Service;
 
 import reactor.core.publisher.Flux;
@@ -18,9 +21,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.web.server.ServerWebExchange;
+import org.lite.gateway.enums.ExecutionType;
+import org.lite.gateway.enums.ExecutionStatus;
+import org.lite.gateway.enums.ExecutionResult;
 
 @Service
 @RequiredArgsConstructor
@@ -30,250 +39,29 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     private final AgentRepository agentRepository;
     private final AgentTaskRepository agentTaskRepository;
     private final AgentExecutionRepository agentExecutionRepository;
-    private final CronDescriptionService cronDescriptionService;
-    
-    // ==================== AGENT MANAGEMENT ====================
-    
-    @Override
-    public Mono<Agent> createAgent(Agent agent, String teamId, String createdBy) {
-        log.info("Creating agent '{}' for team {}", agent.getName(), teamId);
-        
-        agent.setTeamId(teamId);
-        agent.setCreatedBy(createdBy);
-        agent.setUpdatedBy(createdBy);
-        agent.onCreate();
-        
-        // Auto-generate cron description if cron expression is provided
-        if (agent.getCronExpression() != null && !agent.getCronExpression().trim().isEmpty()) {
-            return Mono.just(cronDescriptionService.getCronDescription(agent.getCronExpression()))
-                    .flatMap(description -> {
-                        agent.setCronDescription(description);
-                        log.info("Generated cron description: {}", description);
-                        return agentRepository.save(agent);
-                    })
-                    .doOnSuccess(savedAgent -> log.info("Agent '{}' created successfully with ID: {}", 
-                            savedAgent.getName(), savedAgent.getId()))
-                    .doOnError(error -> log.error("Failed to create agent '{}': {}", agent.getName(), error.getMessage()));
-        }
-        
-        return agentRepository.save(agent)
-                .doOnSuccess(savedAgent -> log.info("Agent '{}' created successfully with ID: {}", 
-                        savedAgent.getName(), savedAgent.getId()))
-                .doOnError(error -> log.error("Failed to create agent '{}': {}", agent.getName(), error.getMessage()));
-    }
-    
-    @Override
-    public Mono<Agent> updateAgent(String agentId, Agent agentUpdates) {
-        log.info("Updating agent {}", agentId);
-        
-        return agentRepository.findById(agentId)
-                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
-                .flatMap(existingAgent -> {
-                    // Update only non-null fields
-                    if (agentUpdates.getName() != null) existingAgent.setName(agentUpdates.getName());
-                    if (agentUpdates.getDescription() != null) existingAgent.setDescription(agentUpdates.getDescription());
-                    if (agentUpdates.getStatus() != null) existingAgent.setStatus(agentUpdates.getStatus());
-                    if (agentUpdates.getRouteIdentifier() != null) existingAgent.setRouteIdentifier(agentUpdates.getRouteIdentifier());
-                    if (agentUpdates.getPrimaryLinqToolId() != null) existingAgent.setPrimaryLinqToolId(agentUpdates.getPrimaryLinqToolId());
-                    if (agentUpdates.getSupportedIntents() != null) existingAgent.setSupportedIntents(agentUpdates.getSupportedIntents());
-                    if (agentUpdates.getCapabilities() != null) existingAgent.setCapabilities(agentUpdates.getCapabilities());
-                    if (agentUpdates.getCronExpression() != null) existingAgent.setCronExpression(agentUpdates.getCronExpression());
-                    // Note: boolean fields are primitive, so we can't check for null
-                    // We'll only update if the field is explicitly set in the updates
-                    if (agentUpdates.getMaxRetries() > 0) existingAgent.setMaxRetries(agentUpdates.getMaxRetries());
-                    if (agentUpdates.getTimeoutMinutes() != null) existingAgent.setTimeoutMinutes(agentUpdates.getTimeoutMinutes());
-                    
-                    existingAgent.setUpdatedBy(agentUpdates.getUpdatedBy());
-                    existingAgent.onUpdate();
-                    
-                    return agentRepository.save(existingAgent);
-                })
-                .doOnSuccess(updatedAgent -> log.info("Agent {} updated successfully", agentId))
-                .doOnError(error -> log.error("Failed to update agent {}: {}", agentId, error.getMessage()));
-    }
-    
-    @Override
-    public Mono<Boolean> deleteAgent(String agentId, String teamId) {
-        log.info("Deleting agent {} for team {}", agentId, teamId);
-        
-        return agentRepository.findById(agentId)
-                .filter(agent -> teamId.equals(agent.getTeamId()))
-                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
-                .flatMap(agent -> {
-                    agent.setEnabled(false);
-                    agent.setStatus(AgentStatus.DISABLED);
-                    agent.setUpdatedBy("system");
-                    agent.onUpdate();
-                    
-                    return agentRepository.save(agent)
-                            .thenReturn(true);
-                })
-                .doOnSuccess(deleted -> log.info("Agent {} deleted successfully", agentId))
-                .doOnError(error -> log.error("Failed to delete agent {}: {}", agentId, error.getMessage()));
-    }
-    
-    @Override
-    public Mono<Agent> setAgentEnabled(String agentId, String teamId, boolean enabled) {
-        log.info("Setting agent {} enabled={} for team {}", agentId, enabled, teamId);
-        
-        return agentRepository.findById(agentId)
-                .filter(agent -> teamId.equals(agent.getTeamId()))
-                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
-                .flatMap(agent -> {
-                    agent.setEnabled(enabled);
-                    if (enabled) {
-                        agent.setStatus(AgentStatus.IDLE);
-                    } else {
-                        agent.setStatus(AgentStatus.DISABLED);
-                    }
-                    agent.setUpdatedBy("system");
-                    agent.onUpdate();
-                    
-                    return agentRepository.save(agent);
-                })
-                .doOnSuccess(updatedAgent -> log.info("Agent {} enabled={} successfully", agentId, enabled))
-                .doOnError(error -> log.error("Failed to set agent {} enabled={}: {}", agentId, enabled, error.getMessage()));
-    }
-    
-    @Override
-    public Mono<Agent> getAgentById(String agentId, String teamId) {
-        return agentRepository.findById(agentId)
-                .filter(agent -> teamId.equals(agent.getTeamId()))
-                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")));
-    }
-    
-    @Override
-    public Flux<Agent> getAgentsByTeam(String teamId) {
-        return agentRepository.findByTeamId(teamId);
-    }
-    
-    @Override
-    public Flux<Agent> getAgentsByTeamAndStatus(String teamId, AgentStatus status) {
-        return agentRepository.findByTeamIdAndStatus(teamId, status);
-    }
-    
-    // ==================== TASK MANAGEMENT ====================
-    
-    @Override
-    public Mono<AgentTask> createTask(AgentTask task) {
-        log.info("Creating task '{}' for agent {}", task.getName(), task.getAgentId());
-        
-        return agentRepository.findById(task.getAgentId())
-                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
-                .flatMap(agent -> {
-                    task.setAgentName(agent.getName());
-                    task.setUpdatedBy(task.getCreatedBy());
-                    task.onCreate();
-                    
-                    return agentTaskRepository.save(task)
-                            .flatMap(savedTask -> {
-                                // Add task to agent
-                                agent.addTask(savedTask.getId());
-                                return agentRepository.save(agent)
-                                        .thenReturn(savedTask);
-                            });
-                })
-                .doOnSuccess(savedTask -> log.info("Task '{}' created successfully with ID: {}", 
-                        savedTask.getName(), savedTask.getId()))
-                .doOnError(error -> log.error("Failed to create task '{}': {}", task.getName(), error.getMessage()));
-    }
-    
-    @Override
-    public Mono<AgentTask> updateTask(String taskId, AgentTask taskUpdates, String teamId, String updatedBy) {
-        log.info("Updating task {} for team {}", taskId, teamId);
-        
-        return getTaskById(taskId, teamId)
-                .flatMap(existingTask -> {
-                    // Update only non-null fields
-                    if (taskUpdates.getName() != null) existingTask.setName(taskUpdates.getName());
-                    if (taskUpdates.getDescription() != null) existingTask.setDescription(taskUpdates.getDescription());
-                    if (taskUpdates.getTaskType() != null) existingTask.setTaskType(taskUpdates.getTaskType());
-                    if (taskUpdates.getPriority() != 0) existingTask.setPriority(taskUpdates.getPriority());
-                    // Note: boolean fields are primitive, so we can't check for null
-                    if (taskUpdates.getMaxRetries() > 0) existingTask.setMaxRetries(taskUpdates.getMaxRetries());
-                    if (taskUpdates.getTimeoutMinutes() > 0) existingTask.setTimeoutMinutes(taskUpdates.getTimeoutMinutes());
-                    if (taskUpdates.getTaskConfig() != null) existingTask.setTaskConfig(taskUpdates.getTaskConfig());
-                    if (taskUpdates.getCronExpression() != null) existingTask.setCronExpression(taskUpdates.getCronExpression());
-                    
-                    existingTask.setUpdatedBy(updatedBy);
-                    existingTask.onUpdate();
-                    
-                    return agentTaskRepository.save(existingTask);
-                })
-                .doOnSuccess(updatedTask -> log.info("Task {} updated successfully", taskId))
-                .doOnError(error -> log.error("Failed to update task {}: {}", taskId, error.getMessage()));
-    }
-    
-    @Override
-    public Mono<Boolean> deleteTask(String taskId, String teamId) {
-        log.info("Deleting task {} for team {}", taskId, teamId);
-        
-        return getTaskById(taskId, teamId)
-                .flatMap(task -> {
-                    // Remove task from agent
-                    return agentRepository.findById(task.getAgentId())
-                            .flatMap(agent -> {
-                                agent.removeTask(taskId);
-                                return agentRepository.save(agent);
-                            })
-                            .then(agentTaskRepository.deleteById(taskId))
-                            .thenReturn(true);
-                })
-                .doOnSuccess(deleted -> log.info("Task {} deleted successfully", taskId))
-                .doOnError(error -> log.error("Failed to delete task {}: {}", taskId, error.getMessage()));
-    }
-    
-    @Override
-    public Mono<AgentTask> setTaskEnabled(String taskId, String teamId, boolean enabled) {
-        log.info("Setting task {} enabled={} for team {}", taskId, enabled, teamId);
-        
-        return getTaskById(taskId, teamId)
-                .flatMap(task -> {
-                    task.setEnabled(enabled);
-                    task.setUpdatedBy("system");
-                    task.onUpdate();
-                    
-                    return agentTaskRepository.save(task);
-                })
-                .doOnSuccess(updatedTask -> log.info("Task {} enabled={} successfully", taskId, enabled))
-                .doOnError(error -> log.error("Failed to set task {} enabled={}: {}", taskId, enabled, error.getMessage()));
-    }
-    
-    @Override
-    public Mono<AgentTask> getTaskById(String taskId, String teamId) {
-        return agentTaskRepository.findById(taskId)
-                .flatMap(task -> getAgentById(task.getAgentId(), teamId)
-                        .thenReturn(task))
-                .switchIfEmpty(Mono.error(new RuntimeException("Task not found or access denied")));
-    }
-    
-    @Override
-    public Flux<AgentTask> getTasksByAgent(String agentId, String teamId) {
-        return getAgentById(agentId, teamId)
-                .thenMany(agentTaskRepository.findByAgentId(agentId));
-    }
-    
-    @Override
-    public Flux<AgentTask> getTasksByAgentAndStatus(String agentId, String teamId, AgentTaskStatus status) {
-        return getAgentById(agentId, teamId)
-                .thenMany(agentTaskRepository.findByAgentIdAndStatus(agentId, status));
-    }
+    private final LinqWorkflowService linqWorkflowService;
+    private final LinqWorkflowExecutionService workflowExecutionService;
     
     // ==================== EXECUTION MANAGEMENT ====================
     
     @Override
-    public Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy) {
+    public Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy, ServerWebExchange exchange) {
         log.info("Starting execution of task {} for agent {} in team {}", taskId, agentId, teamId);
         
         return Mono.zip(
-                getAgentById(agentId, teamId),
-                getTaskById(taskId, teamId)
+                agentRepository.findById(agentId),
+                agentTaskRepository.findById(taskId)
         ).flatMap(tuple -> {
             Agent agent = tuple.getT1();
             AgentTask task = tuple.getT2();
             
             // Validate task can be executed
+            log.info("Task {} state: enabled={}, cronExpression={}, autoExecute={}", 
+                    taskId, task.isEnabled(), task.getCronExpression(), task.isAutoExecute());
+            
             if (!task.isReadyToExecute()) {
+                log.error("Task {} is not ready to execute. enabled={}, cronExpression={}, autoExecute={}", 
+                        taskId, task.isEnabled(), task.getCronExpression(), task.isAutoExecute());
                 return Mono.error(new RuntimeException("Task is not ready to execute"));
             }
             
@@ -285,17 +73,14 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
             AgentExecution execution = AgentExecution.builder()
                     .executionId(UUID.randomUUID().toString())
                     .agentId(agentId)
-                    .agentName(agent.getName())
                     .taskId(taskId)
                     .taskName(task.getName())
                     .teamId(teamId)
                     .routeIdentifier(agent.getRouteIdentifier())
-                    .executionType("manual")
+                    .executionType(ExecutionType.MANUAL)
                     .triggerSource("user")
                     .scheduledAt(LocalDateTime.now())
                     .startedAt(LocalDateTime.now())
-                    .status("RUNNING")
-                    .result("UNKNOWN")
                     .executedBy(executedBy)
                     .executionEnvironment("production")
                     .maxRetries(task.getMaxRetries())
@@ -303,23 +88,33 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
             
             execution.onCreate();
             
-            // Update agent and task status
-            agent.markAsRunning("Executing task: " + task.getName());
-            task.markAsExecuting();
+            // No agent state management - agents can execute multiple tasks simultaneously
             
-            return Mono.zip(
-                    agentRepository.save(agent),
-                    agentTaskRepository.save(task),
-                    agentExecutionRepository.save(execution)
-            ).thenReturn(execution);
+            return agentExecutionRepository.save(execution)
+            .then(executeWorkflow(execution, task, agent, exchange))
+            .flatMap(workflowExecutionId -> {
+                // SUCCESS CASE - Only update execution status
+                execution.markAsCompleted();
+                
+                return agentExecutionRepository.save(execution)
+                .thenReturn(execution);
+            })
+            .onErrorResume(error -> {
+                // ERROR CASE - Only update execution status
+                log.error("Task execution failed: {}", error.getMessage());
+                execution.markAsFailed(error.getMessage(), "Workflow execution failed");
+                
+                return agentExecutionRepository.save(execution)
+                .then(Mono.error(error));
+            });
         })
         .doOnSuccess(execution -> log.info("Task execution started: {}", execution.getExecutionId()))
         .doOnError(error -> log.error("Failed to start task execution: {}", error.getMessage()));
     }
     
     @Override
-    public Mono<AgentExecution> executeTaskManually(String agentId, String taskId, String teamId, String executedBy) {
-        return startTaskExecution(agentId, taskId, teamId, executedBy);
+    public Mono<AgentExecution> executeTaskManually(String agentId, String taskId, String teamId, String executedBy, ServerWebExchange exchange) {
+        return startTaskExecution(agentId, taskId, teamId, executedBy, exchange);
     }
     
     @Override
@@ -328,8 +123,8 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
         
         return getExecutionById(executionId, teamId)
                 .flatMap(execution -> {
-                    execution.setStatus("CANCELLED");
-                    execution.setResult("FAILURE");
+                    execution.setStatus(ExecutionStatus.CANCELLED);
+                    execution.setResult(ExecutionResult.FAILURE);
                     execution.setErrorMessage("Execution cancelled by: " + cancelledBy);
                     execution.setCompletedAt(LocalDateTime.now());
                     execution.onUpdate();
@@ -350,14 +145,14 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Flux<AgentExecution> getExecutionHistory(String agentId, String teamId, int limit) {
-        return getAgentById(agentId, teamId)
+        return agentRepository.findById(agentId)
                 .thenMany(agentExecutionRepository.findByAgentIdOrderByCreatedAtDesc(agentId)
                         .take(limit));
     }
     
     @Override
     public Flux<AgentExecution> getTaskExecutionHistory(String taskId, String teamId, int limit) {
-        return getTaskById(taskId, teamId)
+        return agentTaskRepository.findById(taskId)
                 .thenMany(agentExecutionRepository.findByTaskIdOrderByCreatedAtDesc(taskId)
                         .take(limit));
     }
@@ -460,7 +255,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Mono<Map<String, Object>> getTeamAgentsHealth(String teamId) {
-        return getAgentsByTeam(teamId)
+        return agentRepository.findByTeamId(teamId)
                 .collectList()
                 .map(agents -> {
                     long totalAgents = agents.size();
@@ -514,7 +309,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Mono<Map<String, Object>> getTaskPerformance(String taskId, String teamId, LocalDateTime from, LocalDateTime to) {
-        return getTaskById(taskId, teamId)
+        return agentTaskRepository.findById(taskId)
                 .thenMany(agentExecutionRepository.findByTaskIdAndStartedAtBetween(taskId, from, to))
                 .collectList()
                 .map(executions -> {
@@ -546,7 +341,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     @Override
     public Mono<Map<String, Object>> getTeamExecutionStats(String teamId, LocalDateTime from, LocalDateTime to) {
         // First get all agents for the team, then get their executions
-        return getAgentsByTeam(teamId)
+        return agentRepository.findByTeamId(teamId)
                 .map(Agent::getId)
                 .collectList()
                 .flatMap(agentIds -> {
@@ -567,10 +362,10 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
                             .map(executions -> {
                                 long totalExecutions = executions.size();
                                 long successfulExecutions = executions.stream()
-                                        .filter(e -> "SUCCESS".equals(e.getResult()))
+                                        .filter(e -> ExecutionResult.SUCCESS.name().equals(e.getResult()))
                                         .count();
                                 long failedExecutions = executions.stream()
-                                        .filter(e -> "FAILURE".equals(e.getResult()))
+                                        .filter(e -> ExecutionResult.FAILURE.name().equals(e.getResult()))
                                         .count();
                                 
                                 return Map.of(
@@ -598,8 +393,8 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
                     }
                     
                     execution.addRetryAttempt();
-                    execution.setStatus("RUNNING");
-                    execution.setResult("UNKNOWN");
+                    execution.setStatus(ExecutionStatus.RUNNING);
+                    execution.setResult(ExecutionResult.UNKNOWN);
                     execution.setStartedAt(LocalDateTime.now());
                     execution.setExecutedBy(retriedBy);
                     execution.onUpdate();
@@ -618,7 +413,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
                 .filter(agent -> teamId.equals(agent.getTeamId()))
                 .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
-                    agent.markAsIdle();
+                    // No agent state management - just update audit fields
                     agent.setUpdatedBy(resetBy);
                     agent.onUpdate();
                     
@@ -630,7 +425,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Flux<Agent> getAgentsWithErrors(String teamId) {
-        return getAgentsByTeam(teamId)
+        return agentRepository.findByTeamId(teamId)
                 .filter(agent -> AgentStatus.ERROR.equals(agent.getStatus()));
     }
     
@@ -647,10 +442,252 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     public Mono<String> triggerWorkflow(String workflowId, Map<String, Object> parameters, String teamId) {
         log.info("Triggering workflow {} for team {} with parameters: {}", workflowId, teamId, parameters);
         
-        // TODO: Implement workflow triggering logic
-        // This will integrate with your existing workflow system
+        return linqWorkflowService.getWorkflow(workflowId)
+                .flatMap(workflow -> {
+                    // Use the workflow's request directly
+                    LinqRequest request = workflow.getRequest();
+                    
+                    // Ensure it's a workflow request
+                    if (!request.getLink().getTarget().equals("workflow")) {
+                        return Mono.error(new RuntimeException("Invalid workflow request: target must be 'workflow'"));
+                    }
+                    
+                    // Set the workflowId in the request
+                    if (request.getQuery() == null) {
+                        request.setQuery(new LinqRequest.Query());
+                    }
+                    request.getQuery().setWorkflowId(workflowId);
+                    
+                    // Store the workflow steps for each individual request
+                    List<LinqRequest.Query.WorkflowStep> workflowSteps = request.getQuery().getWorkflow();
+                    
+                    // Fix the max.tokens issue in the workflow steps
+                    if (workflowSteps != null) {
+                        workflowSteps.forEach(step -> {
+                            if (step.getToolConfig() != null && step.getToolConfig().getSettings() != null) {
+                                Map<String, Object> settings = step.getToolConfig().getSettings();
+                                if (settings.containsKey("max.tokens")) {
+                                    Object value = settings.remove("max.tokens");
+                                    settings.put("max_tokens", value);
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Set the executedBy field from parameters
+                    if (parameters.containsKey("executedBy")) {
+                        request.setExecutedBy((String) parameters.get("executedBy"));
+                    }
+                    
+                    // Execute the workflow
+                    return workflowExecutionService.executeWorkflow(request)
+                            .flatMap(response -> workflowExecutionService.trackExecution(request, response)
+                                    .map(execution -> execution.getId()));
+                })
+                .doOnSuccess(executionId -> log.info("Workflow {} triggered successfully with execution ID: {}", workflowId, executionId))
+                .doOnError(error -> log.error("Failed to trigger workflow {}: {}", workflowId, error.getMessage()));
+    }
+    
+    /**
+     * Trigger workflow with agent context for tracking
+     */
+    public Mono<String> triggerWorkflowWithAgentContext(String workflowId, Map<String, Object> parameters, String teamId, 
+                                                       String agentId, String agentTaskId, String agentExecutionId, ServerWebExchange exchange) {
+        log.info("Triggering workflow {} for team {} with agent context: agent={}, task={}", workflowId, teamId, agentId, agentTaskId);
         
-        return Mono.just("workflow_execution_id_" + System.currentTimeMillis());
+        return linqWorkflowService.getWorkflow(workflowId)
+                .flatMap(workflow -> {
+                    // Use the workflow's request directly
+                    LinqRequest request = workflow.getRequest();
+                    
+                    // Ensure it's a workflow request
+                    if (!request.getLink().getTarget().equals("workflow")) {
+                        return Mono.error(new RuntimeException("Invalid workflow request: target must be 'workflow'"));
+                    }
+                    
+                    // Set the workflowId in the request
+                    if (request.getQuery() == null) {
+                        request.setQuery(new LinqRequest.Query());
+                    }
+                    request.getQuery().setWorkflowId(workflowId);
+                    
+                    // Store the workflow steps for each individual request
+                    List<LinqRequest.Query.WorkflowStep> workflowSteps = request.getQuery().getWorkflow();
+                    
+                    // Fix the max.tokens issue in the workflow steps
+                    if (workflowSteps != null) {
+                        workflowSteps.forEach(step -> {
+                            if (step.getToolConfig() != null && step.getToolConfig().getSettings() != null) {
+                                Map<String, Object> settings = step.getToolConfig().getSettings();
+                                if (settings.containsKey("max.tokens")) {
+                                    Object value = settings.remove("max.tokens");
+                                    settings.put("max_tokens", value);
+                                }
+                            }
+                        });
+                    }
+                    
+                    // Set the executedBy field from parameters
+                    if (parameters.containsKey("executedBy")) {
+                        request.setExecutedBy((String) parameters.get("executedBy"));
+                    }
+                    
+                    // Execute the workflow with security context
+                    return Mono.just(exchange)
+                            .doOnNext(ex -> log.info("ServerWebExchange available: {}", ex != null))
+                            .flatMap(ex -> 
+                                ReactiveSecurityContextHolder.getContext()
+                                    .doOnNext(ctx -> log.info("Security context available: {}", ctx != null))
+                                    .doOnNext(ctx -> {
+                                        if (ctx != null) {
+                                            log.info("Security context authentication: {}", ctx.getAuthentication());
+                                            if (ctx.getAuthentication() != null) {
+                                                log.info("Authentication principal: {}", ctx.getAuthentication().getPrincipal());
+                                                log.info("Authentication credentials: {}", ctx.getAuthentication().getCredentials());
+                                            }
+                                        }
+                                    })
+                                    .flatMap(securityContext -> 
+                                        workflowExecutionService.executeWorkflow(request)
+                                            .doOnNext(response -> log.info("Workflow execution response received"))
+                                            .flatMap(response -> {
+                                                // Check if the workflow execution actually succeeded
+                                                if (response.getMetadata() != null && 
+                                                    response.getMetadata().getStatus() != null && 
+                                                    !"success".equals(response.getMetadata().getStatus())) {
+                                                    log.error("Workflow execution failed with status: {}", response.getMetadata().getStatus());
+                                                    return Mono.<String>error(new RuntimeException("Workflow execution failed with status: " + response.getMetadata().getStatus()));
+                                                }
+                                                
+                                                // Get agent name by looking up the agent
+                                                return agentRepository.findById(agentId)
+                                                        .map(agent -> {
+                                                            // Prepare agent context for tracking
+                                                            Map<String, Object> agentContext = Map.of(
+                                                                "agentId", agentId,
+                                                                "agentName", agent.getName(),
+                                                                "agentTaskId", agentTaskId,
+                                                                "executionSource", "agent",
+                                                                "agentExecutionId", agentExecutionId
+                                                            );
+                                                            
+                                                            return agentContext;
+                                                        })
+                                                        .flatMap(agentContext -> 
+                                                            workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
+                                                                    .map(workflowExecution -> workflowExecution.getId())
+                                                        );
+                                            })
+                                    )
+                            );
+                })
+                .doOnSuccess(executionId -> log.info("Workflow {} triggered successfully with execution ID: {} for agent: {}", workflowId, executionId, agentId))
+                .doOnError(error -> log.error("Failed to trigger workflow {} for agent {}: {}", workflowId, agentId, error.getMessage()));
+    }
+    
+    /**
+     * Execute the workflow associated with a task
+     */
+    private Mono<Void> executeWorkflow(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
+        log.info("Executing workflow for task: {} (execution: {})", task.getName(), execution.getExecutionId());
+        
+        try {
+            // Extract workflow ID from task configuration
+            String workflowId = extractWorkflowId(task);
+            if (workflowId == null) {
+                log.warn("No workflow ID found in task configuration for task: {}", task.getName());
+                return updateExecutionStatus(execution, ExecutionStatus.FAILED, "No workflow ID configured", null);
+            }
+            
+            // Prepare workflow parameters
+            Map<String, Object> parameters = prepareWorkflowParameters(execution, task, agent);
+            
+            // Trigger the workflow with agent context
+            return triggerWorkflowWithAgentContext(workflowId, parameters, execution.getTeamId(), 
+                    agent.getId(), task.getId(), execution.getExecutionId(), exchange)
+                    .flatMap(workflowExecutionId -> {
+                        log.info("Workflow triggered successfully: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
+                        return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Workflow started", workflowExecutionId);
+                    })
+                    .onErrorResume(error -> {
+                        log.error("Failed to trigger workflow for task: {}", task.getName(), error);
+                        return updateExecutionStatus(execution, ExecutionStatus.FAILED, "Workflow trigger failed: " + error.getMessage(), null);
+                    });
+                    
+        } catch (Exception e) {
+            log.error("Error executing workflow for task: {}", task.getName(), e);
+            return updateExecutionStatus(execution, ExecutionStatus.FAILED, "Workflow execution error: " + e.getMessage(), null);
+        }
+    }
+    
+    /**
+     * Extract workflow ID from task configuration
+     */
+    private String extractWorkflowId(AgentTask task) {
+        try {
+            // Check task_config first
+            if (task.getTaskConfig() != null && task.getTaskConfig().containsKey("workflowId")) {
+                return (String) task.getTaskConfig().get("workflowId");
+            }
+            
+            // Check linq_config as fallback
+            if (task.getLinqConfig() != null) {
+                Map<String, Object> query = (Map<String, Object>) task.getLinqConfig().get("query");
+                if (query != null && query.containsKey("workflowId")) {
+                    return (String) query.get("workflowId");
+                }
+            }
+            
+            return null;
+        } catch (Exception e) {
+            log.warn("Error extracting workflow ID from task: {}", task.getName(), e);
+            return null;
+        }
+    }
+    
+    /**
+     * Prepare workflow parameters
+     */
+    private Map<String, Object> prepareWorkflowParameters(AgentExecution execution, AgentTask task, Agent agent) {
+        Map<String, Object> parameters = new HashMap<>();
+        
+        // Basic execution info
+        parameters.put("executionId", execution.getExecutionId());
+        parameters.put("taskId", task.getId());
+        parameters.put("agentId", agent.getId());
+        parameters.put("teamId", execution.getTeamId());
+        parameters.put("executedBy", execution.getExecutedBy());
+        
+        // Task-specific parameters
+        if (task.getTaskConfig() != null) {
+            parameters.putAll(task.getTaskConfig());
+        }
+        
+        // Note: execution parameters would be added here if AgentExecution had them
+        // For now, we use the basic parameters above
+        
+        return parameters;
+    }
+    
+    /**
+     * Update execution status
+     */
+    private Mono<Void> updateExecutionStatus(AgentExecution execution, ExecutionStatus status, String message, String workflowExecutionId) {
+        execution.setStatus(status);
+        execution.setResult(status == ExecutionStatus.RUNNING ? ExecutionResult.UNKNOWN : 
+                           status == ExecutionStatus.COMPLETED ? ExecutionResult.SUCCESS : 
+                           status == ExecutionStatus.FAILED ? ExecutionResult.FAILURE : 
+                           ExecutionResult.UNKNOWN);
+        if (workflowExecutionId != null) {
+            execution.setWorkflowExecutionId(workflowExecutionId);
+        }
+        if (message != null) {
+            execution.setErrorMessage(message);
+        }
+        execution.onUpdate();
+        
+        return agentExecutionRepository.save(execution)
+                .then();
     }
     
     @Override
@@ -679,7 +716,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Flux<Agent> getAccessibleAgents(String teamId) {
-        return getAgentsByTeam(teamId);
+        return agentRepository.findByTeamId(teamId);
     }
     
     @Override
@@ -707,7 +744,15 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
         log.info("Bulk setting {} agents enabled={} for team {}", agentIds.size(), enabled, teamId);
         
         return Flux.fromIterable(agentIds)
-                .flatMap(agentId -> setAgentEnabled(agentId, teamId, enabled))
+                .flatMap(agentId -> agentRepository.findById(agentId)
+                        .filter(agent -> teamId.equals(agent.getTeamId()))
+                        .flatMap(agent -> {
+                            agent.setEnabled(enabled);
+                            agent.setStatus(enabled ? AgentStatus.IDLE : AgentStatus.DISABLED);
+                            agent.setUpdatedBy(updatedBy);
+                            agent.onUpdate();
+                            return agentRepository.save(agent);
+                        }))
                 .collectList()
                 .doOnSuccess(agents -> log.info("Bulk operation completed for {} agents", agents.size()))
                 .doOnError(error -> log.error("Bulk operation failed: {}", error.getMessage()));
@@ -718,7 +763,9 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
         log.info("Bulk deleting {} agents for team {}", agentIds.size(), teamId);
         
         return Flux.fromIterable(agentIds)
-                .flatMap(agentId -> deleteAgent(agentId, teamId))
+                .flatMap(agentId -> agentRepository.findById(agentId)
+                        .filter(agent -> teamId.equals(agent.getTeamId()))
+                        .flatMap(agent -> agentRepository.delete(agent).thenReturn(true)))
                 .collectList()
                 .doOnSuccess(results -> log.info("Bulk delete completed for {} agents", results.size()))
                 .doOnError(error -> log.error("Bulk delete failed: {}", error.getMessage()));
@@ -771,7 +818,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Mono<Map<String, Object>> getAgentCapabilitiesSummary(String teamId) {
-        return getAgentsByTeam(teamId)
+        return agentRepository.findByTeamId(teamId)
                 .collectList()
                 .map(agents -> {
                     Map<String, Long> capabilityCounts = agents.stream()
@@ -791,7 +838,7 @@ public class AgentOrchestrationServiceImpl implements AgentOrchestrationService 
     
     @Override
     public Mono<Map<String, Object>> getTeamResourceUsage(String teamId) {
-        return getAgentsByTeam(teamId)
+        return agentRepository.findByTeamId(teamId)
                 .collectList()
                 .map(agents -> {
                     long totalAgents = agents.size();

@@ -4,11 +4,11 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import org.lite.gateway.enums.AgentTaskStatus;
 import org.lite.gateway.enums.AgentTaskType;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,7 +30,6 @@ public class AgentTask {
     
     // Agent Association
     private String agentId;                 // Reference to the Agent that owns this task
-    private String agentName;               // Denormalized agent name for easy querying
     
     // Task Configuration
     private int priority;                   // 1 (highest) to 10 (lowest)
@@ -40,13 +39,16 @@ public class AgentTask {
     
     // Task Parameters & Configuration
     @Field("task_config")
+    @JsonProperty("task_config")
     private Map<String, Object> taskConfig; // Task-specific configuration (JSON-like structure)
     
     // Input/Output Specifications
     @Field("input_sources")
+    @JsonProperty("input_sources")
     private List<String> inputSources;      // ["mongodb://linqra/whatsapp_messages", "linq://komunas-app/status"]
     
     @Field("output_targets")
+    @JsonProperty("output_targets")
     private List<String> outputTargets;     // ["milvus://analysis_results", "mongodb://linqra/processed_data"]
     
     // Dependencies & Prerequisites
@@ -67,27 +69,17 @@ public class AgentTask {
     
     // Linq Protocol specific fields (when implementationType is "linq_protocol")
     @Field("linq_config")
+    @JsonProperty("linq_config")
     private Map<String, Object> linqConfig; // Linq protocol configuration matching LinqRequest structure
     
     // Direct API specific fields (when implementationType is "direct_api")
     @Field("api_config")
+    @JsonProperty("api_config")
     private Map<String, Object> apiConfig;  // API call configuration (method, headers, body template)
     
     // Custom Script specific fields (when implementationType is "custom_script")
     private String scriptContent;           // Custom script content if needed
     private String scriptLanguage;          // "javascript", "python", "groovy"
-    
-    // Task State & Status
-    private AgentTaskStatus status;         // PENDING, READY, RUNNING, COMPLETED, FAILED, SKIPPED, CANCELLED, TIMEOUT
-    private LocalDateTime lastExecuted;     // Last execution time
-    private LocalDateTime nextExecution;    // Next scheduled execution
-    private String lastError;               // Last error message if any
-    
-    // Execution History
-    private int totalExecutions;            // Total number of executions
-    private int successfulExecutions;       // Number of successful executions
-    private int failedExecutions;           // Number of failed executions
-    private double averageExecutionTime;    // Average execution time in milliseconds
     
     // Audit Fields
     private LocalDateTime createdAt;
@@ -99,15 +91,10 @@ public class AgentTask {
     public void onCreate() {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
-        if (status == null) status = AgentTaskStatus.PENDING;
         if (!enabled) enabled = true; // Only set to true if not already set
         if (priority == 0) priority = 5; // Only set default if not already set
         if (maxRetries == 0) maxRetries = 3;
         if (timeoutMinutes == 0) timeoutMinutes = 30;
-        if (totalExecutions == 0) totalExecutions = 0;
-        if (successfulExecutions == 0) successfulExecutions = 0;
-        if (failedExecutions == 0) failedExecutions = 0;
-        if (averageExecutionTime == 0.0) averageExecutionTime = 0.0;
     }
     
     public void onUpdate() {
@@ -116,9 +103,7 @@ public class AgentTask {
     
     // Helper methods
     public boolean isReadyToExecute() {
-        return enabled && 
-               (status == AgentTaskStatus.PENDING || status == AgentTaskStatus.READY) && 
-               (cronExpression == null || autoExecute);
+        return enabled && !hasDependencies();
     }
     
     public boolean hasDependencies() {
@@ -143,51 +128,6 @@ public class AgentTask {
     
     public boolean isWorkflowTriggerTask() {
         return "workflow_trigger".equals(implementationType);
-    }
-    
-    public void markAsExecuting() {
-        this.status = AgentTaskStatus.RUNNING;
-        this.lastExecuted = LocalDateTime.now();
-    }
-    
-    public void markAsCompleted(long executionTimeMs) {
-        this.status = AgentTaskStatus.COMPLETED;
-        this.totalExecutions++;
-        this.successfulExecutions++;
-        updateAverageExecutionTime(executionTimeMs);
-    }
-    
-    public void markAsFailed(String error, long executionTimeMs) {
-        this.status = AgentTaskStatus.FAILED;
-        this.lastError = error;
-        this.totalExecutions++;
-        this.failedExecutions++;
-        updateAverageExecutionTime(executionTimeMs);
-    }
-    
-    public void markAsSkipped(String reason) {
-        this.status = AgentTaskStatus.SKIPPED;
-        this.lastError = reason;
-    }
-    
-    public void markAsCancelled() {
-        this.status = AgentTaskStatus.CANCELLED;
-    }
-    
-    public void markAsTimeout() {
-        this.status = AgentTaskStatus.TIMEOUT;
-        this.lastError = "Task execution timed out";
-    }
-    
-    private void updateAverageExecutionTime(long executionTimeMs) {
-        if (totalExecutions > 0) {
-            this.averageExecutionTime = ((this.averageExecutionTime * (totalExecutions - 1)) + executionTimeMs) / totalExecutions;
-        }
-    }
-    
-    public double getSuccessRate() {
-        if (totalExecutions == 0) return 0.0;
-        return (double) successfulExecutions / totalExecutions * 100;
     }
     
     // Linq Protocol helper methods - aligned with LinqRequest structure
@@ -289,5 +229,38 @@ public class AgentTask {
         linqRequest.put("query", query);
         
         return linqRequest;
+    }
+
+    // Explicit getters and setters for complex fields
+    public Map<String, Object> getTaskConfig() {
+        return taskConfig;
+    }
+    
+    public void setTaskConfig(Map<String, Object> taskConfig) {
+        this.taskConfig = taskConfig;
+    }
+    
+    public List<String> getInputSources() {
+        return inputSources;
+    }
+    
+    public void setInputSources(List<String> inputSources) {
+        this.inputSources = inputSources;
+    }
+    
+    public List<String> getOutputTargets() {
+        return outputTargets;
+    }
+    
+    public void setOutputTargets(List<String> outputTargets) {
+        this.outputTargets = outputTargets;
+    }
+    
+    public Map<String, Object> getLinqConfig() {
+        return linqConfig;
+    }
+    
+    public void setLinqConfig(Map<String, Object> linqConfig) {
+        this.linqConfig = linqConfig;
     }
 } 

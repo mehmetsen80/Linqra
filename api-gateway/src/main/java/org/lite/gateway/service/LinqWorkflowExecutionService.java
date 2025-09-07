@@ -5,6 +5,7 @@ import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.LinqWorkflowExecution;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import java.util.Map;
 
 public interface LinqWorkflowExecutionService {
     /**
@@ -21,6 +22,15 @@ public interface LinqWorkflowExecutionService {
      * @return The tracked execution
      */
     Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response);
+
+    /**
+     * Track a workflow execution with agent context
+     * @param request The original request
+     * @param response The execution response
+     * @param agentContext Agent execution context information
+     * @return The tracked execution
+     */
+    Mono<LinqWorkflowExecution> trackExecutionWithAgentContext(LinqRequest request, LinqResponse response, Map<String, Object> agentContext);
 
     /**
      * Get all executions for a specific workflow

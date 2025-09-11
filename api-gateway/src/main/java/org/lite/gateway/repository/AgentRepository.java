@@ -1,7 +1,8 @@
 package org.lite.gateway.repository;
 
 import org.lite.gateway.entity.Agent;
-import org.lite.gateway.enums.AgentStatus;
+import org.lite.gateway.enums.AgentIntent;
+import org.lite.gateway.enums.AgentCapability;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -20,12 +21,6 @@ public interface AgentRepository extends ReactiveMongoRepository<Agent, String> 
     
     // Find agents by route identifier
     Flux<Agent> findByRouteIdentifier(String routeIdentifier);
-    
-    // Find agents by status
-    Flux<Agent> findByStatus(AgentStatus status);
-    
-    // Find agents by team and status
-    Flux<Agent> findByTeamIdAndStatus(String teamId, AgentStatus status);
     
     // Find agents by team and route identifier
     Flux<Agent> findByTeamIdAndRouteIdentifier(String teamId, String routeIdentifier);
@@ -53,19 +48,19 @@ public interface AgentRepository extends ReactiveMongoRepository<Agent, String> 
     
     // Find agents by capability
     @Query("{'capabilities': ?0}")
-    Flux<Agent> findByCapability(String capability);
+    Flux<Agent> findByCapability(AgentCapability capability);
     
     // Find agents by team and capability
     @Query("{'teamId': ?0, 'capabilities': ?1}")
-    Flux<Agent> findByTeamIdAndCapability(String teamId, String capability);
+    Flux<Agent> findByTeamIdAndCapability(String teamId, AgentCapability capability);
     
     // Find agents by supported intent
     @Query("{'supportedIntents': ?0}")
-    Flux<Agent> findBySupportedIntent(String intent);
+    Flux<Agent> findBySupportedIntent(AgentIntent intent);
     
     // Find agents by team and supported intent
     @Query("{'teamId': ?0, 'supportedIntents': ?1}")
-    Flux<Agent> findByTeamIdAndSupportedIntent(String teamId, String intent);
+    Flux<Agent> findByTeamIdAndSupportedIntent(String teamId, AgentIntent intent);
     
     // Find agents that have specific task
     @Query("{'taskIds': ?0}")
@@ -109,29 +104,12 @@ public interface AgentRepository extends ReactiveMongoRepository<Agent, String> 
     // Find agents by team updated after specific date
     Flux<Agent> findByTeamIdAndUpdatedAtAfter(String teamId, LocalDateTime date);
     
-    // Find agents that haven't run recently (for health checks)
-    Flux<Agent> findByLastRunBefore(LocalDateTime date);
-    
-    // Find agents by team that haven't run recently
-    Flux<Agent> findByTeamIdAndLastRunBefore(String teamId, LocalDateTime date);
-    
-    // Find agents with errors (for monitoring)
-    Flux<Agent> findByStatusAndLastErrorIsNotNull(AgentStatus status);
-    
-    // Find agents by team with errors
-    Flux<Agent> findByTeamIdAndStatusAndLastErrorIsNotNull(String teamId, AgentStatus status);
-    
+    // Agent health checks moved to AgentExecution-based queries
     // Count agents by team
     Mono<Long> countByTeamId(String teamId);
     
     // Count enabled agents by team
     Mono<Long> countByTeamIdAndEnabledTrue(String teamId);
-    
-    // Count agents by status
-    Mono<Long> countByStatus(AgentStatus status);
-    
-    // Count agents by team and status
-    Mono<Long> countByTeamIdAndStatus(String teamId, AgentStatus status);
     
     // Count agents by route identifier
     Mono<Long> countByRouteIdentifier(String routeIdentifier);
@@ -153,11 +131,5 @@ public interface AgentRepository extends ReactiveMongoRepository<Agent, String> 
     @Query("{'teamId': ?0, 'resourceConfigs.?1': ?2}")
     Flux<Agent> findByTeamIdAndResourceConfig(String teamId, String key, String value);
     
-    // Find agents that need to run soon (for scheduling)
-    @Query("{'nextRun': {$lte: ?0}, 'enabled': true, 'autoSchedule': true}")
-    Flux<Agent> findAgentsReadyToRun(LocalDateTime now);
-    
-    // Find agents by team that need to run soon
-    @Query("{'teamId': ?0, 'nextRun': {$lte: ?1}, 'enabled': true, 'autoSchedule': true}")
-    Flux<Agent> findAgentsReadyToRunByTeam(String teamId, LocalDateTime now);
+    // Agent scheduling moved to task-level - use AgentTaskRepository for scheduling queries
 } 

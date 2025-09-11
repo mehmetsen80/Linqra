@@ -3,7 +3,6 @@ package org.lite.gateway.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.Agent;
-import org.lite.gateway.enums.AgentStatus;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.CronDescriptionService;
@@ -53,14 +52,11 @@ public class AgentServiceImpl implements AgentService {
                 .flatMap(existingAgent -> {
                     if (agentUpdates.getName() != null) existingAgent.setName(agentUpdates.getName());
                     if (agentUpdates.getDescription() != null) existingAgent.setDescription(agentUpdates.getDescription());
-                    if (agentUpdates.getStatus() != null) existingAgent.setStatus(agentUpdates.getStatus());
                     if (agentUpdates.getRouteIdentifier() != null) existingAgent.setRouteIdentifier(agentUpdates.getRouteIdentifier());
                     if (agentUpdates.getPrimaryLinqToolId() != null) existingAgent.setPrimaryLinqToolId(agentUpdates.getPrimaryLinqToolId());
                     if (agentUpdates.getSupportedIntents() != null) existingAgent.setSupportedIntents(agentUpdates.getSupportedIntents());
                     if (agentUpdates.getCapabilities() != null) existingAgent.setCapabilities(agentUpdates.getCapabilities());
                     if (agentUpdates.getCronExpression() != null) existingAgent.setCronExpression(agentUpdates.getCronExpression());
-                    if (agentUpdates.getMaxRetries() > 0) existingAgent.setMaxRetries(agentUpdates.getMaxRetries());
-                    if (agentUpdates.getTimeoutMinutes() != null) existingAgent.setTimeoutMinutes(agentUpdates.getTimeoutMinutes());
                     
                     existingAgent.setUpdatedBy(agentUpdates.getUpdatedBy());
                     existingAgent.onUpdate();
@@ -80,7 +76,6 @@ public class AgentServiceImpl implements AgentService {
                 .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     agent.setEnabled(false);
-                    agent.setStatus(AgentStatus.DISABLED);
                     agent.setUpdatedBy("system");
                     agent.onUpdate();
                     return agentRepository.save(agent).thenReturn(true);
@@ -98,7 +93,6 @@ public class AgentServiceImpl implements AgentService {
                 .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
                     agent.setEnabled(enabled);
-                    agent.setStatus(enabled ? AgentStatus.IDLE : AgentStatus.DISABLED);
                     agent.setUpdatedBy("system");
                     agent.onUpdate();
                     return agentRepository.save(agent);
@@ -117,10 +111,23 @@ public class AgentServiceImpl implements AgentService {
     public Flux<Agent> getAgentsByTeam(String teamId) {
         return agentRepository.findByTeamId(teamId);
     }
-    
+
     @Override
-    public Flux<Agent> getAgentsByTeamAndStatus(String teamId, AgentStatus status) {
-        return agentRepository.findByTeamIdAndStatus(teamId, status);
+    public Mono<Agent> transferAgentOwnership(String agentId, String fromTeamId, String toTeamId, String transferredBy) {
+        log.info("Transferring agent {} from team {} to team {}", agentId, fromTeamId, toTeamId);
+        
+        return agentRepository.findById(agentId)
+                .filter(agent -> fromTeamId.equals(agent.getTeamId()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
+                .flatMap(agent -> {
+                    agent.setTeamId(toTeamId);
+                    agent.setUpdatedBy(transferredBy);
+                    agent.onUpdate();
+                    
+                    return agentRepository.save(agent);
+                })
+                .doOnSuccess(transferredAgent -> log.info("Agent {} ownership transferred successfully", agentId))
+                .doOnError(error -> log.error("Failed to transfer agent {} ownership: {}", agentId, error.getMessage()));
     }
 }
 

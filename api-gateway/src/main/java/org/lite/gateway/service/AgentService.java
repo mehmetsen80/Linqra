@@ -1,7 +1,6 @@
 package org.lite.gateway.service;
 
 import org.lite.gateway.entity.Agent;
-import org.lite.gateway.enums.AgentStatus;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -36,9 +35,10 @@ public interface AgentService {
      * Get all agents for a team
      */
     Flux<Agent> getAgentsByTeam(String teamId);
-    
+
     /**
-     * Get agents by team and status
+     * Transfer agent ownership to another team
      */
-    Flux<Agent> getAgentsByTeamAndStatus(String teamId, AgentStatus status);
+    Mono<Agent> transferAgentOwnership(String agentId, String fromTeamId, String toTeamId, String transferredBy);
+
 }

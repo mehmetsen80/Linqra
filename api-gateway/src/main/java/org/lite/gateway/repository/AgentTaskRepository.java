@@ -64,13 +64,8 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     // Find tasks by agent and implementation type
     Flux<AgentTask> findByAgentIdAndImplementationType(String agentId, String implementationType);
     
-    // Find tasks by capability
-    @Query("{'capabilities': ?0}")
-    Flux<AgentTask> findByCapability(String capability);
-    
-    // Find tasks by agent and capability
-    @Query("{'agentId': ?0, 'capabilities': ?1}")
-    Flux<AgentTask> findByAgentIdAndCapability(String agentId, String capability);
+    // NOTE: Capabilities removed from AgentTask - capabilities are managed at Agent level
+    // Use AgentRepository to find agents by capability, then get their tasks
     
     // Find tasks by name (case-insensitive)
     @Query("{'name': {$regex: ?0, $options: 'i'}}")
@@ -88,17 +83,7 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     @Query("{'agentId': ?0, 'description': {$regex: ?1, $options: 'i'}}")
     Flux<AgentTask> findByAgentIdAndDescriptionContainingIgnoreCase(String agentId, String description);
     
-    // Find tasks by dependencies
-    @Query("{'dependencies': ?0}")
-    Flux<AgentTask> findByDependency(String dependencyTaskId);
-    
-    // Find tasks that depend on a specific task
-    @Query("{'dependencies': ?0}")
-    Flux<AgentTask> findTasksDependingOn(String taskId);
-    
-    // Find tasks by agent that depend on a specific task
-    @Query("{'agentId': ?0, 'dependencies': ?1}")
-    Flux<AgentTask> findByAgentIdAndDependency(String agentId, String dependencyTaskId);
+    // Dependencies-related methods removed - handled by orchestration layer
     
     // Find tasks by created by
     Flux<AgentTask> findByCreatedBy(String createdBy);
@@ -165,6 +150,21 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     
     // Find tasks by creation date order
     Flux<AgentTask> findByAgentIdOrderByCreatedAtDesc(String agentId);
+    
+    // Scheduling queries (moved from AgentRepository)
+    @Query("{'nextRun': {$lte: ?0}, 'enabled': true, 'autoExecute': true}")
+    Flux<AgentTask> findTasksReadyToRun(LocalDateTime now);
+    
+    // Find tasks by agent that need to run soon
+    @Query("{'agentId': ?0, 'nextRun': {$lte: ?1}, 'enabled': true, 'autoExecute': true}")
+    Flux<AgentTask> findTasksReadyToRunByAgent(String agentId, LocalDateTime now);
+    
+    // Find tasks by team that need to run soon (requires join with Agent)
+    // Note: This will need to be implemented in the service layer with a join
+    
+    // Find tasks that haven't run recently (for health checks)
+    @Query("{'lastRun': {$lt: ?0}}")
+    Flux<AgentTask> findTasksByLastRunBefore(LocalDateTime date);
     
     // NOTE: lastExecuted field removed - use AgentExecutionRepository for execution ordering
 } 

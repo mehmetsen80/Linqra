@@ -3,12 +3,16 @@ package org.lite.gateway.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.AgentTask;
+import org.lite.gateway.enums.ExecutionResult;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
+import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import java.time.LocalDateTime;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -17,6 +21,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     private final AgentRepository agentRepository;
     private final AgentTaskRepository agentTaskRepository;
+    private final AgentExecutionService agentExecutionService;
 
     @Override
     public Mono<AgentTask> createTask(AgentTask task) {
@@ -26,21 +31,16 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                 .flatMap(agent -> {
                     task.setUpdatedBy(task.getCreatedBy());
                     task.onCreate();
-                    return agentTaskRepository.save(task)
-                            .flatMap(savedTask -> {
-                                agent.addTask(savedTask.getId());
-                                return agentRepository.save(agent)
-                                        .thenReturn(savedTask);
-                            });
+                    return agentTaskRepository.save(task);
                 })
                 .doOnSuccess(savedTask -> log.info("Task '{}' created successfully with ID: {}", savedTask.getName(), savedTask.getId()))
                 .doOnError(error -> log.error("Failed to create task '{}': {}", task.getName(), error.getMessage()));
     }
 
     @Override
-    public Mono<AgentTask> updateTask(String taskId, AgentTask taskUpdates, String teamId, String updatedBy) {
-        log.info("Updating task {} for team {}", taskId, teamId);
-        return getTaskById(taskId, teamId)
+    public Mono<AgentTask> updateTask(String taskId, AgentTask taskUpdates, String updatedBy) {
+        log.info("Updating task {}", taskId);
+        return getTaskById(taskId)
                 .flatMap(existingTask -> {
                     if (taskUpdates.getName() != null) existingTask.setName(taskUpdates.getName());
                     if (taskUpdates.getDescription() != null) existingTask.setDescription(taskUpdates.getDescription());
@@ -59,24 +59,19 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
-    public Mono<Boolean> deleteTask(String taskId, String teamId) {
-        log.info("Deleting task {} for team {}", taskId, teamId);
-        return getTaskById(taskId, teamId)
-                .flatMap(task -> agentRepository.findById(task.getAgentId())
-                        .flatMap(agent -> {
-                            agent.removeTask(taskId);
-                            return agentRepository.save(agent);
-                        })
-                        .then(agentTaskRepository.deleteById(taskId))
+    public Mono<Boolean> deleteTask(String taskId) {
+        log.info("Deleting task {}", taskId);
+        return getTaskById(taskId)
+                .flatMap(task -> agentTaskRepository.deleteById(taskId)
                         .thenReturn(true))
                 .doOnSuccess(deleted -> log.info("Task {} deleted successfully", taskId))
                 .doOnError(error -> log.error("Failed to delete task {}: {}", taskId, error.getMessage()));
     }
 
     @Override
-    public Mono<AgentTask> setTaskEnabled(String taskId, String teamId, boolean enabled) {
-        log.info("Setting task {} enabled={} for team {}", taskId, enabled, teamId);
-        return getTaskById(taskId, teamId)
+    public Mono<AgentTask> setTaskEnabled(String taskId, boolean enabled) {
+        log.info("Setting task {} enabled={}", taskId, enabled);
+        return getTaskById(taskId)
                 .flatMap(task -> {
                     task.setEnabled(enabled);
                     task.setUpdatedBy("system");
@@ -88,14 +83,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
-    public Mono<AgentTask> getTaskById(String taskId, String teamId) {
-        return agentTaskRepository.findById(taskId)
-                .flatMap(task -> agentRepository.findById(task.getAgentId()).thenReturn(task))
-                .switchIfEmpty(Mono.error(new RuntimeException("Task not found or access denied")));
-    }
-
-    @Override
-    public Mono<AgentTask> getTaskByIdInternal(String taskId) {
+    public Mono<AgentTask> getTaskById(String taskId) {
         return agentTaskRepository.findById(taskId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Task not found")));
     }
@@ -108,4 +96,57 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     // NOTE: getTasksByAgentAndStatus method removed - task status now managed by AgentExecution
     // Use AgentExecutionRepository to find tasks by execution status
+    
+    @Override
+    public Mono<Map<String, Object>> getTaskStatistics(String taskId, String teamId) {
+        log.info("Getting statistics for task {} in team {}", taskId, teamId);
+        
+        return getTaskById(taskId)
+                .flatMap(task -> {
+                    // Get all executions for this task to calculate statistics
+                    return agentExecutionService.getTaskExecutionHistory(taskId, Integer.MAX_VALUE)
+                            .collectList()
+                            .map(executions -> {
+                                // Calculate execution statistics
+                                long totalExecutions = executions.size();
+                                long successfulExecutions = executions.stream()
+                                        .filter(e -> e.getResult() != null && e.getResult() == ExecutionResult.SUCCESS)
+                                        .count();
+                                long failedExecutions = executions.stream()
+                                        .filter(e -> e.getResult() != null && e.getResult() == ExecutionResult.FAILURE)
+                                        .count();
+                                
+                                double successRate = totalExecutions > 0 ? 
+                                        (double) successfulExecutions / totalExecutions * 100 : 0.0;
+                                
+                                // Calculate average execution time (only for completed executions)
+                                double averageExecutionTime = executions.stream()
+                                        .filter(e -> e.getExecutionDurationMs() != null && e.getExecutionDurationMs() > 0)
+                                        .mapToLong(e -> e.getExecutionDurationMs())
+                                        .average()
+                                        .orElse(0.0);
+                                
+                                // Find last execution time
+                                LocalDateTime lastExecuted = executions.stream()
+                                        .filter(e -> e.getCompletedAt() != null)
+                                        .map(e -> e.getCompletedAt())
+                                        .max(LocalDateTime::compareTo)
+                                        .orElse(null);
+                                
+                                Map<String, Object> stats = Map.of(
+                                        "taskId", taskId,
+                                        "taskName", task.getName(),
+                                        "enabled", task.isEnabled(),
+                                        "taskType", task.getTaskType().toString(),
+                                        "totalExecutions", totalExecutions,
+                                        "successfulExecutions", successfulExecutions,
+                                        "failedExecutions", failedExecutions,
+                                        "successRate", Math.round(successRate * 100.0) / 100.0, // Round to 2 decimal places
+                                        "averageExecutionTime", Math.round(averageExecutionTime * 100.0) / 100.0, // Round to 2 decimal places
+                                        "lastExecuted", lastExecuted
+                                );
+                                return stats;
+                            });
+                });
+    }
 }

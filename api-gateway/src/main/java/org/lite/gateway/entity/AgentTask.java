@@ -51,10 +51,6 @@ public class AgentTask {
     @JsonProperty("output_targets")
     private List<String> outputTargets;     // ["milvus://analysis_results", "mongodb://linqra/processed_data"]
     
-    // Dependencies & Prerequisites
-    @Field("dependencies")
-    private List<String> dependencies;      // Task IDs that must complete before this task
-    
     @Field("prerequisites")
     private Map<String, Object> prerequisites; // Conditions that must be met (e.g., {"time": "09:00", "data_available": true})
     
@@ -62,6 +58,10 @@ public class AgentTask {
     private String cronExpression;          // "0 0 9 * * *" (daily at 9 AM) - if null, manual execution only
     private boolean autoExecute;            // true/false - can run automatically based on cron
     private String executionTrigger;        // "cron", "manual", "event_driven", "workflow", "agent_scheduled"
+    
+    // Scheduling State (moved from Agent entity)
+    private LocalDateTime nextRun;          // Next scheduled execution time for this task
+    private LocalDateTime lastRun;          // Last execution time for this task
     
     // Task Logic & Implementation
     private String implementationType;      // "linq_protocol", "direct_api", "custom_script", "workflow_trigger"
@@ -102,12 +102,8 @@ public class AgentTask {
     }
     
     // Helper methods
-    public boolean isReadyToExecute() {
-        return enabled && !hasDependencies();
-    }
-    
-    public boolean hasDependencies() {
-        return dependencies != null && !dependencies.isEmpty();
+        public boolean isReadyToExecute() {
+        return enabled;
     }
     
     public boolean isScheduled() {

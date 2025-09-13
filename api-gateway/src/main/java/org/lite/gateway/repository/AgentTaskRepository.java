@@ -2,6 +2,7 @@ package org.lite.gateway.repository;
 
 import org.lite.gateway.entity.AgentTask;
 import org.lite.gateway.enums.AgentTaskType;
+import org.lite.gateway.enums.ExecutionTrigger;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -57,15 +58,6 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     
     // Find scheduled tasks by agent
     Flux<AgentTask> findByAgentIdAndCronExpressionIsNotNullAndAutoExecuteTrue(String agentId);
-    
-    // Find tasks by implementation type
-    Flux<AgentTask> findByImplementationType(String implementationType);
-    
-    // Find tasks by agent and implementation type
-    Flux<AgentTask> findByAgentIdAndImplementationType(String agentId, String implementationType);
-    
-    // NOTE: Capabilities removed from AgentTask - capabilities are managed at Agent level
-    // Use AgentRepository to find agents by capability, then get their tasks
     
     // Find tasks by name (case-insensitive)
     @Query("{'name': {$regex: ?0, $options: 'i'}}")
@@ -126,16 +118,7 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     // Check if task exists by name and agent
     Mono<Boolean> existsByNameAndAgentId(String name, String agentId);
     
-    // Check if task exists by implementation target and agent
-    Mono<Boolean> existsByImplementationTargetAndAgentId(String implementationTarget, String agentId);
-    
-    // Find tasks with specific configuration
-    @Query("{'taskConfig.?0': ?1}")
-    Flux<AgentTask> findByTaskConfig(String key, Object value);
-    
-    // Find tasks by agent with specific configuration
-    @Query("{'agentId': ?0, 'taskConfig.?1': ?2}")
-    Flux<AgentTask> findByAgentIdAndTaskConfig(String agentId, String key, Object value);
+    // implementationTarget queries removed - field no longer exists
     
     // Find tasks ready to execute (for scheduler) - simplified without status field
     @Query("{'enabled': true, 'cronExpression': {$exists: true, $ne: null}, 'autoExecute': true}")
@@ -165,6 +148,26 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     // Find tasks that haven't run recently (for health checks)
     @Query("{'lastRun': {$lt: ?0}}")
     Flux<AgentTask> findTasksByLastRunBefore(LocalDateTime date);
+    
+    // ==================== EXECUTION TRIGGER QUERIES ====================
+    
+    // Find tasks by execution trigger type
+    Flux<AgentTask> findByExecutionTrigger(ExecutionTrigger executionTrigger);
+    
+    // Find tasks by agent and execution trigger type
+    Flux<AgentTask> findByAgentIdAndExecutionTrigger(String agentId, ExecutionTrigger executionTrigger);
+    
+    // Find enabled tasks by execution trigger type
+    @Query("{'enabled': true, 'executionTrigger': ?0}")
+    Flux<AgentTask> findEnabledTasksByExecutionTrigger(ExecutionTrigger executionTrigger);
+    
+    // Find manual tasks (for UI display)
+    @Query("{'executionTrigger': 'MANUAL'}")
+    Flux<AgentTask> findManualTasks();
+    
+    // Find scheduled tasks (CRON + AGENT_SCHEDULED)
+    @Query("{'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}, 'enabled': true}")
+    Flux<AgentTask> findScheduledTasks();
     
     // NOTE: lastExecuted field removed - use AgentExecutionRepository for execution ordering
 } 

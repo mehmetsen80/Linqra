@@ -93,7 +93,7 @@ public class AgentController {
         log.info("Getting all agents for team {}", teamId);
         return agentService.getAgentsByTeam(teamId);
     }
-
+    
     @GetMapping("/team/{teamId}/enabled")
     public Flux<Agent> getEnabledAgents(@PathVariable String teamId) {
         log.info("Getting enabled agents for team {}", teamId);

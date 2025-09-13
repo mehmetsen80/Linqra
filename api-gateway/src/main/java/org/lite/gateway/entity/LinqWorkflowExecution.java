@@ -33,6 +33,7 @@ public class LinqWorkflowExecution {
     private String agentId;                 // ID of the agent that triggered this execution
     private String agentName;               // Name of the agent
     private String agentTaskId;             // ID of the specific agent task
+    private String agentTaskName;           // Name of the specific agent task
     private String executionSource;         // "agent", "manual", "cron", "api", "scheduled"
     private String agentExecutionId;        // Reference to AgentExecution entity
 }

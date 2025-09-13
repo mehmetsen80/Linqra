@@ -35,7 +35,7 @@ public interface AgentService {
      * Get all agents for a team
      */
     Flux<Agent> getAgentsByTeam(String teamId);
-
+    
     /**
      * Transfer agent ownership to another team
      */

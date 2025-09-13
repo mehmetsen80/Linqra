@@ -35,4 +35,9 @@ public interface AgentExecutionService {
      */
     Flux<AgentExecution> getExecutionsByTeamAndStatus(String teamId, String status, int limit);
     
+    /**
+     * Retry a failed execution if it's eligible for retry
+     */
+    Mono<AgentExecution> retryFailedExecution(String executionId, String teamId, String retriedBy);
+    
 } 

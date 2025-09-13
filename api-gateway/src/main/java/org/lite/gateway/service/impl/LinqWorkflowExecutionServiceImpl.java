@@ -272,6 +272,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             execution.setAgentId((String) agentContext.get("agentId"));
             execution.setAgentName((String) agentContext.get("agentName"));
             execution.setAgentTaskId((String) agentContext.get("agentTaskId"));
+            execution.setAgentTaskName((String) agentContext.get("agentTaskName"));
             execution.setExecutionSource((String) agentContext.get("executionSource"));
             execution.setAgentExecutionId((String) agentContext.get("agentExecutionId"));
         }

@@ -1,6 +1,7 @@
 package org.lite.gateway.service.impl;
 
 import org.lite.gateway.entity.AgentTask;
+import org.lite.gateway.enums.ExecutionTrigger;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.service.AgentSchedulingService;
@@ -33,8 +34,14 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                 .flatMap(task -> {
                     task.setCronExpression(cronExpression);
                     task.setAutoExecute(true);
+                    task.setExecutionTrigger(ExecutionTrigger.CRON);
                     task.setUpdatedBy("system");
                     task.onUpdate();
+                    
+                    // Validate the execution trigger configuration
+                    if (!task.isExecutionTriggerValid()) {
+                        return Mono.error(new RuntimeException("Invalid execution trigger configuration for CRON scheduling"));
+                    }
                     
                     return agentTaskRepository.save(task);
                 })
@@ -54,8 +61,14 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                 .flatMap(task -> {
                     task.setCronExpression(null);
                     task.setAutoExecute(false);
+                    task.setExecutionTrigger(ExecutionTrigger.MANUAL);
                     task.setUpdatedBy("system");
                     task.onUpdate();
+                    
+                    // Validate the execution trigger configuration
+                    if (!task.isExecutionTriggerValid()) {
+                        return Mono.error(new RuntimeException("Invalid execution trigger configuration for MANUAL mode"));
+                    }
                     
                     return agentTaskRepository.save(task);
                 })
@@ -65,19 +78,34 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
     
     @Override
     public Flux<AgentTask> getTasksReadyToRun() {
-        return agentTaskRepository.findTasksReadyToRun(LocalDateTime.now());
+        return agentTaskRepository.findTasksReadyToRun(LocalDateTime.now())
+                .filter(task -> {
+                    // Only return tasks that should be automatically executed
+                    return task.getExecutionTrigger() == ExecutionTrigger.CRON || 
+                           task.getExecutionTrigger() == ExecutionTrigger.AGENT_SCHEDULED;
+                });
     }
     
     @Override
     public Flux<AgentTask> getTasksReadyToRunByAgent(String agentId) {
-        return agentTaskRepository.findTasksReadyToRunByAgent(agentId, LocalDateTime.now());
+        return agentTaskRepository.findTasksReadyToRunByAgent(agentId, LocalDateTime.now())
+                .filter(task -> {
+                    // Only return tasks that should be automatically executed
+                    return task.getExecutionTrigger() == ExecutionTrigger.CRON || 
+                           task.getExecutionTrigger() == ExecutionTrigger.AGENT_SCHEDULED;
+                });
     }
     
     @Override
     public Flux<AgentTask> getTasksReadyToRunByTeam(String teamId) {
         // This requires joining with agents, so we'll implement it in the service layer
         return agentRepository.findByTeamId(teamId)
-                .flatMap(agent -> agentTaskRepository.findTasksReadyToRunByAgent(agent.getId(), LocalDateTime.now()));
+                .flatMap(agent -> agentTaskRepository.findTasksReadyToRunByAgent(agent.getId(), LocalDateTime.now())
+                        .filter(task -> {
+                            // Only return tasks that should be automatically executed
+                            return task.getExecutionTrigger() == ExecutionTrigger.CRON || 
+                                   task.getExecutionTrigger() == ExecutionTrigger.AGENT_SCHEDULED;
+                        }));
     }
     
     @Override

@@ -25,7 +25,21 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     @Override
     public Mono<AgentTask> createTask(AgentTask task) {
-        log.info("Creating task '{}' for agent {}", task.getName(), task.getAgentId());
+        log.info("Creating task '{}' for agent {} (type: {})", task.getName(), task.getAgentId(), task.getTaskType());
+        
+        // Validate task type configuration
+        if (!task.isTaskTypeConfigurationValid()) {
+            return Mono.error(new IllegalArgumentException(
+                String.format("Invalid configuration for task type %s. Task: %s", 
+                    task.getTaskType(), task.getName())));
+        }
+        
+        // Validate execution trigger configuration
+        if (!task.isExecutionTriggerValid()) {
+            return Mono.error(new IllegalArgumentException(
+                String.format("Invalid execution trigger configuration for task: %s", task.getName())));
+        }
+        
         return agentRepository.findById(task.getAgentId())
                 .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
                 .flatMap(agent -> {
@@ -33,7 +47,8 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                     task.onCreate();
                     return agentTaskRepository.save(task);
                 })
-                .doOnSuccess(savedTask -> log.info("Task '{}' created successfully with ID: {}", savedTask.getName(), savedTask.getId()))
+                .doOnSuccess(savedTask -> log.info("Task '{}' created successfully with ID: {} (type: {})", 
+                    savedTask.getName(), savedTask.getId(), savedTask.getTaskType()))
                 .doOnError(error -> log.error("Failed to create task '{}': {}", task.getName(), error.getMessage()));
     }
 
@@ -48,13 +63,33 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                     if (taskUpdates.getPriority() != 0) existingTask.setPriority(taskUpdates.getPriority());
                     if (taskUpdates.getMaxRetries() > 0) existingTask.setMaxRetries(taskUpdates.getMaxRetries());
                     if (taskUpdates.getTimeoutMinutes() > 0) existingTask.setTimeoutMinutes(taskUpdates.getTimeoutMinutes());
-                    if (taskUpdates.getTaskConfig() != null) existingTask.setTaskConfig(taskUpdates.getTaskConfig());
+                    // taskConfig field removed - use specific fields or linq_config instead
                     if (taskUpdates.getCronExpression() != null) existingTask.setCronExpression(taskUpdates.getCronExpression());
+                    if (taskUpdates.getLinqConfig() != null) existingTask.setLinqConfig(taskUpdates.getLinqConfig());
+                    if (taskUpdates.getApiConfig() != null) existingTask.setApiConfig(taskUpdates.getApiConfig());
+                    if (taskUpdates.getScriptContent() != null) existingTask.setScriptContent(taskUpdates.getScriptContent());
+                    if (taskUpdates.getScriptLanguage() != null) existingTask.setScriptLanguage(taskUpdates.getScriptLanguage());
+                    if (taskUpdates.getExecutionTrigger() != null) existingTask.setExecutionTrigger(taskUpdates.getExecutionTrigger());
+                    
                     existingTask.setUpdatedBy(updatedBy);
                     existingTask.onUpdate();
+                    
+                    // Validate updated configuration
+                    if (!existingTask.isTaskTypeConfigurationValid()) {
+                        return Mono.error(new IllegalArgumentException(
+                            String.format("Invalid configuration for task type %s after update. Task: %s", 
+                                existingTask.getTaskType(), existingTask.getName())));
+                    }
+                    
+                    if (!existingTask.isExecutionTriggerValid()) {
+                        return Mono.error(new IllegalArgumentException(
+                            String.format("Invalid execution trigger configuration after update. Task: %s", 
+                                existingTask.getName())));
+                    }
+                    
                     return agentTaskRepository.save(existingTask);
                 })
-                .doOnSuccess(updatedTask -> log.info("Task {} updated successfully", taskId))
+                .doOnSuccess(updatedTask -> log.info("Task {} updated successfully (type: {})", taskId, updatedTask.getTaskType()))
                 .doOnError(error -> log.error("Failed to update task {}: {}", taskId, error.getMessage()));
     }
 

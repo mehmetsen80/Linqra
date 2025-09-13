@@ -104,7 +104,6 @@ public interface AgentRepository extends ReactiveMongoRepository<Agent, String> 
     // Find agents by team updated after specific date
     Flux<Agent> findByTeamIdAndUpdatedAtAfter(String teamId, LocalDateTime date);
     
-    // Agent health checks moved to AgentExecution-based queries
     // Count agents by team
     Mono<Long> countByTeamId(String teamId);
     
@@ -131,5 +130,4 @@ public interface AgentRepository extends ReactiveMongoRepository<Agent, String> 
     @Query("{'teamId': ?0, 'resourceConfigs.?1': ?2}")
     Flux<Agent> findByTeamIdAndResourceConfig(String teamId, String key, String value);
     
-    // Agent scheduling moved to task-level - use AgentTaskRepository for scheduling queries
 } 

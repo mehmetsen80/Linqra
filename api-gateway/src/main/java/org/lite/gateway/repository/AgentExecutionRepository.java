@@ -58,12 +58,6 @@ public interface AgentExecutionRepository extends ReactiveMongoRepository<AgentE
     // Find executions by agent and trigger source
     Flux<AgentExecution> findByAgentIdAndTriggerSource(String agentId, String triggerSource);
     
-    // Find executions by route identifier
-    Flux<AgentExecution> findByRouteIdentifier(String routeIdentifier);
-    
-    // Find executions by agent and route identifier
-    Flux<AgentExecution> findByAgentIdAndRouteIdentifier(String agentId, String routeIdentifier);
-    
     // Find executions by executed by
     Flux<AgentExecution> findByExecutedBy(String executedBy);
     
@@ -252,12 +246,6 @@ public interface AgentExecutionRepository extends ReactiveMongoRepository<AgentE
     
     // Count executions by agent and trigger source
     Mono<Long> countByAgentIdAndTriggerSource(String agentId, String triggerSource);
-    
-    // Count executions by route identifier
-    Mono<Long> countByRouteIdentifier(String routeIdentifier);
-    
-    // Count executions by agent and route identifier
-    Mono<Long> countByAgentIdAndRouteIdentifier(String agentId, String routeIdentifier);
     
     // Count executions by executed by
     Mono<Long> countByExecutedBy(String executedBy);

@@ -79,6 +79,10 @@ function Home() {
         </div>
       </div>
 
+      <div className="tagline">
+          Agentic Framework for Enterprises
+      </div>
+
       {/* Linqra Integration Section: Java & Python AI Apps */}
       <div className="linqra-integration-section">
         <div className="integration-apps-grid">

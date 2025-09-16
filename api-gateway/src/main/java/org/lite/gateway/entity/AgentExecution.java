@@ -8,6 +8,8 @@ import org.lite.gateway.enums.ExecutionType;
 import org.lite.gateway.enums.ExecutionStatus;
 import org.lite.gateway.enums.ExecutionResult;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
@@ -33,7 +35,6 @@ public class AgentExecution {
     
     // Execution Context
     private String teamId;                  // Team that owns this execution
-    private String routeIdentifier;         // AI app route identifier
     private ExecutionType executionType;    // SCHEDULED, MANUAL, EVENT_DRIVEN, WORKFLOW, AGENT_SCHEDULED
     private String triggerSource;           // What triggered this execution (cron, user, webhook, etc.)
     
@@ -44,8 +45,10 @@ public class AgentExecution {
     private Long executionDurationMs;       // Total execution time in milliseconds
     
     // Execution Status & Results
-    private ExecutionStatus status;         // RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT
-    private ExecutionResult result;         // SUCCESS, PARTIAL_SUCCESS, FAILURE, SKIPPED, UNKNOWN
+    @Builder.Default
+    private ExecutionStatus status = ExecutionStatus.RUNNING;         // RUNNING, COMPLETED, FAILED, CANCELLED, TIMEOUT
+    @Builder.Default
+    private ExecutionResult result = ExecutionResult.UNKNOWN;         // SUCCESS, PARTIAL_SUCCESS, FAILURE, SKIPPED, UNKNOWN
     private String errorMessage;            // Error message if execution failed
     private String errorCode;               // Error code for programmatic handling
     private String errorStack;              // Full error stack trace for debugging
@@ -67,7 +70,8 @@ public class AgentExecution {
     private Long networkBytesOut;           // Network bytes sent
     
     // Retry Information
-    private int retryCount;                 // Number of retry attempts
+    @Builder.Default
+    private int retryCount = 0;             // Number of retry attempts
     private int maxRetries;                 // Maximum retries allowed
     private List<LocalDateTime> retryAttempts; // Timestamps of retry attempts
     
@@ -118,21 +122,12 @@ public class AgentExecution {
     private List<String> tags;              // Tags for categorization and filtering
     
     // Audit Fields
+    @CreatedDate
     private LocalDateTime createdAt;
+    @LastModifiedDate
     private LocalDateTime updatedAt;
     
-    // Pre-persist and pre-update methods
-    public void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-        retryCount = 0;
-        status = ExecutionStatus.RUNNING;
-        result = ExecutionResult.UNKNOWN;
-    }
-    
-    public void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
+    // Timestamps and defaults are automatically handled by annotations
     
     // Helper methods
     public boolean isCompleted() {

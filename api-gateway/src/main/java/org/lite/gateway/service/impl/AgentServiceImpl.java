@@ -5,7 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.Agent;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.service.AgentService;
-import org.lite.gateway.service.CronDescriptionService;
+
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -16,7 +16,6 @@ import reactor.core.publisher.Mono;
 public class AgentServiceImpl implements AgentService {
     
     private final AgentRepository agentRepository;
-    private final CronDescriptionService cronDescriptionService;
     
     @Override
     public Mono<Agent> createAgent(Agent agent, String teamId, String createdBy) {
@@ -25,18 +24,6 @@ public class AgentServiceImpl implements AgentService {
         agent.setTeamId(teamId);
         agent.setCreatedBy(createdBy);
         agent.setUpdatedBy(createdBy);
-        agent.onCreate();
-        
-        if (agent.getCronExpression() != null && !agent.getCronExpression().trim().isEmpty()) {
-            return Mono.just(cronDescriptionService.getCronDescription(agent.getCronExpression()))
-                    .flatMap(description -> {
-                        agent.setCronDescription(description);
-                        log.info("Generated cron description: {}", description);
-                        return agentRepository.save(agent);
-                    })
-                    .doOnSuccess(savedAgent -> log.info("Agent '{}' created successfully with ID: {}", savedAgent.getName(), savedAgent.getId()))
-                    .doOnError(error -> log.error("Failed to create agent '{}': {}", agent.getName(), error.getMessage()));
-        }
         
         return agentRepository.save(agent)
                 .doOnSuccess(savedAgent -> log.info("Agent '{}' created successfully with ID: {}", savedAgent.getName(), savedAgent.getId()))
@@ -52,14 +39,10 @@ public class AgentServiceImpl implements AgentService {
                 .flatMap(existingAgent -> {
                     if (agentUpdates.getName() != null) existingAgent.setName(agentUpdates.getName());
                     if (agentUpdates.getDescription() != null) existingAgent.setDescription(agentUpdates.getDescription());
-                    if (agentUpdates.getRouteIdentifier() != null) existingAgent.setRouteIdentifier(agentUpdates.getRouteIdentifier());
-                    if (agentUpdates.getPrimaryLinqToolId() != null) existingAgent.setPrimaryLinqToolId(agentUpdates.getPrimaryLinqToolId());
                     if (agentUpdates.getSupportedIntents() != null) existingAgent.setSupportedIntents(agentUpdates.getSupportedIntents());
                     if (agentUpdates.getCapabilities() != null) existingAgent.setCapabilities(agentUpdates.getCapabilities());
-                    if (agentUpdates.getCronExpression() != null) existingAgent.setCronExpression(agentUpdates.getCronExpression());
                     
                     existingAgent.setUpdatedBy(agentUpdates.getUpdatedBy());
-                    existingAgent.onUpdate();
                     
                     return agentRepository.save(existingAgent);
                 })
@@ -77,7 +60,6 @@ public class AgentServiceImpl implements AgentService {
                 .flatMap(agent -> {
                     agent.setEnabled(false);
                     agent.setUpdatedBy("system");
-                    agent.onUpdate();
                     return agentRepository.save(agent).thenReturn(true);
                 })
                 .doOnSuccess(deleted -> log.info("Agent {} deleted successfully", agentId))
@@ -94,7 +76,6 @@ public class AgentServiceImpl implements AgentService {
                 .flatMap(agent -> {
                     agent.setEnabled(enabled);
                     agent.setUpdatedBy("system");
-                    agent.onUpdate();
                     return agentRepository.save(agent);
                 })
                 .doOnSuccess(updatedAgent -> log.info("Agent {} enabled={} successfully", agentId, enabled))
@@ -122,8 +103,6 @@ public class AgentServiceImpl implements AgentService {
                 .flatMap(agent -> {
                     agent.setTeamId(toTeamId);
                     agent.setUpdatedBy(transferredBy);
-                    agent.onUpdate();
-                    
                     return agentRepository.save(agent);
                 })
                 .doOnSuccess(transferredAgent -> log.info("Agent {} ownership transferred successfully", agentId))

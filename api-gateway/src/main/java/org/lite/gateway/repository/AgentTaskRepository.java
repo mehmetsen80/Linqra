@@ -53,11 +53,13 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     // Find tasks by type
     Flux<AgentTask> findByTaskType(AgentTaskType taskType);
     
-    // Find scheduled tasks (have cron expression and auto-execute enabled)
-    Flux<AgentTask> findByCronExpressionIsNotNullAndAutoExecuteTrue();
+    // Find scheduled tasks (have cron expression and auto-execution trigger)
+    @Query("{'cronExpression': {$exists: true, $ne: null, $ne: ''}, 'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}}")
+    Flux<AgentTask> findScheduledTasksWithCron();
     
     // Find scheduled tasks by agent
-    Flux<AgentTask> findByAgentIdAndCronExpressionIsNotNullAndAutoExecuteTrue(String agentId);
+    @Query("{'agentId': ?0, 'cronExpression': {$exists: true, $ne: null, $ne: ''}, 'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}}")
+    Flux<AgentTask> findScheduledTasksByAgent(String agentId);
     
     // Find tasks by name (case-insensitive)
     @Query("{'name': {$regex: ?0, $options: 'i'}}")
@@ -116,16 +118,14 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     Mono<Long> countByAgentIdAndTaskType(String agentId, AgentTaskType taskType);
     
     // Check if task exists by name and agent
-    Mono<Boolean> existsByNameAndAgentId(String name, String agentId);
-    
-    // implementationTarget queries removed - field no longer exists
+    Mono<Boolean> existsByNameAndAgentId(String name, String agentId);    // implementationTarget queries removed - field no longer exists
     
     // Find tasks ready to execute (for scheduler) - simplified without status field
-    @Query("{'enabled': true, 'cronExpression': {$exists: true, $ne: null}, 'autoExecute': true}")
+    @Query("{'enabled': true, 'cronExpression': {$exists: true, $ne: null, $ne: ''}, 'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}}")
     Flux<AgentTask> findTasksReadyToExecute();
     
     // Find tasks by agent ready to execute - simplified without status field
-    @Query("{'agentId': ?0, 'enabled': true, 'cronExpression': {$exists: true, $ne: null}, 'autoExecute': true}")
+    @Query("{'agentId': ?0, 'enabled': true, 'cronExpression': {$exists: true, $ne: null, $ne: ''}, 'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}}")
     Flux<AgentTask> findTasksReadyToExecuteByAgent(String agentId);
     
     // Find tasks by priority order
@@ -135,11 +135,11 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     Flux<AgentTask> findByAgentIdOrderByCreatedAtDesc(String agentId);
     
     // Scheduling queries (moved from AgentRepository)
-    @Query("{'nextRun': {$lte: ?0}, 'enabled': true, 'autoExecute': true}")
+    @Query("{'nextRun': {$lte: ?0}, 'enabled': true, 'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}}")
     Flux<AgentTask> findTasksReadyToRun(LocalDateTime now);
     
     // Find tasks by agent that need to run soon
-    @Query("{'agentId': ?0, 'nextRun': {$lte: ?1}, 'enabled': true, 'autoExecute': true}")
+    @Query("{'agentId': ?0, 'nextRun': {$lte: ?1}, 'enabled': true, 'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}}")
     Flux<AgentTask> findTasksReadyToRunByAgent(String agentId, LocalDateTime now);
     
     // Find tasks by team that need to run soon (requires join with Agent)

@@ -19,32 +19,11 @@ public interface AgentRepository extends ReactiveMongoRepository<Agent, String> 
     // Find agents by team
     Flux<Agent> findByTeamId(String teamId);
     
-    // Find agents by route identifier
-    Flux<Agent> findByRouteIdentifier(String routeIdentifier);
-    
-    // Find agents by team and route identifier
-    Flux<Agent> findByTeamIdAndRouteIdentifier(String teamId, String routeIdentifier);
-    
     // Find enabled agents
     Flux<Agent> findByEnabledTrue();
     
     // Find enabled agents by team
     Flux<Agent> findByTeamIdAndEnabledTrue(String teamId);
-    
-    // Find agents by agent type
-    Flux<Agent> findByAgentType(String agentType);
-    
-    // Find agents by team and agent type
-    Flux<Agent> findByTeamIdAndAgentType(String teamId, String agentType);
-    
-    // Find agents that are scheduled (have cron expression and auto-schedule enabled)
-    Flux<Agent> findByCronExpressionIsNotNullAndAutoScheduleTrue();
-    
-    // Find agents by team that are scheduled
-    Flux<Agent> findByTeamIdAndCronExpressionIsNotNullAndAutoScheduleTrue(String teamId);
-    
-    // Find agents by LinqTool ID
-    Flux<Agent> findByPrimaryLinqToolId(String linqToolId);
     
     // Find agents by capability
     @Query("{'capabilities': ?0}")
@@ -110,24 +89,12 @@ public interface AgentRepository extends ReactiveMongoRepository<Agent, String> 
     // Count enabled agents by team
     Mono<Long> countByTeamIdAndEnabledTrue(String teamId);
     
-    // Count agents by route identifier
-    Mono<Long> countByRouteIdentifier(String routeIdentifier);
-    
-    // Count agents by team and route identifier
-    Mono<Long> countByTeamIdAndRouteIdentifier(String teamId, String routeIdentifier);
-    
     // Check if agent exists by name and team (for validation)
     Mono<Boolean> existsByNameAndTeamId(String name, String teamId);
     
-    // Check if agent exists by route identifier and team
-    Mono<Boolean> existsByRouteIdentifierAndTeamId(String routeIdentifier, String teamId);
+    // Check if agent exists by team
+    Mono<Boolean> existsByTeamId(String teamId);
     
-    // Find agents with specific resource configuration
-    @Query("{'resourceConfigs.?0': ?1}")
-    Flux<Agent> findByResourceConfig(String key, String value);
-    
-    // Find agents by team with specific resource configuration
-    @Query("{'teamId': ?0, 'resourceConfigs.?1': ?2}")
-    Flux<Agent> findByTeamIdAndResourceConfig(String teamId, String key, String value);
+
     
 } 

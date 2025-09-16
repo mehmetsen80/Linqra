@@ -279,16 +279,12 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                 .collectList()
                 .flatMap(agents -> {
                     long totalAgents = agents.size();
-                    long scheduledAgents = agents.stream()
-                            .filter(Agent::isScheduled)
-                            .count();
                     
                     if (agents.isEmpty()) {
                         return Mono.just(Map.of(
                                 "teamId", teamId,
                                 "totalAgents", 0L,
                                 "runningAgents", 0L,
-                                "scheduledAgents", 0L,
                                 "utilizationPercentage", 0.0
                         ));
                     }
@@ -306,7 +302,6 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                                     "teamId", teamId,
                                     "totalAgents", totalAgents,
                                     "runningAgents", runningAgents,
-                                    "scheduledAgents", scheduledAgents,
                                     "utilizationPercentage", totalAgents > 0 ? (runningAgents * 100.0 / totalAgents) : 0.0
                             ));
                 });

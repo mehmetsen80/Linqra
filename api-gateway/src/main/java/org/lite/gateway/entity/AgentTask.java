@@ -7,12 +7,13 @@ import lombok.Builder;
 import org.lite.gateway.enums.AgentTaskType;
 import org.lite.gateway.enums.ExecutionTrigger;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
 
 @Document(collection = "agent_tasks")
@@ -27,33 +28,29 @@ public class AgentTask {
     // Task Identification
     private String name;                    // "analyze_whatsapp_messages"
     private String description;             // "Read WhatsApp messages, categorize them, and save to Milvus"
-    private AgentTaskType taskType;         // DATA_PROCESSING, API_CALL, WORKFLOW_TRIGGER, etc.
+    @Builder.Default
+    private AgentTaskType taskType = AgentTaskType.WORKFLOW_EMBEDDED; // WORKFLOW_EMBEDDED, WORKFLOW_TRIGGER
     
     // Agent Association
     private String agentId;                 // Reference to the Agent that owns this task
     
     // Task Configuration
-    private int priority;                   // 1 (highest) to 10 (lowest)
-    private boolean enabled;                // true/false - can be disabled without deletion
-    private int maxRetries;                 // Maximum retry attempts for failed executions
-    private int timeoutMinutes;             // Task timeout duration in minutes
-    
-    // Input/Output Specifications
-    @Field("input_sources")
-    @JsonProperty("input_sources")
-    private List<String> inputSources;      // ["mongodb://linqra/whatsapp_messages", "linq://komunas-app/status"]
-    
-    @Field("output_targets")
-    @JsonProperty("output_targets")
-    private List<String> outputTargets;     // ["milvus://analysis_results", "mongodb://linqra/processed_data"]
-    
-    @Field("prerequisites")
-    private Map<String, Object> prerequisites; // Conditions that must be met (e.g., {"time": "09:00", "data_available": true})
+    @Builder.Default
+    private int priority = 5;               // 1 (highest) to 10 (lowest)
+    @Builder.Default
+    private boolean enabled = true;         // true/false - can be disabled without deletion
+    @Builder.Default
+    private int maxRetries = 3;             // Maximum retry attempts for failed executions
+    @Builder.Default
+    private int timeoutMinutes = 30;        // Task timeout duration in minutes
     
     // Execution Control
-    private String cronExpression;          // "0 0 9 * * *" (daily at 9 AM) - if null, manual execution only
-    private boolean autoExecute;            // true/false - can run automatically based on cron
-    private ExecutionTrigger executionTrigger; // How this task should be triggered
+    @Builder.Default
+    private String cronExpression = "";     // "0 0 9 * * *" (daily at 9 AM) - if empty, manual execution only
+    @Builder.Default
+    private String cronDescription = "";    // "Daily at 9 AM" (human-readable description)
+    @Builder.Default
+    private ExecutionTrigger executionTrigger = ExecutionTrigger.MANUAL; // How this task should be triggered
     
     // Scheduling State (moved from Agent entity)
     private LocalDateTime nextRun;          // Next scheduled execution time for this task
@@ -74,24 +71,12 @@ public class AgentTask {
     private String scriptLanguage;          // "javascript", "python", "groovy"
     
     // Audit Fields
+    @CreatedDate
     private LocalDateTime createdAt;
+    @LastModifiedDate
     private LocalDateTime updatedAt;
     private String createdBy;               // User who created the task
     private String updatedBy;               // User who last updated the task
-    
-    // Pre-persist and pre-update methods
-    public void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-        if (!enabled) enabled = true; // Only set to true if not already set
-        if (priority == 0) priority = 5; // Only set default if not already set
-        if (maxRetries == 0) maxRetries = 3;
-        if (timeoutMinutes == 0) timeoutMinutes = 30;
-    }
-    
-    public void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
     
     // Helper methods
         public boolean isReadyToExecute() {
@@ -99,24 +84,38 @@ public class AgentTask {
     }
     
     public boolean isScheduled() {
-        return autoExecute && cronExpression != null && !cronExpression.trim().isEmpty();
+        return isAutoExecute() && cronExpression != null && !cronExpression.trim().isEmpty();
+    }
+    
+    /**
+     * Derives autoExecute behavior from executionTrigger
+     */
+    public boolean isAutoExecute() {
+        if (executionTrigger == null) return false;
+        return switch (executionTrigger) {
+            case CRON, AGENT_SCHEDULED -> true;
+            case MANUAL -> false;
+            case EVENT_DRIVEN, WORKFLOW -> true; // Usually automatic
+        };
     }
     
     // Task Type helper methods
-    public boolean isDataProcessingTask() {
-        return AgentTaskType.DATA_PROCESSING.equals(taskType);
-    }
-    
-    public boolean isApiCallTask() {
-        return AgentTaskType.API_CALL.equals(taskType);
-    }
-    
     public boolean isWorkflowTriggerTask() {
         return AgentTaskType.WORKFLOW_TRIGGER.equals(taskType);
     }
     
     public boolean isWorkflowEmbeddedTask() {
         return AgentTaskType.WORKFLOW_EMBEDDED.equals(taskType);
+    }
+    
+    /*
+    // Future task type helper methods (commented out for now)
+    public boolean isDataProcessingTask() {
+        return AgentTaskType.DATA_PROCESSING.equals(taskType);
+    }
+    
+    public boolean isApiCallTask() {
+        return AgentTaskType.API_CALL.equals(taskType);
     }
     
     public boolean isLlmAnalysisTask() {
@@ -146,6 +145,7 @@ public class AgentTask {
     public boolean isCustomScriptTask() {
         return AgentTaskType.CUSTOM_SCRIPT.equals(taskType);
     }
+    */
     
     // Execution Trigger validation methods
     public boolean isManualTrigger() {
@@ -175,24 +175,21 @@ public class AgentTask {
         if (executionTrigger == null) {
             return false;
         }
-        
-        switch (executionTrigger) {
-            case CRON:
-                // CRON trigger requires cronExpression and autoExecute should be true
-                return cronExpression != null && !cronExpression.trim().isEmpty() && autoExecute;
-            case MANUAL:
-                // MANUAL trigger should not have cron and autoExecute should be false
-                return (cronExpression == null || cronExpression.trim().isEmpty()) && !autoExecute;
-            case AGENT_SCHEDULED:
-                // AGENT_SCHEDULED allows autoExecute but doesn't require cron
-                return autoExecute;
-            case EVENT_DRIVEN:
-            case WORKFLOW:
-                // These can have various configurations
-                return true;
-            default:
-                return false;
-        }
+
+        return switch (executionTrigger) {
+            case CRON ->
+                // CRON trigger requires cronExpression and should be auto-executable
+                    cronExpression != null && !cronExpression.trim().isEmpty();
+            case MANUAL ->
+                // MANUAL trigger should not have cron and should not be auto-executable
+                    (cronExpression == null || cronExpression.trim().isEmpty());
+            case AGENT_SCHEDULED ->
+                // AGENT_SCHEDULED is always auto-executable
+                    true;
+            case EVENT_DRIVEN, WORKFLOW ->
+                // These can have various configurations and are auto-executable
+                    true;
+        };
     }
     
     /**
@@ -202,48 +199,38 @@ public class AgentTask {
         if (taskType == null) {
             return false;
         }
-        
-        switch (taskType) {
-            case WORKFLOW_TRIGGER:
+
+        return switch (taskType) {
+            case WORKFLOW_TRIGGER ->
                 // WORKFLOW_TRIGGER tasks must have linq_config with workflowId
-                return linqConfig != null && 
-                       linqConfig.containsKey("query") &&
-                       ((Map<?, ?>) linqConfig.get("query")).containsKey("workflowId");
-                       
-            case WORKFLOW_EMBEDDED:
+                    linqConfig != null &&
+                            linqConfig.containsKey("query") &&
+                            ((Map<?, ?>) linqConfig.get("query")).containsKey("workflowId");
+            case WORKFLOW_EMBEDDED ->
                 // WORKFLOW_EMBEDDED tasks must have linq_config with embedded workflow steps
-                return linqConfig != null && 
-                       linqConfig.containsKey("query") &&
-                       ((Map<?, ?>) linqConfig.get("query")).containsKey("workflow");
-                       
-            case API_CALL:
+                    linqConfig != null &&
+                            linqConfig.containsKey("query") &&
+                            ((Map<?, ?>) linqConfig.get("query")).containsKey("workflow");
+            /*
+            // Future task type validations (commented out for now)
+            case API_CALL ->
                 // API_CALL tasks must have either linq_config or api_config
-                return linqConfig != null || apiConfig != null;
-                
-            case CUSTOM_SCRIPT:
+                    linqConfig != null || apiConfig != null;
+            case CUSTOM_SCRIPT ->
                 // CUSTOM_SCRIPT tasks must have script content and language
-                return scriptContent != null && !scriptContent.trim().isEmpty() &&
-                       scriptLanguage != null && !scriptLanguage.trim().isEmpty();
-                       
-            case LLM_ANALYSIS:
+                    scriptContent != null && !scriptContent.trim().isEmpty() &&
+                            scriptLanguage != null && !scriptLanguage.trim().isEmpty();
+            case LLM_ANALYSIS ->
                 // LLM_ANALYSIS tasks should have linq_config with AI model configuration
-                return linqConfig != null;
-                
-            case VECTOR_OPERATIONS:
+                    linqConfig != null;
+            case VECTOR_OPERATIONS ->
                 // VECTOR_OPERATIONS tasks should have linq_config for Milvus operations
-                return linqConfig != null;
-                
-            case DATA_PROCESSING:
-            case NOTIFICATION:
-            case DATA_SYNC:
-            case MONITORING:
-            case REPORTING:
+                    linqConfig != null;
+            case DATA_PROCESSING, NOTIFICATION, DATA_SYNC, MONITORING, REPORTING ->
                 // These types are flexible and can use various configurations
-                return linqConfig != null || apiConfig != null || scriptContent != null;
-                
-            default:
-                return false;
-        }
+                    linqConfig != null || apiConfig != null || scriptContent != null;
+            */
+        };
     }
     
     // Linq Protocol helper methods - aligned with LinqRequest structure
@@ -348,22 +335,6 @@ public class AgentTask {
     }
 
     // Explicit getters and setters for complex fields
-    
-    public List<String> getInputSources() {
-        return inputSources;
-    }
-    
-    public void setInputSources(List<String> inputSources) {
-        this.inputSources = inputSources;
-    }
-    
-    public List<String> getOutputTargets() {
-        return outputTargets;
-    }
-    
-    public void setOutputTargets(List<String> outputTargets) {
-        this.outputTargets = outputTargets;
-    }
     
     public Map<String, Object> getLinqConfig() {
         return linqConfig;

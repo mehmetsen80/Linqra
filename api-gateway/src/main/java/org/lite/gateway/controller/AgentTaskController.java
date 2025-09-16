@@ -1,12 +1,11 @@
 package org.lite.gateway.controller;
 
 import org.lite.gateway.entity.AgentTask;
+import org.lite.gateway.enums.ExecutionTrigger;
 import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
-import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.AgentMonitoringService;
 import org.lite.gateway.service.AgentAuthContextService;
-import org.lite.gateway.service.AgentAuthContextService.AgentAuthContext;
 import org.lite.gateway.dto.TaskExecutionRequest;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.ErrorCode;
@@ -19,7 +18,6 @@ import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
 import java.util.Map;
 import java.time.LocalDateTime;
 
@@ -31,7 +29,6 @@ public class AgentTaskController {
     
     private final AgentExecutionService agentExecutionService;
     private final AgentTaskService agentTaskService;
-    private final AgentService agentService;
     private final AgentMonitoringService agentMonitoringService;
     private final AgentAuthContextService agentAuthContextService;
     
@@ -220,12 +217,23 @@ public class AgentTaskController {
         log.info("Executing task {} by user from context", taskId);
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> executeTaskWithAuth(
-                        authContext.getAgentId(), 
-                        authContext.getTaskId(), 
-                        authContext.getTeamId(), 
-                        authContext.getUsername(), 
-                        exchange))
+                .flatMap(authContext -> 
+                    agentExecutionService.startTaskExecution(
+                            authContext.getAgentId(), 
+                            authContext.getTaskId(), 
+                            authContext.getTeamId(), 
+                            authContext.getUsername(), 
+                            exchange)
+                    .map(execution -> {
+                        Map<String, Object> response = Map.of(
+                                "executionId", execution.getExecutionId(),
+                                "status", execution.getStatus(),
+                                "message", "Task execution started successfully"
+                        );
+                        return ResponseEntity.ok((Object) response);
+                    })
+                    .onErrorReturn(ResponseEntity.badRequest().build())
+                )
                 .onErrorResume(error -> {
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.FORBIDDEN)
@@ -240,19 +248,6 @@ public class AgentTaskController {
     }
     
     // Authorization methods moved to AgentAuthContextService
-    
-    private Mono<ResponseEntity<Object>> executeTaskWithAuth(String agentId, String taskId, String teamId, String executedBy, ServerWebExchange exchange) {
-        return agentExecutionService.startTaskExecution(agentId, taskId, teamId, executedBy, exchange)
-                .map(execution -> {
-                    Map<String, Object> response = Map.of(
-                            "executionId", execution.getExecutionId(),
-                            "status", execution.getStatus(),
-                            "message", "Task execution started successfully"
-                    );
-                    return ResponseEntity.ok((Object) response);
-                })
-                .onErrorReturn(ResponseEntity.badRequest().build());
-    }
     
 
     
@@ -302,10 +297,6 @@ public class AgentTaskController {
                 ));
     }
     
-
-    
-    // Dependencies endpoints removed - handled by orchestration layer
-    
     // ==================== TASK SCHEDULING ====================
     
     @PostMapping("/{taskId}/schedule")
@@ -319,7 +310,7 @@ public class AgentTaskController {
         
         AgentTask taskUpdates = new AgentTask();
         taskUpdates.setCronExpression(cronExpression);
-        taskUpdates.setAutoExecute(true);
+        taskUpdates.setExecutionTrigger(ExecutionTrigger.CRON);
         
         return agentTaskService.updateTask(taskId, taskUpdates, updatedBy)
                 .map(ResponseEntity::ok)
@@ -335,8 +326,8 @@ public class AgentTaskController {
         log.info("Unschedule task {} for team {}", taskId, teamId);
         
         AgentTask taskUpdates = new AgentTask();
-        taskUpdates.setCronExpression(null);
-        taskUpdates.setAutoExecute(false);
+        taskUpdates.setCronExpression("");
+        taskUpdates.setExecutionTrigger(ExecutionTrigger.MANUAL);
         
         return agentTaskService.updateTask(taskId, taskUpdates, updatedBy)
                 .map(ResponseEntity::ok)

@@ -8,6 +8,7 @@ import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
+import org.lite.gateway.service.CronDescriptionService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -22,6 +23,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     private final AgentRepository agentRepository;
     private final AgentTaskRepository agentTaskRepository;
     private final AgentExecutionService agentExecutionService;
+    private final CronDescriptionService cronDescriptionService;
 
     @Override
     public Mono<AgentTask> createTask(AgentTask task) {
@@ -44,8 +46,18 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                 .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
                 .flatMap(agent -> {
                     task.setUpdatedBy(task.getCreatedBy());
-                    task.onCreate();
-                    return agentTaskRepository.save(task);
+                    
+                    // Generate cron description if cron expression is provided
+                    if (task.getCronExpression() != null && !task.getCronExpression().trim().isEmpty()) {
+                        return Mono.just(cronDescriptionService.getCronDescription(task.getCronExpression()))
+                                .flatMap(description -> {
+                                    task.setCronDescription(description);
+                                    log.info("Generated cron description for task '{}': {}", task.getName(), description);
+                                    return agentTaskRepository.save(task);
+                                });
+                    } else {
+                        return agentTaskRepository.save(task);
+                    }
                 })
                 .doOnSuccess(savedTask -> log.info("Task '{}' created successfully with ID: {} (type: {})", 
                     savedTask.getName(), savedTask.getId(), savedTask.getTaskType()))
@@ -63,7 +75,6 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                     if (taskUpdates.getPriority() != 0) existingTask.setPriority(taskUpdates.getPriority());
                     if (taskUpdates.getMaxRetries() > 0) existingTask.setMaxRetries(taskUpdates.getMaxRetries());
                     if (taskUpdates.getTimeoutMinutes() > 0) existingTask.setTimeoutMinutes(taskUpdates.getTimeoutMinutes());
-                    // taskConfig field removed - use specific fields or linq_config instead
                     if (taskUpdates.getCronExpression() != null) existingTask.setCronExpression(taskUpdates.getCronExpression());
                     if (taskUpdates.getLinqConfig() != null) existingTask.setLinqConfig(taskUpdates.getLinqConfig());
                     if (taskUpdates.getApiConfig() != null) existingTask.setApiConfig(taskUpdates.getApiConfig());
@@ -72,7 +83,6 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                     if (taskUpdates.getExecutionTrigger() != null) existingTask.setExecutionTrigger(taskUpdates.getExecutionTrigger());
                     
                     existingTask.setUpdatedBy(updatedBy);
-                    existingTask.onUpdate();
                     
                     // Validate updated configuration
                     if (!existingTask.isTaskTypeConfigurationValid()) {
@@ -110,7 +120,6 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                 .flatMap(task -> {
                     task.setEnabled(enabled);
                     task.setUpdatedBy("system");
-                    task.onUpdate();
                     return agentTaskRepository.save(task);
                 })
                 .doOnSuccess(updatedTask -> log.info("Task {} enabled={} successfully", taskId, enabled))

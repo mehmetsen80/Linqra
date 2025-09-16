@@ -33,10 +33,8 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                         .thenReturn(task))
                 .flatMap(task -> {
                     task.setCronExpression(cronExpression);
-                    task.setAutoExecute(true);
                     task.setExecutionTrigger(ExecutionTrigger.CRON);
                     task.setUpdatedBy("system");
-                    task.onUpdate();
                     
                     // Validate the execution trigger configuration
                     if (!task.isExecutionTriggerValid()) {
@@ -59,11 +57,9 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                         .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                         .thenReturn(task))
                 .flatMap(task -> {
-                    task.setCronExpression(null);
-                    task.setAutoExecute(false);
+                    task.setCronExpression("");
                     task.setExecutionTrigger(ExecutionTrigger.MANUAL);
                     task.setUpdatedBy("system");
-                    task.onUpdate();
                     
                     // Validate the execution trigger configuration
                     if (!task.isExecutionTriggerValid()) {
@@ -114,7 +110,6 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                 .flatMap(task -> {
                     task.setNextRun(nextRun);
                     task.setUpdatedBy("system");
-                    task.onUpdate();
                     
                     return agentTaskRepository.save(task);
                 });
@@ -126,7 +121,6 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                 .flatMap(task -> {
                     task.setLastRun(lastRun);
                     task.setUpdatedBy("system");
-                    task.onUpdate();
                     
                     return agentTaskRepository.save(task);
                 });

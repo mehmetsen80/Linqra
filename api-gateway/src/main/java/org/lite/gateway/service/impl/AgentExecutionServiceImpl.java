@@ -13,16 +13,12 @@ import org.lite.gateway.repository.AgentExecutionRepository;
 import org.lite.gateway.service.AgentExecutionService;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
-
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -88,7 +84,6 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                     .taskId(taskId)
                     .taskName(task.getName())
                     .teamId(teamId)
-                    .routeIdentifier(agent.getRouteIdentifier())
                     .executionType(ExecutionType.MANUAL)
                     .triggerSource("user")
                     .scheduledAt(LocalDateTime.now())
@@ -97,10 +92,6 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                     .executionEnvironment("production")
                     .maxRetries(task.getMaxRetries())
                     .build();
-            
-            execution.onCreate();
-            
-            // No agent state management - agents can execute multiple tasks simultaneously
             
             return agentExecutionRepository.save(execution)
             .then(executeWorkflow(execution, task, agent, exchange))
@@ -136,7 +127,6 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                     execution.setResult(ExecutionResult.FAILURE);
                     execution.setErrorMessage("Execution cancelled by: " + cancelledBy);
                     execution.setCompletedAt(LocalDateTime.now());
-                    execution.onUpdate();
                     
                     return agentExecutionRepository.save(execution)
                             .thenReturn(true);
@@ -224,8 +214,10 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         log.info("Executing task: {} (type: {}, execution: {})", task.getName(), task.getTaskType(), execution.getExecutionId());
         
         return switch (task.getTaskType()) {
-            case WORKFLOW_TRIGGER -> workflowTriggerExecutor.executeTask(execution, task, agent, exchange);
             case WORKFLOW_EMBEDDED -> workflowEmbeddedExecutor.executeTask(execution, task, agent, exchange);
+            case WORKFLOW_TRIGGER -> workflowTriggerExecutor.executeTask(execution, task, agent, exchange);
+            /*
+            // Future task type executions (commented out for now)
             case API_CALL -> executeApiCallTask(execution, task, agent, exchange);
             case LLM_ANALYSIS -> executeLlmAnalysisTask(execution, task, agent, exchange);
             case VECTOR_OPERATIONS -> executeVectorOperationsTask(execution, task, agent, exchange);
@@ -235,6 +227,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
             case DATA_SYNC -> executeDataSyncTask(execution, task, agent, exchange);
             case MONITORING -> executeMonitoringTask(execution, task, agent, exchange);
             case REPORTING -> executeReportingTask(execution, task, agent, exchange);
+            */
         };
     }
     
@@ -352,7 +345,6 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         if (message != null) {
             execution.setErrorMessage(message);
         }
-        execution.onUpdate();
         
         return agentExecutionRepository.save(execution)
                 .then();

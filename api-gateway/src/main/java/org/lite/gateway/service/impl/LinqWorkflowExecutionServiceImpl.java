@@ -245,6 +245,18 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
     @Override
     public Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response) {
+        return trackExecution(request, response, null);
+    }
+    
+    @Override
+    public Mono<LinqWorkflowExecution> trackExecutionWithAgentContext(LinqRequest request, LinqResponse response, Map<String, Object> agentContext) {
+        return trackExecution(request, response, agentContext);
+    }
+    
+    /**
+     * Internal method that handles both regular and agent context tracking
+     */
+    private Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response, Map<String, Object> agentContext) {
         LinqWorkflowExecution execution = new LinqWorkflowExecution();
         execution.setTeamId(response.getMetadata().getTeamId());
         execution.setRequest(request);
@@ -254,6 +266,16 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         // Set status based on metadata status
         execution.setStatus("success".equals(response.getMetadata().getStatus()) ? 
             ExecutionStatus.SUCCESS : ExecutionStatus.FAILED);
+        
+        // Set agent context fields if provided
+        if (agentContext != null) {
+            execution.setAgentId((String) agentContext.get("agentId"));
+            execution.setAgentName((String) agentContext.get("agentName"));
+            execution.setAgentTaskId((String) agentContext.get("agentTaskId"));
+            execution.setAgentTaskName((String) agentContext.get("agentTaskName"));
+            execution.setExecutionSource((String) agentContext.get("executionSource"));
+            execution.setAgentExecutionId((String) agentContext.get("agentExecutionId"));
+        }
         
         // Calculate duration from metadata if available
         if (response.getMetadata() != null && response.getMetadata().getWorkflowMetadata() != null) {
@@ -304,10 +326,20 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             execution.setWorkflowId(request.getQuery().getWorkflowId());
         }
         
-        return executionRepository.save(execution)
-            .doOnSuccess(e -> log.info("Tracked workflow execution: {} with status: {}", e.getId(), e.getStatus()))
-            .doOnError(error -> log.error("Error tracking workflow execution: {}", error.getMessage()));
+        // Enhanced logging based on whether it's agent-triggered or not
+        if (agentContext != null) {
+            return executionRepository.save(execution)
+                .doOnSuccess(e -> log.info("Tracked agent workflow execution: {} for agent: {} with status: {}", 
+                    e.getId(), e.getAgentName(), e.getStatus()))
+                .doOnError(error -> log.error("Error tracking agent workflow execution: {}", error.getMessage()));
+        } else {
+            return executionRepository.save(execution)
+                .doOnSuccess(e -> log.info("Tracked workflow execution: {} with status: {}", e.getId(), e.getStatus()))
+                .doOnError(error -> log.error("Error tracking workflow execution: {}", error.getMessage()));
+        }
     }
+
+
 
     @Override
     public Flux<LinqWorkflowExecution> getWorkflowExecutions(String workflowId) {

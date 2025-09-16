@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.dto.ApiKeyPair;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.service.LinqMicroService;
@@ -196,8 +197,21 @@ public class LinqMicroServiceImpl implements LinqMicroService {
     }
 
     private Mono<Object> invokeService(String method, String url, LinqRequest request) {
+        log.info("invokeService called for URL: {}", url);
         return apiKeyContextService.getApiKeyFromContext()
-                .flatMap(apiKey -> {
+                .doOnNext(apiKeyPair -> log.info("API key from context: {}", apiKeyPair != null ? "present" : "null"))
+                .doOnNext(apiKeyPair -> {
+                    if (apiKeyPair != null) {
+                        log.info("API key pair type: {}", apiKeyPair.getClass().getSimpleName());
+                        if (apiKeyPair instanceof ApiKeyPair) {
+                            ApiKeyPair keyPair = (ApiKeyPair) apiKeyPair;
+                            log.info("API key name: {}", keyPair.getName());
+                            log.info("API key key: {}", keyPair.getKey() != null ? "present" : "null");
+                        }
+                    }
+                })
+                .flatMap(apiKeyPair -> {
+                    ApiKeyPair keyPair = (ApiKeyPair) apiKeyPair;
                     log.debug("Making {} request to {} with API key present", method, url);
                     WebClient webClient = webClientBuilder.build();
 
@@ -216,7 +230,9 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                     };
 
                     // Add API key header
-                    requestSpec = requestSpec.header("X-API-Key", apiKey);
+                    requestSpec = requestSpec
+                            .header("x-api-key", keyPair.getKey())
+                            .header("x-api-key-name", keyPair.getName());
                     
                     // Add executedBy header if present (for user context in workflow steps)
                     if (request.getExecutedBy() != null) {

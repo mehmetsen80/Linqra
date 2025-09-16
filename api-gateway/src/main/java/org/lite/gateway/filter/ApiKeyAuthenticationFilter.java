@@ -2,6 +2,7 @@ package org.lite.gateway.filter;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.dto.ApiKeyPair;
 import org.lite.gateway.service.ApiKeyService;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -28,16 +29,16 @@ import org.springframework.core.io.buffer.DataBuffer;
 public class ApiKeyAuthenticationFilter implements WebFilter {
     private final ApiKeyService apiKeyService;
     private final ObjectMapper objectMapper;
-    private static final String API_KEY_HEADER = "X-API-Key";
-    private static final String API_KEY_NAME_HEADER = "X-API-Key-Name";
+    private static final String API_KEY_HEADER = "x-api-key";
+    private static final String API_KEY_NAME_HEADER = "x-api-key-name";
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
     @Override
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
         String path = exchange.getRequest().getPath().value();
 
-        // Skip API key for all non-linq and non-route paths
-        if (!path.startsWith("/linq") && (path.contains("/whatsapp/webhook") || !path.startsWith("/r/"))) {
+        // Skip API key for all non-linq, non-route, and non-agent-tasks paths
+        if (!path.startsWith("/linq") && !path.startsWith("/api/agent-tasks/") && (path.contains("/whatsapp/webhook") || !path.startsWith("/r/"))) {
             return chain.filter(exchange);
         }
 
@@ -49,6 +50,8 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         // Check API Key and API Key name
         String apiKey = exchange.getRequest().getHeaders().getFirst(API_KEY_HEADER);
         String apiKeyName = exchange.getRequest().getHeaders().getFirst(API_KEY_NAME_HEADER);
+        log.info("My Exchange Request Headers: " );
+        log.info(exchange.getRequest().getHeaders().toString());
         
         if (apiKey == null) {
             log.warn("No API key provided for path: {}", path);
@@ -98,7 +101,7 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
 
                 return Mono.just(new UsernamePasswordAuthenticationToken(
                     validApiKey.getTeamId(),
-                    apiKey,
+                    new ApiKeyPair(apiKey, apiKeyName),
                     List.of(new SimpleGrantedAuthority("ROLE_API_ACCESS"))
                 ));
             })

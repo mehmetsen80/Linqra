@@ -272,6 +272,9 @@ public class LinqWorkflowController {
         @RequestBody(required = false) Map<String, Object> variables,
         ServerWebExchange exchange
     ) {
+
+        log.info("workflow exchange headers: " + exchange.getRequest().getHeaders());
+
         log.info("Executing workflow: {} with variables: {}", workflowId, variables);
         return linqWorkflowService.getWorkflow(workflowId)
             .flatMap(workflow -> {

@@ -58,7 +58,7 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
             
             // For embedded workflows, we create a LinqRequest directly from the task's embedded steps
             return triggerWorkflow(task, parameters, execution.getTeamId(),
-                    agent.getId(), task.getId(), execution.getExecutionId(), exchange)
+                    agent.getId(), task.getId(), execution, exchange)
                     .timeout(timeout)
                     .retryWhen(Retry.backoff(task.getMaxRetries(), Duration.ofSeconds(2))
                             .maxBackoff(Duration.ofMinutes(1))
@@ -70,7 +70,8 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                             }))
                     .flatMap(workflowExecutionId -> {
                         log.info("Embedded workflow triggered successfully: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
-                        return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Embedded workflow started", workflowExecutionId);
+                        return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Embedded workflow started", workflowExecutionId)
+                                .then(monitorWorkflowCompletion(workflowExecutionId, execution));
                     })
                     .onErrorResume(error -> {
                         if (error instanceof java.util.concurrent.TimeoutException) {
@@ -94,7 +95,7 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
      * Trigger an embedded workflow using steps defined directly in the task
      */
     public Mono<String> triggerWorkflow(AgentTask task, Map<String, Object> parameters, String teamId,
-                                        String agentId, String agentTaskId, String agentExecutionId, ServerWebExchange exchange) {
+                                        String agentId, String agentTaskId, AgentExecution execution, ServerWebExchange exchange) {
         log.info("Triggering embedded workflow for team {} with agent context: agent={}, task={}", teamId, agentId, agentTaskId);
 
         try {
@@ -140,8 +141,8 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                 });
             }
 
-            // Set executedBy from agent context (no user context for agent executions)
-            request.setExecutedBy("agent-" + agentId);
+            // Set executedBy from the actual user who initiated the agent task
+            request.setExecutedBy(execution.getExecutedBy());
 
             // Execute the embedded workflow
             return workflowExecutionService.executeWorkflow(request)
@@ -165,7 +166,7 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                                             "agentTaskId", agentTaskId,
                                             "agentTaskName", taskName,
                                             "executionSource", "agent_embedded",
-                                            "agentExecutionId", agentExecutionId
+                                            "agentExecutionId", execution.getExecutionId()
                                     );
                                 })
                                 .flatMap(agentContext ->

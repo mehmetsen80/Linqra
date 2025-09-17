@@ -95,13 +95,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
             
             return agentExecutionRepository.save(execution)
             .then(executeWorkflow(execution, task, agent, exchange))
-            .flatMap(workflowExecutionId -> {
-                // SUCCESS CASE - Only update execution status
-                execution.markAsCompleted();
-                
-                return agentExecutionRepository.save(execution)
-                .thenReturn(execution);
-            })
+            .thenReturn(execution)  // Return the execution object immediately
             .onErrorResume(error -> {
                 // ERROR CASE - Only update execution status
                 log.error("Task execution failed: {}", error.getMessage());

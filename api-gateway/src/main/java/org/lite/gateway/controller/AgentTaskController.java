@@ -6,7 +6,7 @@ import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
 import org.lite.gateway.service.AgentMonitoringService;
 import org.lite.gateway.service.AgentAuthContextService;
-import org.lite.gateway.dto.TaskExecutionRequest;
+import org.lite.gateway.service.AgentTaskVersionService;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.ErrorCode;
 import org.springframework.http.HttpStatus;
@@ -31,6 +31,7 @@ public class AgentTaskController {
     private final AgentTaskService agentTaskService;
     private final AgentMonitoringService agentMonitoringService;
     private final AgentAuthContextService agentAuthContextService;
+    private final AgentTaskVersionService agentTaskVersionService;
     
     // ==================== TASK CRUD OPERATIONS ====================
     
@@ -60,10 +61,9 @@ public class AgentTaskController {
     @GetMapping("/{taskId}")
     public Mono<ResponseEntity<Object>> getTask(
             @PathVariable String taskId,
-            @RequestParam String teamId,
             ServerWebExchange exchange) {
         
-        log.info("Getting task {} for team {}", taskId, teamId);
+        log.info("Getting task {}", taskId);
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> agentTaskService.getTaskById(taskId))
@@ -85,11 +85,9 @@ public class AgentTaskController {
     public Mono<ResponseEntity<Object>> updateTask(
             @PathVariable String taskId,
             @RequestBody AgentTask taskUpdates,
-            @RequestParam String teamId,
-            @RequestParam String updatedBy,
             ServerWebExchange exchange) {
         
-        log.info("Updating task {} for team {}", taskId, teamId);
+        log.info("Updating task {}", taskId);
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> agentTaskService.updateTask(taskId, taskUpdates, authContext.getUsername()))
@@ -110,16 +108,25 @@ public class AgentTaskController {
     @DeleteMapping("/{taskId}")
     public Mono<ResponseEntity<Object>> deleteTask(
             @PathVariable String taskId,
-            @RequestParam String teamId,
             ServerWebExchange exchange) {
         
-        log.info("Deleting task {} for team {}", taskId, teamId);
+        log.info("Deleting task {} (including all version history)", taskId);
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> agentTaskService.deleteTask(taskId))
-                .map(deleted -> ResponseEntity.ok((Object) deleted))
+                .flatMap(authContext -> {
+                    // First delete all version history for this task
+                    return agentTaskVersionService.deleteAllVersionsForTask(taskId)
+                            .doOnSuccess(v -> log.info("Deleted all version history for task: {}", taskId))
+                            .then(agentTaskService.deleteTask(taskId))
+                            .doOnSuccess(deleted -> log.info("Successfully deleted task {} and all its versions", taskId));
+                })
+                .map(deleted -> ResponseEntity.ok((Object) Map.of(
+                        "message", "Task and all version history deleted successfully",
+                        "taskId", taskId,
+                        "deleted", deleted
+                )))
                 .onErrorResume(error -> {
-                    log.warn("Authorization failed for deleteTask {}: {}", taskId, error.getMessage());
+                    log.warn("Authorization or deletion failed for deleteTask {}: {}", taskId, error.getMessage());
                     ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                             ErrorCode.FORBIDDEN,
                             error.getMessage(),
@@ -136,13 +143,12 @@ public class AgentTaskController {
     @GetMapping("/agent/{agentId}")
     public Mono<ResponseEntity<Object>> getTasksByAgent(
             @PathVariable String agentId,
-            @RequestParam String teamId,
             ServerWebExchange exchange) {
         
-        log.info("Getting all tasks for agent {} in team {}", agentId, teamId);
+        log.info("Getting all tasks for agent {}", agentId);
         
         return agentAuthContextService.checkAgentAuthorization(agentId, exchange)
-                .map(authContext -> ResponseEntity.ok((Object) agentTaskService.getTasksByAgent(agentId, teamId)))
+                .map(authContext -> ResponseEntity.ok((Object) agentTaskService.getTasksByAgent(agentId, authContext.getTeamId())))
                 .onErrorResume(error -> {
                     log.warn("Authorization failed for getTasksByAgent {}: {}", agentId, error.getMessage());
                     ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
@@ -161,10 +167,9 @@ public class AgentTaskController {
     @PostMapping("/{taskId}/enable")
     public Mono<ResponseEntity<Object>> enableTask(
             @PathVariable String taskId,
-            @RequestParam String teamId,
             ServerWebExchange exchange) {
         
-        log.info("Enabling task {} for team {}", taskId, teamId);
+        log.info("Enabling task {}", taskId);
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> agentTaskService.setTaskEnabled(taskId, true))
@@ -185,10 +190,9 @@ public class AgentTaskController {
     @PostMapping("/{taskId}/disable")
     public Mono<ResponseEntity<Object>> disableTask(
             @PathVariable String taskId,
-            @RequestParam String teamId,
             ServerWebExchange exchange) {
         
-        log.info("Disabling task {} for team {}", taskId, teamId);
+        log.info("Disabling task {}", taskId);
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> agentTaskService.setTaskEnabled(taskId, false))
@@ -211,7 +215,6 @@ public class AgentTaskController {
     @PostMapping("/{taskId}/execute")
     public Mono<ResponseEntity<Object>> executeTask(
             @PathVariable String taskId,
-            @RequestBody TaskExecutionRequest request,
             ServerWebExchange exchange) {
         
         log.info("Executing task {} by user from context", taskId);
@@ -246,56 +249,7 @@ public class AgentTaskController {
                 .doOnSuccess(response -> log.info("Task {} execution started successfully", taskId))
                 .doOnError(error -> log.error("Failed to execute task {}: {}", taskId, error.getMessage()));
     }
-    
-    // Authorization methods moved to AgentAuthContextService
-    
 
-    
-    // ==================== TASK MONITORING ====================
-    
-    @GetMapping("/{taskId}/performance")
-    public Mono<ResponseEntity<Map<String, Object>>> getTaskPerformance(
-            @PathVariable String taskId,
-            @RequestParam String teamId,
-            @RequestParam String from,
-            @RequestParam String to) {
-        
-        log.info("Getting performance metrics for task {} in team {} from {} to {}", 
-                taskId, teamId, from, to);
-        
-        try {
-            // Parse date strings to LocalDateTime
-            LocalDateTime fromDate = LocalDateTime.parse(from);
-            LocalDateTime toDate = LocalDateTime.parse(to);
-            
-            return agentMonitoringService.getTaskPerformance(taskId, teamId, fromDate, toDate)
-                    .map(ResponseEntity::ok)
-                    .onErrorReturn(ResponseEntity.badRequest().build());
-        } catch (Exception e) {
-            log.error("Error parsing date parameters: {}", e.getMessage());
-            return Mono.just(ResponseEntity.badRequest()
-                    .body(Map.of("error", "Invalid date format. Use ISO format: yyyy-MM-ddTHH:mm:ss")));
-        }
-    }
-    
-    @GetMapping("/{taskId}/execution-history")
-    public Flux<Map<String, Object>> getTaskExecutionHistory(
-            @PathVariable String taskId,
-            @RequestParam(defaultValue = "10") int limit) {
-        
-        log.info("Getting execution history for task {} (limit: {})", taskId, limit);
-        
-        return agentExecutionService.getTaskExecutionHistory(taskId, limit)
-                .map(execution -> Map.of(
-                        "executionId", execution.getExecutionId(),
-                        "status", execution.getStatus(),
-                        "result", execution.getResult(),
-                        "startedAt", execution.getStartedAt(),
-                        "completedAt", execution.getCompletedAt(),
-                        "executionDurationMs", execution.getExecutionDurationMs(),
-                        "errorMessage", execution.getErrorMessage()
-                ));
-    }
     
     // ==================== TASK SCHEDULING ====================
     

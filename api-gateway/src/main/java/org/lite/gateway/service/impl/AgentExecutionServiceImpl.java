@@ -85,7 +85,6 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                     .taskName(task.getName())
                     .teamId(teamId)
                     .executionType(ExecutionType.MANUAL)
-                    .triggerSource("user")
                     .scheduledAt(LocalDateTime.now())
                     .startedAt(LocalDateTime.now())
                     .executedBy(executedBy)

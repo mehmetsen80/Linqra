@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import ExecutionDetailsModal from '../../../components/workflows/ExecutionDetailsModal';
 import { HiPlay } from 'react-icons/hi';
+import StepDescriptions from '../../../components/workflows/StepDescriptions';
 
 function EditWorkflow() {
     const { workflowId } = useParams();
@@ -40,6 +41,9 @@ function EditWorkflow() {
     const [selectedExecution, setSelectedExecution] = useState(null);
     const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
     const [executing, setExecuting] = useState(false);
+    const [requestText, setRequestText] = useState('');
+    const [validationError, setValidationError] = useState(null);
+    const [isEditingRequest, setIsEditingRequest] = useState(false);
 
     console.log('Debug - User:', user);
     console.log('Debug - Current Team:', currentTeam);
@@ -66,6 +70,17 @@ function EditWorkflow() {
             loadExecutions();
         }
     }, [currentTeam]);
+
+    // Update requestText when workflow changes (but not when we're actively editing)
+    useEffect(() => {
+        if (workflow?.request && !isEditingRequest) {
+            const requestString = typeof workflow.request === 'object' 
+                ? JSON.stringify(workflow.request, null, 2) 
+                : workflow.request || '';
+            setRequestText(requestString);
+            setValidationError(null);
+        }
+    }, [workflow, isEditingRequest]);
 
     useEffect(() => {
         if (workflow?.teamId) {
@@ -147,27 +162,52 @@ function EditWorkflow() {
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         
-        if (name === 'request') {
-            try {
-                // Try to parse the JSON input
-                const parsedJson = JSON.parse(value);
-                setWorkflow(prev => ({
-                    ...prev,
-                    request: parsedJson
-                }));
-            } catch (err) {
-                // If parsing fails, just update the raw value
-                setWorkflow(prev => ({
-                    ...prev,
-                    request: value
-                }));
-            }
-        } else {
+        setWorkflow(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
+
+    const handleRequestTextChange = (event) => {
+        const text = event.target.value;
+        setIsEditingRequest(true);
+        setRequestText(text);
+        
+        try {
+            // Try to parse the JSON to validate it
+            const parsed = JSON.parse(text);
             setWorkflow(prev => ({
                 ...prev,
-                [name]: value
+                request: parsed
             }));
+            setValidationError(null);
+        } catch (error) {
+            // If parsing fails, don't update the workflow but show validation error
+            console.warn('JSON parsing failed during editing:', error);
+            setValidationError(error.message);
         }
+    };
+
+    const formatJson = () => {
+        try {
+            const parsed = JSON.parse(requestText);
+            const formatted = JSON.stringify(parsed, null, 2);
+            setRequestText(formatted);
+            setValidationError(null);
+        } catch (error) {
+            setValidationError('Cannot format invalid JSON');
+        }
+    };
+
+    const handleRequestFocus = () => {
+        setIsEditingRequest(true);
+    };
+
+    const handleRequestBlur = () => {
+        // Delay clearing the editing flag to allow for other operations
+        setTimeout(() => {
+            setIsEditingRequest(false);
+        }, 100);
     };
 
     const handleSave = async () => {
@@ -434,7 +474,10 @@ function EditWorkflow() {
     return (
         <div className="edit-workflow-container">
             <div className="d-flex justify-content-between align-items-center mb-4">
-                <h2>Edit Workflow</h2>
+                <h4 className="page-header">
+                    <i className="fas fa-edit me-2"></i>
+                    Edit Workflow
+                </h4>
                 <div className="d-flex gap-2">
                     <OverlayTrigger
                         placement="top"
@@ -481,20 +524,116 @@ function EditWorkflow() {
                 </div>
             </div>
 
+            <div className="workflow-title-section mb-4">
+                <h4 className="workflow-title text-start mb-2">
+                    {workflow?.name}
+                </h4>
+                <div className="workflow-meta text-muted small">
+                    <span className="me-4">
+                        <i className="fas fa-calendar-plus me-1"></i>
+                        Created: {(() => {
+                            try {
+                                if (!workflow?.createdAt) return 'Unknown';
+                                // Handle MongoDB date format or ISO string
+                                const date = Array.isArray(workflow.createdAt) 
+                                    ? new Date(workflow.createdAt[0], workflow.createdAt[1] - 1, workflow.createdAt[2], 
+                                              workflow.createdAt[3] || 0, workflow.createdAt[4] || 0, workflow.createdAt[5] || 0)
+                                    : new Date(workflow.createdAt);
+                                return isNaN(date.getTime()) ? 'Unknown' : format(date, 'MMM dd, yyyy h:mma');
+                            } catch (error) {
+                                console.warn('Error formatting createdAt date:', error);
+                                return 'Unknown';
+                            }
+                        })()}
+                    </span>
+                    <span className="me-4">
+                        <i className="fas fa-user-plus me-1"></i>
+                        Created By: {workflow?.createdBy || 'Unknown'}
+                    </span>
+                    <span className="me-4">
+                        <i className="fas fa-calendar-check me-1"></i>
+                        Updated: {(() => {
+                            try {
+                                if (!workflow?.updatedAt) return 'Never';
+                                // Handle MongoDB date format or ISO string
+                                const date = Array.isArray(workflow.updatedAt) 
+                                    ? new Date(workflow.updatedAt[0], workflow.updatedAt[1] - 1, workflow.updatedAt[2], 
+                                              workflow.updatedAt[3] || 0, workflow.updatedAt[4] || 0, workflow.updatedAt[5] || 0)
+                                    : new Date(workflow.updatedAt);
+                                return isNaN(date.getTime()) ? 'Never' : format(date, 'MMM dd, yyyy h:mma');
+                            } catch (error) {
+                                console.warn('Error formatting updatedAt date:', error);
+                                return 'Never';
+                            }
+                        })()}
+                    </span>
+                    <span className="me-4">
+                        <i className="fas fa-user-edit me-1"></i>
+                        Updated By: {workflow?.updatedBy || 'Unknown'}
+                    </span>
+                    {workflow?.version && (
+                        <span>
+                            <i className="fas fa-code-branch me-1"></i>
+                            v{workflow.version}
+                        </span>
+                    )}
+                </div>
+                {workflow?.description && (
+                    <div className="workflow-description mt-3">
+                        <div className="description-label mb-1">
+                            <i className="fas fa-align-left me-1 text-muted"></i>
+                            <small className="text-muted fw-semibold">Description</small>
+                        </div>
+                        <p className="description-text mb-0">
+                            {workflow.description}
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* Workflow Steps Visualization */}
+            {workflow?.request && (
+                <StepDescriptions workflow={workflow.request} />
+            )}
+
             <div className="row">
                 <div className="col-md-8">
                     <Card className="mb-4">
                         <Card.Body>
                             <Form onSubmit={(e) => e.preventDefault()}>
                                 <Form.Group className="mb-3">
-                                    <Form.Label>Request</Form.Label>
+                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                        <Form.Label>Request</Form.Label>
+                                        <button
+                                            className="btn btn-sm btn-outline-secondary"
+                                            onClick={formatJson}
+                                            title="Format JSON"
+                                            type="button"
+                                        >
+                                            <i className="fas fa-code"></i> Format
+                                        </button>
+                                    </div>
+                                    {validationError && (
+                                        <div className="alert alert-warning alert-sm mb-2">
+                                            <small><strong>JSON Error:</strong> {validationError}</small>
+                                        </div>
+                                    )}
                                     <Form.Control
                                         as="textarea"
                                         name="request"
-                                        value={typeof workflow?.request === 'object' ? JSON.stringify(workflow.request, null, 2) : workflow?.request || ''}
-                                        onChange={handleInputChange}
+                                        value={requestText}
+                                        onChange={handleRequestTextChange}
+                                        onFocus={handleRequestFocus}
+                                        onBlur={handleRequestBlur}
                                         rows={25}
                                         className="font-monospace"
+                                        style={{
+                                            fontSize: '12px',
+                                            lineHeight: '1.4',
+                                            backgroundColor: '#f8f9fa',
+                                            border: validationError ? '1px solid #ffc107' : '1px solid #dee2e6'
+                                        }}
+                                        placeholder="Enter JSON configuration..."
                                     />
                                 </Form.Group>
 

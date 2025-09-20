@@ -4,6 +4,21 @@
     margin: 0 auto;
 }
 
+/* Page Header Styling */
+.page-header {
+    color: #6c757d;
+    font-weight: 500;
+    font-size: 1.1rem;
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+}
+
+.page-header i {
+    color: #adb5bd;
+    font-size: 1rem;
+}
+
 .version-history {
     max-height: 600px;
     overflow-y: auto;
@@ -41,6 +56,85 @@
 
 .version-item small {
     font-size: 0.8rem;
+}
+
+/* Workflow Title Section */
+.workflow-title-section {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.workflow-title {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    text-align: left !important;
+}
+
+.workflow-title i {
+    color: #007bff !important;
+    font-size: 1.1em;
+}
+
+.workflow-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+.workflow-meta span {
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.workflow-meta i {
+    color: var(--primary-color) !important;
+    opacity: 1;
+}
+
+.workflow-title i {
+    color: var(--primary-color) !important;
+    font-size: 1.1em;
+}
+
+/* Workflow Description */
+.workflow-description {
+    border-top: 1px solid #f0f0f0;
+    padding-top: 1rem;
+}
+
+.description-label {
+    display: flex;
+    align-items: center;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.description-label i {
+    font-size: 0.75rem;
+}
+
+.description-text {
+    font-size: 1.2rem;
+    line-height: 1.5;
+    color: #495057;
+    font-style: italic;
+    padding-left: 1.25rem;
+    border-left: 3px solid #e9ecef;
+    background-color: rgba(248, 249, 250, 0.5);
+    padding: 0.75rem 1rem;
+    border-radius: 0.25rem;
 }
 
 /* Style for the request textarea */

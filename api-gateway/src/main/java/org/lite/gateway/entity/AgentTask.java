@@ -77,6 +77,8 @@ public class AgentTask {
     private LocalDateTime updatedAt;
     private String createdBy;               // User who created the task
     private String updatedBy;               // User who last updated the task
+    @Builder.Default
+    private Integer version = 1;            // Current version number
     
     // Helper methods
         public boolean isReadyToExecute() {

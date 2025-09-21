@@ -480,7 +480,7 @@ public class TeamServiceImpl implements TeamService {
         );
     }
 
-    private Mono<TeamDTO> buildTeamDTO(Team team, String role) {
+    private Mono<TeamDTO> buildTeamDTO(Team team, String role, LocalDateTime lastActiveAt) {
         TeamDTO teamDTO = TeamDTO.builder()
             .id(team.getId())
             .name(team.getName())
@@ -490,6 +490,7 @@ public class TeamServiceImpl implements TeamService {
             .createdBy(team.getCreatedBy())
             .updatedBy(team.getUpdatedBy())
             .roles(List.of(role))
+            .lastActiveAt(lastActiveAt)
             .build();
 
         Mono<OrganizationDTO> orgMono = organizationRepository.findById(team.getOrganizationId())
@@ -566,7 +567,7 @@ public class TeamServiceImpl implements TeamService {
         return userRepository.findByUsername(username)
             .flatMapMany(user -> teamMemberRepository.findByUserIdAndStatus(user.getId(), TeamMemberStatus.ACTIVE)
                 .flatMap(teamMember -> teamRepository.findById(teamMember.getTeamId())
-                    .flatMap(team -> buildTeamDTO(team, teamMember.getRole().toString()))));
+                    .flatMap(team -> buildTeamDTO(team, teamMember.getRole().toString(), teamMember.getLastActiveAt()))));
     }
 
     @Override
@@ -592,5 +593,19 @@ public class TeamServiceImpl implements TeamService {
                 return Flux.empty();
             })
             .switchIfEmpty(Mono.error(new InvalidAuthenticationException("User not found or not authorized")));
+    }
+
+    @Override
+    public Mono<Void> updateMemberLastActiveAt(String teamId, String username) {
+        return userRepository.findByUsername(username)
+            .switchIfEmpty(Mono.error(new TeamOperationException("User not found")))
+            .flatMap(user -> teamMemberRepository.findByTeamIdAndUserId(teamId, user.getId())
+                .switchIfEmpty(Mono.error(new TeamOperationException("User is not a member of this team")))
+                .flatMap(member -> {
+                    member.setLastActiveAt(LocalDateTime.now());
+                    return teamMemberRepository.save(member);
+                })
+                .then()
+            );
     }
 } 

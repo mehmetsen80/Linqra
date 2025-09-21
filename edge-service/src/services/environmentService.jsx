@@ -17,7 +17,7 @@ class EnvironmentService {
 
         // Prevent multiple simultaneous calls
         if (this.isFetching) {
-            console.log("Environment fetch already in progress");
+            // console.log("Environment fetch already in progress");
             return;
         }
 

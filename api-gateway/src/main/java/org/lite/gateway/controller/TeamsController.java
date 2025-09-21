@@ -276,5 +276,32 @@ public class TeamsController {
                 log.error("Error in getCurrentUserTeams: {}", e.getMessage());
                 return Flux.empty();
             });
+    }
+
+    @PutMapping("/{teamId}/members/last-active")
+    public Mono<ResponseEntity<?>> updateMemberLastActiveAt(
+            @PathVariable String teamId,
+            ServerWebExchange exchange) {
+        return userContextService.getCurrentUsername(exchange)
+            .flatMap(username -> teamService.updateMemberLastActiveAt(teamId, username))
+            .<ResponseEntity<?>>thenReturn(ResponseEntity.ok().build())
+            .onErrorResume(TeamOperationException.class, e -> {
+                log.error("Error updating last active timestamp: {}", e.getMessage());
+                return Mono.just(ResponseEntity.badRequest()
+                    .body(ErrorResponse.fromErrorCode(
+                        ErrorCode.TEAM_OPERATION_ERROR,
+                        e.getMessage(),
+                        HttpStatus.BAD_REQUEST.value()
+                    )));
+            })
+            .onErrorResume(InvalidAuthenticationException.class, e -> {
+                log.error("Authentication error: {}", e.getMessage());
+                return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ErrorResponse.fromErrorCode(
+                        ErrorCode.AUTHENTICATION_FAILED,
+                        e.getMessage(),
+                        HttpStatus.UNAUTHORIZED.value()
+                    )));
+            });
     }    
 } 

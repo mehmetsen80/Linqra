@@ -49,21 +49,22 @@ public class AgentTaskVersionServiceImpl implements AgentTaskVersionService {
         // Increment version number
         Integer newVersion = (existingTask.getVersion() != null ? existingTask.getVersion() : 1) + 1;
         
-        // Update the existing task with new data and version
-        existingTask.setName(updatedTask.getName());
-        existingTask.setDescription(updatedTask.getDescription());
-        existingTask.setTaskType(updatedTask.getTaskType());
-        existingTask.setPriority(updatedTask.getPriority());
+        // Update the existing task with new data and version (only non-null fields)
+        if (updatedTask.getName() != null) existingTask.setName(updatedTask.getName());
+        if (updatedTask.getDescription() != null) existingTask.setDescription(updatedTask.getDescription());
+        if (updatedTask.getTaskType() != null) existingTask.setTaskType(updatedTask.getTaskType());
+        if (updatedTask.getPriority() != 0) existingTask.setPriority(updatedTask.getPriority());
+        // Always update enabled field (boolean primitive, can't be null)
         existingTask.setEnabled(updatedTask.isEnabled());
-        existingTask.setMaxRetries(updatedTask.getMaxRetries());
-        existingTask.setTimeoutMinutes(updatedTask.getTimeoutMinutes());
-        existingTask.setCronExpression(updatedTask.getCronExpression());
-        existingTask.setCronDescription(updatedTask.getCronDescription());
-        existingTask.setExecutionTrigger(updatedTask.getExecutionTrigger());
-        existingTask.setLinqConfig(updatedTask.getLinqConfig());
-        existingTask.setApiConfig(updatedTask.getApiConfig());
-        existingTask.setScriptContent(updatedTask.getScriptContent());
-        existingTask.setScriptLanguage(updatedTask.getScriptLanguage());
+        if (updatedTask.getMaxRetries() != 0) existingTask.setMaxRetries(updatedTask.getMaxRetries());
+        if (updatedTask.getTimeoutMinutes() != 0) existingTask.setTimeoutMinutes(updatedTask.getTimeoutMinutes());
+        if (updatedTask.getCronExpression() != null) existingTask.setCronExpression(updatedTask.getCronExpression());
+        if (updatedTask.getCronDescription() != null) existingTask.setCronDescription(updatedTask.getCronDescription());
+        if (updatedTask.getExecutionTrigger() != null) existingTask.setExecutionTrigger(updatedTask.getExecutionTrigger());
+        if (updatedTask.getLinqConfig() != null) existingTask.setLinqConfig(updatedTask.getLinqConfig());
+        if (updatedTask.getApiConfig() != null) existingTask.setApiConfig(updatedTask.getApiConfig());
+        if (updatedTask.getScriptContent() != null) existingTask.setScriptContent(updatedTask.getScriptContent());
+        if (updatedTask.getScriptLanguage() != null) existingTask.setScriptLanguage(updatedTask.getScriptLanguage());
         existingTask.setVersion(newVersion);
         existingTask.setUpdatedAt(LocalDateTime.now());
         existingTask.setUpdatedBy(updatedTask.getUpdatedBy());

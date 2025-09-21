@@ -35,11 +35,6 @@ public interface AgentMonitoringService {
     Mono<Map<String, Object>> getAgentPerformance(String agentId, String teamId, LocalDateTime from, LocalDateTime to);
     
     /**
-     * Get performance metrics for a specific task
-     */
-    Mono<Map<String, Object>> getTaskPerformance(String taskId, String teamId, LocalDateTime from, LocalDateTime to);
-    
-    /**
      * Get execution statistics for a team
      */
     Mono<Map<String, Object>> getTeamExecutionStats(String teamId, LocalDateTime from, LocalDateTime to);

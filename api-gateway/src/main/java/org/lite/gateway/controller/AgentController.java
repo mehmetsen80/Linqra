@@ -3,6 +3,7 @@ package org.lite.gateway.controller;
 import org.lite.gateway.entity.Agent;
 import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.AgentAuthContextService;
+import org.lite.gateway.service.AgentTaskService;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.ErrorCode;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,7 @@ public class AgentController {
     
     private final AgentService agentService;
     private final AgentAuthContextService agentAuthContextService;
+    private final AgentTaskService agentTaskService;
     
     // ==================== AGENT CRUD OPERATIONS ====================
     
@@ -99,6 +101,28 @@ public class AgentController {
         log.info("Getting enabled agents for team {}", teamId);
         return agentService.getAgentsByTeam(teamId)
                 .filter(Agent::isEnabled);
+    }
+    
+    @GetMapping("/{agentId}/tasks")
+    public Mono<ResponseEntity<Object>> getTasksByAgent(
+            @PathVariable String agentId,
+            ServerWebExchange exchange) {
+        
+        log.info("Getting all tasks for agent {}", agentId);
+        
+        return agentAuthContextService.checkAgentAuthorization(agentId, exchange)
+                .map(authContext -> ResponseEntity.ok((Object) agentTaskService.getTasksByAgent(agentId, authContext.getTeamId())))
+                .onErrorResume(error -> {
+                    log.warn("Authorization failed for getTasksByAgent {}: {}", agentId, error.getMessage());
+                    ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                            ErrorCode.FORBIDDEN,
+                            error.getMessage(),
+                            HttpStatus.FORBIDDEN.value()
+                    );
+                    return Mono.just(ResponseEntity
+                            .status(HttpStatus.FORBIDDEN)
+                            .body((Object) errorResponse));
+                });
     }
     
     // ==================== AGENT CONTROL OPERATIONS ====================

@@ -65,45 +65,6 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
-    public Mono<AgentTask> updateTask(String taskId, AgentTask taskUpdates, String updatedBy) {
-        log.info("Updating task {}", taskId);
-        return getTaskById(taskId)
-                .flatMap(existingTask -> {
-                    if (taskUpdates.getName() != null) existingTask.setName(taskUpdates.getName());
-                    if (taskUpdates.getDescription() != null) existingTask.setDescription(taskUpdates.getDescription());
-                    if (taskUpdates.getTaskType() != null) existingTask.setTaskType(taskUpdates.getTaskType());
-                    if (taskUpdates.getPriority() != 0) existingTask.setPriority(taskUpdates.getPriority());
-                    if (taskUpdates.getMaxRetries() > 0) existingTask.setMaxRetries(taskUpdates.getMaxRetries());
-                    if (taskUpdates.getTimeoutMinutes() > 0) existingTask.setTimeoutMinutes(taskUpdates.getTimeoutMinutes());
-                    if (taskUpdates.getCronExpression() != null) existingTask.setCronExpression(taskUpdates.getCronExpression());
-                    if (taskUpdates.getLinqConfig() != null) existingTask.setLinqConfig(taskUpdates.getLinqConfig());
-                    if (taskUpdates.getApiConfig() != null) existingTask.setApiConfig(taskUpdates.getApiConfig());
-                    if (taskUpdates.getScriptContent() != null) existingTask.setScriptContent(taskUpdates.getScriptContent());
-                    if (taskUpdates.getScriptLanguage() != null) existingTask.setScriptLanguage(taskUpdates.getScriptLanguage());
-                    if (taskUpdates.getExecutionTrigger() != null) existingTask.setExecutionTrigger(taskUpdates.getExecutionTrigger());
-                    
-                    existingTask.setUpdatedBy(updatedBy);
-                    
-                    // Validate updated configuration
-                    if (!existingTask.isTaskTypeConfigurationValid()) {
-                        return Mono.error(new IllegalArgumentException(
-                            String.format("Invalid configuration for task type %s after update. Task: %s", 
-                                existingTask.getTaskType(), existingTask.getName())));
-                    }
-                    
-                    if (!existingTask.isExecutionTriggerValid()) {
-                        return Mono.error(new IllegalArgumentException(
-                            String.format("Invalid execution trigger configuration after update. Task: %s", 
-                                existingTask.getName())));
-                    }
-                    
-                    return agentTaskRepository.save(existingTask);
-                })
-                .doOnSuccess(updatedTask -> log.info("Task {} updated successfully (type: {})", taskId, updatedTask.getTaskType()))
-                .doOnError(error -> log.error("Failed to update task {}: {}", taskId, error.getMessage()));
-    }
-
-    @Override
     public Mono<Boolean> deleteTask(String taskId) {
         log.info("Deleting task {}", taskId);
         return getTaskById(taskId)
@@ -114,16 +75,16 @@ public class AgentTaskServiceImpl implements AgentTaskService {
     }
 
     @Override
-    public Mono<AgentTask> setTaskEnabled(String taskId, boolean enabled) {
-        log.info("Setting task {} enabled={}", taskId, enabled);
+    public Mono<AgentTask> setTaskEnabled(String taskId, boolean enabled, String updatedBy) {
+        log.info("Setting task {} enabled={} by user {}", taskId, enabled, updatedBy);
         return getTaskById(taskId)
                 .flatMap(task -> {
                     task.setEnabled(enabled);
-                    task.setUpdatedBy("system");
+                    task.setUpdatedBy(updatedBy);
                     return agentTaskRepository.save(task);
                 })
-                .doOnSuccess(updatedTask -> log.info("Task {} enabled={} successfully", taskId, enabled))
-                .doOnError(error -> log.error("Failed to set task {} enabled={}: {}", taskId, enabled, error.getMessage()));
+                .doOnSuccess(updatedTask -> log.info("Task {} enabled={} successfully by user {}", taskId, enabled, updatedBy))
+                .doOnError(error -> log.error("Failed to set task {} enabled={} by user {}: {}", taskId, enabled, updatedBy, error.getMessage()));
     }
 
     @Override

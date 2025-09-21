@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.service.AgentAuthContextService;
 import org.lite.gateway.service.AgentExecutionService;
-import org.lite.gateway.service.AgentMonitoringService;
+import org.lite.gateway.service.AgentTaskService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,48 +21,10 @@ import java.util.Map;
 public class AgentTaskMonitoringController {
 
     private final AgentAuthContextService agentAuthContextService;
-    private final AgentMonitoringService agentMonitoringService;
     private final AgentExecutionService agentExecutionService;
+    private final AgentTaskService agentTaskService;
 
-    @GetMapping("/{taskId}/performance")
-    public Mono<ResponseEntity<Object>> getTaskPerformance(
-            @PathVariable String taskId,
-            @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to,
-            ServerWebExchange exchange) {
-        
-        log.info("Getting performance metrics for task {} from {} to {}", taskId, from, to);
-        
-        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> {
-                    try {
-                        // Set default date range if not provided
-                        LocalDateTime fromDate = from != null ? 
-                            LocalDateTime.parse(from) : 
-                            LocalDateTime.now().minusYears(10); // From very start (10 years ago)
-                        
-                        LocalDateTime toDate = to != null ? 
-                            LocalDateTime.parse(to) : 
-                            LocalDateTime.now(); // Until now
-                        
-                        log.info("Using date range: {} to {} for task {} in team {}", 
-                                fromDate, toDate, taskId, authContext.getTeamId());
-                        
-                        return agentMonitoringService.getTaskPerformance(taskId, authContext.getTeamId(), fromDate, toDate)
-                                .map(result -> ResponseEntity.ok((Object) result));
-                    } catch (Exception e) {
-                        log.error("Error parsing date parameters: {}", e.getMessage());
-                        return Mono.just(ResponseEntity.badRequest()
-                                .body((Object) Map.of("error", "Invalid date format. Use ISO format: yyyy-MM-ddTHH:mm:ss")));
-                    }
-                })
-                .onErrorResume(error -> {
-                    log.warn("Authorization or processing failed for getTaskPerformance {}: {}", taskId, error.getMessage());
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) Map.of("error", error.getMessage())));
-                });
-    }
+
     
     @GetMapping("/{taskId}/execution-history")
     public Mono<ResponseEntity<Object>> getTaskExecutionHistory(
@@ -200,6 +162,26 @@ public class AgentTaskMonitoringController {
                 })
                 .onErrorResume(error -> {
                     log.warn("Authorization or processing failed for getTaskStatus {}: {}", taskId, error.getMessage());
+                    return Mono.just(ResponseEntity
+                            .status(HttpStatus.FORBIDDEN)
+                            .body((Object) Map.of("error", error.getMessage())));
+                });
+    }
+    
+    @GetMapping("/{taskId}/stats")
+    public Mono<ResponseEntity<Object>> getTaskStatistics(
+            @PathVariable String taskId,
+            ServerWebExchange exchange) {
+        
+        log.info("Getting statistics for task {}", taskId);
+        
+        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+                .flatMap(authContext -> {
+                    return agentTaskService.getTaskStatistics(taskId, authContext.getTeamId())
+                            .map(stats -> ResponseEntity.ok((Object) stats));
+                })
+                .onErrorResume(error -> {
+                    log.warn("Authorization or processing failed for getTaskStatistics {}: {}", taskId, error.getMessage());
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.FORBIDDEN)
                             .body((Object) Map.of("error", error.getMessage())));

@@ -1,10 +1,8 @@
 package org.lite.gateway.controller;
 
 import org.lite.gateway.entity.AgentTask;
-import org.lite.gateway.enums.ExecutionTrigger;
 import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
-import org.lite.gateway.service.AgentMonitoringService;
 import org.lite.gateway.service.AgentAuthContextService;
 import org.lite.gateway.service.AgentTaskVersionService;
 import org.lite.gateway.dto.ErrorResponse;
@@ -13,13 +11,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
-import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/agent-tasks")
@@ -29,7 +25,6 @@ public class AgentTaskController {
     
     private final AgentExecutionService agentExecutionService;
     private final AgentTaskService agentTaskService;
-    private final AgentMonitoringService agentMonitoringService;
     private final AgentAuthContextService agentAuthContextService;
     private final AgentTaskVersionService agentTaskVersionService;
     
@@ -81,29 +76,7 @@ public class AgentTaskController {
                 });
     }
     
-    @PutMapping("/{taskId}")
-    public Mono<ResponseEntity<Object>> updateTask(
-            @PathVariable String taskId,
-            @RequestBody AgentTask taskUpdates,
-            ServerWebExchange exchange) {
-        
-        log.info("Updating task {}", taskId);
-        
-        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> agentTaskService.updateTask(taskId, taskUpdates, authContext.getUsername()))
-                .map(updatedTask -> ResponseEntity.ok((Object) updatedTask))
-                .onErrorResume(error -> {
-                    log.warn("Authorization failed for updateTask {}: {}", taskId, error.getMessage());
-                    ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
-                            ErrorCode.FORBIDDEN,
-                            error.getMessage(),
-                            HttpStatus.FORBIDDEN.value()
-                    );
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) errorResponse));
-                });
-    }
+
     
     @DeleteMapping("/{taskId}")
     public Mono<ResponseEntity<Object>> deleteTask(
@@ -138,30 +111,6 @@ public class AgentTaskController {
                 });
     }
     
-    // ==================== TASK LISTING & FILTERING ====================
-    
-    @GetMapping("/agent/{agentId}")
-    public Mono<ResponseEntity<Object>> getTasksByAgent(
-            @PathVariable String agentId,
-            ServerWebExchange exchange) {
-        
-        log.info("Getting all tasks for agent {}", agentId);
-        
-        return agentAuthContextService.checkAgentAuthorization(agentId, exchange)
-                .map(authContext -> ResponseEntity.ok((Object) agentTaskService.getTasksByAgent(agentId, authContext.getTeamId())))
-                .onErrorResume(error -> {
-                    log.warn("Authorization failed for getTasksByAgent {}: {}", agentId, error.getMessage());
-                    ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
-                            ErrorCode.FORBIDDEN,
-                            error.getMessage(),
-                            HttpStatus.FORBIDDEN.value()
-                    );
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) errorResponse));
-                });
-    }
-    
     // ==================== TASK CONTROL OPERATIONS ====================
     
     @PostMapping("/{taskId}/enable")
@@ -172,18 +121,47 @@ public class AgentTaskController {
         log.info("Enabling task {}", taskId);
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> agentTaskService.setTaskEnabled(taskId, true))
-                .map(enabledTask -> ResponseEntity.ok((Object) enabledTask))
+                .flatMap(authContext -> {
+                    return agentTaskService.getTaskById(taskId)
+                            .flatMap(currentTask -> {
+                                if (currentTask.isEnabled()) {
+                                    return Mono.error(new IllegalArgumentException("Task is already enabled"));
+                                }
+                                
+                                AgentTask taskUpdates = AgentTask.builder()
+                                        .enabled(true)
+                                        .updatedBy(authContext.getUsername())
+                                        .build();
+                                return agentTaskVersionService.createNewVersion(
+                                        taskId, 
+                                        taskUpdates, 
+                                        "Task enabled"
+                                );
+                            });
+                })
+                .map(updatedTask -> ResponseEntity.ok((Object) updatedTask))
                 .onErrorResume(error -> {
-                    log.warn("Authorization failed for enableTask {}: {}", taskId, error.getMessage());
-                    ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
-                            ErrorCode.FORBIDDEN,
-                            error.getMessage(),
-                            HttpStatus.FORBIDDEN.value()
-                    );
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) errorResponse));
+                    if (error instanceof IllegalArgumentException) {
+                        log.warn("Validation failed for enableTask {}: {}", taskId, error.getMessage());
+                        ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                                ErrorCode.VALIDATION_ERROR,
+                                error.getMessage(),
+                                HttpStatus.BAD_REQUEST.value()
+                        );
+                        return Mono.just(ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body((Object) errorResponse));
+                    } else {
+                        log.warn("Authorization or update failed for enableTask {}: {}", taskId, error.getMessage());
+                        ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                                ErrorCode.FORBIDDEN,
+                                error.getMessage(),
+                                HttpStatus.FORBIDDEN.value()
+                        );
+                        return Mono.just(ResponseEntity
+                                .status(HttpStatus.FORBIDDEN)
+                                .body((Object) errorResponse));
+                    }
                 });
     }
     
@@ -195,18 +173,47 @@ public class AgentTaskController {
         log.info("Disabling task {}", taskId);
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> agentTaskService.setTaskEnabled(taskId, false))
-                .map(disabledTask -> ResponseEntity.ok((Object) disabledTask))
+                .flatMap(authContext -> {
+                    return agentTaskService.getTaskById(taskId)
+                            .flatMap(currentTask -> {
+                                if (!currentTask.isEnabled()) {
+                                    return Mono.error(new IllegalArgumentException("Task is already disabled"));
+                                }
+                                
+                                AgentTask taskUpdates = AgentTask.builder()
+                                        .enabled(false)
+                                        .updatedBy(authContext.getUsername())
+                                        .build();
+                                return agentTaskVersionService.createNewVersion(
+                                        taskId, 
+                                        taskUpdates, 
+                                        "Task disabled"
+                                );
+                            });
+                })
+                .map(updatedTask -> ResponseEntity.ok((Object) updatedTask))
                 .onErrorResume(error -> {
-                    log.warn("Authorization failed for disableTask {}: {}", taskId, error.getMessage());
-                    ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
-                            ErrorCode.FORBIDDEN,
-                            error.getMessage(),
-                            HttpStatus.FORBIDDEN.value()
-                    );
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) errorResponse));
+                    if (error instanceof IllegalArgumentException) {
+                        log.warn("Validation failed for disableTask {}: {}", taskId, error.getMessage());
+                        ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                                ErrorCode.VALIDATION_ERROR,
+                                error.getMessage(),
+                                HttpStatus.BAD_REQUEST.value()
+                        );
+                        return Mono.just(ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body((Object) errorResponse));
+                    } else {
+                        log.warn("Authorization or update failed for disableTask {}: {}", taskId, error.getMessage());
+                        ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                                ErrorCode.FORBIDDEN,
+                                error.getMessage(),
+                                HttpStatus.FORBIDDEN.value()
+                        );
+                        return Mono.just(ResponseEntity
+                                .status(HttpStatus.FORBIDDEN)
+                                .body((Object) errorResponse));
+                    }
                 });
     }
     
@@ -249,56 +256,5 @@ public class AgentTaskController {
                 .doOnSuccess(response -> log.info("Task {} execution started successfully", taskId))
                 .doOnError(error -> log.error("Failed to execute task {}: {}", taskId, error.getMessage()));
     }
-
     
-    // ==================== TASK SCHEDULING ====================
-    
-    @PostMapping("/{taskId}/schedule")
-    public Mono<ResponseEntity<AgentTask>> scheduleTask(
-            @PathVariable String taskId,
-            @RequestParam String cronExpression,
-            @RequestParam String teamId,
-            @RequestParam String updatedBy) {
-        
-        log.info("Scheduling task {} with cron: {} for team {}", taskId, cronExpression, teamId);
-        
-        AgentTask taskUpdates = new AgentTask();
-        taskUpdates.setCronExpression(cronExpression);
-        taskUpdates.setExecutionTrigger(ExecutionTrigger.CRON);
-        
-        return agentTaskService.updateTask(taskId, taskUpdates, updatedBy)
-                .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.badRequest().build());
-    }
-    
-    @PostMapping("/{taskId}/unschedule")
-    public Mono<ResponseEntity<AgentTask>> unscheduleTask(
-            @PathVariable String taskId,
-            @RequestParam String teamId,
-            @RequestParam String updatedBy) {
-        
-        log.info("Unschedule task {} for team {}", taskId, teamId);
-        
-        AgentTask taskUpdates = new AgentTask();
-        taskUpdates.setCronExpression("");
-        taskUpdates.setExecutionTrigger(ExecutionTrigger.MANUAL);
-        
-        return agentTaskService.updateTask(taskId, taskUpdates, updatedBy)
-                .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.badRequest().build());
-    }
-    
-    // ==================== TASK STATISTICS ====================
-    
-    @GetMapping("/{taskId}/stats")
-    public Mono<ResponseEntity<Map<String, Object>>> getTaskStatistics(
-            @PathVariable String taskId,
-            @RequestParam String teamId) {
-        
-        log.info("Getting statistics for task {} in team {}", taskId, teamId);
-        
-        return agentTaskService.getTaskStatistics(taskId, teamId)
-                .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.notFound().build());
-    }
 } 

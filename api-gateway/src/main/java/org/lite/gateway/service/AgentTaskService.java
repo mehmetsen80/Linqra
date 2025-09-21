@@ -24,20 +24,6 @@ public interface AgentTaskService {
     Mono<AgentTask> createTask(AgentTask task);
     
     /**
-     * Update an existing agent task with new values.
-     * 
-     * Only non-null fields in taskUpdates will be applied to the existing task.
-     * The task's updatedAt timestamp and updatedBy field will be automatically set.
-     * 
-     * @param taskId The unique identifier of the task to update
-     * @param taskUpdates The task entity containing fields to update (null fields are ignored)
-     * @param updatedBy The username or ID of the user performing the update
-     * @return Mono containing the updated task
-     * @throws RuntimeException if the task is not found
-     */
-    Mono<AgentTask> updateTask(String taskId, AgentTask taskUpdates, String updatedBy);
-    
-    /**
      * Delete an agent task and remove it from the associated agent.
      * 
      * This operation will also remove the task reference from the agent's task list
@@ -57,10 +43,11 @@ public interface AgentTaskService {
      * 
      * @param taskId The unique identifier of the task to enable/disable
      * @param enabled true to enable the task, false to disable it
+     * @param updatedBy The username of the user performing the update
      * @return Mono containing the updated task with new enabled status
      * @throws RuntimeException if the task is not found
      */
-    Mono<AgentTask> setTaskEnabled(String taskId, boolean enabled);
+    Mono<AgentTask> setTaskEnabled(String taskId, boolean enabled, String updatedBy);
     
     /**
      * Retrieve an agent task by its unique identifier.

@@ -494,7 +494,12 @@ function Workflows() {
                                         placement="top"
                                         overlay={
                                             <Tooltip id={`tooltip-${execution._id?.$oid || execution.id || execution._id}`}>
-                                                Executed at: {formatDate(execution.executedAt?.$date || execution.executedAt)}
+                                                <div>
+                                                    Executed at: {formatDate(execution.executedAt?.$date || execution.executedAt)}
+                                                    {execution.agentId && (
+                                                        <><br/>Triggered by Agent: {execution.agentName} ({execution.agentId})</>
+                                                    )}
+                                                </div>
                                             </Tooltip>
                                         }
                                     >
@@ -506,6 +511,14 @@ function Workflows() {
                                                 <Badge bg={execution.status === 'SUCCESS' ? 'success' : 'danger'}>
                                                     {execution.status}
                                                 </Badge>
+                                                {execution.agentId ? (
+                                                    <>
+                                                        <Badge bg="primary" className="ms-1 agent-indicator">
+                                                            A
+                                                        </Badge>
+                                                        <small className="text-muted ms-1">[Agent]</small>
+                                                    </>
+                                                ) : null}
                                             </div>
                                             <div className="execution-duration">
                                                 {execution.durationMs?.$numberLong || execution.durationMs}ms

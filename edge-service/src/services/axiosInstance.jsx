@@ -59,12 +59,12 @@ axiosInstance.interceptors.request.use(
         return Promise.reject('Invalid token');
       }
     }
-    console.log('Request being sent:', {
-        url: config.url,
-        method: config.method,
-        data: config.data,
-        headers: config.headers
-    });
+    // console.log('Request being sent:', {
+    //     url: config.url,
+    //     method: config.method,
+    //     data: config.data,
+    //     headers: config.headers
+    // });
     return config;
   },
   (error) => Promise.reject(error)

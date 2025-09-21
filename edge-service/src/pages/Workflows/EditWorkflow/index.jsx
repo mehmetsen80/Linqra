@@ -687,31 +687,65 @@ function EditWorkflow() {
                             {stats ? (
                                 <div>
                                     <Row className="mb-4">
-                                        <Col md={3}>
+                                        <Col md={4}>
                                             <Card className="stats-card">
                                                 <Card.Body>
                                                     <h6>Total</h6>
                                                     <h3>{stats.totalExecutions}</h3>
+                                                    <div className="stats-breakdown mt-3">
+                                                        <div className="breakdown-item agent">
+                                                            <i className="fas fa-robot"></i>
+                                                            <span>{executions.filter(execution => execution.agentId).length} Agent</span>
+                                                        </div>
+                                                        <div className="breakdown-item manual">
+                                                            <i className="fas fa-user"></i>
+                                                            <span>{executions.filter(execution => !execution.agentId).length} Manual</span>
+                                                        </div>
+                                                    </div>
                                                 </Card.Body>
                                             </Card>
                                         </Col>
-                                        <Col md={3}>
+                                        <Col md={4}>
                                             <Card className="stats-card">
                                                 <Card.Body>
                                                     <h6>Success</h6>
                                                     <h3 className="text-success">{stats.successfulExecutions}</h3>
+                                                    <div className="stats-breakdown mt-3">
+                                                        <div className="breakdown-item agent">
+                                                            <i className="fas fa-robot"></i>
+                                                            <span>{executions.filter(execution => execution.agentId && execution.status === 'SUCCESS').length} Agent</span>
+                                                        </div>
+                                                        <div className="breakdown-item manual">
+                                                            <i className="fas fa-user"></i>
+                                                            <span>{executions.filter(execution => !execution.agentId && execution.status === 'SUCCESS').length} Manual</span>
+                                                        </div>
+                                                    </div>
                                                 </Card.Body>
                                             </Card>
                                         </Col>
-                                        <Col md={3}>
+                                        <Col md={4}>
                                             <Card className="stats-card">
                                                 <Card.Body>
                                                     <h6>Failed</h6>
                                                     <h3 className="text-danger">{stats.failedExecutions}</h3>
+                                                    <div className="stats-breakdown mt-3">
+                                                        <div className="breakdown-item agent">
+                                                            <i className="fas fa-robot"></i>
+                                                            <span>{executions.filter(execution => execution.agentId && execution.status !== 'SUCCESS').length} Agent</span>
+                                                        </div>
+                                                        <div className="breakdown-item manual">
+                                                            <i className="fas fa-user"></i>
+                                                            <span>{executions.filter(execution => !execution.agentId && execution.status !== 'SUCCESS').length} Manual</span>
+                                                        </div>
+                                                    </div>
                                                 </Card.Body>
                                             </Card>
                                         </Col>
-                                        <Col md={3}>
+                                        
+                                    </Row>
+
+                                    <Row className="mb-4">
+                                    <Col md={12}>
                                             <Card className="stats-card">
                                                 <Card.Body>
                                                     <h6>Avg Time</h6>
@@ -1000,7 +1034,12 @@ function EditWorkflow() {
                                             placement="top"
                                             overlay={
                                                 <Tooltip id={`tooltip-${execution._id?.$oid || execution.id || execution._id}`}>
-                                                    Executed at: {formatDate(execution.executedAt?.$date || execution.executedAt)}
+                                                    <div>
+                                                        Executed at: {formatDate(execution.executedAt?.$date || execution.executedAt)}
+                                                        {execution.agentId && (
+                                                            <><br/>Triggered by Agent: {execution.agentName} <br/> (Agent ID: {execution.agentId})</>
+                                                        )}
+                                                    </div>
                                                 </Tooltip>
                                             }
                                         >
@@ -1010,11 +1049,19 @@ function EditWorkflow() {
                                             >
                                                 <div className="edit-workflow-execution-header">
                                                     <div className="edit-workflow-execution-number">#{executions.length - index}</div>
-                                                    <div className="edit-workflow-execution-status">
-                                                        <Badge bg={execution.status === 'SUCCESS' ? 'success' : 'danger'}>
-                                                            {execution.status}
-                                                        </Badge>
-                                                    </div>
+                                                                                                    <div className="edit-workflow-execution-status">
+                                                    {execution.agentId ? (
+                                                        <>
+                                                            <Badge bg="primary" className="me-1 agent-indicator">
+                                                                A
+                                                            </Badge>
+                                                           
+                                                        </>
+                                                    ) : null}
+                                                    <Badge bg={execution.status === 'SUCCESS' ? 'success' : 'danger'}>
+                                                        {execution.status}
+                                                    </Badge>
+                                                </div>
                                                 </div>
                                                 <div className="edit-workflow-execution-duration">
                                                     {execution.durationMs?.$numberLong || execution.durationMs}ms

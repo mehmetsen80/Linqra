@@ -1,10 +1,13 @@
 package org.lite.gateway.controller;
 
 import org.lite.gateway.entity.AgentTask;
+import org.lite.gateway.enums.AgentTaskType;
 import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
 import org.lite.gateway.service.AgentAuthContextService;
 import org.lite.gateway.service.AgentTaskVersionService;
+import org.lite.gateway.service.UserContextService;
+import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.ErrorCode;
 import org.springframework.http.HttpStatus;
@@ -15,6 +18,7 @@ import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import jakarta.validation.Valid;
 import java.util.Map;
 
 @RestController
@@ -27,6 +31,8 @@ public class AgentTaskController {
     private final AgentTaskService agentTaskService;
     private final AgentAuthContextService agentAuthContextService;
     private final AgentTaskVersionService agentTaskVersionService;
+    private final UserContextService userContextService;
+    private final TeamContextService teamContextService;
     
     // ==================== TASK CRUD OPERATIONS ====================
     
@@ -255,6 +261,54 @@ public class AgentTaskController {
                 })
                 .doOnSuccess(response -> log.info("Task {} execution started successfully", taskId))
                 .doOnError(error -> log.error("Failed to execute task {}: {}", taskId, error.getMessage()));
+    }
+
+    @PostMapping("/execute-adhoc")
+    public Mono<ResponseEntity<Object>> executeAdhocTask(
+            @Valid @RequestBody AgentTask agentTask,
+            ServerWebExchange exchange) {
+        
+        log.info("Executing ad-hoc task: {}", agentTask.getName());
+        
+        return userContextService.getCurrentUsername(exchange)
+                .flatMap(username -> {
+                    // Basic validation
+                    if (agentTask.getTaskType() != AgentTaskType.WORKFLOW_EMBEDDED) {
+                        return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED tasks are supported for ad-hoc execution"));
+                    }
+                    
+                    if (agentTask.getLinqConfig() == null) {
+                        return Mono.error(new IllegalArgumentException("Invalid workflow configuration: missing linq_config"));
+                    }
+                    
+                    // Get current team context from JWT token
+                    return teamContextService.getTeamFromContext()
+                        .flatMap(teamId -> {
+                            log.info("Using current team {} for ad-hoc execution", teamId);
+                            return agentExecutionService.executeAdhocTask(agentTask, teamId, username, exchange);
+                        })
+                        .switchIfEmpty(Mono.error(new IllegalArgumentException("No current team context found")));
+                })
+                .map(result -> {
+                    Map<String, Object> response = Map.of(
+                            "status", "completed",
+                            "message", "Ad-hoc task executed successfully",
+                            "result", result
+                    );
+                    return ResponseEntity.ok((Object) response);
+                })
+                .onErrorResume(error -> {
+                    log.error("Failed to execute ad-hoc task: {}", error.getMessage());
+                    return Mono.just(ResponseEntity
+                            .status(HttpStatus.BAD_REQUEST)
+                            .body((Object) ErrorResponse.fromErrorCode(
+                                    ErrorCode.VALIDATION_ERROR,
+                                    error.getMessage(),
+                                    HttpStatus.BAD_REQUEST.value()
+                            )));
+                })
+                .doOnSuccess(response -> log.info("Ad-hoc task executed successfully"))
+                .doOnError(error -> log.error("Failed to execute ad-hoc task: {}", error.getMessage()));
     }
     
 } 

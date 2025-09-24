@@ -173,6 +173,13 @@ The challenges of managing multiple AI integrations extend far beyond initial se
 \section{The Linqra Solution: A Unified Gateway for AI}
 Linqra solves these challenges by acting as a universal adapter between applications and the entire ecosystem of AI models. The platform is built on two core concepts:
 
+\subsection{The Linq Protocol}
+A standardized, provider-agnostic API specification. Developers integrate once with the Linqra gateway and gain instant access to all supported models. The protocol normalizes requests and responses, allowing for seamless model interoperability.
+
+\subsection{The Intelligent Gateway}
+A high-performance routing layer that handles authentication, load balancing, retries, and failover intelligently. It translates a single request from the Linq Protocol into the specific format required by the target provider(s).
+
+
 \begin{center}
 \begin{tikzpicture}[
   node distance=1.6cm,
@@ -200,11 +207,6 @@ Linqra solves these challenges by acting as a universal adapter between applicat
 \end{tikzpicture}
 \end{center}
 
-\subsection{The Linq Protocol}
-A standardized, provider-agnostic API specification. Developers integrate once with the Linqra gateway and gain instant access to all supported models. The protocol normalizes requests and responses, allowing for seamless model interoperability.
-
-\subsection{The Intelligent Gateway}
-A high-performance routing layer that handles authentication, load balancing, retries, and failover intelligently. It translates a single request from the Linq Protocol into the specific format required by the target provider(s).
 
 \newpage
 \section{Technical Architecture: How Linqra Works}
@@ -342,6 +344,71 @@ Linqra supports parallelized context gathering to minimize latency and improve d
 \end{tikzpicture}
 \caption{Parallel Context Gathering Architecture}
 \end{figure}
+
+\subsection{Corporate Knowledge for RAG}
+
+To make parallel context gathering effective, enterprises must curate a high‑quality Retrieval‑Augmented Generation (RAG) corpus of corporate knowledge. Linqra provides ingestion, governance, and retrieval primitives to operationalize this at scale.
+
+\paragraph{What to store}
+\begin{itemize}[leftmargin=*]
+  \item Product documentation, runbooks, policies/SLAs, SOPs, code docs, and architecture notes
+  \item CRM/ERP records (contracts, orders), support tickets/chats/emails, knowledge base articles
+  \item Compliance guidance, legal clauses, pricing catalogs, release notes, meeting transcripts
+\end{itemize}
+
+\paragraph{Security and governance}
+\begin{itemize}[leftmargin=*]
+  \item Multi‑tenant isolation; row/field‑level ACLs by team/user; consent \& retention policies
+  \item PII handling (masking/tokenization), audit trails, policy tags (confidential, regulatory)
+\end{itemize}
+
+\paragraph{Chunking and metadata}
+\begin{itemize}[leftmargin=*]
+  \item Chunk to 200–800 tokens with small overlaps or semantic boundaries (headings, bullets)
+  \item Rich metadata: \texttt{source}, \texttt{teamId}, \texttt{language}, \texttt{docId}, \texttt{version}, \texttt{tags}, \texttt{effectiveFrom/To}
+\end{itemize}
+
+\paragraph{Embeddings and indexing}
+\begin{itemize}[leftmargin=*]
+  \item Choose domain‑appropriate embeddings (multilingual if needed); evaluate for drift
+  \item Partition collections by domain/locale/tenant; schedule re‑indexing on updates
+\end{itemize}
+
+\paragraph{Freshness and quality}
+\begin{itemize}[leftmargin=*]
+  \item Near‑real‑time CDC for hot data; backfills for large revisions; invalidation on deletes
+  \item Quality gates: coverage \& duplication checks, toxicity/policy filters, hallucination risk reduction
+\end{itemize}
+
+\paragraph{Retrieval and feedback}
+\begin{itemize}[leftmargin=*]
+  \item Hybrid retrieval (dense+sparse), metadata filters, reranking; sensible defaults (e.g., \texttt{nResults=5})
+  \item Human‑in‑the‑loop feedback to refine prompts, filters, and corpus; track acceptance rates
+\end{itemize}
+
+\paragraph{Observability and versioning}
+\begin{itemize}[leftmargin=*]
+  \item Monitor ingestion latency/failures, retrieval hit‑rate, \textit{MRR@k}/\textit{NDCG@k}, corpus growth
+  \item Snapshot vector indexes for rollback; reversible migrations during schema changes
+\end{itemize}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=1.2cm,
+  small/.style={rectangle, draw, rounded corners=2pt, fill=gray!10, text width=5.5cm, minimum height=0.9cm, align=center},
+  arrow/.style={->, thick}
+]
+\node[small] (sources) {Sources: Docs • SOPs • CRM/ERP • Tickets • KB};
+\node[small, below=of sources] (ingest) {Ingestion & Governance: Connectors • CDC • PII Redaction • ACLs};
+\node[small, below=of ingest] (index) {Vector Index (RAG): Chunking • Metadata • Embeddings};
+\node[small, below=of index] (retrieval) {Hybrid Retrieval: Dense+Sparse • Filters • Rerank};
+\node[small, below=of retrieval] (workflows) {Orchestrated Workflows};
+\draw[arrow] (sources) -- (ingest);
+\draw[arrow] (ingest) -- (index);
+\draw[arrow] (index) -- (retrieval);
+\draw[arrow] (retrieval) -- (workflows);
+\end{tikzpicture}
+\end{center}
 
 \newpage
 \section{Monitoring and Analytics}

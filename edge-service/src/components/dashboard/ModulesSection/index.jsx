@@ -10,7 +10,7 @@ function ModulesSection() {
     <div className="modules-section">
       <div className="section-header">
         <h2>Modules</h2>
-        <p className="text-muted">Access and manage different aspects of your AI App Store</p>
+        <p className="text-muted">Access and manage different aspects of your AI Agents</p>
       </div>
 
       <div className="dashboard-grid">

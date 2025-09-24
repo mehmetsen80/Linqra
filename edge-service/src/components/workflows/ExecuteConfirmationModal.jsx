@@ -9,7 +9,7 @@ const ExecuteConfirmationModal = ({
     workflow, 
     executing = false 
 }) => {
-    const truncateIntent = (intent, maxLength = 60) => {
+    const truncateIntent = (intent, maxLength = 58) => {
         if (!intent) return '';
         return intent.length > maxLength ? `${intent.substring(0, maxLength)}...` : intent;
     };

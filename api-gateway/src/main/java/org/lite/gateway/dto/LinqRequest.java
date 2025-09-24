@@ -76,6 +76,8 @@ public class LinqRequest {
 
             private CacheConfig cacheConfig; // Cache configuration for this step
 
+            private String description; // Optional description explaining what this step does
+
             @Data
             public static class CacheConfig {
                 private boolean enabled = false; // Whether caching is enabled for this step

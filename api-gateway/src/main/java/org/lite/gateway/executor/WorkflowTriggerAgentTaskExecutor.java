@@ -62,7 +62,7 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                     workflowId, timeout.toMinutes(), task.getTaskType(), task.getMaxRetries());
             
             return triggerWorkflow(workflowId, parameters, execution.getTeamId(),
-                    agent.getId(), task.getId(), execution.getExecutionId(), exchange)
+                    agent.getId(), task.getId(), execution, exchange)
                     .timeout(timeout)
                     .retryWhen(Retry.backoff(task.getMaxRetries(), Duration.ofSeconds(2))
                             .maxBackoff(Duration.ofMinutes(1))
@@ -74,7 +74,8 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                             }))
                     .flatMap(workflowExecutionId -> {
                         log.info("Workflow triggered successfully: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
-                        return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Workflow started", workflowExecutionId);
+                        return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Workflow started", workflowExecutionId)
+                                .then(monitorWorkflowCompletion(workflowExecutionId, execution));
                     })
                     .onErrorResume(error -> {
                         if (error instanceof java.util.concurrent.TimeoutException) {
@@ -98,7 +99,7 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
      * Trigger a workflow by its ID with agent context
      */
     public Mono<String> triggerWorkflow(String workflowId, Map<String, Object> parameters, String teamId,
-                                        String agentId, String agentTaskId, String agentExecutionId, ServerWebExchange exchange) {
+                                        String agentId, String agentTaskId, AgentExecution execution, ServerWebExchange exchange) {
         log.info("Triggering workflow {} for team {} with agent context: agent={}, task={}", workflowId, teamId, agentId, agentTaskId);
 
         return linqWorkflowService.getWorkflow(workflowId)
@@ -143,8 +144,8 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                         }
                     }
 
-                    // Set executedBy from agent context
-                    request.setExecutedBy("agent-" + agentId);
+                    // Set executedBy from the actual user who initiated the agent task  
+                    request.setExecutedBy(execution.getExecutedBy());
 
                     // Execute the workflow
                     return workflowExecutionService.executeWorkflow(request)
@@ -166,7 +167,7 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                                                         "agentTaskId", agentTaskId,
                                                         "agentTaskName", taskName,
                                                         "executionSource", "agent",
-                                                        "agentExecutionId", agentExecutionId
+                                                        "agentExecutionId", execution.getExecutionId()
                                                 );
                                             })
                                             .flatMap(agentContext ->
@@ -178,4 +179,5 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                 .doOnSuccess(executionId -> log.info("Workflow {} triggered successfully with execution ID: {} for agent: {}", workflowId, executionId, agentId))
                 .doOnError(error -> log.error("Failed to trigger workflow {} for agent {}: {}", workflowId, agentId, error.getMessage()));
     }
+
 }

@@ -36,7 +36,6 @@ public class AgentExecution {
     // Execution Context
     private String teamId;                  // Team that owns this execution
     private ExecutionType executionType;    // SCHEDULED, MANUAL, EVENT_DRIVEN, WORKFLOW, AGENT_SCHEDULED
-    private String triggerSource;           // What triggered this execution (cron, user, webhook, etc.)
     
     // Execution Timeline
     private LocalDateTime scheduledAt;      // When execution was scheduled
@@ -147,6 +146,7 @@ public class AgentExecution {
         this.status = ExecutionStatus.COMPLETED;
         this.result = ExecutionResult.SUCCESS;
         this.completedAt = LocalDateTime.now();
+        this.errorMessage = "";  // Clear error message on successful completion
         if (this.startedAt != null) {
             this.executionDurationMs = java.time.Duration.between(this.startedAt, this.completedAt).toMillis();
         }

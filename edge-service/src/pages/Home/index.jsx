@@ -40,7 +40,7 @@ function Home() {
       <div className="hero-section">
         <div className="hero-content">
           <img 
-            src="/images/noBgWhite.png" 
+            src="/images/noBgWhiteOnlyLogo.png" 
             alt="Linqra Logo"
             className="hero-logo"
           />
@@ -137,11 +137,11 @@ function Home() {
       </div>
 
       <div id="features" className="features-section">
-        <h2>AI App Store with Enterprise-Grade Security</h2>
+        <h2>AI Agents with Enterprise-Grade Security</h2>
         <div className="features-grid">
           <div className="feature-card">
-            <i className="fas fa-store"></i>
-            <h3>AI App Marketplace</h3>
+            <i className="fas fa-robot"></i>
+            <h3>AI Agents</h3>
             <p>Discover and deploy AI applications with just a few clicks, from chatbots to specialized ML models</p>
           </div>
           <div className="feature-card">
@@ -459,7 +459,7 @@ Content-Type: application/json
       </div>
 
       <div className="deployment-section">
-        <h2>Deploy Your Own AI App Store</h2>
+        <h2>Deploy Your Own AI Agents</h2>
         <div className="deployment-options">
           <div className="deployment-card">
             <i className="fas fa-building"></i>

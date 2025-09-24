@@ -374,12 +374,6 @@ To make parallel context gathering effective, enterprises must curate a high‑q
   \item Partition collections by domain/locale/tenant; schedule re‑indexing on updates
 \end{itemize}
 
-\paragraph{Freshness and quality}
-\begin{itemize}[leftmargin=*]
-  \item Near‑real‑time CDC for hot data; backfills for large revisions; invalidation on deletes
-  \item Quality gates: coverage \& duplication checks, toxicity/policy filters, hallucination risk reduction
-\end{itemize}
-
 \paragraph{Retrieval and feedback}
 \begin{itemize}[leftmargin=*]
   \item Hybrid retrieval (dense+sparse), metadata filters, reranking; sensible defaults (e.g., \texttt{nResults=5})

@@ -245,5 +245,22 @@ export const teamService = {
         error: error.response?.data?.message || 'Failed to fetch team'
       };
     }
+  },
+
+  // Update member's last active timestamp when switching teams
+  updateLastActiveAt: async (teamId) => {
+    try {
+      const response = await axiosInstance.put(`/api/teams/${teamId}/members/last-active`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error updating last active timestamp:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to update last active timestamp'
+      };
+    }
   }
 }; 

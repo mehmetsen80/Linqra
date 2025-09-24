@@ -1,0 +1,201 @@
+/* Step Descriptions Container */
+.step-descriptions-container {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border: 1px solid #e9ecef;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.steps-header {
+    margin-bottom: 1rem;
+}
+
+.steps-title {
+    color: #495057;
+    font-weight: 600;
+    font-size: 1rem;
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+}
+
+.steps-title i {
+    color: var(--primary-color);
+}
+
+/* Steps Flow Container */
+.steps-flow {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+    overflow-x: auto;
+    padding: 0.5rem 0;
+}
+
+/* Individual Step Box */
+.step-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 120px;
+    padding: 1rem;
+    background: white;
+    border: 2px solid #e9ecef;
+    border-radius: 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.step-box:hover,
+.step-box.hovered {
+    border-color: var(--step-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+.step-descriptions-container .step-box .step-number {
+    position: absolute !important;
+    top: -10px !important;
+    right: -10px !important;
+    color: white !important;
+    width: 24px !important;
+    height: 24px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 0.75rem !important;
+    font-weight: bold !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.step-icon {
+    font-size: 1.5rem;
+    color: var(--step-color);
+    margin-bottom: 0.5rem;
+    transition: transform 0.3s ease;
+}
+
+.step-box:hover .step-icon {
+    transform: scale(1.1);
+}
+
+.step-label {
+    text-align: center;
+    min-height: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.step-target {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #495057;
+    margin-bottom: 0.25rem;
+    line-height: 1.2;
+}
+
+.step-action {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: capitalize;
+}
+
+/* Arrow Between Steps */
+.step-arrow {
+    color: #adb5bd;
+    font-size: 1.2rem;
+    margin: 0 0.5rem;
+    transition: color 0.3s ease;
+}
+
+.step-box:hover + .step-arrow,
+.step-arrow:hover {
+    color: var(--primary-color);
+}
+
+/* Tooltip Styling */
+.step-tooltip {
+    max-width: 300px;
+}
+
+.tooltip-content {
+    text-align: left;
+}
+
+.tooltip-header {
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    color: #fff;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+    padding-bottom: 0.25rem;
+}
+
+.tooltip-action {
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.tooltip-description {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    margin-bottom: 0.5rem;
+    font-style: italic;
+    opacity: 0.9;
+}
+
+.tooltip-intent {
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .steps-flow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .step-box {
+        min-width: auto;
+        width: 100%;
+        flex-direction: row;
+        justify-content: flex-start;
+        text-align: left;
+        padding: 1rem 1.5rem;
+    }
+    
+    .step-icon {
+        margin-right: 1rem;
+        margin-bottom: 0;
+    }
+    
+    .step-label {
+        text-align: left;
+        min-height: auto;
+    }
+    
+    .step-arrow {
+        transform: rotate(90deg);
+        margin: 0.5rem 0;
+    }
+    
+    .step-number {
+        top: -8px;
+        left: -8px;
+        right: auto;
+    }
+}
+
+/* Color Variants - Now handled by inline styles */ 

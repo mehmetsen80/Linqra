@@ -1,6 +1,7 @@
 package org.lite.gateway.repository;
 
 import org.lite.gateway.entity.AgentExecution;
+import org.lite.gateway.enums.ExecutionType;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -49,14 +50,11 @@ public interface AgentExecutionRepository extends ReactiveMongoRepository<AgentE
     // Find executions by execution type
     Flux<AgentExecution> findByExecutionType(String executionType);
     
+    // Find executions by execution type
+    Flux<AgentExecution> findByExecutionType(ExecutionType executionType);
+    
     // Find executions by agent and execution type
-    Flux<AgentExecution> findByAgentIdAndExecutionType(String agentId, String executionType);
-    
-    // Find executions by trigger source
-    Flux<AgentExecution> findByTriggerSource(String triggerSource);
-    
-    // Find executions by agent and trigger source
-    Flux<AgentExecution> findByAgentIdAndTriggerSource(String agentId, String triggerSource);
+    Flux<AgentExecution> findByAgentIdAndExecutionType(String agentId, ExecutionType executionType);
     
     // Find executions by executed by
     Flux<AgentExecution> findByExecutedBy(String executedBy);
@@ -238,14 +236,11 @@ public interface AgentExecutionRepository extends ReactiveMongoRepository<AgentE
     // Count executions by execution type
     Mono<Long> countByExecutionType(String executionType);
     
+    // Count executions by execution type
+    Mono<Long> countByExecutionType(ExecutionType executionType);
+    
     // Count executions by agent and execution type
-    Mono<Long> countByAgentIdAndExecutionType(String agentId, String executionType);
-    
-    // Count executions by trigger source
-    Mono<Long> countByTriggerSource(String triggerSource);
-    
-    // Count executions by agent and trigger source
-    Mono<Long> countByAgentIdAndTriggerSource(String agentId, String triggerSource);
+    Mono<Long> countByAgentIdAndExecutionType(String agentId, ExecutionType executionType);
     
     // Count executions by executed by
     Mono<Long> countByExecutedBy(String executedBy);

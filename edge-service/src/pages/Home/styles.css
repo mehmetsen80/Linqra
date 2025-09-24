@@ -589,7 +589,7 @@ html {
 }
 
 .tagline {
-  font-size: 2.2rem;
+  font-size: 1.8rem;
   font-weight: 900;
   font-family: 'fa-brands-400', 'Inter', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif;
   color: var(--primary-light);

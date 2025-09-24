@@ -72,8 +72,18 @@ public abstract class AgentTaskExecutor {
      * Update execution status
      */
     protected Mono<Void> updateExecutionStatus(AgentExecution execution, ExecutionStatus status, String message, String workflowExecutionId) {
-        execution.setStatus(status);
-        execution.setErrorMessage(message);
+        // Use the proper methods to set both status and result correctly
+        switch (status) {
+            case COMPLETED -> execution.markAsCompleted();
+            case FAILED -> execution.markAsFailed(message, "WORKFLOW_EXECUTION_FAILED");
+            case TIMEOUT -> execution.markAsTimeout();
+            default -> {
+                // For other statuses, set manually
+                execution.setStatus(status);
+                execution.setErrorMessage(message);
+            }
+        }
+        
         if (workflowExecutionId != null) {
             execution.setWorkflowExecutionId(workflowExecutionId);
         }
@@ -117,5 +127,49 @@ public abstract class AgentTaskExecutor {
             log.error("Failed to convert map to LinqRequest: {}", e.getMessage());
             throw new RuntimeException("Invalid LinqRequest structure in linq_config", e);
         }
+    }
+
+    /**
+     * Monitor workflow completion and update AgentExecution status accordingly
+     */
+    protected Mono<Void> monitorWorkflowCompletion(String workflowExecutionId, AgentExecution execution) {
+        log.info("Starting to monitor workflow completion for execution: {} (workflow: {})", 
+                execution.getExecutionId(), workflowExecutionId);
+        
+        return workflowExecutionService.getExecution(workflowExecutionId)
+                .flatMap(workflowExecution -> {
+                    org.lite.gateway.model.ExecutionStatus status = workflowExecution.getStatus();
+                    log.info("Workflow {} status: {}", workflowExecutionId, status);
+                    
+                    if (org.lite.gateway.model.ExecutionStatus.SUCCESS.equals(status)) {
+                        log.info("Workflow {} completed successfully, updating AgentExecution to COMPLETED", workflowExecutionId);
+                        return updateExecutionStatus(execution, ExecutionStatus.COMPLETED, 
+                                "Agent task completed successfully", workflowExecutionId);
+                    } else if (org.lite.gateway.model.ExecutionStatus.FAILED.equals(status)) {
+                        log.error("Workflow {} failed, updating AgentExecution to FAILED", workflowExecutionId);
+                        String errorMsg = "Workflow execution failed";
+                        // Try to get error from metadata status
+                        if (workflowExecution.getResponse() != null && 
+                            workflowExecution.getResponse().getMetadata() != null && 
+                            "error".equals(workflowExecution.getResponse().getMetadata().getStatus())) {
+                            errorMsg = "Workflow failed - check execution logs";
+                        }
+                        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
+                                errorMsg, workflowExecutionId);
+                    } else if (org.lite.gateway.model.ExecutionStatus.IN_PROGRESS.equals(status)) {
+                        // Still running, wait and check again
+                        log.info("Workflow {} still in progress, will check again in 5 seconds", workflowExecutionId);
+                        return Mono.delay(Duration.ofSeconds(5))
+                                .then(monitorWorkflowCompletion(workflowExecutionId, execution));
+                    } else {
+                        log.warn("Unknown workflow status: {} for workflow: {}", status, workflowExecutionId);
+                        return Mono.empty();
+                    }
+                })
+                .onErrorResume(error -> {
+                    log.error("Error monitoring workflow completion for {}: {}", workflowExecutionId, error.getMessage());
+                    return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
+                            "Error monitoring workflow: " + error.getMessage(), workflowExecutionId);
+                });
     }
 }

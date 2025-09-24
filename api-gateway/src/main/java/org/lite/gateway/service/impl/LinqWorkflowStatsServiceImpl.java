@@ -182,19 +182,26 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                         .orElse(0.0);
                     stats.setAverageExecutionTime(avgTime);
                     
-                    // Get unique workflow IDs
+                    // Get unique workflow IDs (filter out null values)
                     Set<String> workflowIds = executions.stream()
+                        .filter(execution -> execution != null && execution.getWorkflowId() != null)
                         .map(LinqWorkflowExecution::getWorkflowId)
                         .collect(Collectors.toSet());
                     
                     // Fetch workflow names
                     return Flux.fromIterable(workflowIds)
                         .flatMap(workflowId -> workflowRepository.findById(workflowId)
-                            .map(workflow -> new AbstractMap.SimpleEntry<>(workflowId, workflow.getName())))
+                            .map(workflow -> new AbstractMap.SimpleEntry<>(workflowId, workflow.getName()))
+                            .switchIfEmpty(Mono.just(new AbstractMap.SimpleEntry<>(workflowId, "Unknown Workflow"))))
                         .collectMap(Map.Entry::getKey, Map.Entry::getValue)
                         .map(workflowNames -> {
                             // Process each execution
                             for (LinqWorkflowExecution execution : executions) {
+                                // Skip null executions or executions without workflow ID
+                                if (execution == null || execution.getWorkflowId() == null || execution.getExecutedAt() == null) {
+                                    continue;
+                                }
+                                
                                 // Time-based stats
                                 String hour = execution.getExecutedAt().format(DateTimeFormatter.ofPattern("HH:00"));
                                 String day = execution.getExecutedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
@@ -217,7 +224,9 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                     execution.getResponse().getMetadata() != null && 
                                     execution.getResponse().getMetadata().getWorkflowMetadata() != null) {
                                     
-                                    execution.getResponse().getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
+                                    execution.getResponse().getMetadata().getWorkflowMetadata().stream()
+                                        .filter(stepMetadata -> stepMetadata != null && stepMetadata.getTarget() != null)
+                                        .forEach(stepMetadata -> {
                                         // Step stats
                                         TeamWorkflowStats.StepStats stepStats = stats.getStepStats()
                                             .computeIfAbsent(String.valueOf(stepMetadata.getStep()), k -> {
@@ -229,11 +238,16 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                         
                                         // Update most common target and intent
                                         stepStats.setMostCommonTarget(stepMetadata.getTarget());
-                                        String intent = execution.getRequest().getQuery().getWorkflow().stream()
-                                            .filter(step -> step.getStep() == stepMetadata.getStep())
-                                            .findFirst()
-                                            .map(LinqRequest.Query.WorkflowStep::getIntent)
-                                            .orElse("unknown");
+                                        String intent = "unknown";
+                                        if (execution.getRequest() != null && 
+                                            execution.getRequest().getQuery() != null && 
+                                            execution.getRequest().getQuery().getWorkflow() != null) {
+                                            intent = execution.getRequest().getQuery().getWorkflow().stream()
+                                                .filter(step -> step != null && step.getStep() == stepMetadata.getStep())
+                                                .findFirst()
+                                                .map(LinqRequest.Query.WorkflowStep::getIntent)
+                                                .orElse("unknown");
+                                        }
                                         stepStats.setMostCommonIntent(intent);
                                         
                                         // Update workflow's step stats
@@ -262,11 +276,16 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                         
                                         // Model stats for AI targets
                                         if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini")) {
-                                            String model = execution.getRequest().getQuery().getWorkflow().stream()
-                                                .filter(step -> step.getStep() == stepMetadata.getStep())
-                                                .findFirst()
-                                                .map(step -> step.getToolConfig().getModel())
-                                                .orElse("unknown");
+                                            String model = "unknown";
+                                            if (execution.getRequest() != null && 
+                                                execution.getRequest().getQuery() != null && 
+                                                execution.getRequest().getQuery().getWorkflow() != null) {
+                                                model = execution.getRequest().getQuery().getWorkflow().stream()
+                                                    .filter(step -> step != null && step.getStep() == stepMetadata.getStep())
+                                                    .findFirst()
+                                                    .map(step -> step.getToolConfig() != null ? step.getToolConfig().getModel() : "unknown")
+                                                    .orElse("unknown");
+                                            }
                                             
                                             TeamWorkflowStats.ModelStats modelStats = stats.getModelStats()
                                                 .computeIfAbsent(model, k -> {

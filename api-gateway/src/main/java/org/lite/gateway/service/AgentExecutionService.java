@@ -1,6 +1,7 @@
 package org.lite.gateway.service;
 
 import org.lite.gateway.entity.AgentExecution;
+import org.lite.gateway.entity.AgentTask;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -39,5 +40,10 @@ public interface AgentExecutionService {
      * Retry a failed execution if it's eligible for retry
      */
     Mono<AgentExecution> retryFailedExecution(String executionId, String teamId, String retriedBy);
+    
+    /**
+     * Execute an ad-hoc task without storing it in database or creating execution records
+     */
+    Mono<Object> executeAdhocTask(AgentTask agentTask, String teamId, String executedBy, ServerWebExchange exchange);
     
 } 

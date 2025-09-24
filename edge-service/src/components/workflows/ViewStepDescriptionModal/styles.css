@@ -1,0 +1,337 @@
+/* Modal Styling */
+.view-step-modal .modal-dialog {
+    max-width: 900px;
+}
+
+.view-step-modal .modal-content {
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+/* Header Styling */
+.step-modal-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border-bottom: 1px solid #e9ecef;
+    padding: 1.5rem;
+    border-radius: 0.75rem 0.75rem 0 0 !important;
+}
+
+.custom-close-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.custom-close-btn:hover {
+    background-color: #c82333;
+    transform: scale(1.1);
+}
+
+.step-modal-header .btn-close:hover {
+    background-color: rgba(0, 0, 0, 0.2);
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.step-header-content {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    width: 100%;
+}
+
+.step-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    color: white;
+    font-size: 1.2rem;
+    position: relative;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.step-badge i {
+    font-size: 1.5rem;
+    margin-right: 0.25rem;
+}
+
+.view-step-modal .step-number {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: rgba(0, 0, 0, 0.8) !important;
+    color: white !important;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: bold;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.step-title-info {
+    flex: 1;
+}
+
+.step-modal-title {
+    margin-bottom: 0.5rem;
+    color: #212529 !important;
+    font-weight: 600;
+    font-size: 1.5rem;
+}
+
+.step-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.step-intent {
+    font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 0.85rem;
+    color: #6c757d;
+    background: rgba(108, 117, 125, 0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+}
+
+/* Body Styling */
+.step-modal-body {
+    padding: 0;
+}
+
+.step-tabs {
+    border-bottom: 1px solid #e9ecef;
+}
+
+.view-step-modal .step-tabs .nav-link {
+    color: #6c757d !important;
+    background: white !important;
+    background-color: white !important;
+    border: 1px solid #dee2e6;
+    border-bottom: none;
+    padding: 1rem 1.5rem;
+    font-weight: 500;
+    margin-right: 0.25rem;
+    border-radius: 0.375rem 0.375rem 0 0;
+    transition: all 0.2s ease;
+}
+
+.view-step-modal .step-tabs .nav-link:hover {
+    color: #2c3e50 !important;
+    background: #f8f9fa !important;
+    background-color: #f8f9fa !important;
+    border-color: #adb5bd !important;
+}
+
+.view-step-modal .step-tabs .nav-link.active {
+    color: var(--primary-color, #007bff) !important;
+    background: #f8f9fa !important;
+    background-color: #f8f9fa !important;
+    border-color: #dee2e6 !important;
+    border-bottom: 1px solid #f8f9fa !important;
+    margin-bottom: -1px;
+    z-index: 1;
+    position: relative;
+}
+
+.tab-content-wrapper {
+    padding: 2rem;
+}
+
+/* Overview Tab */
+.step-overview {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.step-description-section {
+    background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+}
+
+.section-title {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.section-title i {
+    color: var(--primary-color, #007bff);
+}
+
+.step-description-text {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #495057;
+    margin-bottom: 0;
+}
+
+.step-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.detail-item {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    transition: box-shadow 0.2s ease;
+}
+
+.detail-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.detail-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+}
+
+.detail-value {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+    color: #495057;
+}
+
+.detail-value i {
+    font-size: 1.1rem;
+}
+
+.intent-code {
+    background: rgba(108, 117, 125, 0.1);
+    color: #495057;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.85rem;
+    word-break: break-all;
+}
+
+/* JSON Section */
+.json-section {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+}
+
+.json-editor-container {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* AI Config Tab */
+.ai-config-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.ai-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .view-step-modal .modal-dialog {
+        max-width: 95%;
+        margin: 1rem;
+    }
+    
+    .step-header-content {
+        flex-direction: column;
+        text-align: center;
+        gap: 1rem;
+    }
+    
+    .step-badge {
+        width: 50px;
+        height: 50px;
+    }
+    
+    .step-badge i {
+        font-size: 1.2rem;
+    }
+    
+    .step-modal-title {
+        font-size: 1.25rem;
+    }
+    
+    .tab-content-wrapper {
+        padding: 1rem;
+    }
+    
+    .step-details-grid,
+    .ai-details-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .step-tabs .nav-link {
+        padding: 0.75rem 1rem;
+        font-size: 0.9rem;
+    }
+}
+
+/* Badge Customizations */
+.badge {
+    font-size: 0.75rem;
+    padding: 0.35em 0.65em;
+}
+
+/* Scrollbar Styling */
+.json-editor-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.json-editor-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.json-editor-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.json-editor-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+} 

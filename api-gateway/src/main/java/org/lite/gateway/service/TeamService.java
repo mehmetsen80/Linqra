@@ -48,5 +48,8 @@ public interface TeamService {
     Flux<TeamDTO> getTeamsByUsername(String username);
 
     Mono<Boolean> hasRole(String teamId, String username, String role);
+    
+    // Update member's last active timestamp
+    Mono<Void> updateMemberLastActiveAt(String teamId, String username);
 }
 

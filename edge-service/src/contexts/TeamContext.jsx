@@ -28,9 +28,9 @@ export const TeamProvider = ({ children }) => {
     
     try {
       const response = await teamService.getAllTeams();
-      console.log('fetchAllTeams response:', response);
+     //console.log('fetchAllTeams response:', response);
       if (response.success) {
-        console.log('Setting teams with:', response.data);
+        //console.log('Setting teams with:', response.data);
         setTeams(response.data || []);
       }
     } catch (error) {
@@ -47,8 +47,9 @@ export const TeamProvider = ({ children }) => {
     }
 
     try {
-      console.log('Fetching user teams...'); // Debug log
+      // console.log('Fetching user teams...'); // Debug log
       const response = await teamService.getUserTeams();
+      // console.log('fetchUserTeams response:', response);
       const teams = response.data || [];
       setUserTeams(teams);
       
@@ -59,11 +60,29 @@ export const TeamProvider = ({ children }) => {
         if (savedTeamId && teams.some(team => team.id === savedTeamId)) {
           teamToSet = teams.find(t => t.id === savedTeamId);
         } else {
-          teamToSet = teams[0];
-          localStorage.setItem('currentTeamId', teams[0].id);
+          // Sort teams by lastActiveAt (most recent first) and select the most recently used team
+          const sortedTeams = teams.sort((a, b) => {
+            // Handle MongoDB array date format: [year, month, day, hour, minute, second, nanoseconds]
+            const parseMongoDate = (dateArray) => {
+              if (!dateArray || !Array.isArray(dateArray)) return new Date(0);
+              const [year, month, day, hour = 0, minute = 0, second = 0, nanoseconds = 0] = dateArray;
+              return new Date(year, month - 1, day, hour, minute, second, Math.floor(nanoseconds / 1000000));
+            };
+            
+            const aLastActive = parseMongoDate(a.lastActiveAt);
+            const bLastActive = parseMongoDate(b.lastActiveAt);
+            
+            console.log('Team A:', a.name, 'lastActiveAt:', aLastActive.toISOString());
+            console.log('Team B:', b.name, 'lastActiveAt:', bLastActive.toISOString());
+            
+            return bLastActive - aLastActive; // Most recent first
+          });
+          console.log('Sorted teams:', sortedTeams);
+          teamToSet = sortedTeams[0];
+          localStorage.setItem('currentTeamId', sortedTeams[0].id);
         }
 
-        console.log('Setting current team to:', teamToSet); // Debug log
+        // console.log('Setting current team to:', teamToSet); // Debug log
         setCurrentTeam(teamToSet);
       }
     } catch (error) {
@@ -81,23 +100,37 @@ export const TeamProvider = ({ children }) => {
   }, [isAuthenticated, fetchUserTeams]);
 
   useEffect(() => {
-    console.log('Effect running, user:', user);
-    console.log('isAuthenticated:', isAuthenticated);
+    // console.log('Effect running, user:', user);
+    // console.log('isAuthenticated:', isAuthenticated);
     if (isAuthenticated && user && isSuperAdmin(user)) {
-      console.log('Calling fetchAllTeams');
+      // console.log('Calling fetchAllTeams');
       fetchAllTeams();
     }
   }, [isAuthenticated, user, fetchAllTeams]);
 
   // Add a debug effect to monitor state changes
   useEffect(() => {
-    console.log('Current team state:', currentTeam);
-    console.log('User teams state:', userTeams);
+    // console.log('Current team state:', currentTeam);
+    // console.log('User teams state:', userTeams);
   }, [currentTeam, userTeams]);
 
-  const switchTeam = useCallback((teamId) => {
+  const switchTeam = useCallback(async (teamId) => {
     const team = userTeams.find(t => t.id === teamId);
     if (team) {
+      // Update the last active timestamp in the backend
+      try {
+        const result = await teamService.updateLastActiveAt(teamId);
+        console.log('updateLastActiveAt result:', result);
+        if (result.success) {
+          console.log('Successfully updated last active timestamp for team:', teamId);
+        } else {
+          console.warn('Failed to update last active timestamp:', result.error);
+        }
+      } catch (error) {
+        console.error('Error updating last active timestamp:', error);
+      }
+      
+      // Update local state and storage
       setCurrentTeam(team);
       localStorage.setItem('currentTeamId', teamId);
     }

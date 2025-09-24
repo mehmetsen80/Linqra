@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Badge, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Modal, Badge, OverlayTrigger, Tooltip, Row, Col } from 'react-bootstrap';
 import { JsonView, allExpanded, defaultStyles } from 'react-json-view-lite';
 import { format } from 'date-fns';
 
@@ -38,20 +38,51 @@ const ExecutionDetailsModal = ({
             </Modal.Header>
             <Modal.Body>
                 <div className="execution-details">
-                    <div className="mb-3">
-                        <h6>Status</h6>
-                        <Badge bg={execution.status === 'SUCCESS' ? 'success' : 'danger'}>
-                            {execution.status}
-                        </Badge>
-                    </div>
-                    <div className="mb-3">
-                        <h6>Duration</h6>
-                        <p>{execution.durationMs?.$numberLong || execution.durationMs}ms</p>
-                    </div>
-                    <div className="mb-3">
-                        <h6>Executed At</h6>
-                        <p>{formatDate(execution.executedAt?.$date || execution.executedAt)}</p>
-                    </div>
+                    <Row className="mb-3">
+                        <Col md={3}>
+                            <h6>Status</h6>
+                            <Badge bg={execution.status === 'SUCCESS' ? 'success' : 'danger'}>
+                                {execution.status}
+                            </Badge>
+                        </Col>
+                        <Col md={3}>
+                            <h6>Duration</h6>
+                            <p className="mb-0">{execution.durationMs?.$numberLong || execution.durationMs}ms</p>
+                        </Col>
+                        <Col md={3}>
+                            <h6>Executed At</h6>
+                            <p className="mb-0">{formatDate(execution.executedAt?.$date || execution.executedAt)}</p>
+                        </Col>
+                        <Col md={3}>
+                            <h6>Trigger</h6>
+                            <div className="trigger-indicator">
+                                {execution.agentId ? (
+                                    <OverlayTrigger
+                                        placement="top"
+                                        overlay={
+                                            <Tooltip id={`agent-tooltip-${execution.id}`}>
+                                                <div>
+                                                    <strong>{execution.agentName || 'Unknown Agent'}</strong>
+                                                    <br/>
+                                                    ID: {execution.agentId}
+                                                </div>
+                                            </Tooltip>
+                                        }
+                                    >
+                                        <Badge bg="secondary" className="d-flex align-items-center gap-2 p-2" style={{cursor: 'pointer'}}>
+                                            <i className="fas fa-robot"></i>
+                                            Agent
+                                        </Badge>
+                                    </OverlayTrigger>
+                                ) : (
+                                    <Badge bg="secondary" className="d-flex align-items-center gap-1 p-2">
+                                        <i className="fas fa-user"></i>
+                                        Manual
+                                    </Badge>
+                                )}
+                            </div>
+                        </Col>
+                    </Row>
                     <div className="mb-3">
                         <h6>Final Result</h6>
                         <p className="final-result">

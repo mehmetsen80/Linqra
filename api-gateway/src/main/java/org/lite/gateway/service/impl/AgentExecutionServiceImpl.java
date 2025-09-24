@@ -11,6 +11,9 @@ import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentExecutionRepository;
 import org.lite.gateway.service.AgentExecutionService;
+import org.lite.gateway.service.LinqWorkflowExecutionService;
+import org.lite.gateway.dto.LinqRequest;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 
@@ -37,6 +40,8 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
     private final AgentExecutionRepository agentExecutionRepository;
     private final WorkflowTriggerAgentTaskExecutor workflowTriggerExecutor;
     private final WorkflowEmbeddedAgentTaskExecutor workflowEmbeddedExecutor;
+    private final LinqWorkflowExecutionService workflowExecutionService;
+    private final ObjectMapper objectMapper;
     
     // ==================== EXECUTION MANAGEMENT ====================
     
@@ -85,7 +90,6 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                     .taskName(task.getName())
                     .teamId(teamId)
                     .executionType(ExecutionType.MANUAL)
-                    .triggerSource("user")
                     .scheduledAt(LocalDateTime.now())
                     .startedAt(LocalDateTime.now())
                     .executedBy(executedBy)
@@ -95,13 +99,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
             
             return agentExecutionRepository.save(execution)
             .then(executeWorkflow(execution, task, agent, exchange))
-            .flatMap(workflowExecutionId -> {
-                // SUCCESS CASE - Only update execution status
-                execution.markAsCompleted();
-                
-                return agentExecutionRepository.save(execution)
-                .thenReturn(execution);
-            })
+            .thenReturn(execution)  // Return the execution object immediately
             .onErrorResume(error -> {
                 // ERROR CASE - Only update execution status
                 log.error("Task execution failed: {}", error.getMessage());
@@ -348,5 +346,52 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         
         return agentExecutionRepository.save(execution)
                 .then();
+    }
+
+    @Override
+    public Mono<Object> executeAdhocTask(AgentTask agentTask, String teamId, String executedBy, ServerWebExchange exchange) {
+        log.info("Executing ad-hoc task: {} for team: {}", agentTask.getName(), teamId);
+        
+        // Validate task type - only WORKFLOW_EMBEDDED supported for ad-hoc execution
+        if (agentTask.getTaskType() != org.lite.gateway.enums.AgentTaskType.WORKFLOW_EMBEDDED) {
+            return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED tasks are supported for ad-hoc execution"));
+        }
+        
+        // Convert AgentTask to LinqRequest for workflow execution
+        if (agentTask.getLinqConfig() == null) {
+            return Mono.error(new IllegalArgumentException("Invalid task configuration: missing linq_config"));
+        }
+        
+        try {
+            // Create LinqRequest from the AgentTask's linq_config using ObjectMapper
+            LinqRequest linqRequest = objectMapper.convertValue(agentTask.getLinqConfig(), LinqRequest.class);
+            
+            // Set execution context
+            if (linqRequest.getQuery() != null && linqRequest.getQuery().getParams() != null) {
+                linqRequest.getQuery().getParams().put("teamId", teamId);
+                linqRequest.getQuery().getParams().put("userId", executedBy);
+            }
+            
+            // Set executedBy
+            linqRequest.setExecutedBy(executedBy);
+            
+            // Execute the workflow directly using the workflow execution service
+            log.info("Executing ad-hoc workflow with intent: {}", 
+                linqRequest.getQuery() != null ? linqRequest.getQuery().getIntent() : "unknown");
+            
+            return workflowExecutionService.executeWorkflow(linqRequest)
+                .map(response -> {
+                    log.info("Ad-hoc workflow execution completed successfully");
+                    return (Object) response;
+                })
+                .onErrorResume(error -> {
+                    log.error("Ad-hoc workflow execution failed: {}", error.getMessage());
+                    return Mono.error(new RuntimeException("Workflow execution failed: " + error.getMessage()));
+                });
+                
+        } catch (Exception e) {
+            log.error("Failed to convert AgentTask to LinqRequest: {}", e.getMessage());
+            return Mono.error(new IllegalArgumentException("Invalid task configuration: " + e.getMessage()));
+        }
     }
 }

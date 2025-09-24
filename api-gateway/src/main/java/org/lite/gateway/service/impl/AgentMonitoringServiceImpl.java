@@ -179,37 +179,6 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
     }
     
     @Override
-    public Mono<Map<String, Object>> getTaskPerformance(String taskId, String teamId, LocalDateTime from, LocalDateTime to) {
-        return agentTaskRepository.findById(taskId)
-                .thenMany(agentExecutionRepository.findByTaskIdAndStartedAtBetween(taskId, from, to))
-                .collectList()
-                .map(executions -> {
-                    long totalExecutions = executions.size();
-                    long successfulExecutions = executions.stream()
-                            .filter(e -> ExecutionResult.SUCCESS.name().equals(e.getResult()))
-                            .count();
-                    long failedExecutions = executions.stream()
-                            .filter(e -> ExecutionResult.FAILURE.name().equals(e.getResult()))
-                            .count();
-                    
-                    double avgExecutionTime = executions.stream()
-                            .filter(e -> e.getExecutionDurationMs() != null)
-                            .mapToLong(AgentExecution::getExecutionDurationMs)
-                            .average()
-                            .orElse(0.0);
-                    
-                    return Map.of(
-                            "taskId", taskId,
-                            "totalExecutions", totalExecutions,
-                            "successfulExecutions", successfulExecutions,
-                            "failedExecutions", failedExecutions,
-                            "successRate", totalExecutions > 0 ? (successfulExecutions * 100.0 / totalExecutions) : 0.0,
-                            "averageExecutionTimeMs", avgExecutionTime
-                    );
-                });
-    }
-    
-    @Override
     public Mono<Map<String, Object>> getTeamExecutionStats(String teamId, LocalDateTime from, LocalDateTime to) {
         // First get all agents for the team, then get their executions
         return agentRepository.findByTeamId(teamId)

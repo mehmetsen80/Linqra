@@ -78,7 +78,10 @@ public enum ErrorCode {
     ENDPOINT_VERSION_NOT_FOUND("ENDPOINT_8002", "Endpoint version not found", ErrorSeverity.ERROR, ErrorCategory.NOT_FOUND),
     ENDPOINT_INVALID_SWAGGER("ENDPOINT_8003", "Invalid OpenAPI/Swagger JSON", ErrorSeverity.ERROR, ErrorCategory.VALIDATION),
     ENDPOINT_ALREADY_EXISTS("ENDPOINT_8004", "Endpoint already exists", ErrorSeverity.ERROR, ErrorCategory.VALIDATION),
-    ENDPOINT_OPERATION_ERROR("ENDPOINT_8005", "Endpoint operation failed", ErrorSeverity.ERROR, ErrorCategory.OPERATION);
+    ENDPOINT_OPERATION_ERROR("ENDPOINT_8005", "Endpoint operation failed", ErrorSeverity.ERROR, ErrorCategory.OPERATION),
+
+    // Workflow Related Errors (9000-9999)
+    WORKFLOW_NOT_FOUND("WF_9001", "Workflow not found", ErrorSeverity.ERROR, ErrorCategory.NOT_FOUND);
 
   
     

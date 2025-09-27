@@ -53,7 +53,7 @@ public abstract class AgentTaskExecutor {
         int baseTimeoutMinutes = task.getTimeoutMinutes();
         
         return switch (task.getTaskType()) {
-            case WORKFLOW_EMBEDDED, WORKFLOW_TRIGGER -> 
+            case WORKFLOW_EMBEDDED, WORKFLOW_TRIGGER, WORKFLOW_EMBEDDED_ADHOC -> 
                 Duration.ofMinutes(baseTimeoutMinutes);
             /*
             // Future timeout adjustments for other task types (commented out for now)

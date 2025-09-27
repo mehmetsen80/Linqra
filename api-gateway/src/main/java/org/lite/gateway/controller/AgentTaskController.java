@@ -273,8 +273,8 @@ public class AgentTaskController {
         return userContextService.getCurrentUsername(exchange)
                 .flatMap(username -> {
                     // Basic validation
-                    if (agentTask.getTaskType() != AgentTaskType.WORKFLOW_EMBEDDED) {
-                        return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED tasks are supported for ad-hoc execution"));
+                    if (agentTask.getTaskType() != AgentTaskType.WORKFLOW_EMBEDDED_ADHOC) {
+                        return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED_ADHOC tasks are supported for ad-hoc execution"));
                     }
                     
                     if (agentTask.getLinqConfig() == null) {

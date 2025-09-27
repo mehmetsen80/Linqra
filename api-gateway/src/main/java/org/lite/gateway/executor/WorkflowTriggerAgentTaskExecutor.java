@@ -23,6 +23,9 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
+import org.lite.gateway.exception.ResourceNotFoundException;
+import org.lite.gateway.dto.ErrorCode;
+
 /**
  * Task executor for WORKFLOW_TRIGGER tasks
  * Triggers workflows by ID (reference-based workflows)
@@ -48,45 +51,50 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
         try {
             // Extract workflow ID from task configuration
             String workflowId = extractWorkflowId(task);
-            if (workflowId == null) {
+            if (workflowId == null || workflowId.isBlank()) {
                 log.warn("No workflow ID found in task configuration for task: {}", task.getName());
                 return updateExecutionStatus(execution, ExecutionStatus.FAILED, "No workflow ID configured", null);
             }
 
-            // Prepare workflow parameters
-            Map<String, Object> parameters = prepareWorkflowParameters(execution, task, agent);
-            
-            // Get timeout for task type
-            Duration timeout = getTimeoutForTaskType(task);
-            log.info("Triggering workflow {} with timeout of {} minutes (adjusted for type {}) and max retries of {}", 
-                    workflowId, timeout.toMinutes(), task.getTaskType(), task.getMaxRetries());
-            
-            return triggerWorkflow(workflowId, parameters, execution.getTeamId(),
-                    agent.getId(), task.getId(), execution, exchange)
-                    .timeout(timeout)
-                    .retryWhen(Retry.backoff(task.getMaxRetries(), Duration.ofSeconds(2))
-                            .maxBackoff(Duration.ofMinutes(1))
-                            .doBeforeRetry(retrySignal -> {
-                                log.warn("Retrying workflow execution for task {} (attempt {}/{}): {}", 
-                                    task.getName(), retrySignal.totalRetries() + 1, task.getMaxRetries(), 
-                                    retrySignal.failure().getMessage());
-                                execution.addRetryAttempt();
-                            }))
-                    .flatMap(workflowExecutionId -> {
-                        log.info("Workflow triggered successfully: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
-                        return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Workflow started", workflowExecutionId)
-                                .then(monitorWorkflowCompletion(workflowExecutionId, execution));
-                    })
-                    .onErrorResume(error -> {
-                        if (error instanceof java.util.concurrent.TimeoutException) {
-                            log.error("Workflow execution timed out after {} minutes for task: {}", timeout.toMinutes(), task.getName());
-                            execution.markAsTimeout();
-                            return agentExecutionRepository.save(execution).then(Mono.error(error));
-                        } else {
-                            log.error("Failed to trigger workflow for task: {} after {} retries", task.getName(), task.getMaxRetries(), error);
-                            return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-                                "Workflow trigger failed after " + task.getMaxRetries() + " retries: " + error.getMessage(), null);
-                        }
+            // Ensure workflow exists before proceeding
+            return linqWorkflowService.getWorkflow(workflowId)
+                    .switchIfEmpty(Mono.defer(() -> Mono.error(new ResourceNotFoundException("Workflow not found: " + workflowId, ErrorCode.WORKFLOW_NOT_FOUND))))
+                    .flatMap(existing -> {
+                        // Prepare workflow parameters
+                        Map<String, Object> parameters = prepareWorkflowParameters(execution, task, agent);
+                        
+                        // Get timeout for task type
+                        Duration timeout = getTimeoutForTaskType(task);
+                        log.info("Triggering workflow {} with timeout of {} minutes (adjusted for type {}) and max retries of {}", 
+                                workflowId, timeout.toMinutes(), task.getTaskType(), task.getMaxRetries());
+                        
+                        return triggerWorkflow(workflowId, parameters, execution.getTeamId(),
+                                agent.getId(), task.getId(), execution, exchange)
+                                .timeout(timeout)
+                                .retryWhen(Retry.backoff(task.getMaxRetries(), Duration.ofSeconds(2))
+                                        .maxBackoff(Duration.ofMinutes(1))
+                                        .doBeforeRetry(retrySignal -> {
+                                            log.warn("Retrying workflow execution for task {} (attempt {}/{}): {}", 
+                                                task.getName(), retrySignal.totalRetries() + 1, task.getMaxRetries(), 
+                                                retrySignal.failure().getMessage());
+                                            execution.addRetryAttempt();
+                                        }))
+                                .flatMap(workflowExecutionId -> {
+                                    log.info("Workflow triggered successfully: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
+                                    return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Workflow started", workflowExecutionId)
+                                            .then(monitorWorkflowCompletion(workflowExecutionId, execution));
+                                })
+                                .onErrorResume(error -> {
+                                    if (error instanceof java.util.concurrent.TimeoutException) {
+                                        log.error("Workflow execution timed out after {} minutes for task: {}", timeout.toMinutes(), task.getName());
+                                        execution.markAsTimeout();
+                                        return agentExecutionRepository.save(execution).then(Mono.error(error));
+                                    } else {
+                                        log.error("Failed to trigger workflow for task: {} after {} retries", task.getName(), task.getMaxRetries(), error);
+                                        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
+                                            "Workflow trigger failed after " + task.getMaxRetries() + " retries: " + error.getMessage(), null);
+                                    }
+                                });
                     });
                     
         } catch (Exception e) {
@@ -134,14 +142,18 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                         });
                     }
 
-                    // Merge additional parameters if provided
+                    // Merge additional parameters if provided (copy-on-write to avoid side-effects)
                     if (!parameters.isEmpty()) {
-                        Map<String, Object> existingParams = request.getQuery().getParams();
-                        if (existingParams != null) {
-                            existingParams.putAll(parameters);
-                        } else {
-                            request.getQuery().setParams(parameters);
+                        if (request.getQuery() == null) {
+                            request.setQuery(new LinqRequest.Query());
                         }
+                        Map<String, Object> existingParams = request.getQuery().getParams();
+                        java.util.Map<String, Object> mergedParams = new java.util.HashMap<>();
+                        if (existingParams != null) {
+                            mergedParams.putAll(existingParams);
+                        }
+                        mergedParams.putAll(parameters);
+                        request.getQuery().setParams(mergedParams);
                     }
 
                     // Set executedBy from the actual user who initiated the agent task  

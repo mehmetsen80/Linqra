@@ -208,7 +208,7 @@ public class AgentTask {
                     linqConfig != null &&
                             linqConfig.containsKey("query") &&
                             ((Map<?, ?>) linqConfig.get("query")).containsKey("workflowId");
-            case WORKFLOW_EMBEDDED ->
+            case WORKFLOW_EMBEDDED, WORKFLOW_EMBEDDED_ADHOC ->
                 // WORKFLOW_EMBEDDED tasks must have linq_config with embedded workflow steps
                     linqConfig != null &&
                             linqConfig.containsKey("query") &&

@@ -37,11 +37,6 @@ public interface AgentExecutionService {
     Flux<AgentExecution> getExecutionsByTeamAndStatus(String teamId, String status, int limit);
     
     /**
-     * Retry a failed execution if it's eligible for retry
-     */
-    Mono<AgentExecution> retryFailedExecution(String executionId, String teamId, String retriedBy);
-    
-    /**
      * Execute an ad-hoc task without storing it in database or creating execution records
      */
     Mono<Object> executeAdhocTask(AgentTask agentTask, String teamId, String executedBy, ServerWebExchange exchange);

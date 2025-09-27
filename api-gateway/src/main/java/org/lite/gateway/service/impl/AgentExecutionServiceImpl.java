@@ -7,13 +7,11 @@ import org.lite.gateway.enums.ExecutionTrigger;
 
 import org.lite.gateway.executor.WorkflowEmbeddedAgentTaskExecutor;
 import org.lite.gateway.executor.WorkflowTriggerAgentTaskExecutor;
+import org.lite.gateway.executor.WorkflowAdHocAgentTaskExecutor;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentExecutionRepository;
 import org.lite.gateway.service.AgentExecutionService;
-import org.lite.gateway.service.LinqWorkflowExecutionService;
-import org.lite.gateway.dto.LinqRequest;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 
@@ -40,8 +38,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
     private final AgentExecutionRepository agentExecutionRepository;
     private final WorkflowTriggerAgentTaskExecutor workflowTriggerExecutor;
     private final WorkflowEmbeddedAgentTaskExecutor workflowEmbeddedExecutor;
-    private final LinqWorkflowExecutionService workflowExecutionService;
-    private final ObjectMapper objectMapper;
+    private final WorkflowAdHocAgentTaskExecutor workflowAdhocExecutor;
     
     // ==================== EXECUTION MANAGEMENT ====================
     
@@ -153,56 +150,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                 .filter(execution -> teamId.equals(execution.getTeamId()))
                 .take(limit);
     }
-
-    // ==================== RETRY LOGIC ====================
     
-    /**
-     * Retry a failed execution if it's eligible for retry
-     */
-    public Mono<AgentExecution> retryFailedExecution(String executionId, String teamId, String retriedBy) {
-        log.info("Attempting to retry execution {} for team {}", executionId, teamId);
-        
-        return agentExecutionRepository.findById(executionId)
-                .filter(execution -> teamId.equals(execution.getTeamId()))
-                .switchIfEmpty(Mono.error(new RuntimeException("Execution not found or access denied")))
-                .flatMap(execution -> {
-                    if (!execution.canRetry()) {
-                        return Mono.error(new RuntimeException(
-                            String.format("Execution cannot be retried. Status: %s, Retry count: %d/%d", 
-                                execution.getStatus(), execution.getRetryCount(), execution.getMaxRetries())));
-                    }
-                    
-                    // Get the original task and agent
-                    return Mono.zip(
-                            agentRepository.findById(execution.getAgentId()),
-                            agentTaskRepository.findById(execution.getTaskId())
-                    ).flatMap(tuple -> {
-                        Agent agent = tuple.getT1();
-                        AgentTask task = tuple.getT2();
-                        
-                        // Reset execution for retry
-                        execution.setStatus(ExecutionStatus.RUNNING);
-                        execution.setResult(ExecutionResult.UNKNOWN);
-                        execution.setErrorMessage(null);
-                        execution.setErrorCode(null);
-                        execution.setStartedAt(LocalDateTime.now());
-                        execution.setCompletedAt(null);
-                        execution.addRetryAttempt();
-                        
-                        log.info("Retrying execution {} (attempt {}/{})", executionId, 
-                                execution.getRetryCount(), execution.getMaxRetries());
-                        
-                        return agentExecutionRepository.save(execution)
-                                .flatMap(savedExecution -> 
-                                    executeWorkflow(savedExecution, task, agent, null)
-                                            .then(Mono.just(savedExecution))
-                                );
-                    });
-                })
-                .doOnSuccess(execution -> log.info("Execution retry completed: {}", execution.getExecutionId()))
-                .doOnError(error -> log.error("Failed to retry execution {}: {}", executionId, error.getMessage()));
-    }
-
     // ==================== WORKFLOW INTEGRATION ====================
     
     /**
@@ -214,6 +162,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         return switch (task.getTaskType()) {
             case WORKFLOW_EMBEDDED -> workflowEmbeddedExecutor.executeTask(execution, task, agent, exchange);
             case WORKFLOW_TRIGGER -> workflowTriggerExecutor.executeTask(execution, task, agent, exchange);
+            default -> Mono.error(new IllegalArgumentException("Unsupported task type: " + task.getTaskType()));
             /*
             // Future task type executions (commented out for now)
             case API_CALL -> executeApiCallTask(execution, task, agent, exchange);
@@ -229,169 +178,16 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         };
     }
     
-    /**
-     * Execute an API call task
-     * TODO: Implement specific API call execution logic
-     */
-    private Mono<Void> executeApiCallTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing API call task: {}", task.getName());
-        // TODO: Implement API call execution logic using task.getApiConfig()
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "API_CALL task execution not yet implemented", null);
-    }
-    
-    /**
-     * Execute an LLM analysis task
-     * TODO: Implement LLM-specific execution logic
-     */
-    private Mono<Void> executeLlmAnalysisTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing LLM analysis task: {}", task.getName());
-        // TODO: Implement LLM analysis execution logic using task.getLinqConfig()
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "LLM_ANALYSIS task execution not yet implemented", null);
-    }
-    
-    /**
-     * Execute a vector operations task
-     * TODO: Implement Milvus vector operations logic
-     */
-    private Mono<Void> executeVectorOperationsTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing vector operations task: {}", task.getName());
-        // TODO: Implement vector operations execution logic for Milvus
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "VECTOR_OPERATIONS task execution not yet implemented", null);
-    }
-    
-    /**
-     * Execute a data processing task
-     * TODO: Implement data processing logic
-     */
-    private Mono<Void> executeDataProcessingTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing data processing task: {}", task.getName());
-        // TODO: Implement data processing execution logic
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "DATA_PROCESSING task execution not yet implemented", null);
-    }
-    
-    /**
-     * Execute a custom script task
-     * TODO: Implement script execution logic
-     */
-    private Mono<Void> executeCustomScriptTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing custom script task: {}", task.getName());
-        // TODO: Implement script execution using task.getScriptContent() and task.getScriptLanguage()
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "CUSTOM_SCRIPT task execution not yet implemented", null);
-    }
-    
-    /**
-     * Execute a notification task
-     * TODO: Implement notification logic
-     */
-    private Mono<Void> executeNotificationTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing notification task: {}", task.getName());
-        // TODO: Implement notification execution logic (email, SMS, webhook, etc.)
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "NOTIFICATION task execution not yet implemented", null);
-    }
-    
-    /**
-     * Execute a data sync task
-     * TODO: Implement data synchronization logic
-     */
-    private Mono<Void> executeDataSyncTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing data sync task: {}", task.getName());
-        // TODO: Implement data synchronization execution logic
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "DATA_SYNC task execution not yet implemented", null);
-    }
-    
-    /**
-     * Execute a monitoring task
-     * TODO: Implement monitoring logic
-     */
-    private Mono<Void> executeMonitoringTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing monitoring task: {}", task.getName());
-        // TODO: Implement monitoring execution logic (health checks, metrics collection, etc.)
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "MONITORING task execution not yet implemented", null);
-    }
-    
-    /**
-     * Execute a reporting task
-     * TODO: Implement reporting logic
-     */
-    private Mono<Void> executeReportingTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
-        log.info("Executing reporting task: {}", task.getName());
-        // TODO: Implement reporting execution logic (generate reports, analytics, etc.)
-        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-            "REPORTING task execution not yet implemented", null);
-    }
-    
-    /**
-     * Update execution status - using the abstract class method
-     */
-    private Mono<Void> updateExecutionStatus(AgentExecution execution, ExecutionStatus status, String message, String workflowExecutionId) {
-        execution.setStatus(status);
-        execution.setResult(status == ExecutionStatus.RUNNING ? ExecutionResult.UNKNOWN : 
-                           status == ExecutionStatus.COMPLETED ? ExecutionResult.SUCCESS : 
-                           status == ExecutionStatus.FAILED ? ExecutionResult.FAILURE : 
-                           ExecutionResult.UNKNOWN);
-        if (workflowExecutionId != null) {
-            execution.setWorkflowExecutionId(workflowExecutionId);
-        }
-        if (message != null) {
-            execution.setErrorMessage(message);
-        }
-        
-        return agentExecutionRepository.save(execution)
-                .then();
-    }
 
     @Override
     public Mono<Object> executeAdhocTask(AgentTask agentTask, String teamId, String executedBy, ServerWebExchange exchange) {
         log.info("Executing ad-hoc task: {} for team: {}", agentTask.getName(), teamId);
-        
-        // Validate task type - only WORKFLOW_EMBEDDED supported for ad-hoc execution
-        if (agentTask.getTaskType() != org.lite.gateway.enums.AgentTaskType.WORKFLOW_EMBEDDED) {
-            return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED tasks are supported for ad-hoc execution"));
+        if (agentTask.getTaskType() == null) {
+            return Mono.error(new IllegalArgumentException("taskType is required for ad-hoc execution"));
         }
-        
-        // Convert AgentTask to LinqRequest for workflow execution
-        if (agentTask.getLinqConfig() == null) {
-            return Mono.error(new IllegalArgumentException("Invalid task configuration: missing linq_config"));
+        if (agentTask.getTaskType() != org.lite.gateway.enums.AgentTaskType.WORKFLOW_EMBEDDED_ADHOC) {
+            return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED_ADHOC tasks are supported for ad-hoc execution"));
         }
-        
-        try {
-            // Create LinqRequest from the AgentTask's linq_config using ObjectMapper
-            LinqRequest linqRequest = objectMapper.convertValue(agentTask.getLinqConfig(), LinqRequest.class);
-            
-            // Set execution context
-            if (linqRequest.getQuery() != null && linqRequest.getQuery().getParams() != null) {
-                linqRequest.getQuery().getParams().put("teamId", teamId);
-                linqRequest.getQuery().getParams().put("userId", executedBy);
-            }
-            
-            // Set executedBy
-            linqRequest.setExecutedBy(executedBy);
-            
-            // Execute the workflow directly using the workflow execution service
-            log.info("Executing ad-hoc workflow with intent: {}", 
-                linqRequest.getQuery() != null ? linqRequest.getQuery().getIntent() : "unknown");
-            
-            return workflowExecutionService.executeWorkflow(linqRequest)
-                .map(response -> {
-                    log.info("Ad-hoc workflow execution completed successfully");
-                    return (Object) response;
-                })
-                .onErrorResume(error -> {
-                    log.error("Ad-hoc workflow execution failed: {}", error.getMessage());
-                    return Mono.error(new RuntimeException("Workflow execution failed: " + error.getMessage()));
-                });
-                
-        } catch (Exception e) {
-            log.error("Failed to convert AgentTask to LinqRequest: {}", e.getMessage());
-            return Mono.error(new IllegalArgumentException("Invalid task configuration: " + e.getMessage()));
-        }
+        return workflowAdhocExecutor.executeAdhocTask(agentTask, teamId, executedBy, exchange);
     }
 }

@@ -52,6 +52,10 @@ public class AgentTask {
     @Builder.Default
     private ExecutionTrigger executionTrigger = ExecutionTrigger.MANUAL; // How this task should be triggered
     
+    // Schedule bootstrap
+    @Builder.Default
+    private boolean scheduleOnStartup = true; // If true and CRON, auto-register Quartz on app startup
+    
     // Scheduling State (moved from Agent entity)
     private LocalDateTime nextRun;          // Next scheduled execution time for this task
     private LocalDateTime lastRun;          // Last execution time for this task
@@ -208,7 +212,7 @@ public class AgentTask {
                     linqConfig != null &&
                             linqConfig.containsKey("query") &&
                             ((Map<?, ?>) linqConfig.get("query")).containsKey("workflowId");
-            case WORKFLOW_EMBEDDED ->
+            case WORKFLOW_EMBEDDED, WORKFLOW_EMBEDDED_ADHOC ->
                 // WORKFLOW_EMBEDDED tasks must have linq_config with embedded workflow steps
                     linqConfig != null &&
                             linqConfig.containsKey("query") &&

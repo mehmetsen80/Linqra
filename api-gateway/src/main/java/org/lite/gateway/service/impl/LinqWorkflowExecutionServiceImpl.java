@@ -48,6 +48,22 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         Map<String, Object> globalParams = request.getQuery().getParams();
         WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
 
+        // Prefer teamId from params if present; otherwise fallback to auth context
+        Mono<String> teamIdMono = Mono.defer(() -> {
+            String teamFromParams = null;
+            if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                Object val = request.getQuery().getParams().get("teamId");
+                if (val != null) teamFromParams = String.valueOf(val);
+            }
+            if (teamFromParams != null && !teamFromParams.isBlank()) {
+                return Mono.just(teamFromParams);
+            }
+            return teamContextService.getTeamFromContext()
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Team context not found. Please ensure you are authenticated with a valid team.")));
+        });
+
         // Execute steps synchronously or asynchronously based on configuration
         Mono<LinqResponse> workflowMono = Mono.just(new LinqResponse());
         for (LinqRequest.Query.WorkflowStep step : steps) {
@@ -109,6 +125,17 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), context));
                 stepQuery.setPayload(resolvePlaceholders(step.getPayload(), context));
                 stepQuery.setToolConfig(step.getToolConfig());
+
+                // Merge global params (e.g., teamId, userId) so downstream services see them
+                Map<String, Object> mergedParams = new HashMap<>();
+                if (globalParams != null) {
+                    mergedParams.putAll(globalParams);
+                }
+                if (stepQuery.getParams() != null) {
+                    mergedParams.putAll(stepQuery.getParams());
+                }
+                stepQuery.setParams(mergedParams);
+
                 // Set the workflow steps in the query to enable caching
                 stepQuery.setWorkflow(steps);
                 stepRequest.setQuery(stepQuery);
@@ -117,10 +144,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 stepRequest.setExecutedBy(request.getExecutedBy());
 
                 // Execute the step
-                return teamContextService.getTeamFromContext()
-                    .switchIfEmpty(Mono.error(new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED, 
-                        "Team context not found. Please ensure you are authenticated with a valid team.")))
+                return teamIdMono
                     .flatMap(teamId -> {
                         log.info("Searching for tool with target: {} and team: {}", step.getTarget(), teamId);
                         return linqToolRepository.findByTargetAndTeamId(step.getTarget(), teamId)
@@ -181,7 +205,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         }
 
         return workflowMono.flatMap(response -> 
-            teamContextService.getTeamFromContext().map(teamId -> {
+            teamIdMono.map(teamId -> {
                 // Build WorkflowResult
                 LinqResponse.WorkflowResult workflowResult = new LinqResponse.WorkflowResult();
                 List<LinqResponse.WorkflowStep> stepResultList = steps.stream()
@@ -220,7 +244,16 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             LinqResponse.Metadata metadata = new LinqResponse.Metadata();
             metadata.setSource("workflow");
             metadata.setStatus("error");
-            metadata.setTeamId(teamContextService.getTeamFromContext().block());
+            // Try to use teamId from params on error path as well
+            String fallbackTeamId = null;
+            if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                Object val = request.getQuery().getParams().get("teamId");
+                if (val != null) fallbackTeamId = String.valueOf(val);
+            }
+            if (fallbackTeamId == null || fallbackTeamId.isBlank()) {
+                fallbackTeamId = teamContextService.getTeamFromContext().block();
+            }
+            metadata.setTeamId(fallbackTeamId);
             metadata.setCacheHit(false);
             metadata.setWorkflowMetadata(stepMetadata);
             errorResponse.setMetadata(metadata);
@@ -338,8 +371,6 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 .doOnError(error -> log.error("Error tracking workflow execution: {}", error.getMessage()));
         }
     }
-
-
 
     @Override
     public Flux<LinqWorkflowExecution> getWorkflowExecutions(String workflowId) {

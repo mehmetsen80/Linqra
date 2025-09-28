@@ -110,4 +110,11 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     public void invalidateKeyCache(String apiKey) {
         redisTemplate.delete(API_KEY_CACHE_PREFIX + apiKey);
     }
+
+    @Override
+    public Mono<ApiKey> getDefaultApiKeyForTeam(String teamId) {
+        return apiKeyRepository.findByTeamId(teamId)
+            .filter(key -> key.isEnabled() && (key.getExpiresAt() == null || key.getExpiresAt().isAfter(Instant.now())))
+            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No valid API key found for team")));
+    }
 } 

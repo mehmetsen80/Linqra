@@ -3,6 +3,7 @@ package org.lite.gateway.enums;
 public enum AgentTaskType {
     WORKFLOW_EMBEDDED,  // Execute embedded workflow steps directly
     WORKFLOW_TRIGGER,   // Trigger existing Linqra workflows by ID
+    WORKFLOW_EMBEDDED_ADHOC, // Execute ad-hoc embedded workflow (not persisted task)
     
     // Future task types (commented out for now)
     /*

@@ -516,7 +516,7 @@ function Workflows() {
                                                         <Badge bg="primary" className="ms-1 agent-indicator">
                                                             A
                                                         </Badge>
-                                                        <small className="text-muted ms-1">[Agent]</small>
+                                                       
                                                     </>
                                                 ) : null}
                                             </div>

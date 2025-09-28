@@ -7,9 +7,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.ApiKeyPair;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
+import org.lite.gateway.entity.ApiKey;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.ApiKeyContextService;
+import org.lite.gateway.service.ApiKeyService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -39,6 +41,9 @@ public class LinqMicroServiceImpl implements LinqMicroService {
 
     @NonNull
     private final ApiKeyContextService apiKeyContextService;
+
+    @NonNull
+    private final ApiKeyService apiKeyService;
 
     @Value("${server.ssl.enabled:true}")
     private boolean sslEnabled;
@@ -141,21 +146,29 @@ public class LinqMicroServiceImpl implements LinqMicroService {
             default -> throw new IllegalArgumentException("Unsupported action: " + action);
         };
 
+        // Prefer teamId from params; fallback to context
+        Mono<String> teamIdMono = Mono.defer(() -> {
+            if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                Object teamObj = request.getQuery().getParams().get("teamId");
+                if (teamObj != null) {
+                    return Mono.just(String.valueOf(teamObj));
+                }
+            }
+            return teamContextService.getTeamFromContext();
+        });
+
         return invokeService(method, url, request)
-                .flatMap(result ->
-                        teamContextService.getTeamFromContext()
-                                .map(teamId -> {
-                                    LinqResponse response = new LinqResponse();
-                                    response.setResult(result);
-                                    LinqResponse.Metadata metadata = new LinqResponse.Metadata();
-                                    metadata.setSource(target);
-                                    metadata.setStatus("success");
-                                    metadata.setTeamId(teamId);
-                                    metadata.setCacheHit(false);
-                                    response.setMetadata(metadata);
-                                    return response;
-                                })
-                );
+                .flatMap(result -> teamIdMono.map(teamId -> {
+                    LinqResponse response = new LinqResponse();
+                    response.setResult(result);
+                    LinqResponse.Metadata metadata = new LinqResponse.Metadata();
+                    metadata.setSource(target);
+                    metadata.setStatus("success");
+                    metadata.setTeamId(teamId);
+                    metadata.setCacheHit(false);
+                    response.setMetadata(metadata);
+                    return response;
+                }));
     }
 
     private String buildUrl(String target, String intent, Map<String, Object> params) {
@@ -168,6 +181,11 @@ public class LinqMicroServiceImpl implements LinqMicroService {
             for (Map.Entry<String, Object> entry : params.entrySet()) {
                 path = path.replace("{" + entry.getKey() + "}", entry.getValue().toString());
             }
+        }
+
+        // Normalize leading slash to avoid double slashes on /r/{target}/
+        if (path.startsWith("/")) {
+            path = path.substring(1);
         }
 
         // Special handling for api-gateway target - call API directly without /r/ prefix
@@ -198,23 +216,39 @@ public class LinqMicroServiceImpl implements LinqMicroService {
 
     private Mono<Object> invokeService(String method, String url, LinqRequest request) {
         log.info("invokeService called for URL: {}", url);
-        return apiKeyContextService.getApiKeyFromContext()
-                .doOnNext(apiKeyPair -> log.info("API key from context: {}", apiKeyPair != null ? "present" : "null"))
-                .doOnNext(apiKeyPair -> {
-                    if (apiKeyPair != null) {
-                        log.info("API key pair type: {}", apiKeyPair.getClass().getSimpleName());
-                        if (apiKeyPair instanceof ApiKeyPair) {
-                            ApiKeyPair keyPair = (ApiKeyPair) apiKeyPair;
-                            log.info("API key name: {}", keyPair.getName());
-                            log.info("API key key: {}", keyPair.getKey() != null ? "present" : "null");
-                        }
-                    }
-                })
-                .flatMap(apiKeyPair -> {
-                    ApiKeyPair keyPair = (ApiKeyPair) apiKeyPair;
-                    log.debug("Making {} request to {} with API key present", method, url);
-                    WebClient webClient = webClientBuilder.build();
+        Mono<?> keyFromContext = apiKeyContextService.getApiKeyFromContext()
+                .doOnNext(k -> log.info("Using API key from security context"))
+                .onErrorResume(e -> Mono.empty());
+        Mono<ApiKey> keyFromTeamParam = Mono.defer(() -> {
+            if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                Object teamObj = request.getQuery().getParams().get("teamId");
+                if (teamObj != null) {
+                    String teamId = String.valueOf(teamObj);
+                    log.info("Attempting to use default API key for team {}", teamId);
+                    return apiKeyService.getDefaultApiKeyForTeam(teamId)
+                            .doOnNext(k -> log.info("Using default API key for team {}", teamId));
+                }
+            }
+            return Mono.empty();
+        });
 
+        return Mono.firstWithValue(keyFromContext, keyFromTeamParam)
+                .switchIfEmpty(Mono.error(new org.springframework.web.server.ResponseStatusException(
+                        org.springframework.http.HttpStatus.UNAUTHORIZED, "No valid API key authentication found")))
+                .flatMap(apiKeyPairObj -> {
+                    String apiKeyValue;
+                    String apiKeyName;
+                    if (apiKeyPairObj instanceof ApiKeyPair pair) {
+                        apiKeyValue = pair.getKey();
+                        apiKeyName = pair.getName();
+                    } else if (apiKeyPairObj instanceof ApiKey key) {
+                        apiKeyValue = key.getKey();
+                        apiKeyName = key.getName();
+                    } else {
+                        return Mono.error(new RuntimeException("Unsupported API key type in context"));
+                    }
+
+                    WebClient webClient = webClientBuilder.build();
                     WebClient.RequestHeadersSpec<?> requestSpec = switch (method) {
                         case "GET" -> webClient.get().uri(url);
                         case "POST" -> webClient.post().uri(url)
@@ -231,8 +265,8 @@ public class LinqMicroServiceImpl implements LinqMicroService {
 
                     // Add API key header
                     requestSpec = requestSpec
-                            .header("x-api-key", keyPair.getKey())
-                            .header("x-api-key-name", keyPair.getName());
+                            .header("x-api-key", apiKeyValue)
+                            .header("x-api-key-name", apiKeyName);
                     
                     // Add executedBy header if present (for user context in workflow steps)
                     if (request.getExecutedBy() != null) {

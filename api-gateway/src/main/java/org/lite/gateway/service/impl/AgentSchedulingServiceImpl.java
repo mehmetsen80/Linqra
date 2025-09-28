@@ -5,6 +5,8 @@ import org.lite.gateway.enums.ExecutionTrigger;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.service.AgentSchedulingService;
+import org.lite.gateway.service.CronDescriptionService;
+import org.lite.gateway.service.AgentQuartzService;
 
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -21,6 +23,8 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
     
     private final AgentTaskRepository agentTaskRepository;
     private final AgentRepository agentRepository;
+    private final CronDescriptionService cronDescriptionService;
+    private final AgentQuartzService agentQuartzService;
     
     @Override
     public Mono<AgentTask> scheduleTask(String taskId, String cronExpression, String teamId) {
@@ -33,6 +37,7 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                         .thenReturn(task))
                 .flatMap(task -> {
                     task.setCronExpression(cronExpression);
+                    task.setCronDescription(cronDescriptionService.getCronDescription(cronExpression));
                     task.setExecutionTrigger(ExecutionTrigger.CRON);
                     task.setUpdatedBy("system");
                     
@@ -41,7 +46,14 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                         return Mono.error(new RuntimeException("Invalid execution trigger configuration for CRON scheduling"));
                     }
                     
-                    return agentTaskRepository.save(task);
+                    return agentTaskRepository.save(task)
+                            .doOnSuccess(saved -> {
+                                try {
+                                    agentQuartzService.scheduleTask(taskId, cronExpression, teamId, "scheduler");
+                                } catch (Exception e) {
+                                    log.error("Failed to register Quartz schedule for task {}: {}", taskId, e.getMessage());
+                                }
+                            });
                 })
                 .doOnSuccess(scheduledTask -> log.info("Task {} scheduled successfully", taskId))
                 .doOnError(error -> log.error("Failed to schedule task {}: {}", taskId, error.getMessage()));
@@ -58,6 +70,7 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                         .thenReturn(task))
                 .flatMap(task -> {
                     task.setCronExpression("");
+                    task.setCronDescription("");
                     task.setExecutionTrigger(ExecutionTrigger.MANUAL);
                     task.setUpdatedBy("system");
                     
@@ -66,7 +79,14 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                         return Mono.error(new RuntimeException("Invalid execution trigger configuration for MANUAL mode"));
                     }
                     
-                    return agentTaskRepository.save(task);
+                    return agentTaskRepository.save(task)
+                            .doOnSuccess(saved -> {
+                                try {
+                                    agentQuartzService.unscheduleTask(taskId);
+                                } catch (Exception e) {
+                                    log.error("Failed to unschedule Quartz job for task {}: {}", taskId, e.getMessage());
+                                }
+                            });
                 })
                 .doOnSuccess(unscheduledTask -> log.info("Task {} unscheduled successfully", taskId))
                 .doOnError(error -> log.error("Failed to unschedule task {}: {}", taskId, error.getMessage()));

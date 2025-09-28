@@ -27,6 +27,18 @@ class CronDescriptionServiceImplTest {
     }
 
     @Test
+    void testGetCronDescription_Every2Minutes() {
+        // Given
+        String cronExpression = "0 */2 * * * ?";
+
+        // When
+        String result = cronDescriptionService.getCronDescription(cronExpression);
+
+        // Then
+        assertEquals("Every 2 minutes at second 0", result);
+    }
+
+    @Test
     void testGetCronDescription_EveryHour() {
         // Given
         String cronExpression = "0 * * * * *";

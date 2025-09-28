@@ -13,7 +13,7 @@ Linqra introduces a new paradigm for AI deployment: an Enterprise AI App Store t
 
 ## Key Features
 
-### 🏪 AI App Store
+### 🏪 AI Agents
 Discover and deploy AI applications with enterprise-grade security and management capabilities. Our curated marketplace ensures quality and compatibility while providing seamless integration options.
 
 ### 🔐 Enterprise Gateway

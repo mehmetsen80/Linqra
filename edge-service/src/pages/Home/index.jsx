@@ -348,7 +348,7 @@ Content-Type: application/json
               </tr>
               <tr>
                 <td>Platform Capabilities</td>
-                <td>AI App Store with team/organization management, unified API Routes for both traditional APIs and Linq Protocol endpoints</td>
+                <td>AI Agents with team/organization management, unified API Routes for both traditional APIs and Linq Protocol endpoints</td>
                 <td>Protocol for tool interactions - No built-in app store or team management</td>
               </tr>
               <tr>

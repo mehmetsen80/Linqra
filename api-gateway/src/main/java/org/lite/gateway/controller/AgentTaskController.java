@@ -238,8 +238,7 @@ public class AgentTaskController {
                             authContext.getAgentId(), 
                             authContext.getTaskId(), 
                             authContext.getTeamId(), 
-                            authContext.getUsername(), 
-                            exchange)
+                            authContext.getUsername())
                     .map(execution -> {
                         Map<String, Object> response = Map.of(
                                 "executionId", execution.getExecutionId(),
@@ -273,8 +272,8 @@ public class AgentTaskController {
         return userContextService.getCurrentUsername(exchange)
                 .flatMap(username -> {
                     // Basic validation
-                    if (agentTask.getTaskType() != AgentTaskType.WORKFLOW_EMBEDDED) {
-                        return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED tasks are supported for ad-hoc execution"));
+                    if (agentTask.getTaskType() != AgentTaskType.WORKFLOW_EMBEDDED_ADHOC) {
+                        return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED_ADHOC tasks are supported for ad-hoc execution"));
                     }
                     
                     if (agentTask.getLinqConfig() == null) {
@@ -285,7 +284,7 @@ public class AgentTaskController {
                     return teamContextService.getTeamFromContext()
                         .flatMap(teamId -> {
                             log.info("Using current team {} for ad-hoc execution", teamId);
-                            return agentExecutionService.executeAdhocTask(agentTask, teamId, username, exchange);
+                            return agentExecutionService.executeAdhocTask(agentTask, teamId, username);
                         })
                         .switchIfEmpty(Mono.error(new IllegalArgumentException("No current team context found")));
                 })

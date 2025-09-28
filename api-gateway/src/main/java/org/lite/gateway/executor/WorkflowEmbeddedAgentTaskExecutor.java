@@ -13,7 +13,6 @@ import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.LinqWorkflowService;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
@@ -43,7 +42,7 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
     }
 
     @Override
-    public Mono<Void> executeTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
+    public Mono<Void> executeTask(AgentExecution execution, AgentTask task, Agent agent) {
         log.info("Executing WORKFLOW_EMBEDDED task: {} (execution: {})", task.getName(), execution.getExecutionId());
         
         try {
@@ -58,7 +57,7 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
             
             // For embedded workflows, we create a LinqRequest directly from the task's embedded steps
             return triggerWorkflow(task, parameters, execution.getTeamId(),
-                    agent.getId(), task.getId(), execution, exchange)
+                    agent.getId(), task.getId(), execution)
                     .timeout(timeout)
                     .retryWhen(Retry.backoff(task.getMaxRetries(), Duration.ofSeconds(2))
                             .maxBackoff(Duration.ofMinutes(1))
@@ -72,6 +71,11 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                         log.info("Embedded workflow triggered successfully: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
                         return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Embedded workflow started", workflowExecutionId)
                                 .then(monitorWorkflowCompletion(workflowExecutionId, execution));
+                    })
+                    .doOnError(error -> {
+                        // Ensure status is marked failed immediately on any error path
+                        String msg = error.getMessage() != null ? error.getMessage() : "Embedded workflow execution error";
+                        execution.markAsFailed(msg, "WORKFLOW_EXECUTION_FAILED");
                     })
                     .onErrorResume(error -> {
                         if (error instanceof java.util.concurrent.TimeoutException) {
@@ -95,9 +99,9 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
      * Trigger an embedded workflow using steps defined directly in the task
      */
     public Mono<String> triggerWorkflow(AgentTask task, Map<String, Object> parameters, String teamId,
-                                        String agentId, String agentTaskId, AgentExecution execution, ServerWebExchange exchange) {
+                                        String agentId, String agentTaskId, AgentExecution execution) {
         log.info("Triggering embedded workflow for team {} with agent context: agent={}, task={}", teamId, agentId, agentTaskId);
-
+        
         try {
             // The linq_config already contains a complete LinqRequest structure
             // We just need to convert it to a LinqRequest object and merge parameters

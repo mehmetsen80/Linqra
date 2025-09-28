@@ -12,7 +12,6 @@ import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.LinqWorkflowService;
-import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
@@ -41,10 +40,9 @@ public abstract class AgentTaskExecutor {
      * @param execution The agent execution context
      * @param task The task to execute
      * @param agent The agent executing the task
-     * @param exchange The server web exchange for context
      * @return A Mono that completes when the task execution is finished
      */
-    public abstract Mono<Void> executeTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange);
+    public abstract Mono<Void> executeTask(AgentExecution execution, AgentTask task, Agent agent);
     
     /**
      * Get timeout duration based on task type
@@ -53,7 +51,7 @@ public abstract class AgentTaskExecutor {
         int baseTimeoutMinutes = task.getTimeoutMinutes();
         
         return switch (task.getTaskType()) {
-            case WORKFLOW_EMBEDDED, WORKFLOW_TRIGGER -> 
+            case WORKFLOW_EMBEDDED, WORKFLOW_TRIGGER, WORKFLOW_EMBEDDED_ADHOC -> 
                 Duration.ofMinutes(baseTimeoutMinutes);
             /*
             // Future timeout adjustments for other task types (commented out for now)

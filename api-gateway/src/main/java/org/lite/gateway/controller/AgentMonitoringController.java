@@ -1,7 +1,6 @@
 package org.lite.gateway.controller;
 
 import org.lite.gateway.entity.Agent;
-import org.lite.gateway.entity.AgentExecution;
 import org.lite.gateway.service.AgentMonitoringService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

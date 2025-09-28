@@ -46,7 +46,7 @@ function Login() {
   return (
     <div className="auth-container">
       <div className="logo-container">
-        <img src="/images/noBgWhite.png" alt="Logo" />
+        <img src="/images/noBgWhiteOnlyLogo.png" alt="Logo" />
       </div>
       <Link to="/" className="home-link">
         <HiHome size={20} />

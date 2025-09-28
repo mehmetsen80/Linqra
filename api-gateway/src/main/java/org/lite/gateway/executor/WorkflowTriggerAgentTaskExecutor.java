@@ -13,7 +13,6 @@ import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.LinqWorkflowService;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
@@ -45,7 +44,7 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
     }
 
     @Override
-    public Mono<Void> executeTask(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
+    public Mono<Void> executeTask(AgentExecution execution, AgentTask task, Agent agent) {
         log.info("Executing WORKFLOW_TRIGGER task: {} (execution: {})", task.getName(), execution.getExecutionId());
         
         try {
@@ -69,7 +68,7 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                                 workflowId, timeout.toMinutes(), task.getTaskType(), task.getMaxRetries());
                         
                         return triggerWorkflow(workflowId, parameters, execution.getTeamId(),
-                                agent.getId(), task.getId(), execution, exchange)
+                                agent.getId(), task.getId(), execution)
                                 .timeout(timeout)
                                 .retryWhen(Retry.backoff(task.getMaxRetries(), Duration.ofSeconds(2))
                                         .maxBackoff(Duration.ofMinutes(1))
@@ -83,6 +82,10 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                                     log.info("Workflow triggered successfully: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
                                     return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Workflow started", workflowExecutionId)
                                             .then(monitorWorkflowCompletion(workflowExecutionId, execution));
+                                })
+                                .doOnError(error -> {
+                                    String msg = error.getMessage() != null ? error.getMessage() : "Workflow execution error";
+                                    execution.markAsFailed(msg, "WORKFLOW_EXECUTION_FAILED");
                                 })
                                 .onErrorResume(error -> {
                                     if (error instanceof java.util.concurrent.TimeoutException) {
@@ -107,7 +110,7 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
      * Trigger a workflow by its ID with agent context
      */
     public Mono<String> triggerWorkflow(String workflowId, Map<String, Object> parameters, String teamId,
-                                        String agentId, String agentTaskId, AgentExecution execution, ServerWebExchange exchange) {
+                                        String agentId, String agentTaskId, AgentExecution execution) {
         log.info("Triggering workflow {} for team {} with agent context: agent={}, task={}", workflowId, teamId, agentId, agentTaskId);
 
         return linqWorkflowService.getWorkflow(workflowId)

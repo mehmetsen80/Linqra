@@ -145,12 +145,12 @@ const authService = {
         console.log('Current redirect URI:', process.env.REACT_APP_OAUTH2_REDIRECT_URI);
         
         const response = await axiosInstance.post('/api/auth/sso/callback', { code });
-        console.log('SSO callback full response:', response);
-        console.log('SSO callback response data:', response.data);
+        // console.log('SSO callback full response:', response);
+        // console.log('SSO callback response data:', response.data);
         
         // Store the idToken if it exists in the response
         if (response.data.idToken) {
-            console.log('Storing idToken from backend response:', response.data.idToken);
+            // console.log('Storing idToken from backend response:', response.data.idToken);
             sessionStorage.setItem('id_token', response.data.idToken);
         } else {
             console.log('No idToken found in response. Response data:', response.data);

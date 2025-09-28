@@ -216,6 +216,11 @@ jobs:
           # Now set permissions
           sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin
           sudo chmod -R 755 /var/www/linqra/.kube/pgadmin
+          
+          # Ensure Postgres data dir exists and set ownership for container UID 999
+          sudo mkdir -p /var/www/linqra/.kube/postgres/data
+          sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
+          sudo chmod 700 /var/www/linqra/.kube/postgres/data
 
           # Ensure the sessions directory exists and is owned by pgadmin
           sudo mkdir -p /var/www/linqra/.kube/pgadmin/data/sessions

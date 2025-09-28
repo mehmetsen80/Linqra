@@ -152,5 +152,8 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     // Find scheduled tasks (CRON + AGENT_SCHEDULED)
     @Query("{'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}, 'enabled': true}")
     Flux<AgentTask> findScheduledTasks();
-    
+
+    // Find CRON tasks to schedule at startup
+    @Query("{'enabled': true, 'cronExpression': {$exists: true, $ne: null, $ne: ''}, 'executionTrigger': 'CRON', 'scheduleOnStartup': true}")
+    Flux<AgentTask> findCronTasksToScheduleOnStartup();
 } 

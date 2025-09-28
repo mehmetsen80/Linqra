@@ -20,17 +20,12 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     // Find tasks by agent
     Flux<AgentTask> findByAgentId(String agentId);
     
-    // NOTE: Task status is now managed by AgentExecution, not AgentTask
-    // Use AgentExecutionRepository to find tasks by execution status
-    
     // Find tasks by agent and type
     Flux<AgentTask> findByAgentIdAndTaskType(String agentId, AgentTaskType taskType);
     
     // Find tasks by team (via agent)
     @Query("{'agentId': {$in: ?0}}")
     Flux<AgentTask> findByAgentIds(List<String> agentIds);
-    
-    // NOTE: Task status removed - use AgentExecutionRepository for execution status
     
     // Find enabled tasks
     Flux<AgentTask> findByEnabledTrue();
@@ -77,8 +72,6 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     @Query("{'agentId': ?0, 'description': {$regex: ?1, $options: 'i'}}")
     Flux<AgentTask> findByAgentIdAndDescriptionContainingIgnoreCase(String agentId, String description);
     
-    // Dependencies-related methods removed - handled by orchestration layer
-    
     // Find tasks by created by
     Flux<AgentTask> findByCreatedBy(String createdBy);
     
@@ -96,12 +89,6 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     
     // Find tasks by agent updated after specific date
     Flux<AgentTask> findByAgentIdAndUpdatedAtAfter(String agentId, LocalDateTime date);
-    
-    // NOTE: lastExecuted field removed - use AgentExecutionRepository for execution history
-    
-    // NOTE: status and lastError fields removed - use AgentExecutionRepository for execution errors
-    
-    // NOTE: nextExecution field removed - calculate from cron expressions if needed
     
     // Count tasks by agent
     Mono<Long> countByAgentId(String agentId);
@@ -142,9 +129,6 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     @Query("{'agentId': ?0, 'nextRun': {$lte: ?1}, 'enabled': true, 'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}}")
     Flux<AgentTask> findTasksReadyToRunByAgent(String agentId, LocalDateTime now);
     
-    // Find tasks by team that need to run soon (requires join with Agent)
-    // Note: This will need to be implemented in the service layer with a join
-    
     // Find tasks that haven't run recently (for health checks)
     @Query("{'lastRun': {$lt: ?0}}")
     Flux<AgentTask> findTasksByLastRunBefore(LocalDateTime date);
@@ -169,5 +153,4 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     @Query("{'executionTrigger': {$in: ['CRON', 'AGENT_SCHEDULED']}, 'enabled': true}")
     Flux<AgentTask> findScheduledTasks();
     
-    // NOTE: lastExecuted field removed - use AgentExecutionRepository for execution ordering
 } 

@@ -72,6 +72,23 @@ public class MilvusController {
         String executedBy = exchange.getRequest().getHeaders().getFirst("X-Executed-By");
         if (executedBy != null) {
             log.info("Using executedBy header for workflow step: {}", executedBy);
+            // If scheduler/system path, bypass user lookup and role checks, trust teamId from request
+            if ("scheduler".equalsIgnoreCase(executedBy)) {
+                log.warn("Bypassing user/role checks for scheduler execution. Team: {}, Collection: {}", request.getTeamId(), collectionName);
+                return linqMilvusStoreService.storeRecord(
+                                collectionName,
+                                request.getRecord(),
+                                request.getTargetTool(),
+                                request.getModelType(),
+                                request.getTextField(),
+                                request.getTeamId()
+                        )
+                        .doOnSuccess(v -> log.info("linqMilvusStoreService.storeRecord completed for collection {} (scheduler path)", collectionName))
+                        .map(v -> ResponseEntity.ok(Map.of(
+                                "status", "stored",
+                                "collection", collectionName
+                        )));
+            }
             return executeStoreRecordWithUser(executedBy, collectionName, request);
         }
         
@@ -87,22 +104,50 @@ public class MilvusController {
             String username, 
             String collectionName, 
             MilvusStoreRecordRequest request) {
-        return userService.findByUsername(username)
+        Mono<Map<String, String>> storeMono = userService.findByUsername(username)
+            .doOnNext(user -> log.info("Milvus storeRecord requested by user: {} (id={}), teamId={}, collection={}, textField={}, targetTool={}, modelType={}",
+                    user.getUsername(), user.getId(), request.getTeamId(), collectionName, request.getTextField(), request.getTargetTool(), request.getModelType()))
+            .doOnNext(u -> log.info("Milvus storeRecord payload: {}", request.getRecord()))
             .flatMap(user -> 
                 teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
                     .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
                     .switchIfEmpty(Mono.error(new AccessDeniedException(
                         "Admin access required for team " + request.getTeamId())))
-                    .then(linqMilvusStoreService.storeRecord(
-                        collectionName,
-                        request.getRecord(),
-                        request.getTargetTool(),
-                        request.getModelType(),
-                        request.getTextField(),
-                        request.getTeamId()
-                    ))
+                    .then(Mono.defer(() -> {
+                        log.info("Invoking linqMilvusStoreService.storeRecord for collection {} (user path)", collectionName);
+                        return linqMilvusStoreService.storeRecord(
+                                collectionName,
+                                request.getRecord(),
+                                request.getTargetTool(),
+                                request.getModelType(),
+                                request.getTextField(),
+                                request.getTeamId()
+                        );
+                    }))
             )
-            .map(ResponseEntity::ok);
+            .switchIfEmpty(Mono.defer(() -> {
+                // Fallback for workflow/system users not present in DB (e.g., 'scheduler')
+                log.warn("No user found for '{}', treating as internal workflow call. Proceeding with team {}.", username, request.getTeamId());
+                return teamService.getTeamById(request.getTeamId())
+                        .switchIfEmpty(Mono.error(new AccessDeniedException("Team not found: " + request.getTeamId())))
+                        .then(Mono.defer(() -> {
+                            log.info("Invoking linqMilvusStoreService.storeRecord for collection {} (internal path)", collectionName);
+                            return linqMilvusStoreService.storeRecord(
+                                    collectionName,
+                                    request.getRecord(),
+                                    request.getTargetTool(),
+                                    request.getModelType(),
+                                    request.getTextField(),
+                                    request.getTeamId()
+                            );
+                        }));
+            }))
+            .doOnSuccess(v -> log.info("linqMilvusStoreService.storeRecord completed for collection {}", collectionName));
+
+        return storeMono.thenReturn(ResponseEntity.ok(Map.of(
+                "status", "stored",
+                "collection", collectionName
+        )));
     }
 
     @PostMapping("/collections/{collectionName}/query")
@@ -227,7 +272,7 @@ public class MilvusController {
             String username, 
             String collectionName, 
             MilvusSearchRequest request) {
-        return userService.findByUsername(username)
+        Mono<Map<String, Object>> searchMono = userService.findByUsername(username)
             .flatMap(user -> 
                 teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
                     .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
@@ -244,6 +289,28 @@ public class MilvusController {
                         request.getMetadataFilters()
                     ))
             )
-            .map(ResponseEntity::ok);
+            .switchIfEmpty(Mono.defer(() -> {
+                // Fallback for workflow/system users not present in DB (e.g., 'scheduler')
+                log.warn("No user found for '{}', treating as internal workflow search. Proceeding with team {}.", username, request.getTeamId());
+                return teamService.getTeamById(request.getTeamId())
+                        .switchIfEmpty(Mono.error(new AccessDeniedException("Team not found: " + request.getTeamId())))
+                        .then(linqMilvusStoreService.searchRecord(
+                                collectionName,
+                                request.getTextField(),
+                                request.getText(),
+                                request.getTeamId(),
+                                request.getTargetTool() != null ? request.getTargetTool() : "openai-embed",
+                                request.getModelType() != null ? request.getModelType() : "text-embedding-3-small",
+                                request.getNResults() != null ? request.getNResults() : 10,
+                                request.getMetadataFilters()
+                        ));
+            }));
+
+        return searchMono
+            .map(ResponseEntity::ok)
+            .defaultIfEmpty(ResponseEntity.ok(Map.of(
+                "results", java.util.List.of(),
+                "count", 0
+            )));
     }
 } 

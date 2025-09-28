@@ -1,10 +1,13 @@
 package org.lite.gateway.controller;
 
+import org.lite.gateway.dto.AgentSchedulingRequest;
 import org.lite.gateway.entity.AgentTask;
 import org.lite.gateway.service.AgentSchedulingService;
+import org.lite.gateway.service.AgentAuthContextService;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
@@ -14,24 +17,26 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/tasks/scheduling")
+@RequestMapping("/api/agent-tasks/scheduling")
 @RequiredArgsConstructor
 @Slf4j
 public class AgentSchedulingController {
     
     private final AgentSchedulingService agentSchedulingService;
+    private final AgentAuthContextService agentAuthContextService;
     
     // ==================== TASK SCHEDULING OPERATIONS ====================
     
     @PostMapping("/{taskId}/schedule")
     public Mono<ResponseEntity<AgentTask>> scheduleTask(
             @PathVariable String taskId,
-            @RequestParam String cronExpression,
-            @RequestParam String teamId) {
+            @RequestBody AgentSchedulingRequest request,
+            ServerWebExchange exchange) {
         
-        log.info("Scheduling task {} with cron: {} for team {}", taskId, cronExpression, teamId);
+        log.info("Scheduling task {} with cron via body for authorized agent", taskId);
         
-        return agentSchedulingService.scheduleTask(taskId, cronExpression, teamId)
+        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+                .flatMap(auth -> agentSchedulingService.scheduleTask(taskId, request.getCronExpression(), auth.getTeamId()))
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }
@@ -39,11 +44,12 @@ public class AgentSchedulingController {
     @PostMapping("/{taskId}/unschedule")
     public Mono<ResponseEntity<AgentTask>> unscheduleTask(
             @PathVariable String taskId,
-            @RequestParam String teamId) {
+            ServerWebExchange exchange) {
         
-        log.info("Unscheduling task {} for team {}", taskId, teamId);
+        log.info("Unscheduling task {} for authorized agent", taskId);
         
-        return agentSchedulingService.unscheduleTask(taskId, teamId)
+        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+                .flatMap(auth -> agentSchedulingService.unscheduleTask(taskId, auth.getTeamId()))
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.badRequest().build());
     }

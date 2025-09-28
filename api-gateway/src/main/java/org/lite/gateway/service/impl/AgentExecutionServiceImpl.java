@@ -23,7 +23,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-import org.springframework.web.server.ServerWebExchange;
 import org.lite.gateway.enums.ExecutionType;
 import org.lite.gateway.enums.ExecutionStatus;
 import org.lite.gateway.enums.ExecutionResult;
@@ -43,7 +42,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
     // ==================== EXECUTION MANAGEMENT ====================
     
     @Override
-    public Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy, ServerWebExchange exchange) {
+    public Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy) {
         log.info("Starting execution of task {} for agent {} in team {}", taskId, agentId, teamId);
         
         return Mono.zip(
@@ -95,7 +94,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                     .build();
             
             return agentExecutionRepository.save(execution)
-            .then(executeWorkflow(execution, task, agent, exchange))
+            .then(executeWorkflow(execution, task, agent))
             .thenReturn(execution)  // Return the execution object immediately
             .onErrorResume(error -> {
                 // ERROR CASE - Only update execution status
@@ -156,31 +155,18 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
     /**
      * Execute the task based on its type using dedicated executors
      */
-    private Mono<Void> executeWorkflow(AgentExecution execution, AgentTask task, Agent agent, ServerWebExchange exchange) {
+    private Mono<Void> executeWorkflow(AgentExecution execution, AgentTask task, Agent agent) {
         log.info("Executing task: {} (type: {}, execution: {})", task.getName(), task.getTaskType(), execution.getExecutionId());
         
         return switch (task.getTaskType()) {
-            case WORKFLOW_EMBEDDED -> workflowEmbeddedExecutor.executeTask(execution, task, agent, exchange);
-            case WORKFLOW_TRIGGER -> workflowTriggerExecutor.executeTask(execution, task, agent, exchange);
+            case WORKFLOW_EMBEDDED -> workflowEmbeddedExecutor.executeTask(execution, task, agent);
+            case WORKFLOW_TRIGGER -> workflowTriggerExecutor.executeTask(execution, task, agent);
             default -> Mono.error(new IllegalArgumentException("Unsupported task type: " + task.getTaskType()));
-            /*
-            // Future task type executions (commented out for now)
-            case API_CALL -> executeApiCallTask(execution, task, agent, exchange);
-            case LLM_ANALYSIS -> executeLlmAnalysisTask(execution, task, agent, exchange);
-            case VECTOR_OPERATIONS -> executeVectorOperationsTask(execution, task, agent, exchange);
-            case DATA_PROCESSING -> executeDataProcessingTask(execution, task, agent, exchange);
-            case CUSTOM_SCRIPT -> executeCustomScriptTask(execution, task, agent, exchange);
-            case NOTIFICATION -> executeNotificationTask(execution, task, agent, exchange);
-            case DATA_SYNC -> executeDataSyncTask(execution, task, agent, exchange);
-            case MONITORING -> executeMonitoringTask(execution, task, agent, exchange);
-            case REPORTING -> executeReportingTask(execution, task, agent, exchange);
-            */
         };
     }
     
-
     @Override
-    public Mono<Object> executeAdhocTask(AgentTask agentTask, String teamId, String executedBy, ServerWebExchange exchange) {
+    public Mono<Object> executeAdhocTask(AgentTask agentTask, String teamId, String executedBy) {
         log.info("Executing ad-hoc task: {} for team: {}", agentTask.getName(), teamId);
         if (agentTask.getTaskType() == null) {
             return Mono.error(new IllegalArgumentException("taskType is required for ad-hoc execution"));
@@ -188,6 +174,6 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         if (agentTask.getTaskType() != org.lite.gateway.enums.AgentTaskType.WORKFLOW_EMBEDDED_ADHOC) {
             return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED_ADHOC tasks are supported for ad-hoc execution"));
         }
-        return workflowAdhocExecutor.executeAdhocTask(agentTask, teamId, executedBy, exchange);
+        return workflowAdhocExecutor.executeAdhocTask(agentTask, teamId, executedBy, null);
     }
 }

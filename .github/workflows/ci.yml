@@ -231,10 +231,10 @@ jobs:
             sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
             sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
 
-            # Ensure Postgres data dir exists and set ownership for container UID 999
-            sudo mkdir -p /var/www/linqra/.kube/postgres/data
-            sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
-            sudo chmod 700 /var/www/linqra/.kube/postgres/data
+            # # Ensure Postgres data dir exists and set ownership for container UID 999
+            # sudo mkdir -p /var/www/linqra/.kube/postgres/data
+            # sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
+            # sudo chmod 700 /var/www/linqra/.kube/postgres/data
 
             # Set correct permissions for mongo-keyfile
             if [ -f /var/www/linqra/.kube/mongodb/mongo-keyfile ]; then
@@ -287,6 +287,12 @@ jobs:
             # Ensure the Docker network exists
             echo 'Ensuring the Docker network exists'
             sudo docker network ls | grep -q linqra-network || sudo docker network create linqra-network
+
+            # Ensure Postgres data directory exists with correct permissions
+            echo 'Setting up Postgres data directory'
+            sudo mkdir -p /var/www/linqra/.kube/postgres/data
+            sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
+            sudo chmod 700 /var/www/linqra/.kube/postgres/data
 
             # Build and start containers
             echo 'Building and starting containers'

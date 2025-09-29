@@ -18,7 +18,7 @@ services:
       timeout: 3s
       retries: 3
     volumes:
-      - ./.kube/postgres/data/:/var/lib/postgresql/data
+      - ./.kube/postgres/data/:/var/lib/postgresql/pgdata
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak

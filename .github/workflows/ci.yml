@@ -210,23 +210,6 @@ jobs:
             sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
           fi
 
-          # Ensure the parent directory exists
-          sudo mkdir -p /var/www/linqra/.kube/pgadmin/data
-
-          # Now set permissions
-          sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin
-          sudo chmod -R 755 /var/www/linqra/.kube/pgadmin
-          
-          # Ensure Postgres data dir exists and set ownership for container UID 999
-          sudo mkdir -p /var/www/linqra/.kube/postgres/data
-          sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
-          sudo chmod 700 /var/www/linqra/.kube/postgres/data
-
-          # Ensure the sessions directory exists and is owned by pgadmin
-          sudo mkdir -p /var/www/linqra/.kube/pgadmin/data/sessions
-          sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
-          sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
-
           echo "About to run SSH block"
           ssh $EC2_USERNAME@$EC2_HOST "
             # Set permissions
@@ -234,6 +217,24 @@ jobs:
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
             sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;
             sudo find /var/www/linqra/keys -type f ! -name 'mongo-keyfile' -exec chmod 600 {} \;
+
+            # Ensure the parent directory exists
+            sudo mkdir -p /var/www/linqra/.kube/pgadmin/data
+
+            # Now set permissions
+            sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin
+            sudo chmod -R 755 /var/www/linqra/.kube/pgadmin
+ 
+
+            # Ensure the sessions directory exists and is owned by pgadmin
+            sudo mkdir -p /var/www/linqra/.kube/pgadmin/data/sessions
+            sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
+            sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
+
+            # Ensure Postgres data dir exists and set ownership for container UID 999
+            sudo mkdir -p /var/www/linqra/.kube/postgres/data
+            sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
+            sudo chmod 700 /var/www/linqra/.kube/postgres/data
 
             # Set correct permissions for mongo-keyfile
             if [ -f /var/www/linqra/.kube/mongodb/mongo-keyfile ]; then

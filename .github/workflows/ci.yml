@@ -180,6 +180,7 @@ jobs:
               --exclude 'mongodb/data3/' \
               --exclude 'postgres/data/' \
               --exclude 'pgadmin/data/' \
+              --exclude 'keycloak/data/' \
               --exclude 'chroma/data/' \
               --exclude 'milvus/data/' \
               --exclude 'etcd/data/' \
@@ -191,23 +192,6 @@ jobs:
           fi
           if [ -d "artifacts/scripts-config" ]; then
             rsync -avz --delete --rsync-path="sudo rsync" artifacts/scripts-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/scripts/
-          fi
-
-          # Set correct permissions for pgadmin
-          if [ -d /var/www/linqra/.kube/pgadmin/data ]; then
-            sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin/data
-            sudo chmod -R 755 /var/www/linqra/.kube/pgadmin/data
-          fi
-
-          # Set correct permissions for MongoDB
-          for d in data1 data2 data3; do
-            if [ -d /var/www/linqra/.kube/mongodb/$d ]; then
-              sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/$d
-            fi
-          done
-          if [ -f /var/www/linqra/.kube/mongodb/mongo-keyfile ]; then
-            sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
-            sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
           fi
 
           echo "About to run SSH block"
@@ -231,11 +215,13 @@ jobs:
             sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
             sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
 
-            # # Ensure Postgres data dir exists and set ownership for container UID 999
-            # sudo mkdir -p /var/www/linqra/.kube/postgres/data
-            # sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
-            # sudo chmod 700 /var/www/linqra/.kube/postgres/data
-
+            # Set correct permissions for MongoDB data directories
+            for d in data1 data2 data3; do
+              if [ -d /var/www/linqra/.kube/mongodb/\$d ]; then
+                sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/\$d
+              fi
+            done
+            
             # Set correct permissions for mongo-keyfile
             if [ -f /var/www/linqra/.kube/mongodb/mongo-keyfile ]; then
               sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
@@ -288,11 +274,18 @@ jobs:
             echo 'Ensuring the Docker network exists'
             sudo docker network ls | grep -q linqra-network || sudo docker network create linqra-network
 
-            # Ensure Postgres data directory exists with correct permissions
+            # Ensure Postgres data directory exists with correct permissions (only if empty)
             echo 'Setting up Postgres data directory'
-            sudo mkdir -p /var/www/linqra/.kube/postgres/data
-            sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
-            sudo chmod 700 /var/www/linqra/.kube/postgres/data
+            if [ ! -d /var/www/linqra/.kube/postgres/data ] || [ -z "$(ls -A /var/www/linqra/.kube/postgres/data)" ]; then
+              echo 'Creating new Postgres data directory'
+              sudo mkdir -p /var/www/linqra/.kube/postgres/data
+              sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
+              sudo chmod 700 /var/www/linqra/.kube/postgres/data
+            else
+              echo 'Postgres data directory exists, fixing permissions only'
+              sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
+              sudo chmod 700 /var/www/linqra/.kube/postgres/data
+            fi
 
             # Build and start containers
             echo 'Building and starting containers'

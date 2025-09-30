@@ -196,24 +196,28 @@ jobs:
 
           echo "About to run SSH block"
           ssh $EC2_USERNAME@$EC2_HOST "
-            # Set permissions
+            # Set basic permissions
             sudo chown -R ubuntu:ubuntu /var/www/linqra
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
             sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;
             sudo find /var/www/linqra/keys -type f ! -name 'mongo-keyfile' -exec chmod 600 {} \;
 
-            # Ensure the parent directory exists
-            sudo mkdir -p /var/www/linqra/.kube/pgadmin/data
-
-            # Now set permissions
-            sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin
-            sudo chmod -R 755 /var/www/linqra/.kube/pgadmin
- 
-
-            # Ensure the sessions directory exists and is owned by pgadmin
-            sudo mkdir -p /var/www/linqra/.kube/pgadmin/data/sessions
-            sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
-            sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
+            # ========================================
+            # CRITICAL: Protect data directories FIRST before any other operations
+            # ========================================
+            
+            # Ensure Postgres data directory exists with correct permissions
+            echo 'Setting up Postgres data directory'
+            if [ ! -d /var/www/linqra/.kube/postgres/data ] || [ -z \"\$(ls -A /var/www/linqra/.kube/postgres/data)\" ]; then
+              echo 'Creating new Postgres data directory'
+              sudo mkdir -p /var/www/linqra/.kube/postgres/data
+              sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
+              sudo chmod 700 /var/www/linqra/.kube/postgres/data
+            else
+              echo 'Postgres data directory exists, fixing permissions only'
+              sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
+              sudo chmod 700 /var/www/linqra/.kube/postgres/data
+            fi
 
             # Set correct permissions for MongoDB data directories
             for d in data1 data2 data3; do
@@ -227,6 +231,16 @@ jobs:
               sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
               sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
             fi
+
+            # Ensure PgAdmin directories exist with correct permissions
+            sudo mkdir -p /var/www/linqra/.kube/pgadmin/data
+            sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin
+            sudo chmod -R 755 /var/www/linqra/.kube/pgadmin
+
+            # Ensure the sessions directory exists and is owned by pgadmin
+            sudo mkdir -p /var/www/linqra/.kube/pgadmin/data/sessions
+            sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
+            sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
 
             # Ensure scripts are executable
             sudo chmod +x /var/www/linqra/scripts/*.sh
@@ -262,9 +276,10 @@ jobs:
             echo 'Stopping running containers'
             sudo docker compose stop
 
-            # Prune unused images/containers/volumes/networks
-            echo 'Pruning unused images/containers/volumes/networks'
-            sudo docker system prune -a -f
+            # Prune unused images and containers (but preserve volumes and networks)
+            echo 'Pruning unused images and containers'
+            sudo docker image prune -a -f
+            sudo docker container prune -f
 
             # Check disk usage
             echo 'Checking disk usage'
@@ -273,19 +288,6 @@ jobs:
             # Ensure the Docker network exists
             echo 'Ensuring the Docker network exists'
             sudo docker network ls | grep -q linqra-network || sudo docker network create linqra-network
-
-            # Ensure Postgres data directory exists with correct permissions (only if empty)
-            echo 'Setting up Postgres data directory'
-            if [ ! -d /var/www/linqra/.kube/postgres/data ] || [ -z "$(ls -A /var/www/linqra/.kube/postgres/data)" ]; then
-              echo 'Creating new Postgres data directory'
-              sudo mkdir -p /var/www/linqra/.kube/postgres/data
-              sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
-              sudo chmod 700 /var/www/linqra/.kube/postgres/data
-            else
-              echo 'Postgres data directory exists, fixing permissions only'
-              sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
-              sudo chmod 700 /var/www/linqra/.kube/postgres/data
-            fi
 
             # Build and start containers
             echo 'Building and starting containers'

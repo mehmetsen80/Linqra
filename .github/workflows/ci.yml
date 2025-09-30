@@ -173,8 +173,19 @@ jobs:
           scp -v artifacts/root-pom/pom.xml $EC2_USERNAME@$EC2_HOST:/var/www/linqra/pom.xml
 
           # .kube, keys, and scripts (if needed, use scp or rsync as appropriate)
+          # CRITICAL: Protect all data directories from deletion during rsync
           if [ -d "artifacts/kube-config" ]; then
             rsync -avz --delete \
+              --filter='protect mongodb/data1/***' \
+              --filter='protect mongodb/data2/***' \
+              --filter='protect mongodb/data3/***' \
+              --filter='protect postgres/data/***' \
+              --filter='protect pgadmin/data/***' \
+              --filter='protect keycloak/data/***' \
+              --filter='protect chroma/data/***' \
+              --filter='protect milvus/data/***' \
+              --filter='protect etcd/data/***' \
+              --filter='protect minio/data/***' \
               --exclude 'mongodb/data1/' \
               --exclude 'mongodb/data2/' \
               --exclude 'mongodb/data3/' \

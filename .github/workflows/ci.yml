@@ -226,22 +226,20 @@ jobs:
             sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;
             sudo find /var/www/linqra/keys -type f ! -name 'mongo-keyfile' -exec chmod 600 {} \;
 
-            # Create edge-service .env on EC2 (not stored in repo)
-            if [ ! -d /var/www/linqra/edge-service ]; then echo 'edge-service directory not found at /var/www/linqra/edge-service'; exit 1; fi
-            sudo bash -lc 'printf "%s\\n" \
-              "VITE_MONGODB_URI=${{ secrets.VITE_MONGODB_URI }}" \
-              "VITE_MONGODB_DB_NAME=${{ secrets.VITE_MONGODB_DB_NAME }}" \
-              "NODE_ENV=production" \
-              "JWT_SECRET=${{ secrets.JWT_SECRET }}" \
-              "VITE_WS_URL=${{ secrets.VITE_WS_URL }}" \
-              "VITE_API_GATEWAY_URL=${{ secrets.VITE_API_GATEWAY_URL }}" \
-              "REACT_APP_KEYCLOAK_URL=${{ secrets.REACT_APP_KEYCLOAK_URL }}" \
-              "REACT_APP_KEYCLOAK_REALM=${{ secrets.REACT_APP_KEYCLOAK_REALM }}" \
-              "REACT_APP_KEYCLOAK_CLIENT_ID=${{ secrets.REACT_APP_KEYCLOAK_CLIENT_ID }}" \
-              "VITE_API_KEY=${{ secrets.VITE_API_KEY }}" \
-              "VITE_API_KEY_NAME=${{ secrets.VITE_API_KEY_NAME }}" \
-              > /var/www/linqra/edge-service/.env'
-            sudo chmod 600 /var/www/linqra/edge-service/.env
+              # Create edge-service .env on EC2 (not stored in repo)
+              if [ ! -d /var/www/linqra/edge-service ]; then echo 'edge-service directory not found at /var/www/linqra/edge-service'; exit 1; fi
+              echo "VITE_MONGODB_URI=${{ secrets.VITE_MONGODB_URI }}" > /var/www/linqra/edge-service/.env
+              echo "VITE_MONGODB_DB_NAME=${{ secrets.VITE_MONGODB_DB_NAME }}" >> /var/www/linqra/edge-service/.env
+              echo "NODE_ENV=production" >> /var/www/linqra/edge-service/.env
+              echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> /var/www/linqra/edge-service/.env
+              echo "VITE_WS_URL=${{ secrets.VITE_WS_URL }}" >> /var/www/linqra/edge-service/.env
+              echo "VITE_API_GATEWAY_URL=${{ secrets.VITE_API_GATEWAY_URL }}" >> /var/www/linqra/edge-service/.env
+              echo "REACT_APP_KEYCLOAK_URL=${{ secrets.REACT_APP_KEYCLOAK_URL }}" >> /var/www/linqra/edge-service/.env
+              echo "REACT_APP_KEYCLOAK_REALM=${{ secrets.REACT_APP_KEYCLOAK_REALM }}" >> /var/www/linqra/edge-service/.env
+              echo "REACT_APP_KEYCLOAK_CLIENT_ID=${{ secrets.REACT_APP_KEYCLOAK_CLIENT_ID }}" >> /var/www/linqra/edge-service/.env
+              echo "VITE_API_KEY=${{ secrets.VITE_API_KEY }}" >> /var/www/linqra/edge-service/.env
+              echo "VITE_API_KEY_NAME=${{ secrets.VITE_API_KEY_NAME }}" >> /var/www/linqra/edge-service/.env
+              sudo chmod 600 /var/www/linqra/edge-service/.env
 
             # ========================================
             # CRITICAL: Protect data directories FIRST before any other operations

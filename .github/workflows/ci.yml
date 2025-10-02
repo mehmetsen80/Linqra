@@ -228,7 +228,7 @@ jobs:
 
             # Create edge-service .env on EC2 (not stored in repo)
             if [ ! -d /var/www/linqra/edge-service ]; then echo 'edge-service directory not found at /var/www/linqra/edge-service'; exit 1; fi
-            sudo bash -lc 'printf "%s\n" \
+            sudo bash -lc 'printf "%s\\n" \
               "VITE_MONGODB_URI=${{ secrets.VITE_MONGODB_URI }}" \
               "VITE_MONGODB_DB_NAME=${{ secrets.VITE_MONGODB_DB_NAME }}" \
               "NODE_ENV=production" \

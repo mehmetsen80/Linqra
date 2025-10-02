@@ -108,6 +108,7 @@ jobs:
           REACT_APP_KEYCLOAK_CLIENT_ID=${{ secrets.REACT_APP_KEYCLOAK_CLIENT_ID }}
           VITE_API_KEY=${{ secrets.VITE_API_KEY }}
           VITE_API_KEY_NAME=${{ secrets.VITE_API_KEY_NAME }}
+          KEYCLOAK_CLIENT_SECRET=${{ secrets.KEYCLOAK_CLIENT_SECRET }}
           EOF
           
           # Verify .env was created
@@ -239,6 +240,7 @@ jobs:
               echo "REACT_APP_KEYCLOAK_CLIENT_ID=${{ secrets.REACT_APP_KEYCLOAK_CLIENT_ID }}" >> /var/www/linqra/edge-service/.env
               echo "VITE_API_KEY=${{ secrets.VITE_API_KEY }}" >> /var/www/linqra/edge-service/.env
               echo "VITE_API_KEY_NAME=${{ secrets.VITE_API_KEY_NAME }}" >> /var/www/linqra/edge-service/.env
+              echo "KEYCLOAK_CLIENT_SECRET=${{ secrets.KEYCLOAK_CLIENT_SECRET }}" >> /var/www/linqra/edge-service/.env
               sudo chmod 600 /var/www/linqra/edge-service/.env
 
             # ========================================

@@ -25,25 +25,25 @@ spring:
         registration:
           linqra-gateway-client:
             client-id: linqra-gateway-client
-            client-secret: ${KEYCLOAK_CLIENT_SECRET:iJRKDkywkezM11llBneSMWfEVTPaCVJU}
+            client-secret: ${KEYCLOAK_CLIENT_SECRET:TixdWtVigsJ0qUUvwP4ccso6QTMLGC6W}
             authorization-grant-type: authorization_code
             scope: gateway.read
             redirect-uri: ${OAUTH2_REDIRECT_URI:https://localhost:3000/callback}
             provider: keycloak
         provider:
           keycloak:
-            token-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/token
-            authorization-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/auth
-            jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/certs
-            issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra
+            token-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/token
+            authorization-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/auth
+            jwk-set-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/certs
+            issuer-uri: http://keycloak-service:8080/keycloak/realms/Linqra
       resourceserver:
         opaquetoken:
-          introspection-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/token/introspect
+          introspection-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/token/introspect
           client-id: linqra-gateway-client
-          client-secret: ${KEYCLOAK_CLIENT_SECRET:iJRKDkywkezM11llBneSMWfEVTPaCVJU}
+          client-secret: ${KEYCLOAK_CLIENT_SECRET:TixdWtVigsJ0qUUvwP4ccso6QTMLGC6W}
         jwt:
-          issuer-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra
-          jwk-set-uri: http://${KEYCLOAK_GATEWAY_URL:localhost}:${KEYCLOAK_GATEWAY_PORT:8281}/realms/Linqra/protocol/openid-connect/certs
+          issuer-uri: http://keycloak-service:8080/keycloak/realms/Linqra
+          jwk-set-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/certs
   data:
     mongodb:
       uri: ${MONGO_GATEWAY_URL:mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}

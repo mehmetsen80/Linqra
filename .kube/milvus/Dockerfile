@@ -1,4 +1,4 @@
-FROM milvusdb/milvus:v2.5.18
+FROM milvusdb/milvus:latest
 
 # Install curl for healthcheck and Python for database operations
 RUN apt-get update && apt-get install -y net-tools iputils-ping netcat-openbsd wget && apt-get install -y curl python3 python3-pip python3-dev build-essential && rm -rf /var/lib/apt/lists/*

@@ -51,7 +51,7 @@ function Home() {
             rel="noopener noreferrer"
             className="version-badge"
           >
-            v0.5
+            v0.6
           </a>
           <div className="hero-separator"></div>
           <div className="cta-buttons">
@@ -59,7 +59,7 @@ function Home() {
               className="cta-button primary"
               onClick={handleGetStarted}
             >
-              Explore AI Apps
+              Explore Framework
             </button>
             {/* <a 
               href="https://docs.linqra.com"

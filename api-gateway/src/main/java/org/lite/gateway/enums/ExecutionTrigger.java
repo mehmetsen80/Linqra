@@ -22,10 +22,5 @@ public enum ExecutionTrigger {
     /**
      * Task is triggered as part of another workflow
      */
-    WORKFLOW,
-    
-    /**
-     * Task is triggered by the agent's internal scheduling logic
-     */
-    AGENT_SCHEDULED
+    WORKFLOW
 } 

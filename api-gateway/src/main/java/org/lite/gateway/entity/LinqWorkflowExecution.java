@@ -5,6 +5,8 @@ import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.model.ExecutionStatus;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -16,6 +18,19 @@ import java.util.Map;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@CompoundIndexes({
+    // Primary: workflow history (with sort for findByWorkflowId with Sort parameter)
+    @CompoundIndex(name = "workflow_executed_idx", def = "{'workflowId': 1, 'executedAt': -1}"),
+    
+    // Team queries (with sort for findByTeamId with Sort parameter)
+    @CompoundIndex(name = "team_executed_idx", def = "{'teamId': 1, 'executedAt': -1}"),
+    
+    // Combined: workflow + team (for findByWorkflowIdAndTeamId with Sort)
+    @CompoundIndex(name = "workflow_team_executed_idx", def = "{'workflowId': 1, 'teamId': 1, 'executedAt': -1}"),
+    
+    // Lookup by ID + team (authorization check in findByIdAndTeamId)
+    @CompoundIndex(name = "id_team_idx", def = "{'_id': 1, 'teamId': 1}")
+})
 public class LinqWorkflowExecution {
     @Id
     private String id;

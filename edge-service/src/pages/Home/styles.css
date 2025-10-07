@@ -589,12 +589,12 @@ html {
 }
 
 .tagline {
-  font-size: 1.8rem;
-  font-weight: 900;
+  font-size: 1.2rem;
+  font-weight: 600;
   font-family: 'fa-brands-400', 'Inter', 'Helvetica Neue', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: var(--primary-light);
+  color: var(--primary-dark);
   margin-top: 2rem;
-  letter-spacing: 2.5px;
+  letter-spacing: 2.1px;
   text-align: center;
   opacity: 0.8095;
   
@@ -618,8 +618,8 @@ html {
   transform: translateY(-2px);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
   background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.2) 0%, 
-    rgba(255, 255, 255, 0.1) 100%
+    rgba(228, 143, 14, 0.2) 0%, 
+    rgba(228, 143, 14, 0.1) 100%
   );
 }
 

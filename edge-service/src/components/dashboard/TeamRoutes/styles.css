@@ -3,6 +3,15 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.team-routes-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--heading-primary);
+  margin: 0 0 1rem 0;
+  padding: 0 0 0 0;
+  text-align: left;
+}
+
 .team-routes-card .card-header {
   background-color: #f8f9fa;  /* Bootstrap's bg-light color */
   border-bottom: 1px solid #e3e3e3;

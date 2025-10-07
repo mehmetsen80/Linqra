@@ -28,9 +28,10 @@ public class ApiMetricsController {
             @RequestParam(required = false) String fromService,
             @RequestParam(required = false) String toService) {
         
-        // If we're filtering by service but no dates provided, don't restrict the date range
+        // If we're filtering by service but no dates provided, use a very old date (10 years ago)
+        // instead of LocalDateTime.MIN which causes overflow
         if ((fromService != null || toService != null) && startDate == null && endDate == null) {
-            startDate = LocalDateTime.MIN;
+            startDate = LocalDateTime.now().minusYears(10);
             endDate = LocalDateTime.now();
         } else {
             // Only apply default date range if no filters are provided at all
@@ -77,6 +78,24 @@ public class ApiMetricsController {
         return apiMetricsService.getServiceInteractions(startDate, endDate);
     }
 
+    @GetMapping("/service-interactions/{serviceName}")
+    public Mono<Map<String, Object>> getServiceInteractionsByService(
+            @PathVariable String serviceName,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+        
+        return apiMetricsService.getServiceInteractionsByService(serviceName, startDate, endDate);
+    }
+
+    @GetMapping("/service-interactions/{serviceName}/summary")
+    public Mono<Map<String, Object>> getServiceInteractionsSummary(
+            @PathVariable String serviceName,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate) {
+        
+        return apiMetricsService.getServiceInteractionsSummary(serviceName, startDate, endDate);
+    }
+
     @GetMapping("/top-endpoints")
     public Flux<Map<String, Object>> getTopEndpoints(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
@@ -84,6 +103,16 @@ public class ApiMetricsController {
             @RequestParam(defaultValue = "10") int limit) {
         
         return apiMetricsService.getTopEndpoints(startDate, endDate, limit);
+    }
+
+    @GetMapping("/top-endpoints/{serviceName}")
+    public Flux<Map<String, Object>> getTopEndpointsByService(
+            @PathVariable String serviceName,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endDate,
+            @RequestParam(defaultValue = "10") int limit) {
+        
+        return apiMetricsService.getTopEndpointsByService(serviceName, startDate, endDate, limit);
     }
 
     @GetMapping("/{id}")

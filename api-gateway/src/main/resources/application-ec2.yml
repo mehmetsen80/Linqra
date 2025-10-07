@@ -48,6 +48,7 @@ spring:
     mongodb:
       uri: ${MONGO_GATEWAY_URL:mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}
       database: Linqra
+      auto-index-creation: true  # Explicitly enable auto-index creation (default is true)
   cloud:
     circuitbreaker:
       resilience4j:

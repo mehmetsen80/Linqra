@@ -20,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -35,16 +36,14 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
     // ==================== HEALTH MONITORING ====================
     
     @Override
-    public Mono<Map<String, Object>> getAgentHealth(String agentId, String teamId) {
+    public Mono<Map<String, Object>> getAgentHealth(String agentId) {
         return agentRepository.findById(agentId)
-                .filter(agent -> teamId.equals(agent.getTeamId()))
-                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
                 .flatMap(agent -> {
                     // Get latest execution for last run and error info
                     Mono<AgentExecution> latestExecutionMono = agentExecutionRepository
                             .findByAgentIdOrderByCreatedAtDesc(agentId)
-                            .next()
-                            .switchIfEmpty(Mono.empty());
+                            .next();
                     
                     // Get next scheduled task run time
                     Mono<LocalDateTime> nextRunMono = agentTaskRepository
@@ -52,25 +51,28 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                             .map(AgentTask::getNextRun)
                             .filter(nextRun -> nextRun != null && nextRun.isAfter(LocalDateTime.now()))
                             .sort()
-                            .next()
-                            .switchIfEmpty(Mono.empty());
+                            .next();
                     
-                    return Mono.zip(latestExecutionMono.defaultIfEmpty(new AgentExecution()), nextRunMono.defaultIfEmpty(null))
-                            .map(tuple -> {
-                                AgentExecution latestExecution = tuple.getT1();
-                                LocalDateTime nextRun = tuple.getT2();
-                                
-                                Map<String, Object> health = Map.of(
-                                        "agentId", agentId,
-                                        "enabled", agent.isEnabled(),
-                                        "lastRun", latestExecution.getStartedAt(),
-                                        "nextRun", nextRun,
-                                        "lastError", latestExecution.getErrorMessage(),
-                                        "canExecute", agent.canExecute()
-                                );
-                                
-                                return health;
-                            });
+                    // Combine both monos, handling empty cases
+                    return Mono.zip(
+                            latestExecutionMono.defaultIfEmpty(new AgentExecution()),
+                            nextRunMono.map(Optional::of).defaultIfEmpty(Optional.empty())
+                    ).map(tuple -> {
+                        AgentExecution latestExecution = tuple.getT1();
+                        Optional<LocalDateTime> nextRunOpt = tuple.getT2();
+                        
+                        // Use HashMap to allow null values (Map.of() doesn't allow nulls)
+                        Map<String, Object> health = new java.util.HashMap<>();
+                        health.put("teamId", agent.getTeamId());
+                        health.put("agentId", agentId);
+                        health.put("enabled", agent.isEnabled());
+                        health.put("lastRun", latestExecution.getStartedAt());
+                        health.put("nextRun", nextRunOpt.orElse(null));
+                        health.put("lastError", latestExecution.getErrorMessage());
+                        health.put("canExecute", agent.canExecute());
+                        
+                        return health;
+                    });
                 });
     }
     
@@ -146,36 +148,78 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
     // ==================== PERFORMANCE MONITORING ====================
     
     @Override
-    public Mono<Map<String, Object>> getAgentPerformance(String agentId, String teamId, LocalDateTime from, LocalDateTime to) {
+    public Mono<Map<String, Object>> getAgentPerformance(String agentId, LocalDateTime from, LocalDateTime to) {
         return agentRepository.findById(agentId)
-                .filter(agent -> teamId.equals(agent.getTeamId()))
-                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
-                .thenMany(agentExecutionRepository.findByAgentIdAndStartedAtBetween(agentId, from, to))
-                .collectList()
-                .map(executions -> {
-                    long totalExecutions = executions.size();
-                    long successfulExecutions = executions.stream()
-                            .filter(e -> ExecutionResult.SUCCESS.name().equals(e.getResult()))
-                            .count();
-                    long failedExecutions = executions.stream()
-                            .filter(e -> ExecutionResult.FAILURE.name().equals(e.getResult()))
-                            .count();
-                    
-                    double avgExecutionTime = executions.stream()
-                            .filter(e -> e.getExecutionDurationMs() != null)
-                            .mapToLong(AgentExecution::getExecutionDurationMs)
-                            .average()
-                            .orElse(0.0);
-                    
-                    return Map.of(
-                            "agentId", agentId,
-                            "totalExecutions", totalExecutions,
-                            "successfulExecutions", successfulExecutions,
-                            "failedExecutions", failedExecutions,
-                            "successRate", totalExecutions > 0 ? (successfulExecutions * 100.0 / totalExecutions) : 0.0,
-                            "averageExecutionTimeMs", avgExecutionTime
-                    );
-                });
+                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
+                .flatMap(agent -> 
+                    agentExecutionRepository.findByAgentIdAndStartedAtBetween(agentId, from, to)
+                        .collectList()
+                        .map(executions -> {
+                            long totalExecutions = executions.size();
+                            
+                            // Count by result
+                            long successfulExecutions = executions.stream()
+                                    .filter(e -> ExecutionResult.SUCCESS.equals(e.getResult()))
+                                    .count();
+                            long failedExecutions = executions.stream()
+                                    .filter(e -> ExecutionResult.FAILURE.equals(e.getResult()))
+                                    .count();
+                            long partialSuccessExecutions = executions.stream()
+                                    .filter(e -> ExecutionResult.PARTIAL_SUCCESS.equals(e.getResult()))
+                                    .count();
+                            long skippedExecutions = executions.stream()
+                                    .filter(e -> ExecutionResult.SKIPPED.equals(e.getResult()))
+                                    .count();
+                            long unknownExecutions = executions.stream()
+                                    .filter(e -> ExecutionResult.UNKNOWN.equals(e.getResult()))
+                                    .count();
+                            
+                            // Count by status
+                            long runningExecutions = executions.stream()
+                                    .filter(e -> ExecutionStatus.RUNNING.equals(e.getStatus()))
+                                    .count();
+                            long completedExecutions = executions.stream()
+                                    .filter(e -> ExecutionStatus.COMPLETED.equals(e.getStatus()))
+                                    .count();
+                            long failedStatusExecutions = executions.stream()
+                                    .filter(e -> ExecutionStatus.FAILED.equals(e.getStatus()))
+                                    .count();
+                            long cancelledExecutions = executions.stream()
+                                    .filter(e -> ExecutionStatus.CANCELLED.equals(e.getStatus()))
+                                    .count();
+                            long timeoutExecutions = executions.stream()
+                                    .filter(e -> ExecutionStatus.TIMEOUT.equals(e.getStatus()))
+                                    .count();
+                            
+                            double avgExecutionTime = executions.stream()
+                                    .filter(e -> e.getExecutionDurationMs() != null)
+                                    .mapToLong(AgentExecution::getExecutionDurationMs)
+                                    .average()
+                                    .orElse(0.0);
+                            
+                            return Map.ofEntries(
+                                    Map.entry("teamId", agent.getTeamId()),
+                                    Map.entry("agentId", agentId),
+                                    Map.entry("totalExecutions", totalExecutions),
+                                    Map.entry("successRate", totalExecutions > 0 ? (successfulExecutions * 100.0 / totalExecutions) : 0.0),
+                                    Map.entry("averageExecutionTimeMs", avgExecutionTime),
+                                    Map.entry("resultBreakdown", Map.of(
+                                            "successful", successfulExecutions,
+                                            "failed", failedExecutions,
+                                            "partialSuccess", partialSuccessExecutions,
+                                            "skipped", skippedExecutions,
+                                            "unknown", unknownExecutions
+                                    )),
+                                    Map.entry("statusBreakdown", Map.of(
+                                            "running", runningExecutions,
+                                            "completed", completedExecutions,
+                                            "failed", failedStatusExecutions,
+                                            "cancelled", cancelledExecutions,
+                                            "timeout", timeoutExecutions
+                                    ))
+                            );
+                        })
+                );
     }
     
     @Override
@@ -186,14 +230,7 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                 .collectList()
                 .flatMap(agentIds -> {
                     if (agentIds.isEmpty()) {
-                        return Mono.just(Map.of(
-                                "teamId", teamId,
-                                "totalExecutions", 0L,
-                                "successfulExecutions", 0L,
-                                "failedExecutions", 0L,
-                                "successRate", 0.0,
-                                "period", Map.of("from", from, "to", to)
-                        ));
+                        return Mono.error(new RuntimeException("No agents assigned to team: " + teamId));
                     }
                     
                     return Flux.fromIterable(agentIds)
@@ -201,20 +238,60 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                             .collectList()
                             .map(executions -> {
                                 long totalExecutions = executions.size();
+                                
+                                // Count by result
                                 long successfulExecutions = executions.stream()
-                                        .filter(e -> ExecutionResult.SUCCESS.name().equals(e.getResult()))
+                                        .filter(e -> ExecutionResult.SUCCESS.equals(e.getResult()))
                                         .count();
                                 long failedExecutions = executions.stream()
-                                        .filter(e -> ExecutionResult.FAILURE.name().equals(e.getResult()))
+                                        .filter(e -> ExecutionResult.FAILURE.equals(e.getResult()))
+                                        .count();
+                                long partialSuccessExecutions = executions.stream()
+                                        .filter(e -> ExecutionResult.PARTIAL_SUCCESS.equals(e.getResult()))
+                                        .count();
+                                long skippedExecutions = executions.stream()
+                                        .filter(e -> ExecutionResult.SKIPPED.equals(e.getResult()))
+                                        .count();
+                                long unknownExecutions = executions.stream()
+                                        .filter(e -> ExecutionResult.UNKNOWN.equals(e.getResult()))
                                         .count();
                                 
-                                return Map.of(
-                                        "teamId", teamId,
-                                        "totalExecutions", totalExecutions,
-                                        "successfulExecutions", successfulExecutions,
-                                        "failedExecutions", failedExecutions,
-                                        "successRate", totalExecutions > 0 ? (successfulExecutions * 100.0 / totalExecutions) : 0.0,
-                                        "period", Map.of("from", from, "to", to)
+                                // Count by status
+                                long runningExecutions = executions.stream()
+                                        .filter(e -> ExecutionStatus.RUNNING.equals(e.getStatus()))
+                                        .count();
+                                long completedExecutions = executions.stream()
+                                        .filter(e -> ExecutionStatus.COMPLETED.equals(e.getStatus()))
+                                        .count();
+                                long failedStatusExecutions = executions.stream()
+                                        .filter(e -> ExecutionStatus.FAILED.equals(e.getStatus()))
+                                        .count();
+                                long cancelledExecutions = executions.stream()
+                                        .filter(e -> ExecutionStatus.CANCELLED.equals(e.getStatus()))
+                                        .count();
+                                long timeoutExecutions = executions.stream()
+                                        .filter(e -> ExecutionStatus.TIMEOUT.equals(e.getStatus()))
+                                        .count();
+                                
+                                return Map.ofEntries(
+                                        Map.entry("teamId", teamId),
+                                        Map.entry("totalExecutions", totalExecutions),
+                                        Map.entry("successRate", totalExecutions > 0 ? (successfulExecutions * 100.0 / totalExecutions) : 0.0),
+                                        Map.entry("period", Map.of("from", from, "to", to)),
+                                        Map.entry("resultBreakdown", Map.of(
+                                                "successful", successfulExecutions,
+                                                "failed", failedExecutions,
+                                                "partialSuccess", partialSuccessExecutions,
+                                                "skipped", skippedExecutions,
+                                                "unknown", unknownExecutions
+                                        )),
+                                        Map.entry("statusBreakdown", Map.of(
+                                                "running", runningExecutions,
+                                                "completed", completedExecutions,
+                                                "failed", failedStatusExecutions,
+                                                "cancelled", cancelledExecutions,
+                                                "timeout", timeoutExecutions
+                                        ))
                                 );
                             });
                 });
@@ -286,12 +363,11 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
     }
     
     @Override
-    public Mono<Map<String, Object>> getWorkflowExecutionStatus(String workflowExecutionId, String teamId) {
-        log.info("Getting workflow execution status {} for team {}", workflowExecutionId, teamId);
+    public Mono<Map<String, Object>> getWorkflowExecutionStatus(String workflowExecutionId) {
+        log.info("Getting workflow execution status {}", workflowExecutionId);
         
         return workflowExecutionService.getExecution(workflowExecutionId)
-                .filter(execution -> teamId.equals(execution.getTeamId()))
-                .switchIfEmpty(Mono.error(new RuntimeException("Workflow execution not found or access denied")))
+                .switchIfEmpty(Mono.error(new RuntimeException("Workflow execution not found")))
                 .map(execution -> {
                     // Calculate progress based on execution status
                     double progress = calculateExecutionProgress(execution);

@@ -28,7 +28,6 @@ public class RouteExistenceResponse {
     @Data
     @Builder
     public static class ExistenceDetail {
-        private boolean idExists;
         private boolean identifierExists;
         private String existingId;
         private String existingIdentifier;

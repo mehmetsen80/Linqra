@@ -3,6 +3,7 @@ package org.lite.gateway.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.dto.ApiRouteDTO;
 import org.lite.gateway.dto.ErrorCode;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.RouteExistenceRequest;
@@ -43,7 +44,7 @@ public class ApiRoutesController {
     private final TeamRouteRepository teamRouteRepository;
 
     @GetMapping
-    public Flux<ApiRoute> getAllRoutes(@RequestParam(required = false) String teamId) {
+    public Flux<ApiRouteDTO> getAllRoutes(@RequestParam(required = false) String teamId) {
         log.info("Fetching API routes with teamId: {}", teamId);
         return apiRouteService.getAllRoutes(teamId);
     }
@@ -125,7 +126,7 @@ public class ApiRoutesController {
                             .teamId(route.getTeamId())
                             .routeId(createdRoute.getId())
                             .assignedAt(LocalDateTime.now())
-                            .assignedBy(user.getId())
+                            .assignedBy(user.getUsername())  // Store username, not ID
                             .permissions(Set.of(RoutePermission.VIEW, RoutePermission.USE, RoutePermission.MANAGE))
                             .build();
                         
@@ -285,25 +286,17 @@ public class ApiRoutesController {
         return apiRouteService.getVersionMetadata(routeIdentifier);
     }
 
-    @GetMapping("/check")
+    @GetMapping("/check/{routeIdentifier}")
     public Mono<ResponseEntity<RouteExistenceResponse>> checkRouteExistence(
-            @Valid RouteExistenceRequest request) {
-        log.info("Checking existence for id: {} or identifier: {}", 
-            request.getId(), request.getRouteIdentifier());
+            @PathVariable String routeIdentifier) {
+        log.info("Checking existence for identifier: {}", routeIdentifier);
         
-        if (request.getId() == null && request.getRouteIdentifier() == null) {
-            return Mono.just(ResponseEntity
-                .badRequest()
-                .body(RouteExistenceResponse.builder()
-                    .exists(false)
-                    .message("Either id or routeIdentifier must be provided")
-                    .detail(ExistenceDetail.builder()
-                        .validationMessage("Missing required parameters")
-                        .build())
-                    .build()));
-        }
+        RouteExistenceRequest request = new RouteExistenceRequest();
+        request.setRouteIdentifier(routeIdentifier);
         
         return apiRouteService.checkRouteExistence(request)
+            .doOnNext(response -> log.info("Route existence check result: exists={}, message={}", 
+                response.isExists(), response.getMessage()))
             .map(ResponseEntity::ok);
     }
 

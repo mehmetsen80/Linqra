@@ -12,6 +12,9 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,11 +25,32 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@CompoundIndexes({
+    // Primary queries: by agent + time range (for performance monitoring)
+    @CompoundIndex(name = "agent_created_idx", def = "{'agentId': 1, 'createdAt': -1}"),
+    @CompoundIndex(name = "agent_started_idx", def = "{'agentId': 1, 'startedAt': -1}"),
+    @CompoundIndex(name = "agent_completed_idx", def = "{'agentId': 1, 'completedAt': -1}"),
+    
+    // Performance monitoring queries
+    @CompoundIndex(name = "agent_status_idx", def = "{'agentId': 1, 'status': 1}"),
+    @CompoundIndex(name = "agent_result_idx", def = "{'agentId': 1, 'result': 1}"),
+    
+    // Task-level queries
+    @CompoundIndex(name = "task_created_idx", def = "{'taskId': 1, 'createdAt': -1}"),
+    @CompoundIndex(name = "task_status_idx", def = "{'taskId': 1, 'status': 1}"),
+    
+    // Team-level analytics
+    @CompoundIndex(name = "team_created_idx", def = "{'teamId': 1, 'createdAt': -1}"),
+    
+    // Workflow tracking
+    @CompoundIndex(name = "workflow_exec_idx", def = "{'workflowExecutionId': 1, 'createdAt': -1}")
+})
 public class AgentExecution {
     @Id
     private String id;
     
     // Execution Identification
+    @Indexed(unique = true)
     private String executionId;             // Unique execution identifier (UUID)
     private String agentId;                 // Reference to the Agent
     private String agentName;               // Denormalized agent name for easy querying

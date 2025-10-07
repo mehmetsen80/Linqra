@@ -215,7 +215,7 @@ export const ApiRoutesDisplay = () => {
                   {currentTeam?.name || 'All Teams'}
                 </Breadcrumb.Item>
                 <Breadcrumb.Item active>
-                  API Routes
+                  Apps
                 </Breadcrumb.Item>
             </Breadcrumb>
            
@@ -227,7 +227,7 @@ export const ApiRoutesDisplay = () => {
                 onClick={() => setShowCreateModal(true)}
                 disabled={!currentTeam && !hasAdminAccess(user)}
               >
-                <HiPlus /> Create API Route
+                <HiPlus /> Add new App
               </Button>
             ) : (
               <OverlayTrigger
@@ -247,7 +247,7 @@ export const ApiRoutesDisplay = () => {
                     onClick={() => setShowCreateModal(true)}
                     disabled={!currentTeam && !hasAdminAccess(user)}
                   >
-                    <HiPlus /> Create API Route
+                    <HiPlus /> Add new App
                   </Button>
                 </span>
               </OverlayTrigger>
@@ -258,11 +258,11 @@ export const ApiRoutesDisplay = () => {
 
       {routes.length === 0 ? (
         <div className="no-routes-message text-center py-5">
-          <h4>No API Routes Found</h4>
+          <h4>No Apps Found</h4>
           <p className="text-muted">
             {currentTeam 
-              ? `No API routes have been created for ${currentTeam.name} yet.`
-              : 'No API routes have been created yet.'}
+              ? `No Apps have been created for ${currentTeam.name} yet.`
+              : 'No Apps have been created yet.'}
           </p>
           {canManageRoutes && (
             <Button 
@@ -342,7 +342,7 @@ export const ApiRoutesDisplay = () => {
                   <div className="detail-item" style={{ width: '48%' }}>
                     <span className="detail-label">HEALTH CHECK</span>
                     <code className="detail-value health-check">
-                      {route.healthCheckEnabled ? 'ENABLED' : 'DISABLED'}
+                      {route.healthCheck.enabled ? 'ENABLED' : 'DISABLED'}
                     </code>
                   </div>
                   <div className="detail-item" style={{ width: '48%' }}>

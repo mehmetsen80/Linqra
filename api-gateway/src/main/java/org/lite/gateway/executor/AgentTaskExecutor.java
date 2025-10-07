@@ -137,14 +137,15 @@ public abstract class AgentTaskExecutor {
         return workflowExecutionService.getExecution(workflowExecutionId)
                 .flatMap(workflowExecution -> {
                     org.lite.gateway.model.ExecutionStatus status = workflowExecution.getStatus();
-                    log.info("Workflow {} status: {}", workflowExecutionId, status);
+                    log.info("Workflow {} status: {} for AgentExecution: {}", workflowExecutionId, status, execution.getExecutionId());
                     
                     if (org.lite.gateway.model.ExecutionStatus.SUCCESS.equals(status)) {
-                        log.info("Workflow {} completed successfully, updating AgentExecution to COMPLETED", workflowExecutionId);
+                        log.info("Workflow {} completed successfully, marking AgentExecution {} as COMPLETED with SUCCESS result", 
+                                workflowExecutionId, execution.getExecutionId());
                         return updateExecutionStatus(execution, ExecutionStatus.COMPLETED, 
                                 "Agent task completed successfully", workflowExecutionId);
                     } else if (org.lite.gateway.model.ExecutionStatus.FAILED.equals(status)) {
-                        log.error("Workflow {} failed, updating AgentExecution to FAILED", workflowExecutionId);
+                        log.error("Workflow {} failed, marking AgentExecution {} as FAILED", workflowExecutionId, execution.getExecutionId());
                         String errorMsg = "Workflow execution failed";
                         // Try to get error from metadata status
                         if (workflowExecution.getResponse() != null && 
@@ -160,8 +161,11 @@ public abstract class AgentTaskExecutor {
                         return Mono.delay(Duration.ofSeconds(5))
                                 .then(monitorWorkflowCompletion(workflowExecutionId, execution));
                     } else {
-                        log.warn("Unknown workflow status: {} for workflow: {}", status, workflowExecutionId);
-                        return Mono.empty();
+                        log.error("Unknown workflow status: {} for workflow: {}. Status type: {}. Marking as FAILED.", 
+                                status, workflowExecutionId, status != null ? status.getClass().getName() : "null");
+                        // If we can't determine status, mark as failed for safety
+                        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
+                                "Workflow monitoring failed: unknown status " + status, workflowExecutionId);
                     }
                 })
                 .onErrorResume(error -> {

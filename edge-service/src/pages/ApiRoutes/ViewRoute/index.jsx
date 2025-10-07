@@ -6,6 +6,8 @@ import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { apiRouteService } from '../../../services/apiRouteService';
 import RouteDetails from '../../../components/apiroutes/RouteDetails';
 import RouteEndpoints from '../../../components/apiroutes/RouteEndpoints';
+import ServiceInteractionStats from '../../../components/apiroutes/ServiceInteractionStats';
+import ServiceTopEndpoints from '../../../components/apiroutes/ServiceTopEndpoints';
 import './styles.css';
 
 const ViewRoute = () => {
@@ -39,32 +41,32 @@ const ViewRoute = () => {
     <div className="view-route-layout">
       <div className="route-header">
         <div className="route-title-section">
-          <h2>API Route</h2>
-          <div className="route-identifier">{route.routeIdentifier}</div>
+          <h2>{route.routeIdentifier}</h2>
+          <div className="route-subtitle">Configure app settings, API endpoints, resiliency, and monitor performance with version control</div>
         </div>
-        <div className="view-toggle">
-          <div 
-            className={`toggle-option ${!showEndpoints ? 'active' : ''}`}
-            onClick={() => setShowEndpoints(false)}
-            role="button"
-          >
-            <FaRoute /> Details
-          </div>
-          <Form.Check 
-            type="switch"
-            id="view-switch"
-            checked={showEndpoints}
-            onChange={(e) => setShowEndpoints(e.target.checked)}
-            className="mx-2"
-          />
-          <div 
-            className={`toggle-option ${showEndpoints ? 'active' : ''}`}
-            onClick={() => setShowEndpoints(true)}
-            role="button"
-          >
-            <FaNetworkWired /> Endpoints
-          </div>
-        </div>
+      </div>
+      
+      <ServiceInteractionStats serviceName={route.routeIdentifier} />
+      
+      <ServiceTopEndpoints serviceName={route.routeIdentifier} />
+      
+      <div className="tab-navigation">
+      <button 
+          className={`tab-button ${showEndpoints ? 'active' : ''}`}
+          onClick={() => setShowEndpoints(true)}
+          type="button"
+        >
+          <FaNetworkWired />
+          <span>API Endpoints</span>
+        </button>
+        <button 
+          className={`tab-button ${!showEndpoints ? 'active' : ''}`}
+          onClick={() => setShowEndpoints(false)}
+          type="button"
+        >
+          <FaRoute />
+          <span>Route Details</span>
+        </button>
       </div>
       
       <div className="content-area">

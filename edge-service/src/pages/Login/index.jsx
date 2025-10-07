@@ -49,10 +49,13 @@ function Login() {
         <img src="/images/noBgWhiteOnlyLogo.png" alt="Logo" />
       </div>
       <Link to="/" className="home-link">
-        <HiHome size={20} />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9,22 9,12 15,12 15,22"/>
+        </svg>
         Home
       </Link>      
-      <div className="auth-form-section">
+      <div className="auth-form-container">
         <div className="auth-card">
           <div className={loading ? 'opacity-50' : ''}>
             <div className="auth-header">
@@ -88,8 +91,7 @@ function Login() {
             )}
 
             <Form onSubmit={handleSubmit}>
-              <Form.Group className="mb-3">
-                <Form.Label>Email</Form.Label>
+              <div className="kc-form-group mb-3">
                 <Form.Control
                   type="email"
                   name="email"
@@ -97,13 +99,14 @@ function Login() {
                   onChange={handleChange}
                   required
                   autoComplete="email"
-                  placeholder="Enter your email"
                   disabled={loading}
+                  className="kc-input"
+                  autoFocus
                 />
-              </Form.Group>
+                <Form.Label className="kc-label">Email</Form.Label>
+              </div>
 
-              <Form.Group className="mb-4">
-                <Form.Label>Password</Form.Label>
+              <div className="kc-form-group mb-4">
                 <Form.Control
                   type="password"
                   name="password"
@@ -111,10 +114,11 @@ function Login() {
                   onChange={handleChange}
                   required
                   autoComplete="current-password"
-                  placeholder="Enter your password"
                   disabled={loading}
+                  className="kc-input"
                 />
-              </Form.Group>
+                <Form.Label className="kc-label">Password</Form.Label>
+              </div>
 
               <Button 
                 type="submit"

@@ -20,10 +20,10 @@ function ModulesSection() {
               <i className="fas fa-route"></i>
             </div>
           </Link>
-          <h3>API Routes</h3>
+          <h3>Apps</h3>
           <p>Configure and manage your API routes and policies</p>
           <Link to="/api-routes" className="card-link">
-            Manage Routes <i className="fas fa-arrow-right"></i>
+            Manage Apps <i className="fas fa-arrow-right"></i>
           </Link>
         </div>
 

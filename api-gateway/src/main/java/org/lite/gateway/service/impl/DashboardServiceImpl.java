@@ -116,7 +116,7 @@ public class DashboardServiceImpl implements DashboardService {
     private Mono<StatDTO> getActiveRoutesCount(List<String> routeIds) {
         return apiRouteRepository.countByIdIn(routeIds)
             .map(count -> StatDTO.builder()
-                .title("Active Routes")
+                .title("Active Apps")
                 .value(String.valueOf(count))
                 .type("count")
                 .trend(StatTrendDTO.builder()

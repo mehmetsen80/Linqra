@@ -1,5 +1,6 @@
 package org.lite.gateway.service;
 
+import org.lite.gateway.dto.ApiRouteDTO;
 import org.lite.gateway.dto.RouteExistenceRequest;
 import org.lite.gateway.dto.RouteExistenceResponse;
 import org.lite.gateway.dto.VersionComparisonResult;
@@ -12,7 +13,8 @@ import reactor.core.publisher.Mono;
 public interface ApiRouteService {
     
     // Basic CRUD operations
-    Flux<ApiRoute> getAllRoutes(String teamId);
+    Flux<ApiRouteDTO> getAllRoutes(String teamId);
+    Flux<ApiRoute> getAllRoutesInternal(); // For internal use (route building)
     Mono<ApiRoute> getRouteById(String id);
     Mono<ApiRoute> getRouteByIdentifier(String routeIdentifier);
     Mono<ApiRoute> createRoute(ApiRoute route, User user);

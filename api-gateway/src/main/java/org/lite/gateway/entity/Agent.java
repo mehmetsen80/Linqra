@@ -12,6 +12,8 @@ import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -22,6 +24,19 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@CompoundIndexes({
+    // Primary query: by team + enabled
+    @CompoundIndex(name = "team_enabled_idx", def = "{'teamId': 1, 'enabled': 1}"),
+    
+    // Unique constraint: name within team
+    @CompoundIndex(name = "team_name_unique_idx", def = "{'teamId': 1, 'name': 1}", unique = true),
+    
+    // Capability queries
+    @CompoundIndex(name = "team_capabilities_idx", def = "{'teamId': 1, 'capabilities': 1}"),
+    
+    // Audit queries
+    @CompoundIndex(name = "team_created_idx", def = "{'teamId': 1, 'createdAt': -1}")
+})
 public class Agent {
     @Id
     private String id;

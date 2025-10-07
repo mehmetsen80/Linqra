@@ -82,8 +82,9 @@ services:
     command:
       - start
     volumes:
-      - .kube/keycloak/data/import:/opt/keycloak/data/import
-      - .kube/keycloak/data/export:/opt/keycloak/data/export
+      - ./.kube/keycloak/data/import:/opt/keycloak/data/import
+      - ./.kube/keycloak/data/export:/opt/keycloak/data/export
+      - ./.kube/keycloak/themes:/opt/keycloak/themes
     depends_on:
       postgres-service:
         condition: service_healthy

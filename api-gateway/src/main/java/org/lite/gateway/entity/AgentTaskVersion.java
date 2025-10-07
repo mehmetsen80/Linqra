@@ -9,6 +9,8 @@ import org.lite.gateway.enums.ExecutionTrigger;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.LocalDateTime;
@@ -19,6 +21,16 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @Document("agent_task_versions")
+@CompoundIndexes({
+    // Primary: version history (sorted DESC for latest first)
+    @CompoundIndex(name = "task_version_idx", def = "{'taskId': 1, 'version': -1}"),
+    
+    // Team-level queries
+    @CompoundIndex(name = "team_created_idx", def = "{'teamId': 1, 'createdAt': -1}"),
+    
+    // Agent-level queries
+    @CompoundIndex(name = "agent_version_idx", def = "{'agentId': 1, 'version': -1}")
+})
 public class AgentTaskVersion {
     @Id
     private String id;

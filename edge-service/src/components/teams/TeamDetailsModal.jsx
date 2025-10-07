@@ -192,7 +192,7 @@ function TeamDetailsModal({ show, onHide, team }) {
                 <Card.Body>
                   <div className="d-flex align-items-center mb-3">
                     <HiTemplate className="text-primary me-2" size={24} />
-                    <h5 className="mb-0">Team Routes</h5>
+                    <h5 className="mb-0">Team Apps</h5>
                   </div>
                   <div className="table-responsive mb-n3">
                     <table className="table table-sm mb-0">

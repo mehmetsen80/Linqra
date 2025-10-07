@@ -3,12 +3,24 @@ package org.lite.gateway.entity;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
 @Document(collection = "alerts")
 @Data
+@CompoundIndexes({
+    // Primary: active alerts by route
+    @CompoundIndex(name = "route_active_idx", def = "{'routeId': 1, 'active': 1}"),
+    
+    // Alert lookup by metric
+    @CompoundIndex(name = "route_metric_active_idx", def = "{'routeId': 1, 'metric': 1, 'active': 1}"),
+    
+    // Exact match query (avoid duplicates)
+    @CompoundIndex(name = "alert_unique_idx", def = "{'routeId': 1, 'metric': 1, 'condition': 1, 'threshold': 1}")
+})
 public class Alert {
     @Id
     private String id;

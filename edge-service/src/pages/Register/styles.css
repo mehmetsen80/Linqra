@@ -1,6 +1,6 @@
 .auth-container {
   min-height: 100vh;
-  width: 100%;
+  width: calc(100% - 2rem);
   position: relative;
   display: flex;
   justify-content: center;
@@ -14,6 +14,7 @@
   border-radius: 20px;
   margin: 1rem;
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+  box-sizing: border-box;
 }
 
 .logo-container {
@@ -31,20 +32,20 @@
   object-fit: contain;
 }
 
-.auth-form-section {
+.auth-form-container {
   position: relative;
   z-index: 1;
   width: 100%;
   max-width: 500px;
   padding: 2rem;
   margin-left: calc(100% / 3);
-  margin-right: 2rem;
+  margin-right: 0;
 }
 
 .auth-card {
   background: rgba(255, 255, 255, 0.95);
   padding: 2.5rem;
-  border-radius: 12px;
+  border-radius: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   backdrop-filter: blur(8px);
   width: 100%;
@@ -56,10 +57,68 @@
 }
 
 .auth-header h2 {
-  color: #333;
+  color: var(--text-primary, #333);
   margin-bottom: 0.5rem;
+  font-size: 2rem;
+  font-weight: 700;
 }
 
+/* Keycloak-style floating label form */
+.kc-form-group {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.kc-input {
+  width: 100%;
+  padding: 2.8rem 1rem 0.25rem 1rem;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+  transition: all 0.3s ease;
+  outline: none;
+  height: 3.25rem;
+}
+
+.kc-form-group .kc-input:focus,
+.kc-input:focus {
+  border-color: #ed7534 !important;
+  box-shadow: 0 0 0 2px rgba(237, 117, 52, 0.1) !important;
+  background: #ffffff !important;
+  outline: none !important;
+}
+
+.kc-input:focus + .kc-label,
+.kc-input:not(:placeholder-shown) + .kc-label {
+  transform: translateY(-2.6rem) scale(0.85);
+  color: #ed7534;
+}
+
+.kc-label {
+  position: absolute;
+  left: 1rem;
+  top: 2.25rem;
+  color: var(--text-secondary, #666);
+  font-size: 1rem;
+  font-weight: 500;
+  pointer-events: none;
+  transition: all 0.3s ease;
+  transform-origin: left top;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0 0.25rem;
+  width: max-content;
+  max-width: max-content;
+  min-width: auto;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+.kc-input:focus + .kc-label {
+  background: rgba(255, 255, 255, 1);
+}
+
+/* Legacy form styling for other components */
 .form-label {
   text-align: left;
   display: block;
@@ -100,10 +159,10 @@
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .auth-container {
-    padding: 1rem;
+    padding: 0;
   }
   
-  .auth-form-section {
+  .auth-form-container {
     margin-left: 0;
     margin-right: 0;
     padding: 1rem;

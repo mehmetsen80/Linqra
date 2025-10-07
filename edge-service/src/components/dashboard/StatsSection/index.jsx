@@ -8,7 +8,7 @@ import './styles.css';
 const DEFAULT_STATS = [
   {
     id: 'active-routes',
-    title: 'Active Routes',
+    title: 'Active Apps',
     value: '0',
     icon: 'fa-route',
     trend: { type: 'neutral', value: '0', period: 'since last week' }
@@ -69,7 +69,7 @@ const StatsSection = ({ refreshInterval = 30000 }) => {
 
   const getStatDescription = (stat) => {
     const descriptions = {
-      'active-routes': 'Total number of API routes currently configured and active in the gateway',
+      'active-routes': 'Total number of apps currently configured and active in the gateway',
       'response-time': 'Average time taken to process and respond to API requests, measured in milliseconds',
       'requests-per-min': 'Total number of API requests being handled by the gateway per minute',
       'success-rate': 'Percentage of requests that completed successfully with 2xx status codes'
@@ -100,17 +100,20 @@ const StatsSection = ({ refreshInterval = 30000 }) => {
 
   if (loading) {
     return (
-      <div className="stats-section loading">
-        {[1, 2, 3, 4].map(id => (
-          <div key={id} className="stat-card skeleton">
-            <div className="stat-icon skeleton-icon"></div>
-            <div className="stat-content">
-              <div className="skeleton-text skeleton-title"></div>
-              <div className="skeleton-text skeleton-value"></div>
-              <div className="skeleton-text skeleton-trend"></div>
+      <div className="stats-section">
+        <h2 className="stats-section-title">Stats</h2>
+        <div className="stats-cards-container loading">
+          {[1, 2, 3, 4].map(id => (
+            <div key={id} className="stat-card skeleton">
+              <div className="stat-icon skeleton-icon"></div>
+              <div className="stat-content">
+                <div className="skeleton-text skeleton-title"></div>
+                <div className="skeleton-text skeleton-value"></div>
+                <div className="skeleton-text skeleton-trend"></div>
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     );
   }
@@ -131,36 +134,39 @@ const StatsSection = ({ refreshInterval = 30000 }) => {
 
   return (
     <div className="stats-section">
-      {stats.map(stat => (
-        <OverlayTrigger
-          key={stat.id}
-          placement="top"
-          overlay={
-            <Tooltip id={`tooltip-${stat.id}`}>
-              <div className="stat-tooltip">
-                <p>{getStatDescription(stat.id)}</p>
-                <p className="trend-explanation">
-                  <small>{getTrendExplanation(stat.id)}</small>
-                </p>
+      <h2 className="stats-section-title">Stats</h2>
+      <div className="stats-cards-container">
+        {stats.map(stat => (
+          <OverlayTrigger
+            key={stat.id}
+            placement="top"
+            overlay={
+              <Tooltip id={`tooltip-${stat.id}`}>
+                <div className="stat-tooltip">
+                  <p>{getStatDescription(stat.id)}</p>
+                  <p className="trend-explanation">
+                    <small>{getTrendExplanation(stat.id)}</small>
+                  </p>
+                </div>
+              </Tooltip>
+            }
+          >
+            <div className="stat-card">
+              <div className="stat-icon">
+                <i className={`fas ${stat.icon}`}></i>
               </div>
-            </Tooltip>
-          }
-        >
-          <div className="stat-card">
-            <div className="stat-icon">
-              <i className={`fas ${stat.icon}`}></i>
-            </div>
-            <div className="stat-content">
-              <h4>{stat.title}</h4>
-              <div className="stat-value">{stat.value}</div>
-              <div className={`stat-trend ${stat.trend.type}`}>
-                <i className={`fas ${getTrendIcon(stat.trend.type)}`}></i>
-                {stat.trend.value} {stat.trend.period}
+              <div className="stat-content">
+                <h4>{stat.title}</h4>
+                <div className="stat-value">{stat.value}</div>
+                <div className={`stat-trend ${stat.trend.type}`}>
+                  <i className={`fas ${getTrendIcon(stat.trend.type)}`}></i>
+                  {stat.trend.value} {stat.trend.period}
+                </div>
               </div>
             </div>
-          </div>
-        </OverlayTrigger>
-      ))}
+          </OverlayTrigger>
+        ))}
+      </div>
     </div>
   );
 };

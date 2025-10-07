@@ -89,5 +89,56 @@ export const apiRouteService = {
       `/api/routes/identifier/${routeIdentifier}/compare?version1=${version1}&version2=${version2}`
     );
     return response.data;
+  },
+
+  getServiceInteractionsSummary: async (serviceName, startDate = null, endDate = null) => {
+    try {
+      let url = `/api/metrics/service-interactions/${serviceName}/summary`;
+      const params = [];
+      
+      if (startDate) {
+        params.push(`startDate=${encodeURIComponent(startDate)}`);
+      }
+      if (endDate) {
+        params.push(`endDate=${encodeURIComponent(endDate)}`);
+      }
+      
+      if (params.length > 0) {
+        url += `?${params.join('&')}`;
+      }
+      
+      const response = await axiosInstance.get(url);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching service interactions summary:', error);
+      throw error;
+    }
+  },
+
+  getTopEndpointsByService: async (serviceName, startDate = null, endDate = null, limit = 10) => {
+    try {
+      let url = `/api/metrics/top-endpoints/${serviceName}`;
+      const params = [];
+      
+      if (startDate) {
+        params.push(`startDate=${encodeURIComponent(startDate)}`);
+      }
+      if (endDate) {
+        params.push(`endDate=${encodeURIComponent(endDate)}`);
+      }
+      if (limit && limit !== 10) {
+        params.push(`limit=${limit}`);
+      }
+      
+      if (params.length > 0) {
+        url += `?${params.join('&')}`;
+      }
+      
+      const response = await axiosInstance.get(url);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching top endpoints by service:', error);
+      throw error;
+    }
   }
 }; 

@@ -15,7 +15,7 @@ public interface AgentMonitoringService {
     /**
      * Get health information for a specific agent
      */
-    Mono<Map<String, Object>> getAgentHealth(String agentId, String teamId);
+    Mono<Map<String, Object>> getAgentHealth(String agentId);
     
     /**
      * Get health summary for all agents in a team
@@ -32,7 +32,7 @@ public interface AgentMonitoringService {
     /**
      * Get performance metrics for a specific agent
      */
-    Mono<Map<String, Object>> getAgentPerformance(String agentId, String teamId, LocalDateTime from, LocalDateTime to);
+    Mono<Map<String, Object>> getAgentPerformance(String agentId, LocalDateTime from, LocalDateTime to);
     
     /**
      * Get execution statistics for a team
@@ -61,5 +61,5 @@ public interface AgentMonitoringService {
     /**
      * Get workflow execution status
      */
-    Mono<Map<String, Object>> getWorkflowExecutionStatus(String workflowExecutionId, String teamId);
+    Mono<Map<String, Object>> getWorkflowExecutionStatus(String workflowExecutionId);
 } 

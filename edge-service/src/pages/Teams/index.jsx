@@ -398,7 +398,7 @@ function Teams() {
                     <th>View</th>
                     <th>Edit</th>
                     <th>Members</th>
-                    <th>Routes</th>
+                    <th>Apps</th>
                     <th>API Keys</th>
                     <th>OpenAI</th>
                     <th>Gemini</th>
@@ -468,7 +468,7 @@ function Teams() {
                                 setShowRoutesModal(true);
                               }}
                             >
-                              <HiTemplate className="me-1" /> Routes ({team.routes?.length || 0})
+                              <HiTemplate className="me-1" /> Apps ({team.routes?.length || 0})
                             </button>
                           </td>
                           <td>

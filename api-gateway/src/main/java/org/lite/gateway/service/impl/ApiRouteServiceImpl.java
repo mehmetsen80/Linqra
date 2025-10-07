@@ -12,7 +12,6 @@ import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.repository.*;
 import org.lite.gateway.service.ApiRouteService;
 import org.lite.gateway.service.DynamicRouteService;
-import org.lite.gateway.service.UserContextService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -26,26 +25,68 @@ public class ApiRouteServiceImpl implements ApiRouteService {
     private final ApiRouteRepository apiRouteRepository;
     private final ObjectMapper objectMapper;
     private final RouteVersionMetadataRepository metadataRepository;
-    private final UserContextService userContextService;
     private final ApiRouteVersionRepository apiRouteVersionRepository;
     private final TeamRouteRepository teamRouteRepository;
-    private final TeamMemberRepository teamMemberRepository;
     private final UserRepository userRepository;
     private final DynamicRouteService dynamicRouteService;
     private final GatewayRoutesRefresher gatewayRoutesRefresher;
     
-    public Flux<ApiRoute> getAllRoutes(String teamId) {
+    public Flux<ApiRouteDTO> getAllRoutes(String teamId) {
         if (teamId == null) {
+            // When no teamId is specified, fetch all routes with their assignment info
             return apiRouteRepository.findAll()
+                    .flatMap(route -> 
+                        // Try to find TeamRoute assignment for this route
+                        teamRouteRepository.findByRouteId(route.getId())
+                            .collectList()
+                            .map(teamRoutes -> {
+                                // If multiple teams have this route, use the first one's assignedBy
+                                // or null if no team assignments exist
+                                String assignedBy = teamRoutes.isEmpty() ? null : teamRoutes.get(0).getAssignedBy();
+                                return convertToDTO(route, assignedBy);
+                            })
+                    )
                     .doOnComplete(() -> log.info("Finished fetching all routes"))
                     .doOnError(error -> log.error("Error fetching routes: {}", error.getMessage()));
         }
         
+        // When teamId is specified, fetch routes for that team with assignment info
         return teamRouteRepository.findByTeamId(teamId)
-                .map(TeamRoute::getRouteId)
-                .flatMap(apiRouteRepository::findById)
+                .flatMap(teamRoute -> 
+                    apiRouteRepository.findById(teamRoute.getRouteId())
+                        .map(route -> convertToDTO(route, teamRoute.getAssignedBy()))
+                )
                 .doOnComplete(() -> log.info("Finished fetching routes for teamId: {}", teamId))
                 .doOnError(error -> log.error("Error fetching routes for teamId {}: {}", teamId, error.getMessage()));
+    }
+    
+    /**
+     * Internal method to get all routes as entities (for route locator and internal use)
+     * This is used by ApiRouteLocatorImpl to build Gateway routes
+     */
+    public Flux<ApiRoute> getAllRoutesInternal() {
+        return apiRouteRepository.findAll()
+                .doOnComplete(() -> log.info("Finished fetching all routes (internal)"))
+                .doOnError(error -> log.error("Error fetching routes (internal): {}", error.getMessage()));
+    }
+    
+    private ApiRouteDTO convertToDTO(ApiRoute route, String assignedBy) {
+        return ApiRouteDTO.builder()
+                .id(route.getId())
+                .version(route.getVersion())
+                .createdAt(route.getCreatedAt())
+                .updatedAt(route.getUpdatedAt())
+                .routeIdentifier(route.getRouteIdentifier())
+                .uri(route.getUri())
+                .methods(route.getMethods())
+                .path(route.getPath())
+                .scope(route.getScope())
+                .maxCallsPerDay(route.getMaxCallsPerDay())
+                .filters(route.getFilters())
+                .healthCheck(route.getHealthCheck())
+                .teamId(route.getTeamId())
+                .assignedBy(assignedBy)
+                .build();
     }
 
     public Mono<ApiRoute> getRouteById(String id) {
@@ -498,66 +539,46 @@ public class ApiRouteServiceImpl implements ApiRouteService {
     }
 
     public Mono<RouteExistenceResponse> checkRouteExistence(RouteExistenceRequest request) {
-        String id = request.getId();
         String routeIdentifier = request.getRouteIdentifier();
 
-        if (id == null && routeIdentifier == null) {
+        if (routeIdentifier == null) {
             return Mono.just(RouteExistenceResponse.builder()
                     .exists(false)
-                    .message("No id or routeIdentifier provided")
+                    .message("No routeIdentifier provided")
                     .detail(RouteExistenceResponse.ExistenceDetail.builder()
-                            .idExists(false)
                             .identifierExists(false)
-                            .validationMessage("Both id and routeIdentifier are null")
+                            .validationMessage("routeIdentifier is null")
                             .build())
                     .build());
         }
 
         return Mono.zip(
-                id != null ? apiRouteRepository.existsById(id) : Mono.just(false),
-                routeIdentifier != null ? apiRouteRepository.existsByRouteIdentifier(routeIdentifier) : Mono.just(false),
-                id != null ? apiRouteRepository.findById(id) : Mono.empty(),
-                routeIdentifier != null ? apiRouteRepository.findByRouteIdentifier(routeIdentifier) : Mono.empty()
+                apiRouteRepository.existsByRouteIdentifier(routeIdentifier),
+                apiRouteRepository.findByRouteIdentifier(routeIdentifier)
         ).map(tuple -> {
-            boolean idExists = tuple.getT1();
-            boolean identifierExists = tuple.getT2();
-            ApiRoute routeById = tuple.getT3();
-            ApiRoute routeByIdentifier = tuple.getT4();
+            boolean identifierExists = tuple.getT1();
+            ApiRoute routeByIdentifier = tuple.getT2();
 
             RouteExistenceResponse.RouteDetail existingRoute = null;
-            if (routeById != null) {
-                existingRoute = buildRouteDetail(routeById);
-            } else if (routeByIdentifier != null) {
+            if (routeByIdentifier != null) {
                 existingRoute = buildRouteDetail(routeByIdentifier);
             }
 
+            String message = identifierExists 
+                ? String.format("Route identifier '%s' exists", routeIdentifier)
+                : String.format("Route identifier '%s' does not exist", routeIdentifier);
+
             return RouteExistenceResponse.builder()
-                    .exists(idExists || identifierExists)
-                    .message(buildExistenceMessage(idExists, identifierExists, id, routeIdentifier))
+                    .exists(identifierExists)
+                    .message(message)
                     .detail(RouteExistenceResponse.ExistenceDetail.builder()
-                            .idExists(idExists)
                             .identifierExists(identifierExists)
-                            .existingId(routeById != null ? routeById.getId() : "")
+                            .existingId(routeByIdentifier != null ? routeByIdentifier.getId() : "")
                             .existingIdentifier(routeByIdentifier != null ? routeByIdentifier.getRouteIdentifier() : "")
                             .existingRoute(existingRoute)
                             .build())
                     .build();
         });
-    }
-
-    private String buildExistenceMessage(boolean idExists, boolean identifierExists,
-                                         String id, String routeIdentifier) {
-        StringBuilder message = new StringBuilder();
-        if (idExists) {
-            message.append("Route with id '").append(id).append("' already exists. ");
-        }
-        if (identifierExists) {
-            message.append("Route with identifier '").append(routeIdentifier).append("' already exists.");
-        }
-        if (!idExists && !identifierExists) {
-            message.append("Route is available for creation.");
-        }
-        return message.toString();
     }
 
     private RouteExistenceResponse.RouteDetail buildRouteDetail(ApiRoute route) {
@@ -603,7 +624,8 @@ public class ApiRouteServiceImpl implements ApiRouteService {
     }
 
     public Mono<String> refreshRoutes() {
-        return getAllRoutes(null)
+        // Fetch all routes directly from repository for refresh (no need for DTOs)
+        return apiRouteRepository.findAll()
             .flatMap(apiRoute -> {
                 // Convert synchronous operations to reactive
                 return Mono.fromRunnable(() -> {

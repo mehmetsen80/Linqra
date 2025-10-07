@@ -42,7 +42,7 @@ const statsService = {
 
   getIconForStat(title) {
     const iconMap = {
-      'Active Routes': 'fa-route',
+      'Active Apps': 'fa-route',
       'Avg Response Time': 'fa-tachometer-alt',
       'Requests/min': 'fa-chart-line',
       'Success Rate': 'fa-shield-alt'
@@ -79,7 +79,7 @@ const statsService = {
 
   getStatId(title) {
     const idMap = {
-      'Active Routes': 'active-routes',
+      'Active Apps': 'active-routes',
       'Avg Response Time': 'response-time',
       'Requests/min': 'requests-per-min',
       'Success Rate': 'success-rate'

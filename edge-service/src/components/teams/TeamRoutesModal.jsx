@@ -122,12 +122,12 @@ const TeamRoutesModal = ({ show, onHide, team, onAddRoute, onRemoveRoute, loadin
         <>
             <Modal show={show} onHide={onHide} size="lg">
                 <Modal.Header closeButton>
-                    <Modal.Title>Team Routes - {team?.name}</Modal.Title>
+                    <Modal.Title>Team Apps - {team?.name}</Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
                     <Form onSubmit={handleSubmit} className="mb-4">
                         <Form.Group className="mb-4">
-                            <Form.Label>Select Route</Form.Label>
+                            <Form.Label>Select App Route</Form.Label>
                             <Select
                                 value={selectedRoute}
                                 onChange={(option) => {
@@ -136,7 +136,7 @@ const TeamRoutesModal = ({ show, onHide, team, onAddRoute, onRemoveRoute, loadin
                                 }}
                                 options={routeOptions}
                                 className="form-select-lg"
-                                placeholder="Select a route..."
+                                placeholder="Select an application route..."
                                 isDisabled={loading || searching}
                                 noOptionsMessage={() => "No routes available or all routes are already assigned"}
                             />
@@ -179,7 +179,7 @@ const TeamRoutesModal = ({ show, onHide, team, onAddRoute, onRemoveRoute, loadin
                         <Table hover className="mt-3">
                             <thead>
                                 <tr>
-                                    <th>Route ID</th>
+                                    <th>App Route ID</th>
                                     <th>Path</th>
                                     <th>Version</th>
                                     <th>Permissions</th>

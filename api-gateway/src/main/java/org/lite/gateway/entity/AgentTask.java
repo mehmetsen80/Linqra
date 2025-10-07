@@ -12,6 +12,8 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -21,6 +23,11 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@CompoundIndexes({
+    @CompoundIndex(name = "nextRun_enabled_idx", def = "{'nextRun': 1, 'enabled': 1}"),
+    @CompoundIndex(name = "agent_enabled_idx", def = "{'agentId': 1, 'enabled': 1}"),
+    @CompoundIndex(name = "agent_nextRun_idx", def = "{'agentId': 1, 'nextRun': 1}")
+})
 public class AgentTask {
     @Id
     private String id;
@@ -57,7 +64,9 @@ public class AgentTask {
     private boolean scheduleOnStartup = true; // If true and CRON, auto-register Quartz on app startup
     
     // Scheduling State (moved from Agent entity)
+    @org.springframework.data.mongodb.core.index.Indexed(name = "nextRun_idx")
     private LocalDateTime nextRun;          // Next scheduled execution time for this task
+    @org.springframework.data.mongodb.core.index.Indexed(name = "lastRun_idx")
     private LocalDateTime lastRun;          // Last execution time for this task
     
     // Linq Protocol specific fields
@@ -99,7 +108,7 @@ public class AgentTask {
     public boolean isAutoExecute() {
         if (executionTrigger == null) return false;
         return switch (executionTrigger) {
-            case CRON, AGENT_SCHEDULED -> true;
+            case CRON -> true;
             case MANUAL -> false;
             case EVENT_DRIVEN, WORKFLOW -> true; // Usually automatic
         };
@@ -170,10 +179,6 @@ public class AgentTask {
         return ExecutionTrigger.WORKFLOW.equals(executionTrigger);
     }
     
-    public boolean isAgentScheduledTrigger() {
-        return ExecutionTrigger.AGENT_SCHEDULED.equals(executionTrigger);
-    }
-    
     /**
      * Validates that the executionTrigger is consistent with other task configuration
      */
@@ -189,9 +194,6 @@ public class AgentTask {
             case MANUAL ->
                 // MANUAL trigger should not have cron and should not be auto-executable
                     (cronExpression == null || cronExpression.trim().isEmpty());
-            case AGENT_SCHEDULED ->
-                // AGENT_SCHEDULED is always auto-executable
-                    true;
             case EVENT_DRIVEN, WORKFLOW ->
                 // These can have various configurations and are auto-executable
                     true;

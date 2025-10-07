@@ -6,6 +6,7 @@ import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.service.AgentSchedulingService;
 import org.lite.gateway.service.CronDescriptionService;
+import org.lite.gateway.service.CronCalculationService;
 import org.lite.gateway.service.AgentQuartzService;
 
 import org.springframework.stereotype.Service;
@@ -24,6 +25,7 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
     private final AgentTaskRepository agentTaskRepository;
     private final AgentRepository agentRepository;
     private final CronDescriptionService cronDescriptionService;
+    private final CronCalculationService cronCalculationService;
     private final AgentQuartzService agentQuartzService;
     
     @Override
@@ -40,6 +42,11 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
                     task.setCronDescription(cronDescriptionService.getCronDescription(cronExpression));
                     task.setExecutionTrigger(ExecutionTrigger.CRON);
                     task.setUpdatedBy("system");
+                    
+                    // Calculate and set next run time
+                    LocalDateTime nextRun = cronCalculationService.calculateNextRun(cronExpression);
+                    task.setNextRun(nextRun);
+                    log.info("Calculated next run time for task {}: {}", taskId, nextRun);
                     
                     // Validate the execution trigger configuration
                     if (!task.isExecutionTriggerValid()) {
@@ -96,9 +103,8 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
     public Flux<AgentTask> getTasksReadyToRun() {
         return agentTaskRepository.findTasksReadyToRun(LocalDateTime.now())
                 .filter(task -> {
-                    // Only return tasks that should be automatically executed
-                    return task.getExecutionTrigger() == ExecutionTrigger.CRON || 
-                           task.getExecutionTrigger() == ExecutionTrigger.AGENT_SCHEDULED;
+                    // Only return tasks that should be automatically executed (CRON scheduled)
+                    return task.getExecutionTrigger() == ExecutionTrigger.CRON;
                 });
     }
     
@@ -106,9 +112,8 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
     public Flux<AgentTask> getTasksReadyToRunByAgent(String agentId) {
         return agentTaskRepository.findTasksReadyToRunByAgent(agentId, LocalDateTime.now())
                 .filter(task -> {
-                    // Only return tasks that should be automatically executed
-                    return task.getExecutionTrigger() == ExecutionTrigger.CRON || 
-                           task.getExecutionTrigger() == ExecutionTrigger.AGENT_SCHEDULED;
+                    // Only return tasks that should be automatically executed (CRON scheduled)
+                    return task.getExecutionTrigger() == ExecutionTrigger.CRON;
                 });
     }
     
@@ -118,9 +123,8 @@ public class AgentSchedulingServiceImpl implements AgentSchedulingService {
         return agentRepository.findByTeamId(teamId)
                 .flatMap(agent -> agentTaskRepository.findTasksReadyToRunByAgent(agent.getId(), LocalDateTime.now())
                         .filter(task -> {
-                            // Only return tasks that should be automatically executed
-                            return task.getExecutionTrigger() == ExecutionTrigger.CRON || 
-                                   task.getExecutionTrigger() == ExecutionTrigger.AGENT_SCHEDULED;
+                            // Only return tasks that should be automatically executed (CRON scheduled)
+                            return task.getExecutionTrigger() == ExecutionTrigger.CRON;
                         }));
     }
     

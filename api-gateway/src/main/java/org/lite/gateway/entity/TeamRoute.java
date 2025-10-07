@@ -18,7 +18,11 @@ import java.util.Set;
 @AllArgsConstructor
 @Document(collection = "team_routes")
 @CompoundIndexes({
-    @CompoundIndex(name = "team_route_idx", def = "{'teamId': 1, 'routeId': 1}", unique = true)
+    // Primary: team's routes (unique constraint)
+    @CompoundIndex(name = "team_route_idx", def = "{'teamId': 1, 'routeId': 1}", unique = true),
+    
+    // Reverse: routes by team
+    @CompoundIndex(name = "route_team_idx", def = "{'routeId': 1, 'teamId': 1}")
 })
 public class TeamRoute {
     @Id

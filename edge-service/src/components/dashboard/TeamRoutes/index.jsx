@@ -108,6 +108,7 @@ const TeamRoutes = () => {
 
   return (
     <Card className="team-routes-card">
+      <h2 className="team-routes-title">Team Apps</h2>
       <Card.Header className="bg-light">
         <Breadcrumb className="bg-light mb-0">
           <Breadcrumb.Item 
@@ -123,7 +124,7 @@ const TeamRoutes = () => {
             {currentTeam?.name || 'Team'}
           </Breadcrumb.Item>
           <Breadcrumb.Item active>
-            Team API Routes
+            Team Apps
           </Breadcrumb.Item>
         </Breadcrumb>
       </Card.Header>
@@ -131,7 +132,7 @@ const TeamRoutes = () => {
         <Table responsive className="team-routes-table">
           <thead>
             <tr>
-              <th>Api Routes</th>
+              <th>Apps</th>
               <th>Method</th>
               <th>Path</th>
               <th>Permissions</th>
@@ -164,7 +165,7 @@ const TeamRoutes = () => {
                     onClick={() => handleViewRoute(route.routeIdentifier)}
                     className="view-button"
                   >
-                    <HiEye /> View API
+                    <HiEye /> Go to App
                   </Button>
                 </td>
               </tr>

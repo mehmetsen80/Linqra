@@ -112,10 +112,13 @@ function Register() {
         <img src="/images/noBgWhiteOnlyLogo.png" alt="Logo" />
       </div>
       <Link to="/" className="home-link">
-        <HiHome size={20} />
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            <polyline points="9,22 9,12 15,12 15,22"/>
+        </svg>
         Home
       </Link>
-      <div className="auth-form-section">
+      <div className="auth-form-container">
         <div className="auth-card">
           <div className={loading ? 'opacity-50' : ''}>
             <div className="auth-header">
@@ -128,48 +131,49 @@ function Register() {
             )}
 
             <Form onSubmit={handleSubmit}>
-              <Form.Group className="mb-3">
-                <Form.Label>Username</Form.Label>
+              <div className="kc-form-group mb-3">
                 <Form.Control
                   type="text"
                   name="username"
                   value={formData.username}
                   onChange={handleChange}
                   required
-                  placeholder="Enter username"
                   disabled={loading}
+                  className="kc-input"
+                  autoFocus
                 />
+                <Form.Label className="kc-label">Username</Form.Label>
                 {usernameError && (
                   <Form.Text className="text-danger">
                     {usernameError}
                   </Form.Text>
                 )}
-              </Form.Group>
+              </div>
 
-              <Form.Group className="mb-3">
-                <Form.Label>Email</Form.Label>
+              <div className="kc-form-group mb-3">
                 <Form.Control
                   type="email"
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  placeholder="Enter email"
                   disabled={loading}
+                  className="kc-input"
                 />
-              </Form.Group>
+                <Form.Label className="kc-label">Email</Form.Label>
+              </div>
 
-              <Form.Group className="mb-3">
-                <Form.Label>Password</Form.Label>
+              <div className="kc-form-group mb-3">
                 <Form.Control
                   type="password"
                   name="password"
                   value={formData.password}
                   onChange={handleChange}
                   required
-                  placeholder="Enter password"
                   disabled={loading}
+                  className="kc-input"
                 />
+                <Form.Label className="kc-label">Password</Form.Label>
                 {formData.password && (
                   <div className="password-strength-container">
                     <div className={`password-strength ${passwordStrength.isStrong ? 'strong' : 'weak'}`}>
@@ -177,20 +181,20 @@ function Register() {
                     </div>
                   </div>
                 )}
-              </Form.Group>
+              </div>
 
-              <Form.Group className="mb-4">
-                <Form.Label>Confirm Password</Form.Label>
+              <div className="kc-form-group mb-4">
                 <Form.Control
                   type="password"
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   required
-                  placeholder="Confirm password"
                   disabled={loading}
+                  className="kc-input"
                 />
-              </Form.Group>
+                <Form.Label className="kc-label">Confirm Password</Form.Label>
+              </div>
 
               <Button 
                 type="submit"

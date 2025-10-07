@@ -10,6 +10,9 @@ import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
+import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +23,10 @@ import java.util.stream.Collectors;
 
 @Document("apiRoutes")
 @Data
+@CompoundIndexes({
+    // Health check queries
+    @CompoundIndex(name = "healthcheck_enabled_idx", def = "{'healthCheck.enabled': 1}")
+})
 public class ApiRoute{
     public ApiRoute() {
         // Initialize default values
@@ -145,6 +152,7 @@ public class ApiRoute{
     
     @NotBlank(message = "Route identifier is required")
     @Pattern(regexp = "^[a-zA-Z0-9-]+$", message = "Route identifier can only contain letters, numbers, and hyphens")
+    @Indexed(unique = true)
     String routeIdentifier;
     
     @NotBlank(message = "URI is required")

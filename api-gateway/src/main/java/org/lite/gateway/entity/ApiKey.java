@@ -3,6 +3,7 @@ package org.lite.gateway.entity;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.index.Indexed;
 
 import java.time.Instant;
 
@@ -11,6 +12,7 @@ import java.time.Instant;
 public class ApiKey {
     @Id
     private String id;
+    @Indexed(unique = true)
     private String key;
     private String name;
     private String teamId;

@@ -173,7 +173,7 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
   return (
     <Modal show={show} onHide={onHide} centered>
       <Modal.Header closeButton>
-        <Modal.Title>Create New API Route</Modal.Title>
+        <Modal.Title>Add New App</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <Form noValidate validated={validated} onSubmit={handleSubmit}>
@@ -238,13 +238,13 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
 
           <Form.Group className="mb-3">
             <Form.Label className="d-flex align-items-center gap-2">
-              Route Identifier
+              App Route Identifier
               <OverlayTrigger
                 placement="top"
                 overlay={
                   <Tooltip>
                     This identifier must be unique and cannot be modified after creation. 
-                    It will be used as a permanent reference for this route.
+                    It will be used as a permanent reference for this app.
                     <br /><br />
                     Examples:
                     <br />• inventory-service
@@ -338,7 +338,7 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
                   >
                     This must be configured as a Client Scope in your identity provider (e.g., Keycloak)
                     and assigned to your OpenID Client. Client Scopes define the level of access
-                    that will be included in the access token for this route.
+                    that will be included in the access token for this app.
                     <br /><br />
                     See how to configure Client Scopes in Keycloak:
                     <br />
@@ -397,7 +397,7 @@ const CreateApiRouteModal = ({ show, onHide, onSubmit }) => {
                 Creating...
               </>
             ) : (
-              'Create API Route'
+              'Add new App'
             )}
           </Button>
         </div>

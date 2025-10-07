@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card } from 'react-bootstrap';
-import { HiClock, HiCalendar, HiKey, HiViewGrid, HiDocumentText, HiUserGroup, HiOfficeBuilding, HiShieldCheck } from 'react-icons/hi';
+import { HiClock, HiCalendar, HiKey, HiViewGrid, HiDocumentText, HiUserGroup, HiOfficeBuilding, HiShieldCheck, HiHashtag } from 'react-icons/hi';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTeam } from '../../../contexts/TeamContext';
 import { useEnvironment } from '../../../contexts/EnvironmentContext';
@@ -33,7 +33,7 @@ const UserSummary = () => {
   }
 
   return (
-    <Card className="user-summary mb-4">
+    <Card className="user-summary mb-4 p-2">
       <Card.Body>
         <div className="d-flex justify-content-between align-items-center">
           <div className="user-info">
@@ -44,6 +44,11 @@ const UserSummary = () => {
             <div className="text-muted d-flex align-items-center gap-2 mt-1">
               <HiCalendar /> Current team: {currentTeam?.name || 'No team selected'}
             </div>
+            {currentTeam?.id && (
+              <div className="text-muted d-flex align-items-center gap-2 mt-1">
+                <HiHashtag /> Team ID: {currentTeam.id}
+              </div>
+            )}
             <div className="text-muted d-flex align-items-center gap-2 mt-1">
               <HiShieldCheck /> Role: {currentTeam?.roles?.[0] || 'USER'}
             </div>
@@ -61,7 +66,7 @@ const UserSummary = () => {
             )}
             <Link to="/api-routes" className="quick-action-button">
               <HiViewGrid />
-              <span>API Routes</span>
+              <span>Apps</span>
             </Link>
             <Link to="/service-status" className="quick-action-button">
               <HiDocumentText />

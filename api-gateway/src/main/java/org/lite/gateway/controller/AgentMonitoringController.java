@@ -23,15 +23,17 @@ public class AgentMonitoringController {
     // ==================== AGENT HEALTH MONITORING ====================
     
     @GetMapping("/{agentId}/health")
-    public Mono<ResponseEntity<Map<String, Object>>> getAgentHealth(
-            @PathVariable String agentId,
-            @RequestParam String teamId) {
+    public Mono<ResponseEntity<Map<String, Object>>> getAgentHealth(@PathVariable String agentId) {
         
-        log.info("Getting health status for agent {} in team {}", agentId, teamId);
+        log.info("Getting health status for agent {}", agentId);
         
-        return agentMonitoringService.getAgentHealth(agentId, teamId)
+        return agentMonitoringService.getAgentHealth(agentId)
                 .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.notFound().build());
+                .onErrorResume(error -> {
+                    log.error("Error getting agent health for {}: {}", agentId, error.getMessage(), error);
+                    return Mono.just(ResponseEntity.status(500)
+                            .body(Map.of("error", error.getMessage())));
+                });
     }
     
     @GetMapping("/team/{teamId}/health")
@@ -55,19 +57,18 @@ public class AgentMonitoringController {
     @GetMapping("/{agentId}/performance")
     public Mono<ResponseEntity<Map<String, Object>>> getAgentPerformance(
             @PathVariable String agentId,
-            @RequestParam String teamId,
-            @RequestParam String from,
-            @RequestParam String to) {
-        
-        log.info("Getting performance metrics for agent {} in team {} from {} to {}", 
-                agentId, teamId, from, to);
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
         
         try {
-            // Parse date strings to LocalDateTime
-            LocalDateTime fromDate = LocalDateTime.parse(from);
-            LocalDateTime toDate = LocalDateTime.parse(to);
+            // Default to last month if not provided
+            LocalDateTime toDate = (to != null) ? LocalDateTime.parse(to) : LocalDateTime.now();
+            LocalDateTime fromDate = (from != null) ? LocalDateTime.parse(from) : toDate.minusMonths(1);
             
-            return agentMonitoringService.getAgentPerformance(agentId, teamId, fromDate, toDate)
+            log.info("Getting performance metrics for agent {} from {} to {}", 
+                    agentId, fromDate, toDate);
+            
+            return agentMonitoringService.getAgentPerformance(agentId, fromDate, toDate)
                     .map(ResponseEntity::ok)
                     .onErrorReturn(ResponseEntity.badRequest().build());
         } catch (Exception e) {
@@ -80,14 +81,15 @@ public class AgentMonitoringController {
     @GetMapping("/team/{teamId}/execution-stats")
     public Mono<ResponseEntity<Map<String, Object>>> getTeamExecutionStats(
             @PathVariable String teamId,
-            @RequestParam String from,
-            @RequestParam String to) {
-        
-        log.info("Getting execution statistics for team {} from {} to {}", teamId, from, to);
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
         
         try {
-            LocalDateTime fromDate = LocalDateTime.parse(from);
-            LocalDateTime toDate = LocalDateTime.parse(to);
+            // Default to last month if not provided
+            LocalDateTime toDate = (to != null) ? LocalDateTime.parse(to) : LocalDateTime.now();
+            LocalDateTime fromDate = (from != null) ? LocalDateTime.parse(from) : toDate.minusMonths(1);
+            
+            log.info("Getting execution statistics for team {} from {} to {}", teamId, fromDate, toDate);
             
             return agentMonitoringService.getTeamExecutionStats(teamId, fromDate, toDate)
                     .map(ResponseEntity::ok)
@@ -144,12 +146,11 @@ public class AgentMonitoringController {
     
     @GetMapping("/workflow/{workflowExecutionId}/status")
     public Mono<ResponseEntity<Map<String, Object>>> getWorkflowExecutionStatus(
-            @PathVariable String workflowExecutionId,
-            @RequestParam String teamId) {
+            @PathVariable String workflowExecutionId) {
         
-        log.info("Getting workflow execution status {} for team {}", workflowExecutionId, teamId);
+        log.info("Getting workflow execution status {}", workflowExecutionId);
         
-        return agentMonitoringService.getWorkflowExecutionStatus(workflowExecutionId, teamId)
+        return agentMonitoringService.getWorkflowExecutionStatus(workflowExecutionId)
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.notFound().build());
     }

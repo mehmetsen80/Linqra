@@ -4,12 +4,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.AgentTask;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.service.AgentExecutionService;
+import org.lite.gateway.service.CronCalculationService;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.quartz.QuartzJobBean;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+
+import java.time.LocalDateTime;
 
 /**
  * Quartz job that runs a scheduled AgentTask by taskId.
@@ -24,6 +27,9 @@ public class AgentTaskQuartzJob extends QuartzJobBean {
 
     @Autowired
     private AgentExecutionService agentExecutionService;
+    
+    @Autowired
+    private CronCalculationService cronCalculationService;
 
     @Override
     protected void executeInternal(JobExecutionContext context) {
@@ -45,6 +51,20 @@ public class AgentTaskQuartzJob extends QuartzJobBean {
                 log.error("[Quartz] AgentTask {} has no agentId", taskId);
                 return;
             }
+
+            // Update lastRun to current time
+            LocalDateTime now = LocalDateTime.now();
+            task.setLastRun(now);
+            
+            // Calculate and update nextRun if cron is set
+            if (task.getCronExpression() != null && !task.getCronExpression().trim().isEmpty()) {
+                LocalDateTime nextRun = cronCalculationService.calculateNextRunAfter(task.getCronExpression(), now);
+                task.setNextRun(nextRun);
+                log.info("[Quartz] Updated task {} - lastRun: {}, nextRun: {}", taskId, now, nextRun);
+            }
+            
+            // Save updated times
+            agentTaskRepository.save(task).block();
 
             // Start execution (blocking within Quartz job thread)
             agentExecutionService.startTaskExecution(agentId, taskId, teamId, executedBy != null ? executedBy : "scheduler")

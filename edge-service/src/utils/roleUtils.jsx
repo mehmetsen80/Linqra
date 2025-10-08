@@ -28,11 +28,19 @@ export const hasAdminAccess = (user, currentTeam) => {
 };
 
 export const RoleBadge = ({ user }) => {
-  if (!user?.roles) return null;
+  if (!user?.roles || !Array.isArray(user.roles)) return null;
   
-  return isSuperAdmin(user) ? (
-    <Badge bg="danger">SUPER ADMIN</Badge>
-  ) : null;
+  // Get the highest role (SUPER_ADMIN > ADMIN > USER)
+  const roles = user.roles;
+  if (roles.includes(ROLES.SUPER_ADMIN)) {
+    return <Badge bg="danger">SUPER ADMIN</Badge>;
+  } else if (roles.includes(ROLES.ADMIN)) {
+    return <Badge bg="warning" text="dark">ADMIN</Badge>;
+  } else if (roles.includes(ROLES.USER)) {
+    return <Badge bg="secondary">USER</Badge>;
+  }
+  
+  return null;
 };
 
 export const AuthBadge = ({ authType }) => {

@@ -174,11 +174,15 @@ public class KeycloakServiceImpl implements KeycloakService {
                 String email = claims.get("email", String.class);
                 
                 //The roles are in the realm_access.roles claim and we
-                List<String> roles = claims.get("realm_access", Map.class) != null ?
-                    ((Map<String, List<String>>) claims.get("realm_access", Map.class)).get("roles") :
-                    new ArrayList<>();
+//                List<String> roles = claims.get("realm_access", Map.class) != null ?
+//                    ((Map<String, List<String>>) claims.get("realm_access", Map.class)).get("roles") :
+//                    new ArrayList<>();
 
-                Mono<AuthResponse> authResponseMono = userRepository.findByUsername(username)
+                // Try to find user by username first, then by email
+                Mono<User> userMono = userRepository.findByUsername(username)
+                    .switchIfEmpty(userRepository.findByEmail(email));
+                
+                Mono<AuthResponse> authResponseMono = userMono
                     .flatMap(existingUser -> {
                         // Case 2: User exists, create AuthResponse
                         Map<String, Object> userMap = new HashMap<>();
@@ -308,25 +312,32 @@ public class KeycloakServiceImpl implements KeycloakService {
                 .flatMap(response -> {
                     // Extract claims from the token
                     return jwtService.extractClaims(response.getAccessToken())
-                        .map(claims -> {
+                        .flatMap(claims -> {
                             String username = claims.get("preferred_username", String.class);
                             String email = claims.get("email", String.class);
-                            List<String> roles = claims.get("realm_access", Map.class) != null ?
-                                ((Map<String, List<String>>) claims.get("realm_access", Map.class)).get("roles") :
-                                new ArrayList<>();
+                            
+                            // Try to find user by username first, then by email
+                            Mono<User> userMono = userRepository.findByUsername(username)
+                                .switchIfEmpty(userRepository.findByEmail(email));
+                            
+                            return userMono
+                                .map(existingUser -> {
+                                    Map<String, Object> user = new HashMap<>();
+                                    user.put("username", existingUser.getUsername());
+                                    user.put("email", existingUser.getEmail());
+                                    user.put("roles", existingUser.getRoles()); // Use application roles
+                                    user.put("id", existingUser.getId());
+                                    user.put("authType", "SSO"); // Add missing authType
 
-                            Map<String, Object> user = new HashMap<>();
-                            user.put("username", username);
-                            user.put("email", email);
-                            user.put("roles", roles);
-
-                            return AuthResponse.builder()
-                                .token(response.getAccessToken())
-                                .refreshToken(response.getRefreshToken())
-                                .idToken(response.getIdToken())
-                                .user(user)
-                                .success(true)
-                                .build();
+                                    return AuthResponse.builder()
+                                        .token(response.getAccessToken())
+                                        .refreshToken(response.getRefreshToken())
+                                        .idToken(response.getIdToken())
+                                        .user(user)
+                                        .success(true)
+                                        .build();
+                                })
+                                .switchIfEmpty(Mono.error(new RuntimeException("User not found during token refresh")));
                         });
                 })
                 .onErrorResume(e -> {

@@ -135,13 +135,17 @@ const UserTeamMenu = () => {
           <Dropdown.Header>User Information</Dropdown.Header>
           <div className="user-info-section">
             <div className="auth-type">
-              <AuthBadge authType={user?.authType || 'oauth2'} />
+              <AuthBadge authType={user?.authType || 'LOCAL'} />
             </div>
             <div className="user-name">
               {user?.username}
-              <RoleBadge user={user || { role: user?.authorities?.[0] }} />
+              <RoleBadge user={user} />
             </div>
             <div className="user-email">{user?.email}</div>
+            {/* Temporary debug info */}
+            <div style={{ fontSize: '10px', color: '#666', marginTop: '5px' }}>
+              Debug: user.authType={JSON.stringify(user?.authType)}, roles={JSON.stringify(user?.roles)}
+            </div>
           </div>
           <Dropdown.Divider />
           <Dropdown.Item onClick={handleLogoutClick}>Sign Out</Dropdown.Item>

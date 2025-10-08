@@ -261,85 +261,85 @@ services:
 
 #  ##### ENABLE THIS FOR DOCKERIZATION FOR ALL REMAINING SERVICES
 # Discovery Server (Eureka)
-  discovery-service:
-   build:
-     context: .
-     dockerfile: .kube/eureka/Dockerfile
-   environment:
-     EUREKA_KEY_STORE: eureka-keystore.jks
-     EUREKA_KEY_STORE_PASSWORD: 123456
-     EUREKA_TRUST_STORE: eureka-truststore.jks
-     EUREKA_TRUST_STORE_PASSWORD: 123456
-     EUREKA_GATEWAY_URL: discovery-service
-     EUREKA_ALIAS_NAME: eureka-app-container
-   ports:
-     - "8761:8761"
-   volumes:
-     - ./discovery-server:/app/discovery-server
-     - ./keys:/app/keys
-   networks:
-     - linqra-network
+#   discovery-service:
+#    build:
+#      context: .
+#      dockerfile: .kube/eureka/Dockerfile
+#    environment:
+#      EUREKA_KEY_STORE: eureka-keystore.jks
+#      EUREKA_KEY_STORE_PASSWORD: 123456
+#      EUREKA_TRUST_STORE: eureka-truststore.jks
+#      EUREKA_TRUST_STORE_PASSWORD: 123456
+#      EUREKA_GATEWAY_URL: discovery-service
+#      EUREKA_ALIAS_NAME: eureka-app-container
+#    ports:
+#      - "8761:8761"
+#    volumes:
+#      - ./discovery-server:/app/discovery-server
+#      - ./keys:/app/keys
+#    networks:
+#      - linqra-network
 
 
- # Load Balancer
-  gateway-loadbalancer:
-   image: haproxy:2.8
-   ports:
-     - "7777:7777"
-   volumes:
-     - ./.kube/gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-     - ./keys/haproxy/gateway-combined-container.pem:/etc/ssl/gateway-cert.pem:ro
-   networks:
-     - linqra-network
-   depends_on:
-     - api-gateway-service
+#  # Load Balancer
+#   gateway-loadbalancer:
+#    image: haproxy:2.8
+#    ports:
+#      - "7777:7777"
+#    volumes:
+#      - ./.kube/gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+#      - ./keys/haproxy/gateway-combined-container.pem:/etc/ssl/gateway-cert.pem:ro
+#    networks:
+#      - linqra-network
+#    depends_on:
+#      - api-gateway-service
 
- # API Gateway Service
-  api-gateway-service:
-   build:
-     context: .
-     dockerfile: ./.kube/gateway/Dockerfile
-   environment:
-     SPRING_PROFILES_ACTIVE: dev
-     GATEWAY_TRUST_STORE: /app/gateway-truststore.jks
-     GATEWAY_TRUST_STORE_PASSWORD: 123456
-     GATEWAY_KEY_STORE: /app/gateway-keystore.jks
-     GATEWAY_KEY_STORE_PASSWORD: 123456
-     GATEWAY_API_HOST: api-gateway-service
-     GATEWAY_ALIAS_NAME: gateway-app-container
-     REDIS_GATEWAY_URL: redis-service
-     MONGO_GATEWAY_URL: "mongodb://root:mongopw@mongodb1:27017,mongodb2:27018,mongodb3:27019/admin?replicaSet=rs0"
-     KEYCLOAK_GATEWAY_URL: keycloak-service
-     KEYCLOAK_GATEWAY_PORT: 8080
-     KEYCLOAK_CLIENT_SECRET: HrjvST9kAZYQXoLP8Wn3g012Ui7Loqah
-     EUREKA_GATEWAY_URL: discovery-service
-     EUREKA_INSTANCE_URL: api-gateway-service
-     SLACK_ENABLED: false
-     SLACK_WEBHOOK_URL: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
-     SMTP_ENABLED: false
-     SMTP_PASSWORD: 123456
-     SMTP_USERNAME: abcdef
-     OAUTH2_REDIRECT_URI: https://localhost:3000/callback
-     MILVUS_HOST: milvus-service
-     MILVUS_PORT: 19530
-   volumes:
-     - ./api-gateway:/app/api-gateway
-     - ./keys:/app/keys
-   deploy:
-     replicas: 1
-     restart_policy:
-       condition: on-failure
-   expose:
-     - "7777"
-   networks:
-     - linqra-network
-   depends_on:
-     - discovery-service
-     - mongodb1
-     - mongodb2
-     - mongodb3
-     - keycloak-service
-     - redis-service
+#  # API Gateway Service
+#   api-gateway-service:
+#    build:
+#      context: .
+#      dockerfile: ./.kube/gateway/Dockerfile
+#    environment:
+#      SPRING_PROFILES_ACTIVE: dev
+#      GATEWAY_TRUST_STORE: /app/gateway-truststore.jks
+#      GATEWAY_TRUST_STORE_PASSWORD: 123456
+#      GATEWAY_KEY_STORE: /app/gateway-keystore.jks
+#      GATEWAY_KEY_STORE_PASSWORD: 123456
+#      GATEWAY_API_HOST: api-gateway-service
+#      GATEWAY_ALIAS_NAME: gateway-app-container
+#      REDIS_GATEWAY_URL: redis-service
+#      MONGO_GATEWAY_URL: "mongodb://root:mongopw@mongodb1:27017,mongodb2:27018,mongodb3:27019/admin?replicaSet=rs0"
+#      KEYCLOAK_GATEWAY_URL: keycloak-service
+#      KEYCLOAK_GATEWAY_PORT: 8080
+#      KEYCLOAK_CLIENT_SECRET: HrjvST9kAZYQXoLP8Wn3g012Ui7Loqah
+#      EUREKA_GATEWAY_URL: discovery-service
+#      EUREKA_INSTANCE_URL: api-gateway-service
+#      SLACK_ENABLED: false
+#      SLACK_WEBHOOK_URL: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
+#      SMTP_ENABLED: false
+#      SMTP_PASSWORD: 123456
+#      SMTP_USERNAME: abcdef
+#      OAUTH2_REDIRECT_URI: https://localhost:3000/callback
+#      MILVUS_HOST: milvus-service
+#      MILVUS_PORT: 19530
+#    volumes:
+#      - ./api-gateway:/app/api-gateway
+#      - ./keys:/app/keys
+#    deploy:
+#      replicas: 1
+#      restart_policy:
+#        condition: on-failure
+#    expose:
+#      - "7777"
+#    networks:
+#      - linqra-network
+#    depends_on:
+#      - discovery-service
+#      - mongodb1
+#      - mongodb2
+#      - mongodb3
+#      - keycloak-service
+#      - redis-service
 
 # chroma vector database (commented out)
 # chroma-service:

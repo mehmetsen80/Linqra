@@ -37,15 +37,17 @@ public class AgentTaskMonitoringController {
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> {
                     return agentExecutionService.getTaskExecutionHistory(taskId, limit)
-                            .map(execution -> Map.of(
-                                    "executionId", execution.getExecutionId(),
-                                    "status", execution.getStatus(),
-                                    "result", execution.getResult(),
-                                    "startedAt", execution.getStartedAt(),
-                                    "completedAt", execution.getCompletedAt(),
-                                    "executionDurationMs", execution.getExecutionDurationMs(),
-                                    "errorMessage", execution.getErrorMessage()
-                            ))
+                            .map(execution -> {
+                                Map<String, Object> executionMap = new java.util.HashMap<>();
+                                executionMap.put("executionId", execution.getExecutionId());
+                                executionMap.put("status", execution.getStatus());
+                                executionMap.put("result", execution.getResult());
+                                executionMap.put("startedAt", execution.getStartedAt());
+                                executionMap.put("completedAt", execution.getCompletedAt()); // can be null
+                                executionMap.put("executionDurationMs", execution.getExecutionDurationMs()); // can be null
+                                executionMap.put("errorMessage", execution.getErrorMessage()); // can be null
+                                return executionMap;
+                            })
                             .collectList()
                             .map(executions -> ResponseEntity.ok((Object) executions));
                 })
@@ -143,16 +145,18 @@ public class AgentTaskMonitoringController {
                     // Get the most recent execution
                     return agentExecutionService.getTaskExecutionHistory(taskId, 1)
                             .next()
-                            .map(execution -> Map.of(
-                                    "taskId", taskId,
-                                    "currentStatus", execution.getStatus(),
-                                    "lastResult", execution.getResult(),
-                                    "lastExecutionId", execution.getExecutionId(),
-                                    "lastStartedAt", execution.getStartedAt(),
-                                    "lastCompletedAt", execution.getCompletedAt(),
-                                    "lastDurationMs", execution.getExecutionDurationMs(),
-                                    "lastErrorMessage", execution.getErrorMessage() != null ? execution.getErrorMessage() : ""
-                            ))
+                            .map(execution -> {
+                                Map<String, Object> statusMap = new java.util.HashMap<>();
+                                statusMap.put("taskId", taskId);
+                                statusMap.put("currentStatus", execution.getStatus());
+                                statusMap.put("lastResult", execution.getResult());
+                                statusMap.put("lastExecutionId", execution.getExecutionId());
+                                statusMap.put("lastStartedAt", execution.getStartedAt());
+                                statusMap.put("lastCompletedAt", execution.getCompletedAt()); // can be null
+                                statusMap.put("lastDurationMs", execution.getExecutionDurationMs()); // can be null
+                                statusMap.put("lastErrorMessage", execution.getErrorMessage()); // can be null
+                                return statusMap;
+                            })
                             .defaultIfEmpty(Map.of(
                                     "taskId", taskId,
                                     "currentStatus", "NEVER_EXECUTED",

@@ -1,15 +1,21 @@
 #root {
-  width: 100%;
+  width: 98%;
   max-width: 100%;
-  margin: 0;
+  margin: 1rem;
   padding: 0rem;
   text-align: center;
+  border-radius: 20px;
+  border: 0px solid #e0e0e0;
+  border-color: var(--primary-color);
+  overflow: hidden;
+
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
 }
 
 /* If you want to add header specific styles */
 .header {
   width: 100%;
-  padding: 1rem;
+  padding: 2rem;
   background-color: #f8f9fa;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   margin-bottom: 2rem;

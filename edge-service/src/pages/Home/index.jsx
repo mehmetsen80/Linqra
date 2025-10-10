@@ -59,7 +59,7 @@ function Home() {
               className="cta-button primary"
               onClick={handleGetStarted}
             >
-              Explore Framework
+              Login Linqra
             </button>
             {/* <a 
               href="https://docs.linqra.com"

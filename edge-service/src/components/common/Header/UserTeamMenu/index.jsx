@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Dropdown, Badge } from 'react-bootstrap';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { useTeam } from '../../../../contexts/TeamContext';
-import { HiOutlineTemplate } from 'react-icons/hi';
+import { HiOutlineTemplate, HiOutlineChartBar, HiOutlineStatusOnline, HiOutlineLogout } from 'react-icons/hi';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
 import 'tippy.js/themes/light.css';
@@ -142,13 +142,22 @@ const UserTeamMenu = () => {
               <RoleBadge user={user} />
             </div>
             <div className="user-email">{user?.email}</div>
-            {/* Temporary debug info */}
-            <div style={{ fontSize: '10px', color: '#666', marginTop: '5px' }}>
-              Debug: user.authType={JSON.stringify(user?.authType)}, roles={JSON.stringify(user?.roles)}
-            </div>
           </div>
           <Dropdown.Divider />
-          <Dropdown.Item onClick={handleLogoutClick}>Sign Out</Dropdown.Item>
+          <Dropdown.Header>Quick Links</Dropdown.Header>
+          <Dropdown.Item href="/metrics">
+            <HiOutlineChartBar size={16} style={{ marginRight: '8px' }} />
+            API Metrics
+          </Dropdown.Item>
+          <Dropdown.Item href="/service-status">
+            <HiOutlineStatusOnline size={16} style={{ marginRight: '8px' }} />
+            Service Status
+          </Dropdown.Item>
+          <Dropdown.Divider />
+          <Dropdown.Item onClick={handleLogoutClick}>
+            <HiOutlineLogout size={16} style={{ marginRight: '8px' }} />
+            Sign Out
+          </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
 

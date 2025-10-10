@@ -3,7 +3,7 @@ import Button from '../../common/Button';
 import { getDefaultDateRange, formatDateForApi } from '../../../utils/dateUtils';
 import './styles.css';
 
-function MetricsFilter({ onFilterChange, services }) {
+function MetricsFilter({ onFilterChange, fromServices, toServices }) {
   const [filters, setFilters] = useState({
     fromService: '',
     toService: '',
@@ -108,7 +108,7 @@ function MetricsFilter({ onFilterChange, services }) {
               onChange={handleFilterChange}
             >
               <option value="">All Services</option>
-              {services.map(service => (
+              {fromServices.map(service => (
                 <option key={service} value={service}>{service}</option>
               ))}
             </select>
@@ -122,7 +122,7 @@ function MetricsFilter({ onFilterChange, services }) {
               onChange={handleFilterChange}
             >
               <option value="">All Services</option>
-              {services.map(service => (
+              {toServices.map(service => (
                 <option key={service} value={service}>{service}</option>
               ))}
             </select>

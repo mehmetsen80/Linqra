@@ -5,6 +5,16 @@
   margin: 0 auto;
 }
 
+.metrics-container h1 {
+  color: var(--heading-primary, #333);
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  text-align: left;
+  font-size: 1.25rem;
+  font-weight: 600;
+  padding-left: 0;
+}
+
 .metrics-content {
   display: flex;
   flex-direction: column;

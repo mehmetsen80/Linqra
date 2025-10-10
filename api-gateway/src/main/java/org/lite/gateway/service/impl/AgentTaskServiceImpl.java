@@ -3,9 +3,11 @@ package org.lite.gateway.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.AgentTask;
+import org.lite.gateway.entity.AgentTaskVersion;
 import org.lite.gateway.enums.ExecutionResult;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
+import org.lite.gateway.repository.AgentTaskVersionRepository;
 import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
 import org.lite.gateway.service.CronDescriptionService;
@@ -22,6 +24,7 @@ public class AgentTaskServiceImpl implements AgentTaskService {
 
     private final AgentRepository agentRepository;
     private final AgentTaskRepository agentTaskRepository;
+    private final AgentTaskVersionRepository agentTaskVersionRepository;
     private final AgentExecutionService agentExecutionService;
     private final CronDescriptionService cronDescriptionService;
 
@@ -59,7 +62,13 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                         return agentTaskRepository.save(task);
                     }
                 })
-                .doOnSuccess(savedTask -> log.info("Task '{}' created successfully with ID: {} (type: {})", 
+                .flatMap(savedTask -> {
+                    // Create initial version (version 1) for the newly created task
+                    return agentRepository.findById(savedTask.getAgentId())
+                            .flatMap(agent -> saveInitialTaskVersion(savedTask, agent.getTeamId()))
+                            .thenReturn(savedTask);
+                })
+                .doOnSuccess(savedTask -> log.info("Task '{}' created successfully with ID: {} and version 1 (type: {})", 
                     savedTask.getName(), savedTask.getId(), savedTask.getTaskType()))
                 .doOnError(error -> log.error("Failed to create task '{}': {}", task.getName(), error.getMessage()));
     }
@@ -153,5 +162,26 @@ public class AgentTaskServiceImpl implements AgentTaskService {
                                 return stats;
                             });
                 });
+    }
+    
+    /**
+     * Save initial version (version 1) for a newly created task
+     */
+    private Mono<Void> saveInitialTaskVersion(AgentTask task, String teamId) {
+        log.info("Creating initial version for task: {}", task.getId());
+        
+        AgentTaskVersion initialVersion = AgentTaskVersion.fromAgentTask(
+                task, 
+                "Initial task creation", 
+                task.getCreatedBy()
+        );
+        initialVersion.setTeamId(teamId);
+        
+        return agentTaskVersionRepository.save(initialVersion)
+                .doOnSuccess(version -> log.info("Initial version created for task {} with version {}", 
+                        task.getId(), version.getVersion()))
+                .doOnError(error -> log.error("Failed to create initial version for task {}: {}", 
+                        task.getId(), error.getMessage()))
+                .then();
     }
 }

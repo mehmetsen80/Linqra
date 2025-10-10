@@ -46,10 +46,6 @@ const Header = () => {
             <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/api-routes">Apps</Nav.Link>
             <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/metrics">API Metrics</Nav.Link>
-            <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/service-status">Service Status</Nav.Link>
-            <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/workflows">Workflows</Nav.Link>
             
           </Nav>

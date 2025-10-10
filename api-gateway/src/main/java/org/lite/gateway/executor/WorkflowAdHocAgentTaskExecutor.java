@@ -6,6 +6,7 @@ import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.entity.Agent;
 import org.lite.gateway.entity.AgentExecution;
 import org.lite.gateway.entity.AgentTask;
+import org.lite.gateway.entity.LinqWorkflowExecution;
 import org.lite.gateway.enums.AgentTaskType;
 import org.lite.gateway.enums.ExecutionType;
 import org.lite.gateway.repository.AgentExecutionRepository;
@@ -93,7 +94,7 @@ public class WorkflowAdHocAgentTaskExecutor extends AgentTaskExecutor {
                                             "agentExecutionId", saved.getExecutionId()
                                     );
                                     return workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
-                                            .map(exec -> exec.getId())
+                                            .map(LinqWorkflowExecution::getId)
                                             .doOnNext(saved::setWorkflowExecutionId)
                                             .then(Mono.just(response));
                                 })

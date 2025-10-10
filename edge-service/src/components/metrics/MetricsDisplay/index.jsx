@@ -13,7 +13,8 @@ function MetricsDisplay() {
   const [selectedService, setSelectedService] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [services, setServices] = useState([]);
+  const [fromServices, setFromServices] = useState([]);
+  const [toServices, setToServices] = useState([]);
 
   useEffect(() => {
     let mounted = true;
@@ -33,12 +34,17 @@ function MetricsDisplay() {
           setMetrics(data);
           setFilteredMetrics(data);
           
-          const uniqueServices = [...new Set([
-            ...data.map(metric => metric.fromService),
-            ...data.map(metric => metric.toService)
-          ])].filter(Boolean).sort();
+          // Extract separate lists for fromService and toService
+          const uniqueFromServices = [...new Set(
+            data.map(metric => metric.fromService)
+          )].filter(Boolean).sort();
           
-          setServices(uniqueServices);
+          const uniqueToServices = [...new Set(
+            data.map(metric => metric.toService)
+          )].filter(Boolean).sort();
+          
+          setFromServices(uniqueFromServices);
+          setToServices(uniqueToServices);
         }
       } catch (err) {
         if (mounted) {
@@ -103,7 +109,8 @@ function MetricsDisplay() {
         <div className="section filter-section">
           <MetricsFilter 
             onFilterChange={handleFilterChange}
-            services={services}
+            fromServices={fromServices}
+            toServices={toServices}
           />
         </div>
         <div className="section chart-section">

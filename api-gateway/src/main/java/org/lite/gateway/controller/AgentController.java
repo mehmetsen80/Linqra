@@ -50,10 +50,10 @@ public class AgentController {
                 });
     }
     
-    @GetMapping("/{agentId}")
+    @GetMapping("/team/{teamId}/{agentId}")
     public Mono<ResponseEntity<Agent>> getAgent(
-            @PathVariable String agentId,
-            @RequestParam String teamId) {
+            @PathVariable String teamId,
+            @PathVariable String agentId) {
         
         log.info("Getting agent {} for team {}", agentId, teamId);
         

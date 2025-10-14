@@ -392,6 +392,20 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             .switchIfEmpty(Mono.error(new RuntimeException("Execution not found")));
     }
 
+    public Mono<LinqWorkflowExecution> getExecutionByAgentExecutionId(String agentExecutionId) {
+        log.info("Fetching execution by agentExecutionId: {}", agentExecutionId);
+        return executionRepository.findByAgentExecutionId(agentExecutionId)
+            .doOnSuccess(exec -> {
+                if (exec != null) {
+                    log.info("Found execution with _id: {} for agentExecutionId: {}", exec.getId(), agentExecutionId);
+                } else {
+                    log.warn("No execution found for agentExecutionId: {}", agentExecutionId);
+                }
+            })
+            .doOnError(error -> log.error("Error fetching execution by agentExecutionId: {}", error.getMessage()))
+            .switchIfEmpty(Mono.error(new RuntimeException("Execution not found for agentExecutionId: " + agentExecutionId)));
+    }
+
     @Override
     public Mono<Void> deleteExecution(String executionId) {
         return teamContextService.getTeamFromContext()

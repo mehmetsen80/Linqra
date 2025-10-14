@@ -421,8 +421,8 @@ function ViewAgent() {
                                 </thead>
                                 <tbody>
                                     {tasks.map((task) => (
-                                        <tr key={task.id} style={{ cursor: 'pointer' }} onClick={() => console.log('View task', task.id)}>
-                                            <td>{task.name}</td>
+                                        <tr key={task.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/agents/${agentId}/tasks/${task.id}`)}>
+                                            <td><strong>{task.name}</strong></td>
                                             <td>
                                                 <Badge bg={
                                                     task.taskType === 'WORKFLOW_TRIGGER' ? 'primary' :

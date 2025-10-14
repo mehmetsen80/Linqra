@@ -335,6 +335,29 @@ const workflowService = {
                 error: error.response?.data?.message || 'Failed to fetch team workflow statistics'
             };
         }
+    },
+
+    getExecutionByAgentExecutionId: async (agentExecutionId) => {
+        try {
+            const response = await axiosInstance.get(`/linq/workflows/executions/${agentExecutionId}`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data
+            };
+        } catch (error) {
+            console.error('Error fetching execution by agent execution ID:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch execution'
+            };
+        }
     }
 };
 

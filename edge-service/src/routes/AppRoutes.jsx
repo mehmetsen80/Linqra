@@ -33,7 +33,8 @@ import WorkflowExecute from '../pages/LinqProtocol/Workflow/Execute';
 import WorkflowExamples from '../pages/LinqProtocol/Workflow/Examples';
 import WorkflowQuotes from '../pages/LinqProtocol/Workflow/Quotes';
 import Agents from '../pages/Agents';
-import ViewAgent from '../pages/Agents/View';
+import ViewAgent from '../pages/Agents/ViewAgent';
+import ViewAgentTask from '../pages/Agents/ViewAgentTask';
 
 const AppRoutes = () => {
   return (
@@ -78,6 +79,7 @@ const AppRoutes = () => {
         <Route path="/workflows" element={<Workflows />} />
         <Route path="/agents" element={<Agents />} />
         <Route path="/agents/:agentId" element={<ViewAgent />} />
+        <Route path="/agents/:agentId/tasks/:taskId" element={<ViewAgentTask />} />
         <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
         
         <Route 

@@ -1,0 +1,1881 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useTeam } from '../../../contexts/TeamContext';
+import { useAuth } from '../../../contexts/AuthContext';
+import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
+import agentTaskService from '../../../services/agentTaskService';
+import agentTaskVersionService from '../../../services/agentTaskVersionService';
+import agentTaskMonitoringService from '../../../services/agentTaskMonitoringService';
+import agentService from '../../../services/agentService';
+import workflowService from '../../../services/workflowService';
+import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
+import { Form, Card, Spinner, Badge, Modal, Row, Col, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import Button from '../../../components/common/Button';
+import { format } from 'date-fns';
+import ConfirmationModal from '../../../components/common/ConfirmationModal';
+import ExecutionDetailsModal from '../../../components/workflows/ExecutionDetailsModal';
+import StepDescriptions from '../../../components/workflows/StepDescriptions';
+import { HiPlay, HiArrowLeft } from 'react-icons/hi';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
+import { 
+    Table, 
+    TableBody, 
+    TableCell, 
+    TableContainer, 
+    TableHead, 
+    TableRow, 
+    Paper,
+    TextField,
+    Box,
+    InputAdornment 
+} from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
+import './styles.css';
+
+function ViewAgentTask() {
+    const { taskId } = useParams();
+    const navigate = useNavigate();
+    const { currentTeam } = useTeam();
+    const { user } = useAuth();
+    const [task, setTask] = useState(null);
+    const [agent, setAgent] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [versions, setVersions] = useState([]);
+    const [showRollbackModal, setShowRollbackModal] = useState(false);
+    const [showCompareModal, setShowCompareModal] = useState(false);
+    const [selectedVersion, setSelectedVersion] = useState(null);
+    const [compareVersions, setCompareVersions] = useState({ version1: '', version2: '' });
+    const [saving, setSaving] = useState(false);
+    const [showMetadataModal, setShowMetadataModal] = useState(false);
+    const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
+    const [executing, setExecuting] = useState(false);
+    const [configText, setConfigText] = useState('');
+    const [validationError, setValidationError] = useState(null);
+    const [isEditingConfig, setIsEditingConfig] = useState(false);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
+    const [stats, setStats] = useState(null);
+    const [metrics, setMetrics] = useState(null);
+    const [executionHistory, setExecutionHistory] = useState([]);
+    const [loadingStats, setLoadingStats] = useState(true);
+    const [selectedExecution, setSelectedExecution] = useState(null);
+    const [showExecutionModal, setShowExecutionModal] = useState(false);
+    const [loadingExecutionDetails, setLoadingExecutionDetails] = useState(false);
+    const [executionFilters, setExecutionFilters] = useState({
+        executionId: '',
+        startedAt: '',
+        completedAt: '',
+        duration: '',
+        status: '',
+        result: ''
+    });
+    const [linkedWorkflow, setLinkedWorkflow] = useState(null);
+    const [loadingWorkflow, setLoadingWorkflow] = useState(false);
+
+    const canEditTask = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
+
+    useEffect(() => {
+        if (currentTeam) {
+            loadTask();
+            loadVersions();
+            loadStats();
+            loadMetrics();
+            loadExecutionHistory();
+        }
+    }, [currentTeam, taskId]);
+
+    useEffect(() => {
+        if (task?.linq_config && !isEditingConfig) {
+            const configString = typeof task.linq_config === 'object' 
+                ? JSON.stringify(task.linq_config, null, 2) 
+                : task.linq_config || '';
+            setConfigText(configString);
+            setValidationError(null);
+        }
+    }, [task, isEditingConfig]);
+
+    useEffect(() => {
+        if (task?.agentId && currentTeam) {
+            loadAgent();
+        }
+    }, [task?.agentId, currentTeam]);
+
+    useEffect(() => {
+        if (task?.linq_config?.query?.workflowId && currentTeam) {
+            loadLinkedWorkflow();
+        }
+    }, [task?.linq_config?.query?.workflowId, currentTeam]);
+
+    const loadTask = async () => {
+        try {
+            setLoading(true);
+            const response = await agentTaskService.getTask(taskId);
+            if (response.success) {
+                setTask(response.data);
+            } else {
+                setError(response.error);
+            }
+        } catch (err) {
+            setError('Failed to load task');
+            console.error('Error loading task:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const loadAgent = async () => {
+        try {
+            const response = await agentService.getAgent(currentTeam.id, task.agentId);
+            if (response.success) {
+                setAgent(response.data);
+            }
+        } catch (err) {
+            console.error('Error loading agent:', err);
+        }
+    };
+
+    const loadLinkedWorkflow = async () => {
+        try {
+            setLoadingWorkflow(true);
+            const workflowId = task?.linq_config?.query?.workflowId;
+            if (workflowId && currentTeam) {
+                const response = await workflowService.getWorkflowById(workflowId);
+                if (response.success) {
+                    setLinkedWorkflow(response.data);
+                }
+            }
+        } catch (err) {
+            console.error('Error loading linked workflow:', err);
+        } finally {
+            setLoadingWorkflow(false);
+        }
+    };
+
+    const loadVersions = async () => {
+        try {
+            const response = await agentTaskVersionService.getVersionHistory(taskId);
+            if (response.success) {
+                setVersions(response.data);
+            }
+        } catch (err) {
+            console.error('Error loading versions:', err);
+        }
+    };
+
+    const loadStats = async () => {
+        try {
+            setLoadingStats(true);
+            const response = await agentTaskMonitoringService.getTaskStatistics(taskId);
+            if (response.success) {
+                setStats(response.data);
+            }
+        } catch (err) {
+            console.error('Error loading stats:', err);
+        } finally {
+            setLoadingStats(false);
+        }
+    };
+
+    const loadMetrics = async () => {
+        try {
+            const response = await agentTaskMonitoringService.getTaskMetrics(taskId);
+            if (response.success) {
+                setMetrics(response.data);
+            }
+        } catch (err) {
+            console.error('Error loading metrics:', err);
+        }
+    };
+
+    const loadExecutionHistory = async () => {
+        try {
+            // Fetch all executions by passing a large limit or removing the limit parameter
+            const response = await agentTaskMonitoringService.getTaskExecutionHistory(taskId, 1000);
+            if (response.success) {
+                setExecutionHistory(response.data);
+            }
+        } catch (err) {
+            console.error('Error loading execution history:', err);
+        }
+    };
+
+    const handleInputChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        setTask(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
+    };
+
+    const handleConfigTextChange = (event) => {
+        const text = event.target.value;
+        setIsEditingConfig(true);
+        setConfigText(text);
+        
+        try {
+            const parsed = JSON.parse(text);
+            setTask(prev => ({
+                ...prev,
+                linq_config: parsed
+            }));
+            setValidationError(null);
+        } catch (error) {
+            console.warn('JSON parsing failed during editing:', error);
+            setValidationError(error.message);
+        }
+    };
+
+    const formatJson = () => {
+        try {
+            const parsed = JSON.parse(configText);
+            const formatted = JSON.stringify(parsed, null, 2);
+            setConfigText(formatted);
+            setValidationError(null);
+        } catch (error) {
+            setValidationError('Cannot format invalid JSON');
+        }
+    };
+
+    const handleConfigFocus = () => {
+        setIsEditingConfig(true);
+    };
+
+    const handleConfigBlur = () => {
+        setTimeout(() => {
+            setIsEditingConfig(false);
+        }, 100);
+    };
+
+    const handleSave = async () => {
+        try {
+            setSaving(true);
+            const taskToSave = {
+                ...task,
+                linq_config: typeof task.linq_config === 'object' ? task.linq_config : JSON.parse(task.linq_config)
+            };
+            const response = await agentTaskVersionService.createNewVersion(taskId, taskToSave);
+            if (response.success) {
+                showSuccessToast('Task updated successfully');
+                loadTask();
+                loadVersions();
+            } else {
+                showErrorToast(response.error || 'Failed to update task');
+            }
+        } catch (err) {
+            showErrorToast('Failed to update task');
+            console.error('Error updating task:', err);
+        } finally {
+            setSaving(false);
+            setShowConfirmModal(false);
+        }
+    };
+
+    const handleRollbackClick = (version) => {
+        setSelectedVersion(version);
+        setShowRollbackModal(true);
+    };
+
+    const handleRollback = async () => {
+        if (!selectedVersion) return;
+
+        try {
+            setSaving(true);
+            const response = await agentTaskVersionService.rollbackToVersion(taskId, selectedVersion.version);
+            if (response.success) {
+                showSuccessToast('Rolled back to previous version');
+                loadTask();
+                loadVersions();
+            } else {
+                showErrorToast(response.error || 'Failed to rollback version');
+            }
+        } catch (err) {
+            showErrorToast('Failed to rollback version');
+            console.error('Error rolling back version:', err);
+        } finally {
+            setSaving(false);
+            setShowRollbackModal(false);
+            setSelectedVersion(null);
+        }
+    };
+
+    const handleCompareClick = (version) => {
+        setCompareVersions({
+            version1: task?.version,
+            version2: version.version
+        });
+        setShowCompareModal(true);
+    };
+
+    const handleMetadataSave = async () => {
+        try {
+            // Create a new version with updated metadata
+            const response = await agentTaskVersionService.createNewVersion(taskId, task);
+            if (response.success) {
+                showSuccessToast('Task details updated successfully');
+                setShowMetadataModal(false);
+                loadTask();
+                loadVersions();
+            } else {
+                showErrorToast(response.error || 'Failed to update task details');
+            }
+        } catch (err) {
+            showErrorToast('Failed to update task details');
+        }
+    };
+
+    const handleExecute = async () => {
+        if (!task) return;
+
+        try {
+            setExecuting(true);
+            const response = await agentTaskService.executeTask(taskId);
+            if (response.success) {
+                showSuccessToast('Task execution started successfully');
+                // Reload stats, metrics, and execution history
+                setTimeout(() => {
+                    loadStats();
+                    loadMetrics();
+                    loadExecutionHistory();
+                    loadTask();
+                }, 2000); // Wait 2 seconds for execution to complete
+            } else {
+                showErrorToast(response.error || 'Failed to execute task');
+            }
+        } catch (err) {
+            console.error('Error executing task:', err);
+            showErrorToast('Failed to execute task');
+        } finally {
+            setExecuting(false);
+            setShowExecuteConfirm(false);
+        }
+    };
+
+    const handleEnableDisable = async () => {
+        try {
+            const response = task.enabled 
+                ? await agentTaskService.disableTask(taskId)
+                : await agentTaskService.enableTask(taskId);
+            
+            if (response.success) {
+                showSuccessToast(`Task ${task.enabled ? 'disabled' : 'enabled'} successfully`);
+                loadTask();
+            } else {
+                showErrorToast(response.error || `Failed to ${task.enabled ? 'disable' : 'enable'} task`);
+            }
+        } catch (err) {
+            showErrorToast(`Failed to ${task.enabled ? 'disable' : 'enable'} task`);
+        }
+    };
+
+    const handleExecutionClick = async (execution) => {
+        try {
+            setLoadingExecutionDetails(true);
+            
+            // Fetch the full execution details by agentExecutionId
+            // This works for both embedded workflows and workflow triggers
+            const response = await workflowService.getExecutionByAgentExecutionId(execution.executionId);
+            
+            if (response.success && response.data) {
+                setSelectedExecution(response.data);
+                setShowExecutionModal(true);
+            } else {
+                showErrorToast(response.error || 'Execution details not found');
+            }
+        } catch (err) {
+            console.error('Error fetching execution details:', err);
+            showErrorToast('Failed to load execution details');
+        } finally {
+            setLoadingExecutionDetails(false);
+        }
+    };
+
+    const handleExecutionFilterChange = (column) => (event) => {
+        setExecutionFilters(prev => ({
+            ...prev,
+            [column]: event.target.value
+        }));
+    };
+
+    const filteredExecutions = executionHistory.filter(execution => {
+        return Object.keys(executionFilters).every(key => {
+            const filterValue = executionFilters[key].toLowerCase();
+            if (!filterValue) return true;
+
+            if (key === 'executionId') {
+                return execution.executionId.toLowerCase().includes(filterValue);
+            }
+            if (key === 'startedAt' || key === 'completedAt') {
+                return formatDate(execution[key]).toLowerCase().includes(filterValue);
+            }
+            if (key === 'duration') {
+                return String(execution.executionDurationMs || '').includes(filterValue);
+            }
+            if (key === 'status' || key === 'result') {
+                return String(execution[key] || '').toLowerCase().includes(filterValue);
+            }
+
+            return true;
+        });
+    });
+
+    const formatDate = (date) => {
+        if (!date) return 'N/A';
+        try {
+            let dateObj;
+            if (Array.isArray(date)) {
+                dateObj = new Date(date[0], date[1] - 1, date[2], date[3], date[4], date[5]);
+            } else {
+                dateObj = new Date(date);
+            }
+            if (isNaN(dateObj.getTime())) return 'N/A';
+            return format(dateObj, 'MMM d, yyyy HH:mm');
+        } catch (err) {
+            console.error('Error formatting date:', err);
+            return 'N/A';
+        }
+    };
+
+    const highlightDifferences = (obj1, obj2, path = '') => {
+        if (!obj1 || !obj2) return {};
+        
+        const result = {};
+        
+        if (Array.isArray(obj1) && Array.isArray(obj2)) {
+            obj1.forEach((item, index) => {
+                if (index < obj2.length) {
+                    const nestedDiffs = highlightDifferences(item, obj2[index], `${path}[${index}]`);
+                    Object.assign(result, nestedDiffs);
+                }
+            });
+            return result;
+        }
+        
+        if (typeof obj1 === 'object' && typeof obj2 === 'object') {
+            const allKeys = new Set([...Object.keys(obj1), ...Object.keys(obj2)]);
+            
+            allKeys.forEach(key => {
+                const currentPath = path ? `${path}.${key}` : key;
+                
+                if (obj1[key] && obj2[key] && 
+                    typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
+                    const nestedDiffs = highlightDifferences(obj1[key], obj2[key], currentPath);
+                    Object.assign(result, nestedDiffs);
+                } 
+                else if (JSON.stringify(obj1[key]) !== JSON.stringify(obj2[key])) {
+                    result[currentPath] = true;
+                }
+            });
+            
+            return result;
+        }
+        
+        if (JSON.stringify(obj1) !== JSON.stringify(obj2)) {
+            result[path] = true;
+        }
+        
+        return result;
+    };
+
+    const renderJsonWithHighlights = (obj, differences, path = '') => {
+        if (!obj) return null;
+        
+        if (Array.isArray(obj)) {
+            return (
+                <div>
+                    [
+                    <div style={{ marginLeft: '20px' }}>
+                        {obj.map((item, index) => (
+                            <div key={index}>
+                                {renderJsonWithHighlights(item, differences, `${path}[${index}]`)}
+                                {index < obj.length - 1 && ','}
+                            </div>
+                        ))}
+                    </div>
+                    ]
+                </div>
+            );
+        }
+        
+        if (typeof obj === 'object' && obj !== null) {
+            return (
+                <div>
+                    {'{'}
+                    <div style={{ marginLeft: '20px' }}>
+                        {Object.entries(obj).map(([key, value], index, array) => {
+                            const currentPath = path ? `${path}.${key}` : key;
+                            const isDifferent = differences[currentPath];
+                            
+                            return (
+                                <div key={key} className={isDifferent ? 'diff-changed' : ''}>
+                                    <span className="json-key">"{key}"</span>: {renderJsonWithHighlights(value, differences, currentPath)}
+                                    {index < array.length - 1 && ','}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {'}'}
+                </div>
+            );
+        }
+        
+        return (
+            <span className="json-value">
+                {typeof obj === 'string' ? `"${obj}"` : String(obj)}
+            </span>
+        );
+    };
+
+    if (loading) {
+        return (
+            <div className="d-flex justify-content-center align-items-center" style={{ height: '200px' }}>
+                <Spinner animation="border" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                </Spinner>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="alert alert-danger" role="alert">
+                {error}
+            </div>
+        );
+    }
+
+    return (
+        <div className="view-agent-task-container">
+            <div className="d-flex justify-content-between align-items-center mb-4">
+                <h4 className="page-header">
+                    <i className="fas fa-tasks me-2"></i>
+                    Agent Task Details
+                </h4>
+                <div className="d-flex gap-2">
+                    <Button 
+                        variant="outline-secondary" 
+                        onClick={() => navigate(`/agents/${task?.agentId}`)}
+                    >
+                        <HiArrowLeft className="me-1" /> Back to Agent
+                    </Button>
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="execute-tooltip">
+                                {task?.enabled ? 'Execute this task' : 'Task must be enabled to execute'}
+                            </Tooltip>
+                        }
+                    >
+                        <div>
+                            <Button 
+                                variant="primary" 
+                                onClick={() => setShowExecuteConfirm(true)}
+                                disabled={!task?.enabled || executing}
+                            >
+                                <HiPlay className="me-1" /> Execute
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="toggle-tooltip">
+                                {canEditTask ? `${task?.enabled ? 'Disable' : 'Enable'} this task` : 'Only team admins can modify tasks'}
+                            </Tooltip>
+                        }
+                    >
+                        <div>
+                            <Button 
+                                variant={task?.enabled ? 'warning' : 'success'}
+                                onClick={handleEnableDisable}
+                                disabled={!canEditTask}
+                            >
+                                {task?.enabled ? 'Disable Task' : 'Enable Task'}
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="edit-details-tooltip">
+                                {canEditTask ? 'Edit task details' : 'Only team admins can edit task details'}
+                            </Tooltip>
+                        }
+                    >
+                        <div>
+                            <Button 
+                                variant="outline-primary" 
+                                onClick={() => setShowMetadataModal(true)}
+                                disabled={!canEditTask}
+                            >
+                                Edit Task Details
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
+                </div>
+            </div>
+
+            <div className="task-title-section mb-4">
+                <h4 className="task-title text-start mb-2">
+                    {task?.name}
+                </h4>
+                <div className="task-meta text-muted small">
+                    <span className="me-4">
+                        <i className="fas fa-calendar-plus me-1"></i>
+                        Created: {formatDate(task?.createdAt)}
+                    </span>
+                    <span className="me-4">
+                        <i className="fas fa-user-plus me-1"></i>
+                        Created By: {task?.createdBy || 'Unknown'}
+                    </span>
+                    <span className="me-4">
+                        <i className="fas fa-calendar-check me-1"></i>
+                        Updated: {formatDate(task?.updatedAt)}
+                    </span>
+                    <span className="me-4">
+                        <i className="fas fa-user-edit me-1"></i>
+                        Updated By: {task?.updatedBy || 'Unknown'}
+                    </span>
+                    {task?.version && (
+                        <span>
+                            <i className="fas fa-code-branch me-1"></i>
+                            v{task.version}
+                        </span>
+                    )}
+                </div>
+                {task?.description && (
+                    <div className="task-description mt-3">
+                        <div className="description-label mb-1">
+                            <i className="fas fa-align-left me-1 text-muted"></i>
+                            <small className="text-muted fw-semibold">Description</small>
+                        </div>
+                        <p className="description-text mb-0">
+                            {task.description}
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* Schedule Information Section */}
+            <Card className="mb-4">
+                <Card.Header className="bg-light">
+                    <h5 className="mb-0">
+                        <i className="fas fa-clock me-2"></i>
+                        Schedule Information
+                    </h5>
+                </Card.Header>
+                <Card.Body>
+                    {task?.executionTrigger === 'MANUAL' ? (
+                        <div className="text-center py-3">
+                            <i className="fas fa-hand-pointer text-muted fa-3x mb-3"></i>
+                            <h6 className="text-muted">Manual Execution Only</h6>
+                            <p className="text-muted mb-3">
+                                This task is set to manual execution. It will not run automatically.
+                            </p>
+                            {canEditTask && (
+                                <Button 
+                                    variant="outline-primary" 
+                                    size="sm"
+                                    onClick={() => setShowMetadataModal(true)}
+                                >
+                                    <i className="fas fa-edit me-1"></i>
+                                    Edit Task to Add Scheduler
+                                </Button>
+                            )}
+                        </div>
+                    ) : (
+                        <Row>
+                            <Col md={6}>
+                                <div className="schedule-info-item">
+                                    <label className="schedule-label">
+                                        <i className="fas fa-sync-alt me-2"></i>
+                                        Execution Trigger
+                                    </label>
+                                    <div>
+                                        <Badge bg={
+                                            task?.executionTrigger === 'CRON' ? 'primary' :
+                                            task?.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
+                                            'info'
+                                        } className="schedule-badge">
+                                            {task?.executionTrigger}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </Col>
+                            {task?.cronExpression && (
+                                <>
+                                    <Col md={6}>
+                                        <div className="schedule-info-item">
+                                            <label className="schedule-label">
+                                                <i className="fas fa-code me-2"></i>
+                                                Cron Expression
+                                            </label>
+                                            <div>
+                                                <code className="schedule-code">{task.cronExpression}</code>
+                                            </div>
+                                        </div>
+                                    </Col>
+                                    <Col md={12}>
+                                        <div className="schedule-info-item">
+                                            <label className="schedule-label">
+                                                <i className="fas fa-info-circle me-2"></i>
+                                                Cron Description
+                                            </label>
+                                            <div className="schedule-description">
+                                                {task.cronDescription || 'No description available'}
+                                            </div>
+                                        </div>
+                                    </Col>
+                                </>
+                            )}
+                            <Col md={6}>
+                                <div className="schedule-info-item">
+                                    <label className="schedule-label">
+                                        <i className="fas fa-play-circle me-2"></i>
+                                        Last Run
+                                    </label>
+                                    <div className="schedule-value">
+                                        {task?.lastRun ? (
+                                            <span className="text-success">
+                                                <i className="fas fa-check-circle me-1"></i>
+                                                {formatDate(task.lastRun)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted">
+                                                <i className="fas fa-minus-circle me-1"></i>
+                                                Never executed
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </Col>
+                            <Col md={6}>
+                                <div className="schedule-info-item">
+                                    <label className="schedule-label">
+                                        <i className="fas fa-clock me-2"></i>
+                                        Next Run
+                                    </label>
+                                    <div className="schedule-value">
+                                        {task?.nextRun ? (
+                                            <span className="text-primary">
+                                                <i className="fas fa-clock me-1"></i>
+                                                {formatDate(task.nextRun)}
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted">
+                                                <i className="fas fa-minus-circle me-1"></i>
+                                                Not scheduled
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </Col>
+                            <Col md={12}>
+                                <div className="schedule-info-item">
+                                    <label className="schedule-label">
+                                        <i className="fas fa-cog me-2"></i>
+                                        Additional Settings
+                                    </label>
+                                    <div>
+                                        {task?.scheduleOnStartup && (
+                                            <Badge bg="success" className="me-2 mb-2">
+                                                <i className="fas fa-power-off me-1"></i>
+                                                Schedule on Startup
+                                            </Badge>
+                                        )}
+                                        {task?.scheduled && (
+                                            <Badge bg="info" className="me-2 mb-2">
+                                                <i className="fas fa-calendar-check me-1"></i>
+                                                Currently Scheduled
+                                            </Badge>
+                                        )}
+                                        {task?.autoExecute && (
+                                            <Badge bg="warning" className="me-2 mb-2">
+                                                <i className="fas fa-bolt me-1"></i>
+                                                Auto Execute
+                                            </Badge>
+                                        )}
+                                        {!task?.scheduleOnStartup && !task?.scheduled && !task?.autoExecute && (
+                                            <span className="text-muted">None</span>
+                                        )}
+                                    </div>
+                                </div>
+                            </Col>
+                        </Row>
+                    )}
+                </Card.Body>
+            </Card>
+
+            <div className="row">
+                <div className="col-md-8">
+                    <Card className="mb-4">
+                        <Card.Body>
+                            <Form onSubmit={(e) => e.preventDefault()}>
+                                <Form.Group className="mb-3">
+                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                        <Form.Label>Linq Configuration</Form.Label>
+                                        <button
+                                            className="btn btn-sm btn-outline-secondary"
+                                            onClick={formatJson}
+                                            title="Format JSON"
+                                            type="button"
+                                        >
+                                            <i className="fas fa-code"></i> Format
+                                        </button>
+                                    </div>
+                                    {validationError && (
+                                        <div className="alert alert-warning alert-sm mb-2">
+                                            <small><strong>JSON Error:</strong> {validationError}</small>
+                                        </div>
+                                    )}
+                                    <Form.Control
+                                        as="textarea"
+                                        name="config"
+                                        value={configText}
+                                        onChange={handleConfigTextChange}
+                                        onFocus={handleConfigFocus}
+                                        onBlur={handleConfigBlur}
+                                        rows={25}
+                                        className="font-monospace"
+                                        style={{
+                                            fontSize: '12px',
+                                            lineHeight: '1.4',
+                                            backgroundColor: '#f8f9fa',
+                                            border: validationError ? '1px solid #ffc107' : '1px solid #dee2e6'
+                                        }}
+                                        placeholder="Enter JSON configuration..."
+                                    />
+                                </Form.Group>
+
+                                <div className="d-flex justify-content-end">
+                                    <OverlayTrigger
+                                        placement="top"
+                                        overlay={
+                                            <Tooltip id="save-tooltip">
+                                                {canEditTask ? 'Save changes to create a new version' : 'Only team admins can save changes'}
+                                            </Tooltip>
+                                        }
+                                    >
+                                        <div>
+                                            <Button 
+                                                variant="primary" 
+                                                onClick={() => setShowConfirmModal(true)}
+                                                disabled={saving || !canEditTask || validationError}
+                                            >
+                                                {saving ? (
+                                                    <>
+                                                        <Spinner
+                                                            as="span"
+                                                            animation="border"
+                                                            size="sm"
+                                                            role="status"
+                                                            aria-hidden="true"
+                                                            className="me-2"
+                                                        />
+                                                        Saving...
+                                                    </>
+                                                ) : 'Save Changes'}
+                                            </Button>
+                                        </div>
+                                    </OverlayTrigger>
+                                </div>
+                            </Form>
+                        </Card.Body>
+                    </Card>
+
+                    {/* Workflow Steps Visualization */}
+                    {task?.linq_config && (() => {
+                        // For WORKFLOW_TRIGGER: Use the linked workflow
+                        if (task.linq_config.query?.workflowId && linkedWorkflow) {
+                            return <StepDescriptions workflow={linkedWorkflow.request} />;
+                        }
+                        // For WORKFLOW_EMBEDDED: Use the embedded workflow from linq_config
+                        if (task.linq_config.query?.workflow) {
+                            return <StepDescriptions workflow={task.linq_config} />;
+                        }
+                        // Show loading if we're fetching a linked workflow
+                        if (task.linq_config.query?.workflowId && loadingWorkflow) {
+                            return (
+                                <div className="text-center my-3">
+                                    <Spinner animation="border" size="sm" />
+                                    <span className="ms-2">Loading workflow steps...</span>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
+
+                    {/* Task Statistics Section */}
+                    <Card className="mb-4">
+                        <Card.Header>
+                            <h5 className="mb-0">Task Statistics</h5>
+                        </Card.Header>
+                        <Card.Body>
+                            {loadingStats ? (
+                                <div className="text-center">
+                                    <Spinner animation="border" role="status">
+                                        <span className="visually-hidden">Loading stats...</span>
+                                    </Spinner>
+                                </div>
+                            ) : stats ? (
+                                <div>
+                                    <Row className="mb-4">
+                                        <Col md={6}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Total Executions</h6>
+                                                    <h3>{stats.totalExecutions}</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                        <Col md={6}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Success</h6>
+                                                    <h3 className="text-success">{stats.successfulExecutions}</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                    </Row>
+
+                                    <Row className="mb-4">
+                                        <Col md={6}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Failed</h6>
+                                                    <h3 className="text-danger">{stats.failedExecutions}</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                        <Col md={6}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Success Rate</h6>
+                                                    <h3 className="text-info">{stats.successRate.toFixed(1)}%</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                    </Row>
+
+                                    <Row className="mb-4">
+                                        <Col md={12}>
+                                            <Card className="stats-card">
+                                                <Card.Body>
+                                                    <h6>Avg Execution Time</h6>
+                                                    <h3>{stats.averageExecutionTime.toFixed(2)}ms</h3>
+                                                </Card.Body>
+                                            </Card>
+                                        </Col>
+                                    </Row>
+                                </div>
+                            ) : (
+                                <div className="text-center text-muted">
+                                    <p>No execution data available</p>
+                                </div>
+                            )}
+                        </Card.Body>
+                    </Card>
+                </div>
+
+                <div className="col-md-4">
+                    <Card className="mb-4">
+                        <Card.Body className="task-details">
+                            <h5>Task Details</h5>
+                            <div className="detail-item">
+                                <div className="detail-label">ID</div>
+                                <div className="detail-value">{task?.id}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Version</div>
+                                <div className="detail-value">v{task?.version || 'N/A'}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Name</div>
+                                <div className="detail-value">{task?.name}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Agent</div>
+                                <div className="detail-value">
+                                    {agent ? (
+                                        <div>
+                                            <div>{agent.name}</div>
+                                            <small className="text-muted">ID: {task?.agentId}</small>
+                                        </div>
+                                    ) : (
+                                        task?.agentId
+                                    )}
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Task Type</div>
+                                <div className="detail-value">
+                                    <Badge bg={
+                                        task?.taskType === 'WORKFLOW_TRIGGER' ? 'primary' :
+                                        task?.taskType === 'WORKFLOW_EMBEDDED' ? 'info' :
+                                        task?.taskType === 'API_CALL' ? 'warning' :
+                                        'secondary'
+                                    }>
+                                        {task?.taskType?.replace(/_/g, ' ')}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Status</div>
+                                <div className="detail-value">
+                                    <Badge bg={task?.enabled ? 'success' : 'secondary'}>
+                                        {task?.enabled ? 'Active' : 'Inactive'}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Execution Trigger</div>
+                                <div className="detail-value">
+                                    <Badge bg={
+                                        task?.executionTrigger === 'MANUAL' ? 'secondary' :
+                                        task?.executionTrigger === 'CRON' ? 'primary' :
+                                        task?.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
+                                        'info'
+                                    }>
+                                        {task?.executionTrigger}
+                                    </Badge>
+                                </div>
+                            </div>
+                            {task?.cronExpression && (
+                                <>
+                                    <div className="detail-item">
+                                        <div className="detail-label">Cron Expression</div>
+                                        <div className="detail-value">
+                                            <code>{task.cronExpression}</code>
+                                        </div>
+                                    </div>
+                                    <div className="detail-item">
+                                        <div className="detail-label">Cron Description</div>
+                                        <div className="detail-value">{task.cronDescription || 'N/A'}</div>
+                                    </div>
+                                </>
+                            )}
+                            <div className="detail-item">
+                                <div className="detail-label">Priority</div>
+                                <div className="detail-value">{task?.priority || 'N/A'}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Max Retries</div>
+                                <div className="detail-value">{task?.maxRetries || 0}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Timeout</div>
+                                <div className="detail-value">{task?.timeoutMinutes || 0} minutes</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Schedule on Startup</div>
+                                <div className="detail-value">
+                                    <Badge bg={task?.scheduleOnStartup ? 'success' : 'secondary'}>
+                                        {task?.scheduleOnStartup ? 'Yes' : 'No'}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Ready to Execute</div>
+                                <div className="detail-value">
+                                    <Badge bg={task?.readyToExecute ? 'success' : 'warning'}>
+                                        {task?.readyToExecute ? 'Yes' : 'No'}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Auto Execute</div>
+                                <div className="detail-value">
+                                    <Badge bg={task?.autoExecute ? 'success' : 'secondary'}>
+                                        {task?.autoExecute ? 'Yes' : 'No'}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Linq Target</div>
+                                <div className="detail-value">{task?.linqTarget || 'N/A'}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Linq Action</div>
+                                <div className="detail-value">{task?.linqAction || 'N/A'}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Linq Intent</div>
+                                <div className="detail-value">{task?.linqIntent || 'N/A'}</div>
+                            </div>
+                            {task?.linqParams && Object.keys(task.linqParams).length > 0 && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Linq Params</div>
+                                    <div className="detail-value">
+                                        <pre style={{ fontSize: '0.8rem', marginBottom: 0 }}>
+                                            {JSON.stringify(task.linqParams, null, 2)}
+                                        </pre>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="detail-item">
+                                <div className="detail-label">Task Flags</div>
+                                <div className="detail-value">
+                                    {task?.scheduled && <Badge bg="info" className="me-1 mb-1">Scheduled</Badge>}
+                                    {task?.cronTrigger && <Badge bg="primary" className="me-1 mb-1">Cron Trigger</Badge>}
+                                    {task?.manualTrigger && <Badge bg="secondary" className="me-1 mb-1">Manual Trigger</Badge>}
+                                    {task?.eventDrivenTrigger && <Badge bg="warning" className="me-1 mb-1">Event Driven</Badge>}
+                                    {task?.workflowTrigger && <Badge bg="success" className="me-1 mb-1">Workflow Trigger</Badge>}
+                                    {task?.workflowTriggerTask && <Badge bg="primary" className="me-1 mb-1">Workflow Trigger Task</Badge>}
+                                    {task?.workflowEmbeddedTask && <Badge bg="info" className="me-1 mb-1">Workflow Embedded</Badge>}
+                                    {(!task?.scheduled && !task?.cronTrigger && !task?.manualTrigger && !task?.eventDrivenTrigger && !task?.workflowTrigger && !task?.workflowTriggerTask && !task?.workflowEmbeddedTask) && (
+                                        <span className="text-muted">None</span>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Validation Status</div>
+                                <div className="detail-value">
+                                    <div className="mb-1">
+                                        <small className="text-muted me-2">Execution Trigger:</small>
+                                        <Badge bg={task?.executionTriggerValid ? 'success' : 'danger'}>
+                                            {task?.executionTriggerValid ? 'Valid' : 'Invalid'}
+                                        </Badge>
+                                    </div>
+                                    <div>
+                                        <small className="text-muted me-2">Task Configuration:</small>
+                                        <Badge bg={task?.taskTypeConfigurationValid ? 'success' : 'danger'}>
+                                            {task?.taskTypeConfigurationValid ? 'Valid' : 'Invalid'}
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Last Run</div>
+                                <div className="detail-value">{formatDate(task?.lastRun)}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Next Run</div>
+                                <div className="detail-value">{formatDate(task?.nextRun)}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Created At</div>
+                                <div className="detail-value">{formatDate(task?.createdAt)}</div>
+                            </div>
+                            <div className="detail-item">
+                                <div className="detail-label">Updated At</div>
+                                <div className="detail-value">{formatDate(task?.updatedAt)}</div>
+                            </div>
+                        </Card.Body>
+                    </Card>
+
+                    <Card className="mb-4">
+                        <Card.Header>
+                            <h5 className="mb-0">Version History</h5>
+                        </Card.Header>
+                        <Card.Body className="version-history">
+                            {versions.map((version) => (
+                                <div key={version.id} className="version-item">
+                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                        <div className="d-flex align-items-center">
+                                            <Badge bg="secondary" className="me-2">v{version.version}</Badge>
+                                            {version.version === task.version && (
+                                                <Badge bg="success">Current</Badge>
+                                            )}
+                                        </div>
+                                        <small className="text-muted">
+                                            {formatDate(version.createdAt)}
+                                        </small>
+                                    </div>
+                                    <p className="version-description mb-2">
+                                        Version {version.version} - {formatDate(version.createdAt)}
+                                    </p>
+                                    <div className="d-flex justify-content-between align-items-center">
+                                        <small className="text-muted">
+                                            By {version.createdBy || 'System'}
+                                        </small>
+                                        {version.version !== task?.version && (
+                                            <div className="d-flex gap-2">
+                                                <Button
+                                                    variant="outline-info"
+                                                    size="sm"
+                                                    onClick={() => handleCompareClick(version)}
+                                                >
+                                                    Compare
+                                                </Button>
+                                                <OverlayTrigger
+                                                    placement="top"
+                                                    overlay={
+                                                        <Tooltip id="rollback-tooltip">
+                                                            {canEditTask ? 'Rollback to this version' : 'Only team admins can rollback versions'}
+                                                        </Tooltip>
+                                                    }
+                                                >
+                                                    <div>
+                                                        <Button
+                                                            variant="outline-primary"
+                                                            size="sm"
+                                                            onClick={() => handleRollbackClick(version)}
+                                                            disabled={!canEditTask}
+                                                        >
+                                                            Rollback
+                                                        </Button>
+                                                    </div>
+                                                </OverlayTrigger>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </Card.Body>
+                    </Card>
+                </div>
+            </div>
+
+            {/* Execution History */}
+            {executionHistory && executionHistory.length > 0 && (
+                <Card className="mb-4">
+                    <Card.Header>
+                        <h5 className="mb-0">Execution History ({executionHistory.length} total)</h5>
+                    </Card.Header>
+                    <Card.Body className="p-0">
+                        <TableContainer 
+                            component={Paper} 
+                            sx={{ 
+                                maxHeight: 600,
+                                boxShadow: 'none',
+                                '& .MuiTableHead-root': {
+                                    position: 'sticky',
+                                    top: 0,
+                                    backgroundColor: '#f8f9fa',
+                                    zIndex: 10
+                                }
+                            }}
+                        >
+                            <Table stickyHeader>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', minWidth: 150 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                Execution ID
+                                                <TextField
+                                                    size="small"
+                                                    variant="outlined"
+                                                    placeholder="Filter"
+                                                    value={executionFilters.executionId}
+                                                    onChange={handleExecutionFilterChange('executionId')}
+                                                    sx={{ mt: 1 }}
+                                                    slotProps={{
+                                                        input: {
+                                                            startAdornment: (
+                                                                <InputAdornment position="start">
+                                                                    <SearchIcon fontSize="small" />
+                                                                </InputAdornment>
+                                                            )
+                                                        }
+                                                    }}
+                                                />
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', minWidth: 150 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                Started At
+                                                <TextField
+                                                    size="small"
+                                                    variant="outlined"
+                                                    placeholder="Filter"
+                                                    value={executionFilters.startedAt}
+                                                    onChange={handleExecutionFilterChange('startedAt')}
+                                                    sx={{ mt: 1 }}
+                                                    slotProps={{
+                                                        input: {
+                                                            startAdornment: (
+                                                                <InputAdornment position="start">
+                                                                    <SearchIcon fontSize="small" />
+                                                                </InputAdornment>
+                                                            )
+                                                        }
+                                                    }}
+                                                />
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', minWidth: 150 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                Completed At
+                                                <TextField
+                                                    size="small"
+                                                    variant="outlined"
+                                                    placeholder="Filter"
+                                                    value={executionFilters.completedAt}
+                                                    onChange={handleExecutionFilterChange('completedAt')}
+                                                    sx={{ mt: 1 }}
+                                                    slotProps={{
+                                                        input: {
+                                                            startAdornment: (
+                                                                <InputAdornment position="start">
+                                                                    <SearchIcon fontSize="small" />
+                                                                </InputAdornment>
+                                                            )
+                                                        }
+                                                    }}
+                                                />
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', minWidth: 120 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                Duration (ms)
+                                                <TextField
+                                                    size="small"
+                                                    variant="outlined"
+                                                    placeholder="Filter"
+                                                    value={executionFilters.duration}
+                                                    onChange={handleExecutionFilterChange('duration')}
+                                                    sx={{ mt: 1 }}
+                                                    slotProps={{
+                                                        input: {
+                                                            startAdornment: (
+                                                                <InputAdornment position="start">
+                                                                    <SearchIcon fontSize="small" />
+                                                                </InputAdornment>
+                                                            )
+                                                        }
+                                                    }}
+                                                />
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', minWidth: 120 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                Status
+                                                <TextField
+                                                    size="small"
+                                                    variant="outlined"
+                                                    placeholder="Filter"
+                                                    value={executionFilters.status}
+                                                    onChange={handleExecutionFilterChange('status')}
+                                                    sx={{ mt: 1 }}
+                                                    slotProps={{
+                                                        input: {
+                                                            startAdornment: (
+                                                                <InputAdornment position="start">
+                                                                    <SearchIcon fontSize="small" />
+                                                                </InputAdornment>
+                                                            )
+                                                        }
+                                                    }}
+                                                />
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', minWidth: 120 }}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                                Result
+                                                <TextField
+                                                    size="small"
+                                                    variant="outlined"
+                                                    placeholder="Filter"
+                                                    value={executionFilters.result}
+                                                    onChange={handleExecutionFilterChange('result')}
+                                                    sx={{ mt: 1 }}
+                                                    slotProps={{
+                                                        input: {
+                                                            startAdornment: (
+                                                                <InputAdornment position="start">
+                                                                    <SearchIcon fontSize="small" />
+                                                                </InputAdornment>
+                                                            )
+                                                        }
+                                                    }}
+                                                />
+                                            </Box>
+                                        </TableCell>
+                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', width: 80 }}>
+                                            Error
+                                        </TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {filteredExecutions.map((execution) => (
+                                        <TableRow 
+                                            key={execution.executionId}
+                                            onClick={() => handleExecutionClick(execution)}
+                                            sx={{ 
+                                                cursor: 'pointer',
+                                                '&:hover': {
+                                                    backgroundColor: '#f5f5f5'
+                                                }
+                                            }}
+                                        >
+                                            <TableCell>
+                                                <small style={{ fontFamily: 'monospace' }}>
+                                                    {execution.executionId.substring(0, 8)}...
+                                                </small>
+                                            </TableCell>
+                                            <TableCell>{formatDate(execution.startedAt)}</TableCell>
+                                            <TableCell>{formatDate(execution.completedAt)}</TableCell>
+                                            <TableCell>{execution.executionDurationMs}</TableCell>
+                                            <TableCell>
+                                                <Badge bg={
+                                                    execution.status === 'COMPLETED' ? 'success' :
+                                                    execution.status === 'RUNNING' ? 'primary' :
+                                                    execution.status === 'FAILED' ? 'danger' :
+                                                    'secondary'
+                                                }>
+                                                    {execution.status}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge bg={
+                                                    execution.result === 'SUCCESS' ? 'success' :
+                                                    execution.result === 'FAILURE' ? 'danger' :
+                                                    execution.result === 'PARTIAL_SUCCESS' ? 'warning' :
+                                                    'secondary'
+                                                }>
+                                                    {execution.result}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>
+                                                {execution.errorMessage ? (
+                                                    <OverlayTrigger
+                                                        placement="left"
+                                                        overlay={
+                                                            <Tooltip id={`error-${execution.executionId}`}>
+                                                                {execution.errorMessage}
+                                                            </Tooltip>
+                                                        }
+                                                    >
+                                                        <i className="fas fa-exclamation-circle text-danger"></i>
+                                                    </OverlayTrigger>
+                                                ) : (
+                                                    <span className="text-muted">-</span>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Card.Body>
+                </Card>
+            )}
+
+            {/* Performance Visualizations */}
+            {executionHistory && executionHistory.length > 0 && (
+                <Card className="mb-4">
+                    <Card.Header>
+                        <h5 className="mb-0">Performance Insights</h5>
+                    </Card.Header>
+                    <Card.Body>
+                        <Row className="mb-4">
+                            <Col md={6}>
+                                <Card>
+                                    <Card.Body>
+                                        <h6>Execution Status Distribution</h6>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={(() => {
+                                                        const statusCounts = executionHistory.reduce((acc, exec) => {
+                                                            acc[exec.status] = (acc[exec.status] || 0) + 1;
+                                                            return acc;
+                                                        }, {});
+                                                        return Object.entries(statusCounts).map(([status, count]) => ({
+                                                            name: status,
+                                                            value: count
+                                                        }));
+                                                    })()}
+                                                    dataKey="value"
+                                                    nameKey="name"
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    outerRadius={100}
+                                                    label
+                                                >
+                                                    {Object.keys(executionHistory.reduce((acc, exec) => {
+                                                        acc[exec.status] = true;
+                                                        return acc;
+                                                    }, {})).map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={['#28a745', '#007bff', '#dc3545', '#6c757d'][index % 4]} />
+                                                    ))}
+                                                </Pie>
+                                                <RechartsTooltip 
+                                                    formatter={(value, name) => {
+                                                        const total = executionHistory.length;
+                                                        const percentage = ((value / total) * 100).toFixed(1);
+                                                        return [`${value} executions (${percentage}%)`, name];
+                                                    }}
+                                                    contentStyle={{
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                        border: '1px solid #ccc',
+                                                        borderRadius: '4px',
+                                                        padding: '10px'
+                                                    }}
+                                                />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </Card.Body>
+                                </Card>
+                            </Col>
+                            <Col md={6}>
+                                <Card>
+                                    <Card.Body>
+                                        <h6>Result Distribution</h6>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={(() => {
+                                                        const resultCounts = executionHistory.reduce((acc, exec) => {
+                                                            acc[exec.result] = (acc[exec.result] || 0) + 1;
+                                                            return acc;
+                                                        }, {});
+                                                        return Object.entries(resultCounts).map(([result, count]) => ({
+                                                            name: result,
+                                                            value: count
+                                                        }));
+                                                    })()}
+                                                    dataKey="value"
+                                                    nameKey="name"
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    outerRadius={100}
+                                                    label
+                                                >
+                                                    {Object.keys(executionHistory.reduce((acc, exec) => {
+                                                        acc[exec.result] = true;
+                                                        return acc;
+                                                    }, {})).map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={['#28a745', '#dc3545', '#ffc107', '#6c757d'][index % 4]} />
+                                                    ))}
+                                                </Pie>
+                                                <RechartsTooltip 
+                                                    formatter={(value, name) => {
+                                                        const total = executionHistory.length;
+                                                        const percentage = ((value / total) * 100).toFixed(1);
+                                                        return [`${value} executions (${percentage}%)`, name];
+                                                    }}
+                                                    contentStyle={{
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                        border: '1px solid #ccc',
+                                                        borderRadius: '4px',
+                                                        padding: '10px'
+                                                    }}
+                                                />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </Card.Body>
+                                </Card>
+                            </Col>
+                        </Row>
+
+                        <Row>
+                            <Col md={12}>
+                                <Card>
+                                    <Card.Body>
+                                        <h6>Execution Duration Over Time</h6>
+                                        <ResponsiveContainer width="100%" height={400}>
+                                            <BarChart data={executionHistory.map((exec, index) => ({
+                                                execution: `#${executionHistory.length - index}`,
+                                                duration: exec.executionDurationMs,
+                                                time: formatDate(exec.startedAt)
+                                            })).reverse()}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis 
+                                                    dataKey="execution" 
+                                                    angle={-45}
+                                                    textAnchor="end"
+                                                    height={80}
+                                                    interval={0}
+                                                    tick={{ fontSize: 12 }}
+                                                />
+                                                <YAxis label={{ value: 'Duration (ms)', angle: -90, position: 'insideLeft' }} />
+                                                <RechartsTooltip 
+                                                    formatter={(value) => [`${value}ms`, 'Duration']}
+                                                    labelFormatter={(label) => `Execution ${label}`}
+                                                    contentStyle={{
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                        border: '1px solid #ccc',
+                                                        borderRadius: '4px',
+                                                        padding: '10px'
+                                                    }}
+                                                />
+                                                <Legend />
+                                                <Bar dataKey="duration" name="Execution Duration (ms)" fill="#8884d8" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </Card.Body>
+                                </Card>
+                            </Col>
+                        </Row>
+                    </Card.Body>
+                </Card>
+            )}
+
+            {/* Compare Modal */}
+            <Modal
+                show={showCompareModal}
+                onHide={() => setShowCompareModal(false)}
+                fullscreen
+            >
+                <Modal.Header closeButton>
+                    <Modal.Title>Compare Versions</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <div className="compare-form">
+                        <div className="version-selectors mb-4">
+                            <div className="row g-3 align-items-center">
+                                <div className="col-5">
+                                    <div className="version-content p-3 bg-light rounded">
+                                        <h6 className="mb-3">Version {compareVersions.version1}</h6>
+                                        <div className="diff-view">
+                                            <div className="diff-section">
+                                                <h6 className="diff-title">Configuration</h6>
+                                                <pre className="diff-content">
+                                                    {renderJsonWithHighlights(
+                                                        task?.linq_config || {},
+                                                        highlightDifferences(
+                                                            task?.linq_config || {},
+                                                            versions.find(v => v.version === compareVersions.version2)?.linq_config || {}
+                                                        )
+                                                    )}
+                                                </pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="col-2 text-center">
+                                    <span className="vs-badge">VS</span>
+                                </div>
+                                <div className="col-5">
+                                    <div className="version-content p-3 bg-light rounded">
+                                        <h6 className="mb-3">Version {compareVersions.version2}</h6>
+                                        <div className="diff-view">
+                                            <div className="diff-section">
+                                                <h6 className="diff-title">Configuration</h6>
+                                                <pre className="diff-content">
+                                                    {renderJsonWithHighlights(
+                                                        versions.find(v => v.version === compareVersions.version2)?.linq_config || {},
+                                                        highlightDifferences(
+                                                            task?.linq_config || {},
+                                                            versions.find(v => v.version === compareVersions.version2)?.linq_config || {}
+                                                        )
+                                                    )}
+                                                </pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowCompareModal(false)}>
+                        Close
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+
+            {/* Rollback Confirmation Modal */}
+            <ConfirmationModal
+                show={showRollbackModal}
+                onHide={() => {
+                    setShowRollbackModal(false);
+                    setSelectedVersion(null);
+                }}
+                onConfirm={handleRollback}
+                title="Rollback Version"
+                message={`Are you sure you want to rollback from version ${task?.version} to version ${selectedVersion?.version}?`}
+                confirmLabel={saving ? (
+                    <>
+                        <Spinner
+                            as="span"
+                            animation="border"
+                            size="sm"
+                            role="status"
+                            aria-hidden="true"
+                            className="me-2"
+                        />
+                        Rolling back...
+                    </>
+                ) : "Rollback"}
+                variant="warning"
+                disabled={saving}
+            />
+
+            {/* Save Confirmation Modal */}
+            <ConfirmationModal
+                show={showConfirmModal}
+                onHide={() => setShowConfirmModal(false)}
+                onConfirm={handleSave}
+                title="Save Changes"
+                message="Are you sure you want to save these changes? This will create a new version of the task."
+            />
+
+            {/* Metadata Edit Modal */}
+            <Modal
+                show={showMetadataModal}
+                onHide={() => setShowMetadataModal(false)}
+                centered
+            >
+                <Modal.Header closeButton>
+                    <Modal.Title>Edit Task Details</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <Form>
+                        <Form.Group className="mb-3">
+                            <Form.Label>Name</Form.Label>
+                            <Form.Control
+                                type="text"
+                                name="name"
+                                value={task?.name || ''}
+                                onChange={handleInputChange}
+                                placeholder="Enter task name"
+                            />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Description</Form.Label>
+                            <Form.Control
+                                as="textarea"
+                                name="description"
+                                value={task?.description || ''}
+                                onChange={handleInputChange}
+                                placeholder="Enter task description"
+                                rows={3}
+                            />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Priority</Form.Label>
+                            <Form.Control
+                                type="number"
+                                name="priority"
+                                value={task?.priority || 1}
+                                onChange={handleInputChange}
+                                min="1"
+                                max="10"
+                            />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Max Retries</Form.Label>
+                            <Form.Control
+                                type="number"
+                                name="maxRetries"
+                                value={task?.maxRetries || 0}
+                                onChange={handleInputChange}
+                                min="0"
+                            />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Timeout (minutes)</Form.Label>
+                            <Form.Control
+                                type="number"
+                                name="timeoutMinutes"
+                                value={task?.timeoutMinutes || 30}
+                                onChange={handleInputChange}
+                                min="1"
+                            />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Cron Expression</Form.Label>
+                            <Form.Control
+                                type="text"
+                                name="cronExpression"
+                                value={task?.cronExpression || ''}
+                                onChange={handleInputChange}
+                                placeholder="e.g., 0 0 * * *"
+                            />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Cron Description</Form.Label>
+                            <Form.Control
+                                type="text"
+                                name="cronDescription"
+                                value={task?.cronDescription || ''}
+                                readOnly
+                                disabled
+                                placeholder="Auto-generated based on cron expression"
+                                style={{ backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
+                            />
+                            <Form.Text className="text-muted">
+                                This description is automatically generated based on the cron expression.
+                            </Form.Text>
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Check
+                                type="switch"
+                                id="scheduleOnStartup-switch"
+                                name="scheduleOnStartup"
+                                label="Schedule on Startup"
+                                checked={task?.scheduleOnStartup || false}
+                                onChange={handleInputChange}
+                            />
+                            <Form.Text className="text-muted">
+                                If enabled, this task will be scheduled automatically when the agent starts.
+                            </Form.Text>
+                        </Form.Group>
+                    </Form>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowMetadataModal(false)}>
+                        Cancel
+                    </Button>
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="metadata-save-tooltip">
+                                {canEditTask ? 'Save task details' : 'Only team admins can save task details'}
+                            </Tooltip>
+                        }
+                    >
+                        <div>
+                            <Button 
+                                variant="primary" 
+                                onClick={handleMetadataSave}
+                                disabled={!canEditTask}
+                            >
+                                Save Changes
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
+                </Modal.Footer>
+            </Modal>
+
+            {/* Execute Confirmation Modal */}
+            <ConfirmationModal
+                show={showExecuteConfirm}
+                onHide={() => setShowExecuteConfirm(false)}
+                onConfirm={handleExecute}
+                title="Execute Task"
+                message={`Are you sure you want to execute "${task?.name}"?`}
+                confirmLabel={executing ? (
+                    <>
+                        <Spinner
+                            as="span"
+                            animation="border"
+                            size="sm"
+                            role="status"
+                            aria-hidden="true"
+                            className="me-2"
+                        />
+                        Executing...
+                    </>
+                ) : "Execute"}
+                variant="primary"
+                disabled={executing}
+            />
+
+            {/* Execution Details Modal */}
+            <ExecutionDetailsModal
+                show={showExecutionModal}
+                onHide={() => {
+                    setShowExecutionModal(false);
+                    setSelectedExecution(null);
+                }}
+                execution={selectedExecution}
+                formatDate={formatDate}
+            />
+        </div>
+    );
+}
+
+export default ViewAgentTask;
+

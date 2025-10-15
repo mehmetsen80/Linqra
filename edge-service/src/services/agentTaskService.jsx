@@ -172,6 +172,58 @@ const agentTaskService = {
                 error: error.response?.data?.message || 'Failed to execute ad-hoc task'
             };
         }
+    },
+
+    getCronDescription: async (cronExpression) => {
+        try {
+            const response = await axiosInstance.post('/api/cron/describe', {
+                cronExpression: cronExpression
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data,
+                description: response.data.description
+            };
+        } catch (error) {
+            console.error('Error getting cron description:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to get cron description'
+            };
+        }
+    },
+
+    updateSchedulingConfiguration: async (taskId, schedulingData) => {
+        console.log('🌐 Making HTTP POST to:', `/api/agent-tasks/${taskId}/versions/scheduling`);
+        console.log('📤 Request payload:', schedulingData);
+        try {
+            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/versions/scheduling`, schedulingData, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data,
+                message: 'Scheduling configuration updated successfully'
+            };
+        } catch (error) {
+            console.error('Error updating scheduling configuration:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to update scheduling configuration'
+            };
+        }
     }
 };
 

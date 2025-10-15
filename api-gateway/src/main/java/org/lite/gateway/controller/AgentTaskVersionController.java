@@ -6,11 +6,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.ErrorCode;
 import org.lite.gateway.dto.ErrorResponse;
+import org.lite.gateway.dto.SchedulingUpdateRequest;
+import org.lite.gateway.enums.ExecutionTrigger;
 import org.lite.gateway.entity.AgentTask;
 import org.lite.gateway.entity.AgentTaskVersion;
 import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.AgentTaskService;
 import org.lite.gateway.service.AgentTaskVersionService;
+import org.lite.gateway.service.AgentSchedulingService;
+import org.lite.gateway.service.AgentAuthContextService;
 import org.lite.gateway.service.TeamService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
@@ -32,6 +36,8 @@ public class AgentTaskVersionController {
     private final AgentTaskVersionService agentTaskVersionService;
     private final AgentTaskService agentTaskService;
     private final AgentService agentService;
+    private final AgentSchedulingService agentSchedulingService;
+    private final AgentAuthContextService agentAuthContextService;
     private final UserContextService userContextService;
     private final UserService userService;
     private final TeamService teamService;
@@ -185,6 +191,85 @@ public class AgentTaskVersionController {
                 }
             })
             .doOnError(error -> log.error("Error rolling back agent task: {}", error.getMessage()));
+    }
+
+    @PostMapping("/{taskId}/versions/scheduling")
+    public Mono<ResponseEntity<?>> updateSchedulingConfiguration(
+        @PathVariable String taskId,
+        @RequestBody SchedulingUpdateRequest request,
+        @RequestParam(required = false) String changeDescription,
+        ServerWebExchange exchange
+    ) {
+        log.info("🔥 SCHEDULING ENDPOINT CALLED - taskId: {}, cronExpression: {}, executionTrigger: {}", 
+                taskId, request.getCronExpression(), request.getExecutionTrigger());
+        log.info("Updating scheduling configuration for agent task: {}", taskId);
+        
+        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+            .doOnSuccess(auth -> log.info("Authorization successful for task {} - teamId: {}", taskId, auth.getTeamId()))
+            .doOnError(error -> log.error("Authorization failed for task {}: {}", taskId, error.getMessage()))
+            .flatMap(auth -> {
+                log.info("Starting task update for taskId: {}, teamId: {}", taskId, auth.getTeamId());
+                return agentTaskService.getTaskById(taskId)
+                    .doOnSuccess(task -> log.info("Retrieved task {} - current executionTrigger: {}, cronExpression: {}", 
+                            taskId, task.getExecutionTrigger(), task.getCronExpression()))
+                    .doOnError(error -> log.error("Failed to retrieve task {}: {}", taskId, error.getMessage()))
+                    .flatMap(existingTask -> {
+                        log.info("Updating task {} scheduling fields - cronExpression: {}, executionTrigger: {}, scheduleOnStartup: {}", 
+                                taskId, request.getCronExpression(), request.getExecutionTrigger(), request.getScheduleOnStartup());
+                        
+                        // Update only the scheduling-related fields
+                        existingTask.setCronExpression(request.getCronExpression());
+                        existingTask.setCronDescription(request.getCronDescription());
+                        existingTask.setScheduleOnStartup(request.getScheduleOnStartup());
+                        existingTask.setExecutionTrigger(ExecutionTrigger.valueOf(request.getExecutionTrigger()));
+                        
+                        log.info("Task {} fields updated - new executionTrigger: {}, new cronExpression: {}", 
+                                taskId, existingTask.getExecutionTrigger(), existingTask.getCronExpression());
+                        
+                        return validateAndCreateNewVersion(taskId, existingTask, changeDescription, exchange)
+                            .doOnSuccess(response -> {
+                                log.info("Task {} version created successfully - status: {}", taskId, response.getStatusCode());
+                                
+                                // If scheduling was successful and it's a CRON task, schedule it properly
+                                if (response.getStatusCode().is2xxSuccessful() && 
+                                    ExecutionTrigger.CRON.equals(ExecutionTrigger.valueOf(request.getExecutionTrigger()))) {
+                                    
+                                    log.info("Task {} is CRON type and response successful - proceeding with Quartz scheduling", taskId);
+                                    
+                                    // Schedule the task asynchronously without affecting the response
+                                    agentSchedulingService.scheduleTask(
+                                        taskId, 
+                                        request.getCronExpression(), 
+                                        auth.getTeamId()
+                                    )
+                                    .doOnSuccess(scheduledTask -> {
+                                        log.info("✅ SUCCESS: Task {} scheduled with Quartz - cron: {}, teamId: {}", 
+                                                taskId, request.getCronExpression(), auth.getTeamId());
+                                    })
+                                    .doOnError(error -> {
+                                        log.error("❌ FAILED: Quartz scheduling failed for task {} - cron: {}, teamId: {}, error: {}", 
+                                                taskId, request.getCronExpression(), auth.getTeamId(), error.getMessage());
+                                    })
+                                    .subscribe(); // Fire and forget
+                                } else {
+                                    log.warn("Task {} NOT scheduled with Quartz - responseStatus: {}, executionTrigger: {}, isCRON: {}", 
+                                            taskId, response.getStatusCode(), request.getExecutionTrigger(), 
+                                            ExecutionTrigger.CRON.equals(ExecutionTrigger.valueOf(request.getExecutionTrigger())));
+                                }
+                            })
+                            .doOnError(error -> log.error("Failed to create new version for task {}: {}", taskId, error.getMessage()));
+                    });
+            })
+            .onErrorResume(error -> {
+                log.error("Error updating scheduling configuration for task: {}", taskId, error);
+                return Mono.just(ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorResponse.fromErrorCode(
+                        ErrorCode.INTERNAL_ERROR,
+                        "Failed to update scheduling configuration: " + error.getMessage(),
+                        HttpStatus.INTERNAL_SERVER_ERROR.value()
+                    )));
+            });
     }
 
     @GetMapping("/{taskId}/versions")

@@ -631,6 +631,11 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
         if (!isValidDayOfWeek(dayOfWeek)) {
             throw new IllegalArgumentException("Invalid day of week value: " + dayOfWeek);
         }
+        
+        // Quartz-specific validation: Cannot use * for both dayOfMonth and dayOfWeek
+        if ("*".equals(dayOfMonth) && "*".equals(dayOfWeek)) {
+            throw new IllegalArgumentException("Cannot use '*' for both Day of Month and Day of Week. Use '?' for one of them in Quartz cron expressions.");
+        }
     }
 
     private boolean isValidField(String field, int min, int max) {

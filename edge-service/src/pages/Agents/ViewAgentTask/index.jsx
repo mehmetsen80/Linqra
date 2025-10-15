@@ -6,10 +6,11 @@ import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
 import agentTaskService from '../../../services/agentTaskService';
 import agentTaskVersionService from '../../../services/agentTaskVersionService';
 import agentTaskMonitoringService from '../../../services/agentTaskMonitoringService';
+import agentSchedulingService from '../../../services/agentSchedulingService';
 import agentService from '../../../services/agentService';
 import workflowService from '../../../services/workflowService';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
-import { Form, Card, Spinner, Badge, Modal, Row, Col, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Form, Card, Spinner, Badge, Modal, Row, Col, OverlayTrigger, Tooltip, Accordion } from 'react-bootstrap';
 import Button from '../../../components/common/Button';
 import { format } from 'date-fns';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
@@ -71,6 +72,42 @@ function ViewAgentTask() {
     });
     const [linkedWorkflow, setLinkedWorkflow] = useState(null);
     const [loadingWorkflow, setLoadingWorkflow] = useState(false);
+    const [generatingCronDescription, setGeneratingCronDescription] = useState(false);
+    const [showSchedulingModal, setShowSchedulingModal] = useState(false);
+    
+    // Timezone conversion utilities
+    const getUserTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+    
+    const convertUTCToLocal = (utcHour, utcMinute) => {
+        const utcDate = new Date();
+        utcDate.setUTCHours(utcHour, utcMinute, 0, 0);
+        return {
+            hour: utcDate.getHours(),
+            minute: utcDate.getMinutes()
+        };
+    };
+    
+    const convertLocalToUTC = (localHour, localMinute) => {
+        const localDate = new Date();
+        localDate.setHours(localHour, localMinute, 0, 0);
+        return {
+            hour: localDate.getUTCHours(),
+            minute: localDate.getUTCMinutes()
+        };
+    };
+    
+    const [cronFields, setCronFields] = useState({
+        seconds: '',
+        minutes: '',
+        hours: '',
+        dayOfMonth: '',
+        month: '',
+        dayOfWeek: ''
+    });
+    const [cronValidationError, setCronValidationError] = useState('');
+    const [cronDescriptionError, setCronDescriptionError] = useState('');
+    const [isValidatingCron, setIsValidatingCron] = useState(false);
+    const [isCronValidated, setIsCronValidated] = useState(false);
 
     const canEditTask = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
 
@@ -105,6 +142,31 @@ function ViewAgentTask() {
             loadLinkedWorkflow();
         }
     }, [task?.linq_config?.query?.workflowId, currentTeam]);
+
+    useEffect(() => {
+        if (showSchedulingModal && task?.cronExpression) {
+            setCronFields(parseCronExpressionToUTC(task.cronExpression));
+            // If there's already a description, mark as validated
+            setIsCronValidated(!!task.cronDescription);
+        } else if (showSchedulingModal) {
+            // Reset validation state when opening modal without existing cron
+            setIsCronValidated(false);
+        }
+    }, [showSchedulingModal, task?.cronExpression, task?.cronDescription]);
+
+    // Clear errors and reset validation when cron expression changes
+    useEffect(() => {
+        const currentExpression = buildCronExpression(cronFields);
+        const previousExpression = task?.cronExpression || '';
+        
+        // Only reset validation if the expression actually changed
+        if (currentExpression !== previousExpression) {
+            setCronValidationError('');
+            setCronDescriptionError('');
+            setIsCronValidated(false);
+        }
+    }, [cronFields, task?.cronExpression]);
+
 
     const loadTask = async () => {
         try {
@@ -205,6 +267,189 @@ function ViewAgentTask() {
             ...prev,
             [name]: type === 'checkbox' ? checked : value
         }));
+
+        // Auto-generate cron description when cron expression changes
+        if (name === 'cronExpression' && value.trim()) {
+            generateCronDescription(value.trim());
+        }
+    };
+
+    const generateCronDescription = async (cronExpression) => {
+        if (!cronExpression || cronExpression.length < 5) {
+            return;
+        }
+
+        try {
+            setGeneratingCronDescription(true);
+            const response = await agentTaskService.getCronDescription(cronExpression);
+            if (response.success && response.description) {
+                setTask(prev => ({
+                    ...prev,
+                    cronDescription: response.description
+                }));
+            } else {
+                // If API fails, clear the description
+                setTask(prev => ({
+                    ...prev,
+                    cronDescription: ''
+                }));
+            }
+        } catch (err) {
+            console.error('Error generating cron description:', err);
+            setTask(prev => ({
+                ...prev,
+                cronDescription: ''
+            }));
+        } finally {
+            setGeneratingCronDescription(false);
+        }
+    };
+
+    const validateAndGenerateCronDescription = async () => {
+        const cronExpression = buildCronExpression(cronFields);
+        
+        // Clear previous errors
+        setCronValidationError('');
+        setCronDescriptionError('');
+        
+        // Basic validation - check if all fields are filled
+        const parts = cronExpression.trim().split(/\s+/).filter(part => part.trim());
+        if (parts.length !== 6) {
+            setCronValidationError('All cron fields must be filled');
+            return;
+        }
+        
+        // Check for empty fields
+        const hasEmptyFields = Object.values(cronFields).some(field => !field.trim());
+        if (hasEmptyFields) {
+            setCronValidationError('All cron fields must be filled');
+            return;
+        }
+        
+        // Quartz-specific validation: Cannot use * for both dayOfMonth and dayOfWeek
+        if (cronFields.dayOfMonth === '*' && cronFields.dayOfWeek === '*') {
+            setCronValidationError('Cannot use * for both Day of Month and Day of Week. Use ? for one of them.');
+            return;
+        }
+        
+        try {
+            setIsValidatingCron(true);
+            const response = await agentTaskService.getCronDescription(cronExpression);
+            
+            if (response.success && response.description) {
+                setTask(prev => ({
+                    ...prev,
+                    cronExpression: cronExpression,
+                    cronDescription: response.description
+                }));
+                setCronDescriptionError('');
+                setIsCronValidated(true);
+            } else {
+                setCronDescriptionError(response.error || 'Failed to validate cron expression');
+                setTask(prev => ({
+                    ...prev,
+                    cronDescription: ''
+                }));
+                setIsCronValidated(false);
+            }
+        } catch (err) {
+            console.error('Error validating cron expression:', err);
+            setCronDescriptionError(err.response?.data?.message || 'Invalid cron expression');
+            setTask(prev => ({
+                ...prev,
+                cronDescription: ''
+            }));
+            setIsCronValidated(false);
+        } finally {
+            setIsValidatingCron(false);
+        }
+    };
+
+    const parseCronExpression = (cronExpression) => {
+        if (!cronExpression) {
+            return { seconds: '', minutes: '', hours: '', dayOfMonth: '', month: '', dayOfWeek: '' };
+        }
+        
+        const parts = cronExpression.trim().split(/\s+/);
+        return {
+            seconds: parts[0] || '',
+            minutes: parts[1] || '',
+            hours: parts[2] || '',
+            dayOfMonth: parts[3] || '',
+            month: parts[4] || '',
+            dayOfWeek: parts[5] || ''
+        };
+    };
+
+    const buildCronExpression = (fields) => {
+        // For Quartz cron expressions, we cannot use * for both dayOfMonth and dayOfWeek
+        // If dayOfMonth is *, then dayOfWeek should be ?
+        const dayOfWeek = fields.dayOfMonth === '*' ? '?' : fields.dayOfWeek;
+        
+        // The fields already contain UTC time (what user enters), so use them directly
+        return `${fields.seconds} ${fields.minutes} ${fields.hours} ${fields.dayOfMonth} ${fields.month} ${dayOfWeek}`.trim();
+    };
+    
+    const parseCronExpressionToUTC = (cronExpression) => {
+        if (!cronExpression) return { seconds: '', minutes: '', hours: '', dayOfMonth: '', month: '', dayOfWeek: '' };
+        
+        const parts = cronExpression.split(' ');
+        if (parts.length !== 6) return { seconds: '', minutes: '', hours: '', dayOfMonth: '', month: '', dayOfWeek: '' };
+        
+        const [seconds, utcMinutes, utcHours, dayOfMonth, month, dayOfWeek] = parts;
+        
+        // Return UTC time directly (what gets stored)
+        return {
+            seconds: seconds || '',
+            minutes: utcMinutes || '',
+            hours: utcHours || '',
+            dayOfMonth: dayOfMonth || '',
+            month: month || '',
+            dayOfWeek: dayOfWeek || ''
+        };
+    };
+
+    const handleCronFieldChange = (field, value) => {
+        // Limit to 6 characters and only allow valid cron characters
+        const sanitizedValue = value.replace(/[^0-9*,\-\/\s]/g, '').substring(0, 6);
+        
+        setCronFields(prev => {
+            const newFields = { ...prev, [field]: sanitizedValue };
+            const cronExpression = buildCronExpression(newFields);
+            
+            // Update the task's cron expression
+            setTask(prevTask => ({
+                ...prevTask,
+                cronExpression: cronExpression
+            }));
+            
+            // Clear any previous validation errors when user starts typing
+            setCronValidationError('');
+            setCronDescriptionError('');
+            
+            return newFields;
+        });
+    };
+
+    const isCronExpressionValid = () => {
+        const cronExpression = buildCronExpression(cronFields);
+        
+        if (!cronExpression || cronExpression.trim() === '') {
+            return false;
+        }
+
+        const parts = cronExpression.trim().split(/\s+/);
+        if (parts.length !== 6) {
+            return false;
+        }
+
+        // Check if all fields are filled
+        const hasEmptyFields = Object.values(cronFields).some(field => !field.trim());
+        if (hasEmptyFields) {
+            return false;
+        }
+
+        return true;
     };
 
     const handleConfigTextChange = (event) => {
@@ -658,10 +903,47 @@ function ViewAgentTask() {
             {/* Schedule Information Section */}
             <Card className="mb-4">
                 <Card.Header className="bg-light">
-                    <h5 className="mb-0">
-                        <i className="fas fa-clock me-2"></i>
-                        Schedule Information
-                    </h5>
+                    <div className="d-flex justify-content-between align-items-center">
+                        <h5 className="mb-0">
+                            <i className="fas fa-clock me-2"></i>
+                            Schedule Information
+                        </h5>
+                        {canEditTask && task?.executionTrigger !== 'MANUAL' && (
+                            <div className="d-flex gap-2">
+                                <Button 
+                                    variant="outline-danger" 
+                                    size="sm"
+                                    onClick={async () => {
+                                        if (window.confirm('Are you sure you want to unschedule this task? It will no longer run automatically.')) {
+                                            try {
+                                                const response = await agentSchedulingService.unscheduleTask(taskId);
+                                                if (response.success) {
+                                                    showSuccessToast('Task unscheduled successfully');
+                                                    loadTask(); // Reload task to reflect changes
+                                                } else {
+                                                    showErrorToast(response.error || 'Failed to unschedule task');
+                                                }
+                                            } catch (error) {
+                                                showErrorToast('Failed to unschedule task');
+                                                console.error('Error unscheduling task:', error);
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <i className="fas fa-calendar-times me-1"></i>
+                                    Unschedule
+                                </Button>
+                                <Button 
+                                    variant="outline-primary" 
+                                    size="sm"
+                                    onClick={() => setShowSchedulingModal(true)}
+                                >
+                                    <i className="fas fa-edit me-1"></i>
+                                    Edit
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 </Card.Header>
                 <Card.Body>
                     {task?.executionTrigger === 'MANUAL' ? (
@@ -675,10 +957,10 @@ function ViewAgentTask() {
                                 <Button 
                                     variant="outline-primary" 
                                     size="sm"
-                                    onClick={() => setShowMetadataModal(true)}
+                                    onClick={() => setShowSchedulingModal(true)}
                                 >
-                                    <i className="fas fa-edit me-1"></i>
-                                    Edit Task to Add Scheduler
+                                    <i className="fas fa-clock me-1"></i>
+                                    Configure Scheduling
                                 </Button>
                             )}
                         </div>
@@ -711,6 +993,37 @@ function ViewAgentTask() {
                                             </label>
                                             <div>
                                                 <code className="schedule-code">{task.cronExpression}</code>
+                                            </div>
+                                        </div>
+                                    </Col>
+                                    <Col md={6}>
+                                        <div className="schedule-info-item">
+                                            <label className="schedule-label">
+                                                <i className="fas fa-clock me-2"></i>
+                                                Schedule Time
+                                            </label>
+                                            <div>
+                                                {(() => {
+                                                    const parts = task.cronExpression.split(' ');
+                                                    if (parts.length >= 3) {
+                                                        const utcHour = parseInt(parts[2]) || 0;
+                                                        const utcMinute = parseInt(parts[1]) || 0;
+                                                        const localTime = convertUTCToLocal(utcHour, utcMinute);
+                                                        return (
+                                                            <div>
+                                                                <div className="mb-1">
+                                                                    <i className="fas fa-globe me-1 text-primary"></i>
+                                                                    <strong>UTC:</strong> {utcHour.toString().padStart(2, '0')}:{utcMinute.toString().padStart(2, '0')}
+                                                                </div>
+                                                                <div>
+                                                                    <i className="fas fa-map-marker-alt me-1 text-success"></i>
+                                                                    <strong>Local ({Intl.DateTimeFormat().resolvedOptions().timeZone}):</strong> {localTime.hour.toString().padStart(2, '0')}:{localTime.minute.toString().padStart(2, '0')}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return <span className="text-muted">Invalid cron expression</span>;
+                                                })()}
                                             </div>
                                         </div>
                                     </Col>
@@ -1738,80 +2051,46 @@ function ViewAgentTask() {
                             />
                         </Form.Group>
 
-                        <Form.Group className="mb-3">
-                            <Form.Label>Priority</Form.Label>
-                            <Form.Control
-                                type="number"
-                                name="priority"
-                                value={task?.priority || 1}
-                                onChange={handleInputChange}
-                                min="1"
-                                max="10"
-                            />
-                        </Form.Group>
+                        <Row className="mb-3">
+                            <Col md={4}>
+                                <Form.Group>
+                                    <Form.Label>Priority</Form.Label>
+                                    <Form.Control
+                                        type="number"
+                                        name="priority"
+                                        value={task?.priority || 1}
+                                        onChange={handleInputChange}
+                                        min="1"
+                                        max="10"
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={4}>
+                                <Form.Group>
+                                    <Form.Label>Max Retries</Form.Label>
+                                    <Form.Control
+                                        type="number"
+                                        name="maxRetries"
+                                        value={task?.maxRetries || 0}
+                                        onChange={handleInputChange}
+                                        min="0"
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={4}>
+                                <Form.Group>
+                                    <Form.Label>Timeout (minutes)</Form.Label>
+                                    <Form.Control
+                                        type="number"
+                                        name="timeoutMinutes"
+                                        value={task?.timeoutMinutes || 30}
+                                        onChange={handleInputChange}
+                                        min="1"
+                                    />
+                                </Form.Group>
+                            </Col>
+                        </Row>
 
-                        <Form.Group className="mb-3">
-                            <Form.Label>Max Retries</Form.Label>
-                            <Form.Control
-                                type="number"
-                                name="maxRetries"
-                                value={task?.maxRetries || 0}
-                                onChange={handleInputChange}
-                                min="0"
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Timeout (minutes)</Form.Label>
-                            <Form.Control
-                                type="number"
-                                name="timeoutMinutes"
-                                value={task?.timeoutMinutes || 30}
-                                onChange={handleInputChange}
-                                min="1"
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Cron Expression</Form.Label>
-                            <Form.Control
-                                type="text"
-                                name="cronExpression"
-                                value={task?.cronExpression || ''}
-                                onChange={handleInputChange}
-                                placeholder="e.g., 0 0 * * *"
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Cron Description</Form.Label>
-                            <Form.Control
-                                type="text"
-                                name="cronDescription"
-                                value={task?.cronDescription || ''}
-                                readOnly
-                                disabled
-                                placeholder="Auto-generated based on cron expression"
-                                style={{ backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
-                            />
-                            <Form.Text className="text-muted">
-                                This description is automatically generated based on the cron expression.
-                            </Form.Text>
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Check
-                                type="switch"
-                                id="scheduleOnStartup-switch"
-                                name="scheduleOnStartup"
-                                label="Schedule on Startup"
-                                checked={task?.scheduleOnStartup || false}
-                                onChange={handleInputChange}
-                            />
-                            <Form.Text className="text-muted">
-                                If enabled, this task will be scheduled automatically when the agent starts.
-                            </Form.Text>
-                        </Form.Group>
                     </Form>
                 </Modal.Body>
                 <Modal.Footer>
@@ -1862,6 +2141,496 @@ function ViewAgentTask() {
                 variant="primary"
                 disabled={executing}
             />
+
+            {/* Scheduling Configuration Modal */}
+            <Modal show={showSchedulingModal} onHide={() => setShowSchedulingModal(false)} size="lg">
+                <Modal.Header closeButton>
+                    <Modal.Title>
+                        <i className="fas fa-clock me-2"></i>
+                        Configure Task Scheduling
+                    </Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <Form>
+                        {/* Section 1: Cron Expression Input */}
+                        <Card className="mb-3 border-0">
+                            <Card.Header className="bg-light px-0">
+                                <h6 className="mb-0">
+                                    <i className="fas fa-calendar-alt me-2"></i>
+                                    Cron Expression (UTC)
+                                </h6>
+                            </Card.Header>
+                            <Card.Body className="px-0">
+                                <div className="cron-input-container">
+                                    <div className="cron-field-group">
+                                        <div className="cron-field">
+                                            <label className="cron-field-label">Seconds</label>
+                                            <Form.Control
+                                                type="text"
+                                                value={cronFields.seconds}
+                                                onChange={(e) => setCronFields(prev => ({ ...prev, seconds: e.target.value }))}
+                                                placeholder="0"
+                                                maxLength={6}
+                                                className="cron-input"
+                                            />
+                                        </div>
+                                        <div className="cron-field">
+                                            <label className="cron-field-label">Minutes</label>
+                                            <Form.Control
+                                                type="text"
+                                                value={cronFields.minutes}
+                                                onChange={(e) => setCronFields(prev => ({ ...prev, minutes: e.target.value }))}
+                                                placeholder="0"
+                                                maxLength={6}
+                                                className="cron-input"
+                                            />
+                                        </div>
+                                        <div className="cron-field">
+                                            <label className="cron-field-label">Hours</label>
+                                            <Form.Control
+                                                type="text"
+                                                value={cronFields.hours}
+                                                onChange={(e) => setCronFields(prev => ({ ...prev, hours: e.target.value }))}
+                                                placeholder="9"
+                                                maxLength={6}
+                                                className="cron-input"
+                                            />
+                                        </div>
+                                        <div className="cron-field">
+                                            <label className="cron-field-label">Day</label>
+                                            <Form.Control
+                                                type="text"
+                                                value={cronFields.dayOfMonth}
+                                                onChange={(e) => setCronFields(prev => ({ ...prev, dayOfMonth: e.target.value }))}
+                                                placeholder="*"
+                                                maxLength={6}
+                                                className="cron-input"
+                                            />
+                                        </div>
+                                        <div className="cron-field">
+                                            <label className="cron-field-label">Month</label>
+                                            <Form.Control
+                                                type="text"
+                                                value={cronFields.month}
+                                                onChange={(e) => setCronFields(prev => ({ ...prev, month: e.target.value }))}
+                                                placeholder="*"
+                                                maxLength={6}
+                                                className="cron-input"
+                                            />
+                                        </div>
+                                        <div className="cron-field">
+                                            <label className="cron-field-label">Day of Week</label>
+                                            <Form.Control
+                                                type="text"
+                                                value={cronFields.dayOfWeek}
+                                                onChange={(e) => setCronFields(prev => ({ ...prev, dayOfWeek: e.target.value }))}
+                                                placeholder="*"
+                                                maxLength={6}
+                                                className="cron-input"
+                                            />
+                                        </div>
+                                    </div>
+                                    {cronValidationError && (
+                                        <div className="text-danger small mt-2">
+                                            <i className="fas fa-exclamation-triangle me-1"></i>
+                                            {cronValidationError}
+                                        </div>
+                                    )}
+                                </div>
+                                <Form.Text className="text-muted mt-2">
+                                    Examples: <code>0 0 9 * * ?</code> (Daily at 9 AM UTC), <code>0 */15 * * * ?</code> (Every 15 minutes), <code>0 0 17 ? * MON-FRI</code> (Weekdays at 5 PM UTC)
+                                </Form.Text>
+                                
+                                {/* Timezone Conversion Display - Inside the card */}
+                                {cronFields.hours && cronFields.minutes && (
+                                    <div className="mt-3 p-2 bg-light border rounded">
+                                        <small className="text-muted">
+                                            <i className="fas fa-globe me-1"></i>
+                                            <strong>UTC:</strong> {cronFields.hours.padStart(2, '0')}:{cronFields.minutes.padStart(2, '0')}
+                                            <span className="mx-2">→</span>
+                                            <i className="fas fa-map-marker-alt me-1"></i>
+                                            <strong>Local ({Intl.DateTimeFormat().resolvedOptions().timeZone}):</strong> {(() => {
+                                                const utcHour = parseInt(cronFields.hours) || 0;
+                                                const utcMinute = parseInt(cronFields.minutes) || 0;
+                                                const localTime = convertUTCToLocal(utcHour, utcMinute);
+                                                return `${localTime.hour.toString().padStart(2, '0')}:${localTime.minute.toString().padStart(2, '0')}`;
+                                            })()}
+                                        </small>
+                                    </div>
+                                )}
+                                
+                                {/* Timezone Information */}
+                                <div className="alert alert-info mt-3 mb-0">
+                                    <i className="fas fa-info-circle me-2"></i>
+                                    <strong>Timezone Note:</strong> Enter times in UTC (what gets stored). 
+                                    We'll show you what that translates to in your local timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone}) below.
+                                </div>
+                            </Card.Body>
+                        </Card>
+
+                        {/* Cron Expression Examples Accordion */}
+                        <Accordion className="mb-4">
+                            <Accordion.Item eventKey="0">
+                                <Accordion.Header>
+                                    <i className="fas fa-lightbulb me-2 text-warning"></i>
+                                    Cron Expression Examples
+                                </Accordion.Header>
+                                <Accordion.Body>
+                                    <div className="table-responsive">
+                                    <table className="table table-sm table-bordered">
+                                        <thead className="table-light">
+                                            <tr>
+                                                <th style={{ width: '30%' }}>Expression</th>
+                                                <th style={{ width: '70%' }}>Description</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><code>0 0 9 * * ?</code></td>
+                                                <td>Every day at 9:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 */15 * * * ?</code></td>
+                                                <td>Every 15 minutes</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 17 ? * MON-FRI</code></td>
+                                                <td>Every weekday at 5:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 12 ? * SAT,SUN</code></td>
+                                                <td>Every weekend at 12:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 0 1 * ?</code></td>
+                                                <td>First day of every month at midnight</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 9 L * ?</code></td>
+                                                <td>Last day of every month at 9:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 9 ? * MON</code></td>
+                                                <td>Every Monday at 9:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 9-17 * * ?</code></td>
+                                                <td>Every hour from 9:00 AM to 5:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 */30 6-18 * * ?</code></td>
+                                                <td>Every 30 minutes from 6:00 AM to 6:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 0 1 1 ?</code></td>
+                                                <td>New Year's Day at midnight</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 8 ? * MON,WED,FRI</code></td>
+                                                <td>Every Monday, Wednesday, Friday at 8:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 6 ? * TUE-THU</code></td>
+                                                <td>Every Tuesday through Thursday at 6:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 18 ? * WED-SAT</code></td>
+                                                <td>Every Wednesday through Saturday at 6:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 0 15 * ?</code></td>
+                                                <td>15th day of every month at midnight</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 9 1,15,30 * ?</code></td>
+                                                <td>1st, 15th, and 30th of every month at 9:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 7 * 3-5 ?</code></td>
+                                                <td>Every day from March to May at 7:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 8 * 6-8 ?</code></td>
+                                                <td>Every day from June to August at 8:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 9 * 9-11 ?</code></td>
+                                                <td>Every day from September to November at 9:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 10 * 12,1,2 ?</code></td>
+                                                <td>Every day December, January, February at 10:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 0 1 1,4,7,10 ?</code></td>
+                                                <td>First day of every quarter at midnight</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 9 ? * 2#1</code></td>
+                                                <td>First Tuesday of every month at 9:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 14 ? * 6#3</code></td>
+                                                <td>Third Saturday of every month at 2:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 9 15W * ?</code></td>
+                                                <td>Nearest weekday to 15th of every month at 9:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 9 LW * ?</code></td>
+                                                <td>Last weekday of every month at 9:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 */5 9-17 * * ?</code></td>
+                                                <td>Every 5 minutes from 9:00 AM to 5:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 */10 * ? * SAT,SUN</code></td>
+                                                <td>Every 10 minutes on weekends</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 */2 6-22 * ?</code></td>
+                                                <td>Every 2 hours from 6:00 AM to 10:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 */3 7-19 * ?</code></td>
+                                                <td>Every 3 hours from 7:00 AM to 7:00 PM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 22-6 * * ?</code></td>
+                                                <td>Every hour from 10:00 PM to 6:00 AM</td>
+                                            </tr>
+                                            <tr>
+                                                <td><code>0 0 0 L 12 ?</code></td>
+                                                <td>Last day of December at midnight</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <small className="text-muted">
+                                        <i className="fas fa-info-circle me-1"></i>
+                                        <strong>Note:</strong> Use <code>?</code> for Day of Week when specifying Day of Month, and use <code>?</code> for Day of Month when specifying Day of Week.
+                                    </small>
+                                </div>
+                                </Accordion.Body>
+                            </Accordion.Item>
+                        </Accordion>
+
+                        {/* Section 2: Schedule Description */}
+                        <Card className="mb-3 border-0">
+                            <Card.Header className="bg-light px-0">
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <h6 className="mb-0">
+                                        <i className="fas fa-file-alt me-2"></i>
+                                        Schedule Description
+                                    </h6>
+                                    <Button
+                                        type="button"
+                                        variant="outline-primary"
+                                        size="sm"
+                                        onClick={validateAndGenerateCronDescription}
+                                        disabled={!isCronExpressionValid() || isValidatingCron}
+                                    >
+                                        {isValidatingCron ? (
+                                            <>
+                                                <Spinner animation="border" size="sm" className="me-2" />
+                                                Validating...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="fas fa-check-circle me-2"></i>
+                                                Get Description
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
+                            </Card.Header>
+                            <Card.Body className="px-0">
+                                <Form.Group className="mb-3">
+                                    <Form.Label>UTC Time</Form.Label>
+                                    <Form.Control
+                                        type="text"
+                                        name="cronDescription"
+                                        value={task?.cronDescription || ''}
+                                        readOnly
+                                        disabled
+                                        placeholder="Click 'Get Description' to validate and generate description"
+                                        style={{ backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
+                                    />
+                                </Form.Group>
+
+                                {/* Local Time Description */}
+                                {task?.cronDescription && cronFields.hours && cronFields.minutes && (
+                                    <Form.Group className="mb-0">
+                                        <Form.Label>Local Time ({Intl.DateTimeFormat().resolvedOptions().timeZone})</Form.Label>
+                                        <Form.Control
+                                            type="text"
+                                            value={(() => {
+                                        const utcHour = parseInt(cronFields.hours) || 0;
+                                        const utcMinute = parseInt(cronFields.minutes) || 0;
+                                        const localTime = convertUTCToLocal(utcHour, utcMinute);
+                                        
+                                        // Replace UTC time references with local time in the description
+                                        let localDescription = task.cronDescription;
+                                        
+                                        // Convert UTC time to 12-hour format for description matching
+                                        const utcHour12 = utcHour === 0 ? 12 : utcHour > 12 ? utcHour - 12 : utcHour;
+                                        const utcAmPm = utcHour >= 12 ? 'PM' : 'AM';
+                                        
+                                        // Convert local time to 12-hour format for replacement
+                                        const localHour12 = localTime.hour === 0 ? 12 : localTime.hour > 12 ? localTime.hour - 12 : localTime.hour;
+                                        const localAmPm = localTime.hour >= 12 ? 'PM' : 'AM';
+                                        
+                                        // Try to find and replace the time pattern in the description
+                                        // Start with the most specific pattern first to avoid partial matches
+                                        
+                                        // Pattern 1: 12-hour format with minutes and AM/PM (e.g., "11:11 PM")
+                                        const utcPattern1 = `${utcHour12}:${utcMinute.toString().padStart(2, '0')} ${utcAmPm}`;
+                                        const localPattern1 = `${localHour12}:${localTime.minute.toString().padStart(2, '0')} ${localAmPm}`;
+                                        
+                                        if (localDescription.includes(utcPattern1)) {
+                                            console.log(`Converting: "${utcPattern1}" → "${localPattern1}"`);
+                                            localDescription = localDescription.replace(new RegExp(utcPattern1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern1);
+                                        } 
+                                        // Pattern 2: 24-hour format with minutes (e.g., "23:11")
+                                        else if (localDescription.includes(`${utcHour}:${utcMinute.toString().padStart(2, '0')}`)) {
+                                            const utcPattern2 = `${utcHour}:${utcMinute.toString().padStart(2, '0')}`;
+                                            const localPattern2 = `${localTime.hour}:${localTime.minute.toString().padStart(2, '0')}`;
+                                            console.log(`Converting: "${utcPattern2}" → "${localPattern2}"`);
+                                            localDescription = localDescription.replace(new RegExp(utcPattern2.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern2);
+                                        }
+                                        // Pattern 3: 24-hour format padded (e.g., "23:11")
+                                        else if (localDescription.includes(`${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')}`)) {
+                                            const utcPattern3 = `${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')}`;
+                                            const localPattern3 = `${localTime.hour.toString().padStart(2, '0')}:${localTime.minute.toString().padStart(2, '0')}`;
+                                            console.log(`Converting: "${utcPattern3}" → "${localPattern3}"`);
+                                            localDescription = localDescription.replace(new RegExp(utcPattern3.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern3);
+                                        }
+                                        // Pattern 4: 12-hour format without minutes (e.g., "11 PM") - only if no minutes pattern matched
+                                        else if (localDescription.includes(`${utcHour12} ${utcAmPm}`)) {
+                                            const utcPattern4 = `${utcHour12} ${utcAmPm}`;
+                                            const localPattern4 = `${localHour12} ${localAmPm}`;
+                                            console.log(`Converting: "${utcPattern4}" → "${localPattern4}"`);
+                                            localDescription = localDescription.replace(new RegExp(utcPattern4.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern4);
+                                        }
+                                        
+                                        console.log(`UTC Description: "${task.cronDescription}"`);
+                                        console.log(`Local Description: "${localDescription}"`);
+                                        console.log(`UTC Time: ${utcHour}:${utcMinute.toString().padStart(2, '0')}`);
+                                        console.log(`Local Time: ${localTime.hour}:${localTime.minute.toString().padStart(2, '0')}`);
+                                        console.log(`UTC Hour 12: ${utcHour12}, UTC AM/PM: ${utcAmPm}`);
+                                        console.log(`Local Hour 12: ${localHour12}, Local AM/PM: ${localAmPm}`);
+                                        console.log(`Local minute: ${localTime.minute}, padded: ${localTime.minute.toString().padStart(2, '0')}`);
+                                        
+                                        return localDescription;
+                                    })()}
+                                            readOnly
+                                            disabled
+                                            style={{ backgroundColor: '#f8f9fa', cursor: 'not-allowed' }}
+                                        />
+                                    </Form.Group>
+                                )}
+                                
+                                {/* Error Messages */}
+                                {(cronValidationError || cronDescriptionError) && (
+                                    <div className="mt-3">
+                                        {cronValidationError && (
+                                            <div className="text-danger small mb-2">
+                                                <i className="fas fa-exclamation-triangle me-1"></i>
+                                                {cronValidationError}
+                                            </div>
+                                        )}
+                                        {cronDescriptionError && (
+                                            <div className="text-danger small">
+                                                <i className="fas fa-exclamation-triangle me-1"></i>
+                                                {cronDescriptionError}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                
+                                <Form.Text className="text-muted mt-2">
+                                    Click "Get Description" to validate your cron expression and generate a human-readable description.
+                                </Form.Text>
+                            </Card.Body>
+                        </Card>
+
+                        <Form.Group className="mb-3">
+                            <Form.Check
+                                type="switch"
+                                id="scheduleOnStartup-switch"
+                                name="scheduleOnStartup"
+                                label="Schedule on Startup"
+                                checked={task?.scheduleOnStartup || false}
+                                onChange={handleInputChange}
+                            />
+                            <Form.Text className="text-muted">
+                                If enabled, this task will be scheduled automatically when the agent starts.
+                            </Form.Text>
+                        </Form.Group>
+                    </Form>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowSchedulingModal(false)}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        variant="primary" 
+                        onClick={async () => {
+                            console.log('🖱️ Save Scheduling button clicked!');
+                            try {
+                                setSaving(true);
+                                
+                                // Validate cron expression before saving
+                                const cronExpression = buildCronExpression(cronFields);
+                                if (cronExpression.trim() && !isCronExpressionValid()) {
+                                    showErrorToast('Please fix the cron expression errors before saving');
+                                    return;
+                                }
+                                
+                                // Send only the scheduling-related fields using the new endpoint
+                                const schedulingUpdate = {
+                                    cronExpression: cronExpression,
+                                    cronDescription: task?.cronDescription || '',
+                                    scheduleOnStartup: task?.scheduleOnStartup || false,
+                                    executionTrigger: cronExpression.trim() ? 'CRON' : 'MANUAL'
+                                };
+                                console.log('🚀 Calling updateSchedulingConfiguration with:', { taskId, schedulingUpdate });
+                                const response = await agentTaskService.updateSchedulingConfiguration(taskId, schedulingUpdate);
+                                console.log('📥 Response from updateSchedulingConfiguration:', response);
+                                if (response.success) {
+                                    showSuccessToast('Scheduling configuration updated successfully');
+                                    setShowSchedulingModal(false);
+                                    loadTask();
+                                    loadVersions();
+                                } else {
+                                    showErrorToast(response.error || 'Failed to update scheduling configuration');
+                                }
+                            } catch (err) {
+                                showErrorToast('Failed to update scheduling configuration');
+                                console.error('Error updating scheduling:', err);
+                            } finally {
+                                setSaving(false);
+                            }
+                        }}
+                        disabled={saving || !isCronExpressionValid() || !isCronValidated || !!cronValidationError || !!cronDescriptionError}
+                    >
+                        {saving ? (
+                            <>
+                                <Spinner
+                                    as="span"
+                                    animation="border"
+                                    size="sm"
+                                    role="status"
+                                    aria-hidden="true"
+                                    className="me-2"
+                                />
+                                Saving...
+                            </>
+                        ) : 'Save Scheduling'}
+                    </Button>
+                </Modal.Footer>
+            </Modal>
 
             {/* Execution Details Modal */}
             <ExecutionDetailsModal

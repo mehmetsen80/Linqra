@@ -58,6 +58,8 @@ function ViewAgentTask() {
     const [stats, setStats] = useState(null);
     const [metrics, setMetrics] = useState(null);
     const [executionHistory, setExecutionHistory] = useState([]);
+    const [workflowStats, setWorkflowStats] = useState(null);
+    const [loadingWorkflowStats, setLoadingWorkflowStats] = useState(false);
     const [loadingStats, setLoadingStats] = useState(true);
     const [selectedExecution, setSelectedExecution] = useState(null);
     const [showExecutionModal, setShowExecutionModal] = useState(false);
@@ -74,6 +76,8 @@ function ViewAgentTask() {
     const [loadingWorkflow, setLoadingWorkflow] = useState(false);
     const [generatingCronDescription, setGeneratingCronDescription] = useState(false);
     const [showSchedulingModal, setShowSchedulingModal] = useState(false);
+    const [showUnscheduleModal, setShowUnscheduleModal] = useState(false);
+    const [unscheduling, setUnscheduling] = useState(false);
     
     // Timezone conversion utilities
     const getUserTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -130,6 +134,12 @@ function ViewAgentTask() {
             setValidationError(null);
         }
     }, [task, isEditingConfig]);
+
+    useEffect(() => {
+        if (task) {
+            loadWorkflowStats();
+        }
+    }, [task]);
 
     useEffect(() => {
         if (task?.agentId && currentTeam) {
@@ -238,6 +248,35 @@ function ViewAgentTask() {
         }
     };
 
+    const loadWorkflowStats = async () => {
+        if (!task) return;
+        
+        try {
+            setLoadingWorkflowStats(true);
+            
+            // For WORKFLOW_TRIGGER tasks, fetch stats by workflowId
+            if (task.taskType === 'WORKFLOW_TRIGGER' && task.linq_config?.query?.workflowId) {
+                const workflowId = task.linq_config.query.workflowId;
+                const response = await workflowService.getWorkflowStats(workflowId);
+                if (response.success) {
+                    setWorkflowStats(response.data);
+                }
+            }
+            // For WORKFLOW_EMBEDDED tasks, fetch stats by agentTaskId
+            else if (task.taskType === 'WORKFLOW_EMBEDDED' || task.taskType === 'WORKFLOW_EMBEDDED_ADHOC') {
+                const response = await workflowService.getAgentTaskWorkflowStats(taskId);
+                if (response.success) {
+                    setWorkflowStats(response.data);
+                }
+            }
+            
+        } catch (err) {
+            console.error('Error loading workflow stats:', err);
+        } finally {
+            setLoadingWorkflowStats(false);
+        }
+    };
+
     const loadMetrics = async () => {
         try {
             const response = await agentTaskMonitoringService.getTaskMetrics(taskId);
@@ -263,6 +302,7 @@ function ViewAgentTask() {
 
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
+        
         setTask(prev => ({
             ...prev,
             [name]: type === 'checkbox' ? checked : value
@@ -553,7 +593,10 @@ function ViewAgentTask() {
 
     const handleMetadataSave = async () => {
         try {
+            setSaving(true);
+            
             // Create a new version with updated metadata
+            // Note: Backend will auto-detect and update task type based on linq_config structure
             const response = await agentTaskVersionService.createNewVersion(taskId, task);
             if (response.success) {
                 showSuccessToast('Task details updated successfully');
@@ -564,7 +607,10 @@ function ViewAgentTask() {
                 showErrorToast(response.error || 'Failed to update task details');
             }
         } catch (err) {
-            showErrorToast('Failed to update task details');
+            showErrorToast(err.response?.data?.message || 'Failed to update task details');
+            console.error('Error updating task details:', err);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -668,7 +714,17 @@ function ViewAgentTask() {
         try {
             let dateObj;
             if (Array.isArray(date)) {
-                dateObj = new Date(date[0], date[1] - 1, date[2], date[3], date[4], date[5]);
+                // Handle array format [year, month, day, hour, minute, second?, nanosecond?]
+                // Since these are stored in UTC, we need to create a UTC date
+                const year = date[0];
+                const month = date[1] - 1; // JavaScript months are 0-based
+                const day = date[2];
+                const hour = date[3];
+                const minute = date[4];
+                const second = date[5] || 0;
+                
+                // Create UTC date
+                dateObj = new Date(Date.UTC(year, month, day, hour, minute, second));
             } else {
                 dateObj = new Date(date);
             }
@@ -913,22 +969,7 @@ function ViewAgentTask() {
                                 <Button 
                                     variant="outline-danger" 
                                     size="sm"
-                                    onClick={async () => {
-                                        if (window.confirm('Are you sure you want to unschedule this task? It will no longer run automatically.')) {
-                                            try {
-                                                const response = await agentSchedulingService.unscheduleTask(taskId);
-                                                if (response.success) {
-                                                    showSuccessToast('Task unscheduled successfully');
-                                                    loadTask(); // Reload task to reflect changes
-                                                } else {
-                                                    showErrorToast(response.error || 'Failed to unschedule task');
-                                                }
-                                            } catch (error) {
-                                                showErrorToast('Failed to unschedule task');
-                                                console.error('Error unscheduling task:', error);
-                                            }
-                                        }
-                                    }}
+                                    onClick={() => setShowUnscheduleModal(true)}
                                 >
                                     <i className="fas fa-calendar-times me-1"></i>
                                     Unschedule
@@ -965,155 +1006,91 @@ function ViewAgentTask() {
                             )}
                         </div>
                     ) : (
-                        <Row>
-                            <Col md={6}>
-                                <div className="schedule-info-item">
-                                    <label className="schedule-label">
-                                        <i className="fas fa-sync-alt me-2"></i>
-                                        Execution Trigger
-                                    </label>
-                                    <div>
-                                        <Badge bg={
-                                            task?.executionTrigger === 'CRON' ? 'primary' :
-                                            task?.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
-                                            'info'
-                                        } className="schedule-badge">
-                                            {task?.executionTrigger}
-                                        </Badge>
-                                    </div>
-                                </div>
-                            </Col>
+                        <div>
                             {task?.cronExpression && (
-                                <>
-                                    <Col md={6}>
-                                        <div className="schedule-info-item">
-                                            <label className="schedule-label">
-                                                <i className="fas fa-code me-2"></i>
-                                                Cron Expression
-                                            </label>
-                                            <div>
-                                                <code className="schedule-code">{task.cronExpression}</code>
-                                            </div>
-                                        </div>
-                                    </Col>
-                                    <Col md={6}>
-                                        <div className="schedule-info-item">
-                                            <label className="schedule-label">
-                                                <i className="fas fa-clock me-2"></i>
-                                                Schedule Time
-                                            </label>
-                                            <div>
+                                <div className="mb-3">
+                                    <div className="mb-2">
+                                        <strong>{task.cronDescription || 'No description available'} (UTC)</strong>
+                                    </div>
+                                    <div className="mb-2">
+                                        <small className="text-muted">
+                                            <i className="fas fa-map-marker-alt me-1"></i>
+                                            Local Time ({Intl.DateTimeFormat().resolvedOptions().timeZone}): 
+                                            <strong className="ms-1">
                                                 {(() => {
                                                     const parts = task.cronExpression.split(' ');
                                                     if (parts.length >= 3) {
                                                         const utcHour = parseInt(parts[2]) || 0;
                                                         const utcMinute = parseInt(parts[1]) || 0;
                                                         const localTime = convertUTCToLocal(utcHour, utcMinute);
-                                                        return (
-                                                            <div>
-                                                                <div className="mb-1">
-                                                                    <i className="fas fa-globe me-1 text-primary"></i>
-                                                                    <strong>UTC:</strong> {utcHour.toString().padStart(2, '0')}:{utcMinute.toString().padStart(2, '0')}
-                                                                </div>
-                                                                <div>
-                                                                    <i className="fas fa-map-marker-alt me-1 text-success"></i>
-                                                                    <strong>Local ({Intl.DateTimeFormat().resolvedOptions().timeZone}):</strong> {localTime.hour.toString().padStart(2, '0')}:{localTime.minute.toString().padStart(2, '0')}
-                                                                </div>
-                                                            </div>
-                                                        );
+                                                        const localHour12 = localTime.hour === 0 ? 12 : localTime.hour > 12 ? localTime.hour - 12 : localTime.hour;
+                                                        const localAmPm = localTime.hour >= 12 ? 'PM' : 'AM';
+                                                        return `${localHour12}:${localTime.minute.toString().padStart(2, '0')} ${localAmPm}`;
                                                     }
-                                                    return <span className="text-muted">Invalid cron expression</span>;
+                                                    return 'Invalid';
                                                 })()}
-                                            </div>
-                                        </div>
-                                    </Col>
-                                    <Col md={12}>
-                                        <div className="schedule-info-item">
-                                            <label className="schedule-label">
-                                                <i className="fas fa-info-circle me-2"></i>
-                                                Cron Description
-                                            </label>
-                                            <div className="schedule-description">
-                                                {task.cronDescription || 'No description available'}
-                                            </div>
-                                        </div>
-                                    </Col>
-                                </>
+                                            </strong>
+                                        </small>
+                                    </div>
+                                    <div className="d-flex gap-3 text-muted small">
+                                        <span>
+                                            <i className="fas fa-globe me-1"></i>
+                                            {(() => {
+                                                const parts = task.cronExpression.split(' ');
+                                                if (parts.length >= 3) {
+                                                    const utcHour = parseInt(parts[2]) || 0;
+                                                    const utcMinute = parseInt(parts[1]) || 0;
+                                                    return `${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')} UTC`;
+                                                }
+                                                return 'Invalid';
+                                            })()}
+                                        </span>
+                                        <span>
+                                            <code className="text-muted">{task.cronExpression}</code>
+                                        </span>
+                                    </div>
+                                </div>
                             )}
-                            <Col md={6}>
-                                <div className="schedule-info-item">
-                                    <label className="schedule-label">
-                                        <i className="fas fa-play-circle me-2"></i>
-                                        Last Run
-                                    </label>
-                                    <div className="schedule-value">
-                                        {task?.lastRun ? (
-                                            <span className="text-success">
-                                                <i className="fas fa-check-circle me-1"></i>
-                                                {formatDate(task.lastRun)}
-                                            </span>
-                                        ) : (
-                                            <span className="text-muted">
-                                                <i className="fas fa-minus-circle me-1"></i>
-                                                Never executed
-                                            </span>
-                                        )}
+                            
+                            <Row className="mt-3">
+                                <Col md={6}>
+                                    <div className="p-3 border rounded">
+                                        <small className="text-muted d-block mb-2">
+                                            <i className="fas fa-history me-1"></i>
+                                            Last Run
+                                            <span className="ms-1">({Intl.DateTimeFormat().resolvedOptions().timeZone})</span>
+                                        </small>
+                                        <div>
+                                            {task?.lastRun ? (
+                                                <strong className="text-success">
+                                                    {formatDate(task.lastRun)}
+                                                </strong>
+                                            ) : (
+                                                <span className="text-muted">Never executed</span>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            </Col>
-                            <Col md={6}>
-                                <div className="schedule-info-item">
-                                    <label className="schedule-label">
-                                        <i className="fas fa-clock me-2"></i>
-                                        Next Run
-                                    </label>
-                                    <div className="schedule-value">
-                                        {task?.nextRun ? (
-                                            <span className="text-primary">
-                                                <i className="fas fa-clock me-1"></i>
-                                                {formatDate(task.nextRun)}
-                                            </span>
-                                        ) : (
-                                            <span className="text-muted">
-                                                <i className="fas fa-minus-circle me-1"></i>
-                                                Not scheduled
-                                            </span>
-                                        )}
+                                </Col>
+                                <Col md={6}>
+                                    <div className="p-3 border rounded">
+                                        <small className="text-muted d-block mb-2">
+                                            <i className="fas fa-clock me-1"></i>
+                                            Next Run
+                                            <span className="ms-1">({Intl.DateTimeFormat().resolvedOptions().timeZone})</span>
+                                        </small>
+                                        <div>
+                                            {task?.nextRun ? (
+                                                <strong style={{ color: '#ff6b35' }}>
+                                                    {formatDate(task.nextRun)}
+                                                </strong>
+                                            ) : (
+                                                <span className="text-muted">Not scheduled</span>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            </Col>
-                            <Col md={12}>
-                                <div className="schedule-info-item">
-                                    <label className="schedule-label">
-                                        <i className="fas fa-cog me-2"></i>
-                                        Additional Settings
-                                    </label>
-                                    <div>
-                                        {task?.scheduleOnStartup && (
-                                            <Badge bg="success" className="me-2 mb-2">
-                                                <i className="fas fa-power-off me-1"></i>
-                                                Schedule on Startup
-                                            </Badge>
-                                        )}
-                                        {task?.scheduled && (
-                                            <Badge bg="info" className="me-2 mb-2">
-                                                <i className="fas fa-calendar-check me-1"></i>
-                                                Currently Scheduled
-                                            </Badge>
-                                        )}
-                                        {task?.autoExecute && (
-                                            <Badge bg="warning" className="me-2 mb-2">
-                                                <i className="fas fa-bolt me-1"></i>
-                                                Auto Execute
-                                            </Badge>
-                                        )}
-                                        {!task?.scheduleOnStartup && !task?.scheduled && !task?.autoExecute && (
-                                            <span className="text-muted">None</span>
-                                        )}
-                                    </div>
-                                </div>
-                            </Col>
-                        </Row>
+                                </Col>
+                            </Row>
+                        </div>
                     )}
                 </Card.Body>
             </Card>
@@ -1418,42 +1395,116 @@ function ViewAgentTask() {
                                 <div className="detail-item">
                                     <div className="detail-label">Linq Params</div>
                                     <div className="detail-value">
-                                        <pre style={{ fontSize: '0.8rem', marginBottom: 0 }}>
+                                        <pre style={{ fontSize: '0.8rem', marginBottom: 0, textAlign: 'left' }}>
                                             {JSON.stringify(task.linqParams, null, 2)}
                                         </pre>
                                     </div>
                                 </div>
                             )}
+                            {task?.scheduled && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Scheduled</div>
+                                    <div className="detail-value">
+                                        <Badge bg="info">
+                                            <i className="fas fa-calendar-check me-1"></i>
+                                            Yes
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                            {task?.cronTrigger && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Cron Trigger</div>
+                                    <div className="detail-value">
+                                        <Badge bg="primary">
+                                            <i className="fas fa-clock me-1"></i>
+                                            Enabled
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                            {task?.manualTrigger && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Manual Trigger</div>
+                                    <div className="detail-value">
+                                        <Badge bg="secondary">
+                                            <i className="fas fa-hand-pointer me-1"></i>
+                                            Enabled
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                            {task?.eventDrivenTrigger && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Event Driven</div>
+                                    <div className="detail-value">
+                                        <Badge bg="warning">
+                                            <i className="fas fa-bolt me-1"></i>
+                                            Enabled
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                            {task?.workflowTrigger && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Workflow Trigger</div>
+                                    <div className="detail-value">
+                                        <Badge bg="success">
+                                            <i className="fas fa-project-diagram me-1"></i>
+                                            Enabled
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                            {task?.workflowTriggerTask && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Workflow Trigger Task</div>
+                                    <div className="detail-value">
+                                        <Badge bg="primary">
+                                            <i className="fas fa-tasks me-1"></i>
+                                            Yes
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                            {task?.workflowEmbeddedTask && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Workflow Embedded Task</div>
+                                    <div className="detail-value">
+                                        <Badge bg="info">
+                                            <i className="fas fa-code-branch me-1"></i>
+                                            Yes
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
+                            {task?.autoExecute && (
+                                <div className="detail-item">
+                                    <div className="detail-label">Auto Execute</div>
+                                    <div className="detail-value">
+                                        <Badge bg="warning">
+                                            <i className="fas fa-bolt me-1"></i>
+                                            Enabled
+                                        </Badge>
+                                    </div>
+                                </div>
+                            )}
                             <div className="detail-item">
-                                <div className="detail-label">Task Flags</div>
+                                <div className="detail-label">Execution Trigger Valid</div>
                                 <div className="detail-value">
-                                    {task?.scheduled && <Badge bg="info" className="me-1 mb-1">Scheduled</Badge>}
-                                    {task?.cronTrigger && <Badge bg="primary" className="me-1 mb-1">Cron Trigger</Badge>}
-                                    {task?.manualTrigger && <Badge bg="secondary" className="me-1 mb-1">Manual Trigger</Badge>}
-                                    {task?.eventDrivenTrigger && <Badge bg="warning" className="me-1 mb-1">Event Driven</Badge>}
-                                    {task?.workflowTrigger && <Badge bg="success" className="me-1 mb-1">Workflow Trigger</Badge>}
-                                    {task?.workflowTriggerTask && <Badge bg="primary" className="me-1 mb-1">Workflow Trigger Task</Badge>}
-                                    {task?.workflowEmbeddedTask && <Badge bg="info" className="me-1 mb-1">Workflow Embedded</Badge>}
-                                    {(!task?.scheduled && !task?.cronTrigger && !task?.manualTrigger && !task?.eventDrivenTrigger && !task?.workflowTrigger && !task?.workflowTriggerTask && !task?.workflowEmbeddedTask) && (
-                                        <span className="text-muted">None</span>
-                                    )}
+                                    <Badge bg={task?.executionTriggerValid ? 'success' : 'danger'}>
+                                        <i className={`fas fa-${task?.executionTriggerValid ? 'check-circle' : 'times-circle'} me-1`}></i>
+                                        {task?.executionTriggerValid ? 'Valid' : 'Invalid'}
+                                    </Badge>
                                 </div>
                             </div>
                             <div className="detail-item">
-                                <div className="detail-label">Validation Status</div>
+                                <div className="detail-label">Task Configuration Valid</div>
                                 <div className="detail-value">
-                                    <div className="mb-1">
-                                        <small className="text-muted me-2">Execution Trigger:</small>
-                                        <Badge bg={task?.executionTriggerValid ? 'success' : 'danger'}>
-                                            {task?.executionTriggerValid ? 'Valid' : 'Invalid'}
-                                        </Badge>
-                                    </div>
-                                    <div>
-                                        <small className="text-muted me-2">Task Configuration:</small>
-                                        <Badge bg={task?.taskTypeConfigurationValid ? 'success' : 'danger'}>
-                                            {task?.taskTypeConfigurationValid ? 'Valid' : 'Invalid'}
-                                        </Badge>
-                                    </div>
+                                    <Badge bg={task?.taskTypeConfigurationValid ? 'success' : 'danger'}>
+                                        <i className={`fas fa-${task?.taskTypeConfigurationValid ? 'check-circle' : 'times-circle'} me-1`}></i>
+                                        {task?.taskTypeConfigurationValid ? 'Valid' : 'Invalid'}
+                                    </Badge>
                                 </div>
                             </div>
                             <div className="detail-item">
@@ -1561,7 +1612,7 @@ function ViewAgentTask() {
                             <Table stickyHeader>
                                 <TableHead>
                                     <TableRow>
-                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', minWidth: 150 }}>
+                                        <TableCell sx={{ fontWeight: 'bold', backgroundColor: '#f8f9fa', whiteSpace: 'nowrap' }}>
                                             <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                                                 Execution ID
                                                 <TextField
@@ -1710,9 +1761,9 @@ function ViewAgentTask() {
                                                 }
                                             }}
                                         >
-                                            <TableCell>
+                                            <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                                 <small style={{ fontFamily: 'monospace' }}>
-                                                    {execution.executionId.substring(0, 8)}...
+                                                    {execution.executionId}
                                                 </small>
                                             </TableCell>
                                             <TableCell>{formatDate(execution.startedAt)}</TableCell>
@@ -1759,6 +1810,96 @@ function ViewAgentTask() {
                                 </TableBody>
                             </Table>
                         </TableContainer>
+                    </Card.Body>
+                </Card>
+            )}
+
+            {/* Workflow Step & Target Analysis */}
+            {workflowStats && workflowStats.stepStats && Object.keys(workflowStats.stepStats).length > 0 && (
+                <Card className="mb-4">
+                    <Card.Header>
+                        <h5 className="mb-0">Workflow Analysis</h5>
+                    </Card.Header>
+                    <Card.Body>
+                        <Row className="mb-4">
+                            <Col md={6}>
+                                <Card>
+                                    <Card.Body>
+                                        <h6>Step Performance</h6>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={Object.entries(workflowStats.stepStats).map(([step, data]) => ({
+                                                step: `Step ${step}`,
+                                                duration: data.averageDurationMs,
+                                                executions: data.totalExecutions
+                                            }))}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="step" />
+                                                <YAxis />
+                                                <RechartsTooltip 
+                                                    formatter={(value, name) => {
+                                                        if (name === 'duration') {
+                                                            return [`${value.toFixed(2)}ms`, 'Avg. Duration'];
+                                                        }
+                                                        return [value, 'Total Executions'];
+                                                    }}
+                                                    contentStyle={{
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                        border: '1px solid #ccc',
+                                                        borderRadius: '4px',
+                                                        padding: '10px'
+                                                    }}
+                                                />
+                                                <Legend />
+                                                <Bar dataKey="duration" name="Avg. Duration (ms)" fill="#8884d8" />
+                                                <Bar dataKey="executions" name="Total Executions" fill="#82ca9d" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </Card.Body>
+                                </Card>
+                            </Col>
+                            <Col md={6}>
+                                <Card>
+                                    <Card.Body>
+                                        <h6>Target Distribution</h6>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={Object.entries(workflowStats.targetStats).map(([target, data]) => ({
+                                                        name: target,
+                                                        value: data.totalExecutions
+                                                    }))}
+                                                    dataKey="value"
+                                                    nameKey="name"
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    outerRadius={100}
+                                                    label
+                                                >
+                                                    {Object.entries(workflowStats.targetStats).map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'][index % 6]} />
+                                                    ))}
+                                                </Pie>
+                                                <RechartsTooltip 
+                                                    formatter={(value, name) => {
+                                                        const total = Object.values(workflowStats.targetStats)
+                                                            .reduce((sum, data) => sum + data.totalExecutions, 0);
+                                                        const percentage = ((value / total) * 100).toFixed(1);
+                                                        return [`${value} executions (${percentage}%)`, name];
+                                                    }}
+                                                    contentStyle={{
+                                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                        border: '1px solid #ccc',
+                                                        borderRadius: '4px',
+                                                        padding: '10px'
+                                                    }}
+                                                />
+                                                <Legend />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </Card.Body>
+                                </Card>
+                            </Col>
+                        </Row>
                     </Card.Body>
                 </Card>
             )}
@@ -1928,13 +2069,87 @@ function ViewAgentTask() {
                 <Modal.Body>
                     <div className="compare-form">
                         <div className="version-selectors mb-4">
-                            <div className="row g-3 align-items-center">
+                            <div className="row g-3 align-items-start">
                                 <div className="col-5">
                                     <div className="version-content p-3 bg-light rounded">
-                                        <h6 className="mb-3">Version {compareVersions.version1}</h6>
+                                        <h6 className="mb-3">Version {compareVersions.version1} (Current)</h6>
                                         <div className="diff-view">
+                                            {/* Basic Information */}
+                                            <div className="diff-section mb-3">
+                                                <h6 className="diff-title">Basic Information</h6>
+                                                <pre className="diff-content">
+                                                    {renderJsonWithHighlights(
+                                                        {
+                                                            name: task?.name,
+                                                            description: task?.description,
+                                                            taskType: task?.taskType,
+                                                            priority: task?.priority,
+                                                            enabled: task?.enabled,
+                                                            maxRetries: task?.maxRetries,
+                                                            timeoutMinutes: task?.timeoutMinutes
+                                                        },
+                                                        highlightDifferences(
+                                                            {
+                                                                name: task?.name,
+                                                                description: task?.description,
+                                                                taskType: task?.taskType,
+                                                                priority: task?.priority,
+                                                                enabled: task?.enabled,
+                                                                maxRetries: task?.maxRetries,
+                                                                timeoutMinutes: task?.timeoutMinutes
+                                                            },
+                                                            (() => {
+                                                                const v = versions.find(v => v.version === compareVersions.version2);
+                                                                return {
+                                                                    name: v?.name,
+                                                                    description: v?.description,
+                                                                    taskType: v?.taskType,
+                                                                    priority: v?.priority,
+                                                                    enabled: v?.enabled,
+                                                                    maxRetries: v?.maxRetries,
+                                                                    timeoutMinutes: v?.timeoutMinutes
+                                                                };
+                                                            })()
+                                                        )
+                                                    )}
+                                                </pre>
+                                            </div>
+                                            
+                                            {/* Scheduling Information */}
+                                            <div className="diff-section mb-3">
+                                                <h6 className="diff-title">Scheduling</h6>
+                                                <pre className="diff-content">
+                                                    {renderJsonWithHighlights(
+                                                        {
+                                                            executionTrigger: task?.executionTrigger,
+                                                            cronExpression: task?.cronExpression,
+                                                            cronDescription: task?.cronDescription,
+                                                            scheduleOnStartup: task?.scheduleOnStartup
+                                                        },
+                                                        highlightDifferences(
+                                                            {
+                                                                executionTrigger: task?.executionTrigger,
+                                                                cronExpression: task?.cronExpression,
+                                                                cronDescription: task?.cronDescription,
+                                                                scheduleOnStartup: task?.scheduleOnStartup
+                                                            },
+                                                            (() => {
+                                                                const v = versions.find(v => v.version === compareVersions.version2);
+                                                                return {
+                                                                    executionTrigger: v?.executionTrigger,
+                                                                    cronExpression: v?.cronExpression,
+                                                                    cronDescription: v?.cronDescription,
+                                                                    scheduleOnStartup: v?.scheduleOnStartup
+                                                                };
+                                                            })()
+                                                        )
+                                                    )}
+                                                </pre>
+                                            </div>
+                                            
+                                            {/* Linq Configuration */}
                                             <div className="diff-section">
-                                                <h6 className="diff-title">Configuration</h6>
+                                                <h6 className="diff-title">Linq Configuration</h6>
                                                 <pre className="diff-content">
                                                     {renderJsonWithHighlights(
                                                         task?.linq_config || {},
@@ -1955,18 +2170,93 @@ function ViewAgentTask() {
                                     <div className="version-content p-3 bg-light rounded">
                                         <h6 className="mb-3">Version {compareVersions.version2}</h6>
                                         <div className="diff-view">
-                                            <div className="diff-section">
-                                                <h6 className="diff-title">Configuration</h6>
-                                                <pre className="diff-content">
-                                                    {renderJsonWithHighlights(
-                                                        versions.find(v => v.version === compareVersions.version2)?.linq_config || {},
-                                                        highlightDifferences(
-                                                            task?.linq_config || {},
-                                                            versions.find(v => v.version === compareVersions.version2)?.linq_config || {}
-                                                        )
-                                                    )}
-                                                </pre>
-                                            </div>
+                                            {(() => {
+                                                const v = versions.find(v => v.version === compareVersions.version2);
+                                                return (
+                                                    <>
+                                                        {/* Basic Information */}
+                                                        <div className="diff-section mb-3">
+                                                            <h6 className="diff-title">Basic Information</h6>
+                                                            <pre className="diff-content">
+                                                                {renderJsonWithHighlights(
+                                                                    {
+                                                                        name: v?.name,
+                                                                        description: v?.description,
+                                                                        taskType: v?.taskType,
+                                                                        priority: v?.priority,
+                                                                        enabled: v?.enabled,
+                                                                        maxRetries: v?.maxRetries,
+                                                                        timeoutMinutes: v?.timeoutMinutes
+                                                                    },
+                                                                    highlightDifferences(
+                                                                        {
+                                                                            name: task?.name,
+                                                                            description: task?.description,
+                                                                            taskType: task?.taskType,
+                                                                            priority: task?.priority,
+                                                                            enabled: task?.enabled,
+                                                                            maxRetries: task?.maxRetries,
+                                                                            timeoutMinutes: task?.timeoutMinutes
+                                                                        },
+                                                                        {
+                                                                            name: v?.name,
+                                                                            description: v?.description,
+                                                                            taskType: v?.taskType,
+                                                                            priority: v?.priority,
+                                                                            enabled: v?.enabled,
+                                                                            maxRetries: v?.maxRetries,
+                                                                            timeoutMinutes: v?.timeoutMinutes
+                                                                        }
+                                                                    )
+                                                                )}
+                                                            </pre>
+                                                        </div>
+                                                        
+                                                        {/* Scheduling Information */}
+                                                        <div className="diff-section mb-3">
+                                                            <h6 className="diff-title">Scheduling</h6>
+                                                            <pre className="diff-content">
+                                                                {renderJsonWithHighlights(
+                                                                    {
+                                                                        executionTrigger: v?.executionTrigger,
+                                                                        cronExpression: v?.cronExpression,
+                                                                        cronDescription: v?.cronDescription,
+                                                                        scheduleOnStartup: v?.scheduleOnStartup
+                                                                    },
+                                                                    highlightDifferences(
+                                                                        {
+                                                                            executionTrigger: task?.executionTrigger,
+                                                                            cronExpression: task?.cronExpression,
+                                                                            cronDescription: task?.cronDescription,
+                                                                            scheduleOnStartup: task?.scheduleOnStartup
+                                                                        },
+                                                                        {
+                                                                            executionTrigger: v?.executionTrigger,
+                                                                            cronExpression: v?.cronExpression,
+                                                                            cronDescription: v?.cronDescription,
+                                                                            scheduleOnStartup: v?.scheduleOnStartup
+                                                                        }
+                                                                    )
+                                                                )}
+                                                            </pre>
+                                                        </div>
+                                                        
+                                                        {/* Linq Configuration */}
+                                                        <div className="diff-section">
+                                                            <h6 className="diff-title">Linq Configuration</h6>
+                                                            <pre className="diff-content">
+                                                                {renderJsonWithHighlights(
+                                                                    v?.linq_config || {},
+                                                                    highlightDifferences(
+                                                                        task?.linq_config || {},
+                                                                        v?.linq_config || {}
+                                                                    )
+                                                                )}
+                                                            </pre>
+                                                        </div>
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 </div>
@@ -2631,6 +2921,44 @@ function ViewAgentTask() {
                     </Button>
                 </Modal.Footer>
             </Modal>
+
+            {/* Unschedule Confirmation Modal */}
+            <ConfirmationModal
+                show={showUnscheduleModal}
+                onHide={() => setShowUnscheduleModal(false)}
+                onConfirm={async () => {
+                    setUnscheduling(true);
+                    try {
+                        const response = await agentSchedulingService.unscheduleTask(taskId);
+                        if (response.success) {
+                            showSuccessToast('Task unscheduled successfully');
+                            setShowUnscheduleModal(false);
+                            loadTask(); // Reload task to reflect changes
+                        } else {
+                            showErrorToast(response.error || 'Failed to unschedule task');
+                        }
+                    } catch (error) {
+                        showErrorToast('Failed to unschedule task');
+                        console.error('Error unscheduling task:', error);
+                    } finally {
+                        setUnscheduling(false);
+                    }
+                }}
+                title="Unschedule Task"
+                message={
+                    <div>
+                        <p>Are you sure you want to unschedule this task?</p>
+                        <p className="text-muted mb-0">
+                            <i className="fas fa-exclamation-triangle me-2"></i>
+                            The task will no longer run automatically according to its schedule.
+                        </p>
+                    </div>
+                }
+                confirmLabel={unscheduling ? "Unscheduling..." : "Unschedule"}
+                cancelLabel="Cancel"
+                variant="danger"
+                disabled={unscheduling}
+            />
 
             {/* Execution Details Modal */}
             <ExecutionDetailsModal

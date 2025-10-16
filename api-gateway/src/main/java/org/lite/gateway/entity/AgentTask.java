@@ -94,10 +94,12 @@ public class AgentTask {
     private Integer version = 1;            // Current version number
     
     // Helper methods
-        public boolean isReadyToExecute() {
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    public boolean isReadyToExecute() {
         return enabled;
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public boolean isScheduled() {
         return isAutoExecute() && cronExpression != null && !cronExpression.trim().isEmpty();
     }
@@ -105,6 +107,7 @@ public class AgentTask {
     /**
      * Derives autoExecute behavior from executionTrigger
      */
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public boolean isAutoExecute() {
         if (executionTrigger == null) return false;
         return switch (executionTrigger) {
@@ -115,10 +118,12 @@ public class AgentTask {
     }
     
     // Task Type helper methods
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public boolean isWorkflowTriggerTask() {
         return AgentTaskType.WORKFLOW_TRIGGER.equals(taskType);
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public boolean isWorkflowEmbeddedTask() {
         return AgentTaskType.WORKFLOW_EMBEDDED.equals(taskType);
     }
@@ -163,18 +168,22 @@ public class AgentTask {
     */
     
     // Execution Trigger validation methods
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public boolean isManualTrigger() {
         return ExecutionTrigger.MANUAL.equals(executionTrigger);
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public boolean isCronTrigger() {
         return ExecutionTrigger.CRON.equals(executionTrigger);
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public boolean isEventDrivenTrigger() {
         return ExecutionTrigger.EVENT_DRIVEN.equals(executionTrigger);
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public boolean isWorkflowTrigger() {
         return ExecutionTrigger.WORKFLOW.equals(executionTrigger);
     }
@@ -242,6 +251,7 @@ public class AgentTask {
     }
     
     // Linq Protocol helper methods - aligned with LinqRequest structure
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public String getLinqTarget() {
         if (linqConfig != null) {
             // Extract from link.target
@@ -253,6 +263,7 @@ public class AgentTask {
         return null;
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public String getLinqAction() {
         if (linqConfig != null) {
             // Extract from link.action
@@ -264,6 +275,7 @@ public class AgentTask {
         return null;
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public String getLinqIntent() {
         if (linqConfig != null) {
             // Extract from query.intent
@@ -275,6 +287,7 @@ public class AgentTask {
         return null;
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public Map<String, Object> getLinqParams() {
         if (linqConfig != null) {
             // Extract from query.params
@@ -286,6 +299,7 @@ public class AgentTask {
         return null;
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public Object getLinqPayload() {
         if (linqConfig != null) {
             // Extract from query.payload
@@ -297,6 +311,7 @@ public class AgentTask {
         return null;
     }
     
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     public Map<String, Object> getLinqToolConfig() {
         if (linqConfig != null) {
             // Extract from query.toolConfig

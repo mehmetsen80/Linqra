@@ -14,4 +14,5 @@ public interface LinqWorkflowExecutionRepository extends ReactiveMongoRepository
     Mono<LinqWorkflowExecution> findByIdAndTeamId(String id, String teamId);
     Flux<LinqWorkflowExecution> findByWorkflowIdAndTeamId(String workflowId, String teamId, Sort sort);
     Mono<LinqWorkflowExecution> findByAgentExecutionId(String agentExecutionId);
+    Flux<LinqWorkflowExecution> findByAgentTaskId(String agentTaskId, Sort sort);
 }

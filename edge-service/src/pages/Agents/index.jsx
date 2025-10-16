@@ -18,6 +18,7 @@ function Agents() {
     const [agents, setAgents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [taskCounts, setTaskCounts] = useState({});
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -33,6 +34,20 @@ function Agents() {
             const response = await agentService.getAgentsByTeam(currentTeam.id);
             if (response.success) {
                 setAgents(response.data);
+                
+                // Fetch task counts for each agent
+                const counts = {};
+                await Promise.all(
+                    response.data.map(async (agent) => {
+                        const tasksResponse = await agentService.getTasksByAgent(agent.id);
+                        if (tasksResponse.success) {
+                            counts[agent.id] = tasksResponse.data.length;
+                        } else {
+                            counts[agent.id] = 0;
+                        }
+                    })
+                );
+                setTaskCounts(counts);
             } else {
                 setError(response.error);
             }
@@ -155,7 +170,10 @@ function Agents() {
                                                     </Badge>
                                                 </td>
                                                 <td>
-                                                    <Badge bg="info">0 tasks</Badge>
+                                                    <Badge bg="info">
+                                                        {taskCounts[agent.id] !== undefined ? taskCounts[agent.id] : '...'} 
+                                                        {taskCounts[agent.id] === 1 ? ' task' : ' tasks'}
+                                                    </Badge>
                                                 </td>
                                                 <td>
                                                     {formatDate(agent.createdAt)}

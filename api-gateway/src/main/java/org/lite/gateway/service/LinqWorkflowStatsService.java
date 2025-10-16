@@ -13,6 +13,13 @@ public interface LinqWorkflowStatsService {
     Mono<LinqWorkflowStats> getWorkflowStats(String workflowId);
 
     /**
+     * Get statistics for an embedded workflow in an agent task
+     * @param agentTaskId The ID of the agent task
+     * @return Mono containing workflow statistics
+     */
+    Mono<LinqWorkflowStats> getAgentTaskWorkflowStats(String agentTaskId);
+
+    /**
      * Get team-wide workflow statistics
      * @return Mono containing team statistics
      */

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Alert, Card, Badge, Breadcrumb, Row, Col, Spinner, Modal, Form } from 'react-bootstrap';
+import { Alert, Card, Badge, Breadcrumb, Row, Col, Spinner, Modal, Form, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { useTeam } from '../../../contexts/TeamContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
@@ -37,6 +37,9 @@ function ViewAgent() {
         timeoutMinutes: 30
     });
     const [creatingTask, setCreatingTask] = useState(false);
+    const [showEditAgentModal, setShowEditAgentModal] = useState(false);
+    const [editedAgent, setEditedAgent] = useState(null);
+    const [savingAgent, setSavingAgent] = useState(false);
 
     const loadAgent = async () => {
         try {
@@ -108,6 +111,55 @@ function ViewAgent() {
                 ? parseInt(value) || 0 
                 : value
         }));
+    };
+
+    const handleEditAgentClick = () => {
+        setEditedAgent({
+            ...agent,
+            supportedIntents: agent.supportedIntents || [],
+            capabilities: agent.capabilities || []
+        });
+        setShowEditAgentModal(true);
+    };
+
+    const handleEditedAgentChange = (e) => {
+        const { name, value } = e.target;
+        setEditedAgent(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
+
+    const handleMultiSelectChange = (field, selectedOptions) => {
+        const values = Array.from(selectedOptions).map(option => option.value);
+        setEditedAgent(prev => ({
+            ...prev,
+            [field]: values
+        }));
+    };
+
+    const handleSaveAgent = async () => {
+        if (!editedAgent.name || !editedAgent.description) {
+            showErrorToast('Please fill in all required fields');
+            return;
+        }
+
+        try {
+            setSavingAgent(true);
+            const response = await agentService.updateAgent(agentId, editedAgent);
+            if (response.success) {
+                showSuccessToast('Agent updated successfully');
+                setShowEditAgentModal(false);
+                loadAgent(); // Reload agent data
+            } else {
+                showErrorToast(response.error || 'Failed to update agent');
+            }
+        } catch (error) {
+            console.error('Error updating agent:', error);
+            showErrorToast(error.response?.data?.message || 'Failed to update agent');
+        } finally {
+            setSavingAgent(false);
+        }
     };
 
     const handleCreateTask = async () => {
@@ -267,12 +319,28 @@ function ViewAgent() {
                         </Button>
                         {canEditAgent && (
                             <>
-                                <Button variant="primary" size="sm" onClick={() => navigate(`/agents/${agentId}/edit`)}>
+                                <Button variant="primary" size="sm" onClick={handleEditAgentClick}>
                                     <HiPencilAlt /> Edit
                                 </Button>
-                                <Button variant="outline-danger" size="sm" onClick={() => console.log('Delete agent')}>
-                                    <HiTrash /> Delete
-                                </Button>
+                                <OverlayTrigger
+                                    placement="bottom"
+                                    overlay={
+                                        <Tooltip id="delete-agent-tooltip">
+                                            Delete functionality will be enabled in a future update
+                                        </Tooltip>
+                                    }
+                                >
+                                    <span className="d-inline-block">
+                                        <Button 
+                                            variant="outline-danger" 
+                                            size="sm" 
+                                            disabled
+                                            style={{ pointerEvents: 'none' }}
+                                        >
+                                            <HiTrash /> Delete
+                                        </Button>
+                                    </span>
+                                </OverlayTrigger>
                             </>
                         )}
                     </div>
@@ -676,6 +744,123 @@ function ViewAgent() {
                         disabled={creatingTask || !newTask.name || !newTask.description}
                     >
                         {creatingTask ? 'Creating...' : 'Create Task'}
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+
+            {/* Edit Agent Modal */}
+            <Modal
+                show={showEditAgentModal}
+                onHide={() => setShowEditAgentModal(false)}
+                centered
+                size="lg"
+            >
+                <Modal.Header closeButton>
+                    <Modal.Title>Edit Agent</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    {editedAgent && (
+                        <Form>
+                            <Form.Group className="mb-3">
+                                <Form.Label>Name <span className="text-danger">*</span></Form.Label>
+                                <Form.Control
+                                    type="text"
+                                    name="name"
+                                    value={editedAgent.name || ''}
+                                    onChange={handleEditedAgentChange}
+                                    placeholder="Enter agent name"
+                                />
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label>Description <span className="text-danger">*</span></Form.Label>
+                                <Form.Control
+                                    as="textarea"
+                                    name="description"
+                                    value={editedAgent.description || ''}
+                                    onChange={handleEditedAgentChange}
+                                    placeholder="Enter agent description"
+                                    rows={3}
+                                />
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label>Supported Intents</Form.Label>
+                                <Form.Select
+                                    multiple
+                                    value={editedAgent.supportedIntents}
+                                    onChange={(e) => handleMultiSelectChange('supportedIntents', e.target.selectedOptions)}
+                                    style={{ height: '150px' }}
+                                >
+                                    <option value="MONGODB_READ">MongoDB Read</option>
+                                    <option value="MONGODB_WRITE">MongoDB Write</option>
+                                    <option value="MILVUS_READ">Milvus Read</option>
+                                    <option value="MILVUS_WRITE">Milvus Write</option>
+                                    <option value="LLM_ANALYSIS">LLM Analysis</option>
+                                    <option value="LLM_GENERATION">LLM Generation</option>
+                                    <option value="API_INTEGRATION">API Integration</option>
+                                    <option value="WORKFLOW_ORCHESTRATION">Workflow Orchestration</option>
+                                    <option value="DATA_TRANSFORMATION">Data Transformation</option>
+                                    <option value="NOTIFICATION_SENDING">Notification Sending</option>
+                                    <option value="FILE_PROCESSING">File Processing</option>
+                                    <option value="MONITORING">Monitoring</option>
+                                    <option value="REPORTING">Reporting</option>
+                                    <option value="SCHEDULING">Scheduling</option>
+                                    <option value="EVENT_HANDLING">Event Handling</option>
+                                </Form.Select>
+                                <Form.Text className="text-muted">
+                                    Hold Ctrl/Cmd to select multiple intents
+                                </Form.Text>
+                            </Form.Group>
+
+                            <Form.Group className="mb-3">
+                                <Form.Label>Capabilities</Form.Label>
+                                <Form.Select
+                                    multiple
+                                    value={editedAgent.capabilities}
+                                    onChange={(e) => handleMultiSelectChange('capabilities', e.target.selectedOptions)}
+                                    style={{ height: '150px' }}
+                                >
+                                    <option value="MONGODB_ACCESS">MongoDB Access</option>
+                                    <option value="MILVUS_ACCESS">Milvus Access</option>
+                                    <option value="LLM_INTEGRATION">LLM Integration</option>
+                                    <option value="HTTP_CLIENT">HTTP Client</option>
+                                    <option value="FILE_SYSTEM_ACCESS">File System Access</option>
+                                    <option value="EMAIL_SENDING">Email Sending</option>
+                                    <option value="SMS_SENDING">SMS Sending</option>
+                                    <option value="SLACK_INTEGRATION">Slack Integration</option>
+                                    <option value="WEBHOOK_HANDLING">Webhook Handling</option>
+                                    <option value="CRON_SCHEDULING">Cron Scheduling</option>
+                                    <option value="EVENT_STREAMING">Event Streaming</option>
+                                    <option value="DATA_ENCRYPTION">Data Encryption</option>
+                                    <option value="IMAGE_PROCESSING">Image Processing</option>
+                                    <option value="PDF_PROCESSING">PDF Processing</option>
+                                    <option value="JSON_PROCESSING">JSON Processing</option>
+                                    <option value="XML_PROCESSING">XML Processing</option>
+                                    <option value="CSV_PROCESSING">CSV Processing</option>
+                                    <option value="TEMPLATE_RENDERING">Template Rendering</option>
+                                    <option value="METRICS_COLLECTION">Metrics Collection</option>
+                                    <option value="LOG_ANALYSIS">Log Analysis</option>
+                                    <option value="BACKUP_OPERATIONS">Backup Operations</option>
+                                    <option value="CACHE_MANAGEMENT">Cache Management</option>
+                                </Form.Select>
+                                <Form.Text className="text-muted">
+                                    Hold Ctrl/Cmd to select multiple capabilities
+                                </Form.Text>
+                            </Form.Group>
+                        </Form>
+                    )}
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowEditAgentModal(false)}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        variant="primary" 
+                        onClick={handleSaveAgent}
+                        disabled={savingAgent || !editedAgent?.name || !editedAgent?.description}
+                    >
+                        {savingAgent ? 'Saving...' : 'Save Changes'}
                     </Button>
                 </Modal.Footer>
             </Modal>

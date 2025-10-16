@@ -4,6 +4,7 @@ import org.lite.gateway.entity.Agent;
 import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.AgentAuthContextService;
 import org.lite.gateway.service.AgentTaskService;
+import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.ErrorCode;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,7 @@ public class AgentController {
     private final AgentService agentService;
     private final AgentAuthContextService agentAuthContextService;
     private final AgentTaskService agentTaskService;
+    private final TeamContextService teamContextService;
     
     // ==================== AGENT CRUD OPERATIONS ====================
     
@@ -32,13 +34,19 @@ public class AgentController {
             @RequestBody Agent agent,
             ServerWebExchange exchange) {
         
-        log.info("Creating agent '{}' for team {}", agent.getName(), agent.getTeamId());
+        log.info("Creating agent '{}'", agent.getName());
         
-        return agentAuthContextService.checkTeamAuthorization(agent.getTeamId(), exchange)
-                .flatMap(authContext -> agentService.createAgent(agent, agent.getTeamId(), authContext.getUsername()))
+        return teamContextService.getTeamFromContext()
+                .flatMap(teamId -> {
+                    log.info("Creating agent '{}' for team {}", agent.getName(), teamId);
+                    agent.setTeamId(teamId); // Set teamId from context
+                    
+                    return agentAuthContextService.checkTeamAuthorization(teamId, exchange)
+                            .flatMap(authContext -> agentService.createAgent(agent, teamId, authContext.getUsername()));
+                })
                 .map(createdAgent -> ResponseEntity.ok((Object) createdAgent))
                 .onErrorResume(error -> {
-                    log.warn("Authorization failed for createAgent: {}", error.getMessage());
+                    log.warn("Failed to create agent: {}", error.getMessage());
                     ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                             ErrorCode.FORBIDDEN,
                             error.getMessage(),

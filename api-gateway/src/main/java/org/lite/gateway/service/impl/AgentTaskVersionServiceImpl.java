@@ -6,6 +6,7 @@ import org.lite.gateway.entity.Agent;
 import org.lite.gateway.entity.AgentTask;
 import org.lite.gateway.entity.AgentTaskVersion;
 import org.lite.gateway.dto.ErrorCode;
+import org.lite.gateway.enums.AgentTaskType;
 import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
@@ -16,6 +17,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -61,7 +63,17 @@ public class AgentTaskVersionServiceImpl implements AgentTaskVersionService {
         if (updatedTask.getCronExpression() != null) existingTask.setCronExpression(updatedTask.getCronExpression());
         if (updatedTask.getCronDescription() != null) existingTask.setCronDescription(updatedTask.getCronDescription());
         if (updatedTask.getExecutionTrigger() != null) existingTask.setExecutionTrigger(updatedTask.getExecutionTrigger());
-        if (updatedTask.getLinqConfig() != null) existingTask.setLinqConfig(updatedTask.getLinqConfig());
+        
+        // If linq_config is updated, auto-detect and set the appropriate task type
+        if (updatedTask.getLinqConfig() != null) {
+            existingTask.setLinqConfig(updatedTask.getLinqConfig());
+            AgentTaskType detectedType = detectTaskTypeFromLinqConfig(updatedTask.getLinqConfig());
+            if (detectedType != null) {
+                existingTask.setTaskType(detectedType);
+                log.info("Auto-detected task type as {} based on linq_config structure", detectedType);
+            }
+        }
+        
         if (updatedTask.getApiConfig() != null) existingTask.setApiConfig(updatedTask.getApiConfig());
         if (updatedTask.getScriptContent() != null) existingTask.setScriptContent(updatedTask.getScriptContent());
         if (updatedTask.getScriptLanguage() != null) existingTask.setScriptLanguage(updatedTask.getScriptLanguage());
@@ -82,6 +94,43 @@ public class AgentTaskVersionServiceImpl implements AgentTaskVersionService {
                 
                 return agentTaskVersionRepository.save(newVersionRecord);
             });
+    }
+    
+    /**
+     * Detects the appropriate task type based on linq_config structure
+     * @param linqConfig The linq configuration map
+     * @return The detected AgentTaskType or null if cannot be determined
+     */
+    private AgentTaskType detectTaskTypeFromLinqConfig(Map<String, Object> linqConfig) {
+        if (linqConfig == null || !linqConfig.containsKey("query")) {
+            return null;
+        }
+        
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> query = (Map<String, Object>) linqConfig.get("query");
+            
+            // Check for WORKFLOW_TRIGGER: has workflowId
+            if (query.containsKey("workflowId") && query.get("workflowId") != null) {
+                String workflowId = query.get("workflowId").toString();
+                if (!workflowId.trim().isEmpty()) {
+                    return AgentTaskType.WORKFLOW_TRIGGER;
+                }
+            }
+            
+            // Check for WORKFLOW_EMBEDDED: has workflow array
+            if (query.containsKey("workflow") && query.get("workflow") instanceof java.util.List) {
+                @SuppressWarnings("unchecked")
+                java.util.List<Object> workflow = (java.util.List<Object>) query.get("workflow");
+                if (!workflow.isEmpty()) {
+                    return AgentTaskType.WORKFLOW_EMBEDDED;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to detect task type from linq_config: {}", e.getMessage());
+        }
+        
+        return null;
     }
     
     @Override

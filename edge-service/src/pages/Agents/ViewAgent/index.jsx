@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Alert, Card, Badge, Breadcrumb, Row, Col, Spinner } from 'react-bootstrap';
+import { Alert, Card, Badge, Breadcrumb, Row, Col, Spinner, Modal, Form } from 'react-bootstrap';
 import { useTeam } from '../../../contexts/TeamContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
@@ -8,6 +8,8 @@ import Button from '../../../components/common/Button';
 import { HiArrowLeft, HiPencilAlt, HiTrash, HiPlus } from 'react-icons/hi';
 import agentService from '../../../services/agentService';
 import agentMonitoringService from '../../../services/agentMonitoringService';
+import agentTaskService from '../../../services/agentTaskService';
+import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { format, isValid, parseISO } from 'date-fns';
 import './styles.css';
 
@@ -25,6 +27,16 @@ function ViewAgent() {
     const [loadingStats, setLoadingStats] = useState(true);
     const [tasks, setTasks] = useState([]);
     const [loadingTasks, setLoadingTasks] = useState(true);
+    const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+    const [newTask, setNewTask] = useState({
+        name: '',
+        description: '',
+        taskType: 'WORKFLOW_EMBEDDED',
+        priority: 5,
+        maxRetries: 3,
+        timeoutMinutes: 30
+    });
+    const [creatingTask, setCreatingTask] = useState(false);
 
     const loadAgent = async () => {
         try {
@@ -87,6 +99,100 @@ function ViewAgent() {
             loadAgentTasks();
         }
     }, [agentId, currentTeam]);
+
+    const handleNewTaskChange = (e) => {
+        const { name, value } = e.target;
+        setNewTask(prev => ({
+            ...prev,
+            [name]: name === 'priority' || name === 'maxRetries' || name === 'timeoutMinutes' 
+                ? parseInt(value) || 0 
+                : value
+        }));
+    };
+
+    const handleCreateTask = async () => {
+        if (!newTask.name || !newTask.description) {
+            showErrorToast('Please fill in all required fields');
+            return;
+        }
+
+        try {
+            setCreatingTask(true);
+            
+            // Construct minimal valid linq_config based on taskType
+            let linq_config;
+            if (newTask.taskType === 'WORKFLOW_EMBEDDED') {
+                // For WORKFLOW_EMBEDDED: must have linq_config with embedded workflow steps
+                linq_config = {
+                    link: {
+                        target: "workflow",
+                        action: "execute"
+                    },
+                    query: {
+                        intent: "placeholder_intent",
+                        params: {},
+                        workflow: [
+                            {
+                                step: 1,
+                                target: "placeholder-service",
+                                action: "fetch",
+                                intent: "/api/placeholder",
+                                params: {},
+                                payload: null,
+                                toolConfig: null,
+                                async: null,
+                                cacheConfig: null
+                            }
+                        ]
+                    }
+                };
+            } else if (newTask.taskType === 'WORKFLOW_TRIGGER') {
+                // For WORKFLOW_TRIGGER: must have linq_config with workflowId
+                linq_config = {
+                    link: {
+                        target: "workflow",
+                        action: "execute"
+                    },
+                    query: {
+                        intent: "placeholder_intent",
+                        workflowId: "", // User must set this later
+                        params: {}
+                    }
+                };
+            }
+            
+            const taskData = {
+                ...newTask,
+                agentId: agentId,
+                linq_config: linq_config
+            };
+            
+            const response = await agentTaskService.createAgentTask(taskData);
+            
+            if (response.success) {
+                showSuccessToast('Task created successfully!');
+                setShowCreateTaskModal(false);
+                setNewTask({
+                    name: '',
+                    description: '',
+                    taskType: 'WORKFLOW_EMBEDDED',
+                    priority: 5,
+                    maxRetries: 3,
+                    timeoutMinutes: 30
+                });
+                loadAgentTasks(); // Reload tasks
+                // Navigate to the new task
+                navigate(`/agents/${agentId}/tasks/${response.data.id}`);
+            } else {
+                showErrorToast(response.error || 'Failed to create task');
+            }
+        } catch (error) {
+            console.error('Error creating task:', error);
+            showErrorToast(error.response?.data?.message || 'Failed to create task');
+        } finally {
+            setCreatingTask(false);
+        }
+    };
 
     const formatDate = (dateValue, formatStr = 'MMM dd, yyyy HH:mm') => {
         if (!dateValue) return 'N/A';
@@ -319,76 +425,14 @@ function ViewAgent() {
                 </Col>
             </Row>
 
-            {performance && (
-                <Row className="mb-4">
-                    <Col lg={6}>
-                        <Card>
-                            <Card.Header>
-                                <h5 className="mb-0">Status Breakdown</h5>
-                            </Card.Header>
-                            <Card.Body>
-                                <div className="stat-item">
-                                    <div className="stat-label">Completed</div>
-                                    <div className="stat-value text-success">{performance.statusBreakdown?.completed || 0}</div>
-                                </div>
-                                <div className="stat-item">
-                                    <div className="stat-label">Running</div>
-                                    <div className="stat-value text-primary">{performance.statusBreakdown?.running || 0}</div>
-                                </div>
-                                <div className="stat-item">
-                                    <div className="stat-label">Failed</div>
-                                    <div className="stat-value text-danger">{performance.statusBreakdown?.failed || 0}</div>
-                                </div>
-                                <div className="stat-item">
-                                    <div className="stat-label">Cancelled</div>
-                                    <div className="stat-value text-warning">{performance.statusBreakdown?.cancelled || 0}</div>
-                                </div>
-                                <div className="stat-item">
-                                    <div className="stat-label">Timeout</div>
-                                    <div className="stat-value text-muted">{performance.statusBreakdown?.timeout || 0}</div>
-                                </div>
-                            </Card.Body>
-                        </Card>
-                    </Col>
-                    <Col lg={6}>
-                        <Card>
-                            <Card.Header>
-                                <h5 className="mb-0">Result Breakdown</h5>
-                            </Card.Header>
-                            <Card.Body>
-                                <div className="stat-item">
-                                    <div className="stat-label">Successful</div>
-                                    <div className="stat-value text-success">{performance.resultBreakdown?.successful || 0}</div>
-                                </div>
-                                <div className="stat-item">
-                                    <div className="stat-label">Failed</div>
-                                    <div className="stat-value text-danger">{performance.resultBreakdown?.failed || 0}</div>
-                                </div>
-                                <div className="stat-item">
-                                    <div className="stat-label">Partial Success</div>
-                                    <div className="stat-value text-warning">{performance.resultBreakdown?.partialSuccess || 0}</div>
-                                </div>
-                                <div className="stat-item">
-                                    <div className="stat-label">Skipped</div>
-                                    <div className="stat-value text-muted">{performance.resultBreakdown?.skipped || 0}</div>
-                                </div>
-                                <div className="stat-item">
-                                    <div className="stat-label">Unknown</div>
-                                    <div className="stat-value text-muted">{performance.resultBreakdown?.unknown || 0}</div>
-                                </div>
-                            </Card.Body>
-                        </Card>
-                    </Col>
-                </Row>
-            )}
-
-            <Card>
+            <Card className="mb-4">
                 <Card.Header className="d-flex justify-content-between align-items-center">
                     <h5 className="mb-0">Agent Tasks</h5>
                     {canEditAgent && (
                         <Button 
                             variant="primary"
-                            onClick={() => console.log('Create task')}
+                            onClick={() => setShowCreateTaskModal(true)}
+                            disabled={!canEditAgent}
                         >
                             <HiPlus /> Create Task
                         </Button>
@@ -468,6 +512,173 @@ function ViewAgent() {
                     )}
                 </Card.Body>
             </Card>
+
+            {performance && (
+                <Row className="mb-4">
+                    <Col lg={6}>
+                        <Card>
+                            <Card.Header>
+                                <h5 className="mb-0">Status Breakdown</h5>
+                            </Card.Header>
+                            <Card.Body>
+                                <div className="stat-item">
+                                    <div className="stat-label">Completed</div>
+                                    <div className="stat-value text-success">{performance.statusBreakdown?.completed || 0}</div>
+                                </div>
+                                <div className="stat-item">
+                                    <div className="stat-label">Running</div>
+                                    <div className="stat-value text-primary">{performance.statusBreakdown?.running || 0}</div>
+                                </div>
+                                <div className="stat-item">
+                                    <div className="stat-label">Failed</div>
+                                    <div className="stat-value text-danger">{performance.statusBreakdown?.failed || 0}</div>
+                                </div>
+                                <div className="stat-item">
+                                    <div className="stat-label">Cancelled</div>
+                                    <div className="stat-value text-warning">{performance.statusBreakdown?.cancelled || 0}</div>
+                                </div>
+                                <div className="stat-item">
+                                    <div className="stat-label">Timeout</div>
+                                    <div className="stat-value text-muted">{performance.statusBreakdown?.timeout || 0}</div>
+                                </div>
+                            </Card.Body>
+                        </Card>
+                    </Col>
+                    <Col lg={6}>
+                        <Card>
+                            <Card.Header>
+                                <h5 className="mb-0">Result Breakdown</h5>
+                            </Card.Header>
+                            <Card.Body>
+                                <div className="stat-item">
+                                    <div className="stat-label">Successful</div>
+                                    <div className="stat-value text-success">{performance.resultBreakdown?.successful || 0}</div>
+                                </div>
+                                <div className="stat-item">
+                                    <div className="stat-label">Failed</div>
+                                    <div className="stat-value text-danger">{performance.resultBreakdown?.failed || 0}</div>
+                                </div>
+                                <div className="stat-item">
+                                    <div className="stat-label">Partial Success</div>
+                                    <div className="stat-value text-warning">{performance.resultBreakdown?.partialSuccess || 0}</div>
+                                </div>
+                                <div className="stat-item">
+                                    <div className="stat-label">Skipped</div>
+                                    <div className="stat-value text-muted">{performance.resultBreakdown?.skipped || 0}</div>
+                                </div>
+                                <div className="stat-item">
+                                    <div className="stat-label">Unknown</div>
+                                    <div className="stat-value text-muted">{performance.resultBreakdown?.unknown || 0}</div>
+                                </div>
+                            </Card.Body>
+                        </Card>
+                    </Col>
+                </Row>
+            )}
+
+            {/* Create Task Modal */}
+            <Modal
+                show={showCreateTaskModal}
+                onHide={() => setShowCreateTaskModal(false)}
+                centered
+            >
+                <Modal.Header closeButton>
+                    <Modal.Title>Create New Task</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <Form>
+                        <Form.Group className="mb-3">
+                            <Form.Label>Name <span className="text-danger">*</span></Form.Label>
+                            <Form.Control
+                                type="text"
+                                name="name"
+                                value={newTask.name}
+                                onChange={handleNewTaskChange}
+                                placeholder="Enter task name"
+                            />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Description <span className="text-danger">*</span></Form.Label>
+                            <Form.Control
+                                as="textarea"
+                                name="description"
+                                value={newTask.description}
+                                onChange={handleNewTaskChange}
+                                placeholder="Enter task description"
+                                rows={3}
+                            />
+                        </Form.Group>
+
+                        <Form.Group className="mb-3">
+                            <Form.Label>Task Type</Form.Label>
+                            <Form.Select
+                                name="taskType"
+                                value={newTask.taskType}
+                                onChange={handleNewTaskChange}
+                            >
+                                <option value="WORKFLOW_EMBEDDED">Workflow Embedded</option>
+                                <option value="WORKFLOW_TRIGGER">Workflow Trigger</option>
+                            </Form.Select>
+                            <Form.Text className="text-muted">
+                                Embedded: Steps defined inline. Trigger: Reference an existing workflow.
+                            </Form.Text>
+                        </Form.Group>
+
+                        <Row className="mb-3">
+                            <Col md={4}>
+                                <Form.Group>
+                                    <Form.Label>Priority</Form.Label>
+                                    <Form.Control
+                                        type="number"
+                                        name="priority"
+                                        value={newTask.priority}
+                                        onChange={handleNewTaskChange}
+                                        min="1"
+                                        max="10"
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={4}>
+                                <Form.Group>
+                                    <Form.Label>Max Retries</Form.Label>
+                                    <Form.Control
+                                        type="number"
+                                        name="maxRetries"
+                                        value={newTask.maxRetries}
+                                        onChange={handleNewTaskChange}
+                                        min="0"
+                                    />
+                                </Form.Group>
+                            </Col>
+                            <Col md={4}>
+                                <Form.Group>
+                                    <Form.Label>Timeout (minutes)</Form.Label>
+                                    <Form.Control
+                                        type="number"
+                                        name="timeoutMinutes"
+                                        value={newTask.timeoutMinutes}
+                                        onChange={handleNewTaskChange}
+                                        min="1"
+                                    />
+                                </Form.Group>
+                            </Col>
+                        </Row>
+                    </Form>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowCreateTaskModal(false)}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        variant="primary" 
+                        onClick={handleCreateTask}
+                        disabled={creatingTask || !newTask.name || !newTask.description}
+                    >
+                        {creatingTask ? 'Creating...' : 'Create Task'}
+                    </Button>
+                </Modal.Footer>
+            </Modal>
         </div>
     );
 }

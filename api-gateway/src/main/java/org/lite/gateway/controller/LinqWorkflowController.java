@@ -370,6 +370,15 @@ public class LinqWorkflowController {
             .doOnError(error -> log.error("Error fetching workflow stats: {}", error.getMessage()));
     }
 
+    @GetMapping("/agent-task/{agentTaskId}/stats")
+    public Mono<LinqWorkflowStats> getAgentTaskWorkflowStats(@PathVariable String agentTaskId) {
+        log.info("Fetching workflow stats for agent task: {}", agentTaskId);
+        return linqWorkflowStatsService.getAgentTaskWorkflowStats(agentTaskId)
+            .doOnSuccess(stats -> log.info("Successfully fetched stats for agent task {} with {} executions", 
+                agentTaskId, stats.getTotalExecutions()))
+            .doOnError(error -> log.error("Error fetching agent task workflow stats: {}", error.getMessage()));
+    }
+
     @PostMapping("/validate")
     public Mono<ValidationResult> validateWorkflow(@RequestBody String rawRequest) {
         log.info("Validating workflow request: {}", rawRequest);

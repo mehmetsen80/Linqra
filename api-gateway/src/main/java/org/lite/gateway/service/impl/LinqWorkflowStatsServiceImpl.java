@@ -30,11 +30,29 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
     private final LinqWorkflowExecutionRepository executionRepository;
 
     @Override
+    public Mono<LinqWorkflowStats> getAgentTaskWorkflowStats(String agentTaskId) {
+        log.info("Calculating workflow stats for agent task: {}", agentTaskId);
+        return executionRepository.findByAgentTaskId(agentTaskId, Sort.by(Sort.Direction.DESC, "executedAt"))
+            .collectList()
+            .map(executions -> calculateWorkflowStats(executions))
+            .doOnSuccess(stats -> log.info("Successfully calculated stats for agent task {} with {} executions", 
+                agentTaskId, stats.getTotalExecutions()))
+            .doOnError(error -> log.error("Error calculating agent task workflow stats: {}", error.getMessage()));
+    }
+
+    @Override
     public Mono<LinqWorkflowStats> getWorkflowStats(String workflowId) {
         return executionRepository.findByWorkflowId(workflowId, Sort.by(Sort.Direction.DESC, "executedAt"))
             .collectList()
-            .map(executions -> {
-                LinqWorkflowStats stats = new LinqWorkflowStats();
+            .map(executions -> calculateWorkflowStats(executions))
+            .doOnError(error -> log.error("Error calculating workflow stats: {}", error.getMessage()));
+    }
+    
+    /**
+     * Helper method to calculate workflow stats from a list of executions
+     */
+    private LinqWorkflowStats calculateWorkflowStats(java.util.List<LinqWorkflowExecution> executions) {
+        LinqWorkflowStats stats = new LinqWorkflowStats();
                 
                 // Initialize maps
                 stats.setStepStats(new HashMap<>());
@@ -146,8 +164,6 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                 });
                 
                 return stats;
-            })
-            .doOnError(error -> log.error("Error calculating workflow stats: {}", error.getMessage()));
     }
 
     @Override

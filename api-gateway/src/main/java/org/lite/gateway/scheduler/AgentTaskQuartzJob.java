@@ -52,8 +52,8 @@ public class AgentTaskQuartzJob extends QuartzJobBean {
                 return;
             }
 
-            // Update lastRun to current time
-            LocalDateTime now = LocalDateTime.now();
+            // Update lastRun to current time (in UTC to match cron scheduling)
+            LocalDateTime now = LocalDateTime.now(java.time.ZoneId.of("UTC"));
             task.setLastRun(now);
             
             // Calculate and update nextRun if cron is set

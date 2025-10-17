@@ -52,17 +52,16 @@ public class AgentServiceImpl implements AgentService {
     
     @Override
     public Mono<Boolean> deleteAgent(String agentId, String teamId) {
-        log.info("Deleting agent {} for team {}", agentId, teamId);
+        log.info("Hard deleting agent {} for team {}", agentId, teamId);
         
         return agentRepository.findById(agentId)
                 .filter(agent -> teamId.equals(agent.getTeamId()))
                 .switchIfEmpty(Mono.error(new RuntimeException("Agent not found or access denied")))
                 .flatMap(agent -> {
-                    agent.setEnabled(false);
-                    agent.setUpdatedBy("system");
-                    return agentRepository.save(agent).thenReturn(true);
+                    // Hard delete - actually remove from database
+                    return agentRepository.deleteById(agentId).thenReturn(true);
                 })
-                .doOnSuccess(deleted -> log.info("Agent {} deleted successfully", agentId))
+                .doOnSuccess(deleted -> log.info("Agent {} hard deleted successfully", agentId))
                 .doOnError(error -> log.error("Failed to delete agent {}: {}", agentId, error.getMessage()));
     }
     

@@ -149,11 +149,10 @@ const agentService = {
         }
     },
 
-    deleteAgent: async (agentId, teamId) => {
+    deleteAgent: async (agentId) => {
         console.log('Deleting agent:', agentId);
         try {
             const response = await axiosInstance.delete(`/api/agents/${agentId}`, {
-                params: { teamId },
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',

@@ -5,6 +5,7 @@ import { useTeam } from '../../../contexts/TeamContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
 import Button from '../../../components/common/Button';
+import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { HiArrowLeft, HiPencilAlt, HiTrash, HiPlus } from 'react-icons/hi';
 import agentService from '../../../services/agentService';
 import agentMonitoringService from '../../../services/agentMonitoringService';
@@ -40,6 +41,8 @@ function ViewAgent() {
     const [showEditAgentModal, setShowEditAgentModal] = useState(false);
     const [editedAgent, setEditedAgent] = useState(null);
     const [savingAgent, setSavingAgent] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [deleting, setDeleting] = useState(false);
 
     const loadAgent = async () => {
         try {
@@ -159,6 +162,25 @@ function ViewAgent() {
             showErrorToast(error.response?.data?.message || 'Failed to update agent');
         } finally {
             setSavingAgent(false);
+        }
+    };
+
+    const handleDeleteAgent = async () => {
+        try {
+            setDeleting(true);
+            const response = await agentService.deleteAgent(agentId);
+            if (response.success) {
+                showSuccessToast('Agent deleted successfully');
+                navigate('/agents'); // Navigate back to agents list
+            } else {
+                showErrorToast(response.error || 'Failed to delete agent');
+            }
+        } catch (error) {
+            console.error('Error deleting agent:', error);
+            showErrorToast(error.response?.data?.message || 'Failed to delete agent');
+        } finally {
+            setDeleting(false);
+            setShowDeleteConfirm(false);
         }
     };
 
@@ -326,7 +348,9 @@ function ViewAgent() {
                                     placement="bottom"
                                     overlay={
                                         <Tooltip id="delete-agent-tooltip">
-                                            Delete functionality will be enabled in a future update
+                                            {tasks.length > 0 
+                                                ? `Cannot delete agent with ${tasks.length} task(s). Please delete all tasks first.`
+                                                : 'Delete this agent'}
                                         </Tooltip>
                                     }
                                 >
@@ -334,8 +358,9 @@ function ViewAgent() {
                                         <Button 
                                             variant="outline-danger" 
                                             size="sm" 
-                                            disabled
-                                            style={{ pointerEvents: 'none' }}
+                                            disabled={tasks.length > 0}
+                                            onClick={() => setShowDeleteConfirm(true)}
+                                            style={tasks.length > 0 ? { pointerEvents: 'none' } : {}}
                                         >
                                             <HiTrash /> Delete
                                         </Button>
@@ -553,7 +578,7 @@ function ViewAgent() {
                                             <td>
                                                 <Badge bg={
                                                     task.executionTrigger === 'MANUAL' ? 'secondary' :
-                                                    task.executionTrigger === 'CRON' ? 'primary' :
+                                                    task.executionTrigger === 'CRON' ? 'secondary' :
                                                     task.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
                                                     'info'
                                                 }>
@@ -864,6 +889,30 @@ function ViewAgent() {
                     </Button>
                 </Modal.Footer>
             </Modal>
+
+            {/* Delete Confirmation Modal */}
+            <ConfirmationModal
+                show={showDeleteConfirm}
+                onHide={() => setShowDeleteConfirm(false)}
+                onConfirm={handleDeleteAgent}
+                title="Delete Agent"
+                message={`Are you sure you want to delete "${agent?.name}"? This action cannot be undone.`}
+                confirmLabel={deleting ? (
+                    <>
+                        <Spinner
+                            as="span"
+                            animation="border"
+                            size="sm"
+                            role="status"
+                            aria-hidden="true"
+                            className="me-2"
+                        />
+                        Deleting...
+                    </>
+                ) : "Delete Agent"}
+                variant="danger"
+                disabled={deleting}
+            />
         </div>
     );
 }

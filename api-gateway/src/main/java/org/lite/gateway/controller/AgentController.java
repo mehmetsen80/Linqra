@@ -16,6 +16,8 @@ import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/agents")
 @RequiredArgsConstructor
@@ -85,15 +87,54 @@ public class AgentController {
     }
     
     @DeleteMapping("/{agentId}")
-    public Mono<ResponseEntity<Boolean>> deleteAgent(
+    public Mono<ResponseEntity<Object>> deleteAgent(
             @PathVariable String agentId,
-            @RequestParam String teamId) {
+            ServerWebExchange exchange) {
         
-        log.info("Deleting agent {} for team {}", agentId, teamId);
+        log.info("Deleting agent {}", agentId);
         
-        return agentService.deleteAgent(agentId, teamId)
-                .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.badRequest().build());
+        return teamContextService.getTeamFromContext()
+                .flatMap(teamId -> {
+                    log.info("Deleting agent {} for team {}", agentId, teamId);
+                    
+                    return agentAuthContextService.checkAgentAuthorization(agentId, exchange)
+                            .flatMap(authContext -> {
+                                // First, check if there are any tasks for this agent
+                                return agentTaskService.getTasksByAgent(agentId, teamId)
+                                        .collectList()
+                                        .flatMap(tasks -> {
+                                            if (!tasks.isEmpty()) {
+                                                log.warn("Cannot delete agent {} - has {} tasks", agentId, tasks.size());
+                                                ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                                                        ErrorCode.VALIDATION_ERROR,
+                                                        String.format("Cannot delete agent. Please delete all %d task(s) first.", tasks.size()),
+                                                        HttpStatus.BAD_REQUEST.value()
+                                                );
+                                                return Mono.just(ResponseEntity
+                                                        .status(HttpStatus.BAD_REQUEST)
+                                                        .body((Object) errorResponse));
+                                            }
+                                            
+                                            // No tasks, proceed with deletion
+                                            return agentService.deleteAgent(agentId, teamId)
+                                                    .map(deleted -> ResponseEntity.ok((Object) Map.of(
+                                                            "success", true,
+                                                            "message", "Agent deleted successfully"
+                                                    )));
+                                        });
+                            });
+                })
+                .onErrorResume(error -> {
+                    log.error("Failed to delete agent {}: {}", agentId, error.getMessage());
+                    ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                            ErrorCode.INTERNAL_ERROR,
+                            "Failed to delete agent: " + error.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR.value()
+                    );
+                    return Mono.just(ResponseEntity
+                            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body((Object) errorResponse));
+                });
     }
     
     // ==================== AGENT LISTING & FILTERING ====================

@@ -101,7 +101,7 @@ const StatsSection = ({ refreshInterval = 30000 }) => {
   if (loading) {
     return (
       <div className="stats-section">
-        <h2 className="stats-section-title">Stats</h2>
+        <h2 className="stats-section-title">App Stats</h2>
         <div className="stats-cards-container loading">
           {[1, 2, 3, 4].map(id => (
             <div key={id} className="stat-card skeleton">
@@ -134,7 +134,7 @@ const StatsSection = ({ refreshInterval = 30000 }) => {
 
   return (
     <div className="stats-section">
-      <h2 className="stats-section-title">Stats</h2>
+      <h2 className="stats-section-title">App Stats</h2>
       <div className="stats-cards-container">
         {stats.map(stat => (
           <OverlayTrigger

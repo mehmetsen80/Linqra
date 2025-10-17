@@ -25,7 +25,7 @@
         <div class="kc-form-card">
             <div class="kc-header">
                 <h1>Linqra SSO Login</h1>
-                <p>Configure app settings, API endpoints, and monitor performance with version control</p>
+                <p>Agentic AI Framework - Build intelligent agents with workflows, observability, and enterprise-grade security</p>
             </div>
             
             <#if displayMessage?? && displayMessage && message?has_content && (message.type != 'warning' || !isAppInitiatedAction??)>

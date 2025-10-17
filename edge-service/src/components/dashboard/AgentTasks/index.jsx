@@ -144,7 +144,7 @@ function AgentTasks() {
                             <td className="col-trigger">
                                 <Badge bg={
                                     task.executionTrigger === 'MANUAL' ? 'secondary' :
-                                    task.executionTrigger === 'CRON' ? 'success' :
+                                    task.executionTrigger === 'CRON' ? 'secondary' :
                                     task.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
                                     'info'
                                 }>

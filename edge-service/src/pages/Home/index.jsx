@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Modal, Button } from 'react-bootstrap';
 import architectureDiagram from '/images/linqra-diagram-transparent.svg';
 import ImageModal from '../../components/common/ImageModal';
 import { useAuth } from '../../contexts/AuthContext';
@@ -9,6 +10,8 @@ function Home() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [showImageModal, setShowImageModal] = useState(false);
+  const [showLearnMoreModal, setShowLearnMoreModal] = useState(false);
+  const [learnMoreContent, setLearnMoreContent] = useState(null);
 
   const handleGetStarted = () => {
     if (isAuthenticated) {
@@ -16,6 +19,116 @@ function Home() {
     } else {
       navigate('/login');
     }
+  };
+
+  const handleCardClick = (type) => {
+    const content = type === 'agent' ? getAgentContent() : getWorkflowContent();
+    setLearnMoreContent(content);
+    setShowLearnMoreModal(true);
+  };
+
+  const navigateToPage = (type) => {
+    if (type === 'agent') {
+      navigate('/agents');
+    } else if (type === 'workflow') {
+      navigate('/workflows');
+    }
+  };
+
+  const getAgentContent = () => ({
+    title: 'AI Agents',
+    icon: 'fas fa-robot',
+    description: 'Intelligent agents that learn, adapt, and execute complex tasks autonomously with enterprise-grade reliability.',
+    features: [
+      'Multi-trigger execution (CRON, Manual)',
+      'Task versioning & rollback',
+      'LLM integration (OpenAI, Gemini)',
+      'Real-time monitoring'
+    ],
+    sections: [
+      {
+        title: 'What are AI Agents?',
+        content: 'AI Agents are autonomous entities that can perceive their environment, make decisions, and execute tasks with minimal human intervention. They combine LLM capabilities with structured workflows to deliver intelligent automation at scale.'
+      },
+      {
+        title: 'Key Capabilities',
+        items: [
+          'Multi-trigger execution (CRON, Event-driven, Manual, Workflow-triggered)',
+          'Task versioning and rollback for safe deployments',
+          'Native LLM integration (OpenAI, Gemini, and more)',
+          'Real-time monitoring and observability',
+          'Team-based collaboration and access control',
+          'Retry logic with exponential backoff',
+          'Timeout management and circuit breakers'
+        ]
+      },
+      {
+        title: 'Use Cases',
+        items: [
+          'Automated data processing and enrichment',
+          'Intelligent content generation and curation',
+          'Customer support automation',
+          'Document analysis and summarization',
+          'Predictive maintenance and alerting',
+          'Multi-source data aggregation'
+        ]
+      },
+      {
+        title: 'Getting Started',
+        content: 'Create your first agent by defining tasks with specific intents, configuring execution triggers, and linking them to workflows. Agents can be scheduled, event-driven, or manually executed based on your needs.'
+      }
+    ]
+  });
+
+  const getWorkflowContent = () => ({
+    title: 'Workflows',
+    icon: 'fas fa-project-diagram',
+    description: 'Powerful orchestration engine for building complex, multi-step automation pipelines with ease.',
+    features: [
+      'Sequential & parallel execution',
+      'Dynamic step resolution',
+      'Variable interpolation',
+      'Queue-based async processing'
+    ],
+    sections: [
+      {
+        title: 'What are Workflows?',
+        content: 'Workflows are structured sequences of operations that orchestrate multiple services, APIs, and AI models. They enable you to build sophisticated automation pipelines with branching logic, error handling, and async processing.'
+      },
+      {
+        title: 'Key Capabilities',
+        items: [
+          'Sequential and parallel step execution',
+          'Dynamic step resolution based on runtime data',
+          'Variable interpolation ({{step1.result.data}})',
+          'Queue-based async processing for long-running tasks',
+          'Built-in caching with configurable TTL',
+          'Step-level retry and error handling',
+          'Workflow versioning and history tracking'
+        ]
+      },
+      {
+        title: 'Integration Targets',
+        items: [
+          'LLM providers (OpenAI, Gemini, etc.)',
+          'Vector databases (Milvus) for semantic search',
+          'MongoDB for data persistence',
+          'External REST APIs',
+          'Message queues (Kafka, Redis)',
+          'Custom microservices',
+          'Database operations (CRUD)'
+        ]
+      },
+      {
+        title: 'Getting Started',
+        content: 'Build your first workflow by defining steps with targets, actions, and intents. Chain steps together using variable interpolation to pass data between operations. Deploy and monitor execution in real-time.'
+      }
+    ]
+  });
+
+  const closeLearnMoreModal = () => {
+    setShowLearnMoreModal(false);
+    setLearnMoreContent(null);
   };
 
   return (
@@ -79,8 +192,28 @@ function Home() {
         </div>
       </div>
 
-      <div className="tagline">
-          Agentic Framework for Enterprises
+      {/* Core Components Section */}
+      <div className="core-components-section">
+        <h2 className="section-title">Intelligent Automation at Scale</h2>
+        <p className="section-subtitle">Build, orchestrate, and deploy AI-powered agents with enterprise-grade workflows</p>
+        
+        <div className="core-components-grid">
+          <div className="core-card agent-card clickable-card" onClick={() => handleCardClick('agent')}>
+            <div className="core-icon">
+              <i className="fas fa-robot"></i>
+            </div>
+            <h3>AI Agents</h3>
+            <p>Intelligent agents that learn, adapt, and execute complex tasks autonomously. Support multiple execution triggers, versioning, and team-based collaboration.</p>
+          </div>
+          
+          <div className="core-card workflow-card clickable-card" onClick={() => handleCardClick('workflow')}>
+            <div className="core-icon">
+              <i className="fas fa-project-diagram"></i>
+            </div>
+            <h3>Workflows</h3>
+            <p>Powerful orchestration engine for multi-step processes. Chain operations, handle async tasks, and build complex automation pipelines with ease.</p>
+          </div>
+        </div>
       </div>
 
       {/* Linqra Integration Section: Java & Python AI Apps */}
@@ -529,6 +662,81 @@ Content-Type: application/json
         onHide={() => setShowImageModal(false)}
         imageSrc={architectureDiagram}
       />
+
+      {/* Learn More Modal */}
+      <Modal 
+        show={showLearnMoreModal} 
+        onHide={closeLearnMoreModal}
+        size="lg"
+        centered
+        className="learn-more-modal"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            {learnMoreContent?.title}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {learnMoreContent && (
+            <div className="learn-more-content">
+              <div className="modal-header-section">
+                <div className="modal-icon-wrapper" style={{ 
+                  backgroundColor: learnMoreContent.title === 'AI Agents' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)' 
+                }}>
+                  <i className={learnMoreContent.icon} style={{ 
+                    color: learnMoreContent.title === 'AI Agents' ? '#6366f1' : '#10b981',
+                    fontSize: '3rem'
+                  }}></i>
+                </div>
+                <p className="lead-description">{learnMoreContent.description}</p>
+              </div>
+
+              {learnMoreContent.features && (
+                <div className="quick-features">
+                  <h5>Key Features</h5>
+                  <ul className="quick-features-grid">
+                    {learnMoreContent.features.map((feature, idx) => (
+                      <li key={idx}>
+                        <i className="fas fa-check-circle me-2"></i>
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {learnMoreContent.sections.map((section, index) => (
+                <div key={index} className="content-section">
+                  <h4>{section.title}</h4>
+                  {section.content && <p>{section.content}</p>}
+                  {section.items && (
+                    <ul className="modal-feature-list">
+                      {section.items.map((item, itemIndex) => (
+                        <li key={itemIndex}>
+                          <i className="fas fa-check-circle me-2"></i>
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button 
+            variant="primary" 
+            onClick={() => {
+              closeLearnMoreModal();
+              navigateToPage(learnMoreContent?.title === 'AI Agents' ? 'agent' : 'workflow');
+            }}
+          >
+            <i className="fas fa-arrow-right me-2"></i>
+            Go to {learnMoreContent?.title}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

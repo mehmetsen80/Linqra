@@ -1,0 +1,163 @@
+.agents-page {
+    padding: 20px;
+}
+
+/* Breadcrumb styling */
+.agents-page .breadcrumb-item a {
+    color: var(--primary-color, #ed7534);
+    text-decoration: none;
+}
+
+.agents-page .breadcrumb-item a:hover {
+    color: var(--primary-dark, #d35f28);
+    text-decoration: underline;
+}
+
+.agents-table-card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.agents-table {
+    margin-bottom: 0;
+}
+
+.agents-table thead {
+    background-color: #f8f9fa;
+}
+
+.agents-table th {
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    padding: 12px;
+}
+
+.agents-table td {
+    vertical-align: middle;
+    padding: 12px;
+}
+
+.agents-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.agents-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+.agents-table tbody tr.selected-row {
+    background-color: rgba(237, 117, 52, 0.1);
+}
+
+.agent-name {
+    font-weight: 400;
+    color: #212529;
+}
+
+.agent-description {
+    color: #6c757d;
+    font-size: 0.9rem;
+    max-width: 300px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.action-buttons .btn-link {
+    padding: 4px 8px;
+    color: var(--primary-color, #ed7534);
+}
+
+.action-buttons .btn-link:hover {
+    color: var(--primary-dark, #d35f28);
+}
+
+.action-buttons .btn-link.text-danger {
+    color: #dc3545 !important;
+}
+
+.action-buttons .btn-link.text-danger:hover {
+    color: #c82333 !important;
+}
+
+.agent-details-card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    position: sticky;
+    top: 20px;
+}
+
+.agent-details-card .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 15px;
+}
+
+.agent-details-card .card-header h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.detail-section {
+    margin-bottom: 1.5rem;
+}
+
+.detail-section:last-child {
+    margin-bottom: 0;
+}
+
+.detail-section h6 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+    letter-spacing: 0.5px;
+}
+
+.detail-section p {
+    margin: 0;
+    color: #212529;
+    word-wrap: break-word;
+}
+
+/* Empty state */
+.text-center.py-5 {
+    padding: 3rem 1rem !important;
+}
+
+.text-center.py-5 i {
+    opacity: 0.5;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+    .agent-details-card {
+        position: static;
+        margin-top: 1rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .agent-description {
+        max-width: 200px;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+}
+

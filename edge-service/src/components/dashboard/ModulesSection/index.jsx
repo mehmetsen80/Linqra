@@ -106,6 +106,19 @@ function ModulesSection() {
                 Manage Workflows <i className="fas fa-arrow-right"></i>
               </Link>
             </div>
+
+            <div className="dashboard-card">
+              <Link to="/agents" className="card-icon-link">
+                <div className="card-icon">
+                  <i className="fas fa-robot"></i>
+                </div>
+              </Link>
+              <h3>Agents</h3>
+              <p>Create and manage your AI agents</p>
+              <Link to="/agents" className="card-link">
+                Manage Agents <i className="fas fa-arrow-right"></i>
+              </Link>
+            </div>
           </>
         )}
 

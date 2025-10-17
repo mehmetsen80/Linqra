@@ -53,6 +53,13 @@ public interface LinqWorkflowExecutionService {
     Mono<LinqWorkflowExecution> getExecution(String executionId);
 
     /**
+     * Get a specific execution by agent execution ID
+     * @param agentExecutionId The agent execution ID
+     * @return The workflow execution
+     */
+    Mono<LinqWorkflowExecution> getExecutionByAgentExecutionId(String agentExecutionId);
+
+    /**
      * Delete a specific execution by ID
      * @param executionId The execution ID
      * @return Mono<Void> indicating the deletion

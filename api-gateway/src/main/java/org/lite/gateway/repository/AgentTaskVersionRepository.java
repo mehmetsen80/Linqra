@@ -13,7 +13,7 @@ public interface AgentTaskVersionRepository extends ReactiveMongoRepository<Agen
     /**
      * Find all versions for a specific task, ordered by version number descending
      */
-    @Query("{ 'taskId': ?0 }")
+    @Query(value = "{ 'taskId': ?0 }", sort = "{ 'version': -1 }")
     Flux<AgentTaskVersion> findByTaskIdOrderByVersionDesc(String taskId);
     
     /**

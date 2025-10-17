@@ -344,7 +344,14 @@ public class LinqWorkflowController {
     @GetMapping("/executions/{executionId}")
     public Mono<LinqWorkflowExecution> getExecution(@PathVariable String executionId) {
         log.info("Fetching execution: {}", executionId);
-        return workflowExecutionService.getExecution(executionId)
+        
+        // First, try to find by agentExecutionId (UUID format)
+        // If not found, fall back to finding by MongoDB _id
+        return workflowExecutionService.getExecutionByAgentExecutionId(executionId)
+            .onErrorResume(error -> {
+                log.info("Not found by agentExecutionId, trying by _id: {}", executionId);
+                return workflowExecutionService.getExecution(executionId);
+            })
             .doOnSuccess(e -> log.info("Execution fetched successfully: {}", e.getId()))
             .doOnError(error -> log.error("Error fetching execution: {}", error.getMessage()));
     }
@@ -361,6 +368,15 @@ public class LinqWorkflowController {
         log.info("Fetching stats for workflow: {}", workflowId);
         return linqWorkflowStatsService.getWorkflowStats(workflowId)
             .doOnError(error -> log.error("Error fetching workflow stats: {}", error.getMessage()));
+    }
+
+    @GetMapping("/agent-task/{agentTaskId}/stats")
+    public Mono<LinqWorkflowStats> getAgentTaskWorkflowStats(@PathVariable String agentTaskId) {
+        log.info("Fetching workflow stats for agent task: {}", agentTaskId);
+        return linqWorkflowStatsService.getAgentTaskWorkflowStats(agentTaskId)
+            .doOnSuccess(stats -> log.info("Successfully fetched stats for agent task {} with {} executions", 
+                agentTaskId, stats.getTotalExecutions()))
+            .doOnError(error -> log.error("Error fetching agent task workflow stats: {}", error.getMessage()));
     }
 
     @PostMapping("/validate")

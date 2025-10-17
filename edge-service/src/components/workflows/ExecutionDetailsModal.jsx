@@ -1,5 +1,5 @@
-import React from 'react';
-import { Modal, Badge, OverlayTrigger, Tooltip, Row, Col } from 'react-bootstrap';
+import React, { useState } from 'react';
+import { Modal, Badge, OverlayTrigger, Tooltip, Row, Col, Tabs, Tab } from 'react-bootstrap';
 import { JsonView, allExpanded, defaultStyles } from 'react-json-view-lite';
 import { format } from 'date-fns';
 
@@ -24,20 +24,29 @@ const ExecutionDetailsModal = ({
         }
     }
 }) => {
+    const [activeTab, setActiveTab] = useState('overview');
+    
     if (!execution) return null;
 
     return (
         <Modal 
             show={show} 
             onHide={onHide}
-            size="lg"
+            size="xl"
             centered
+            dialogClassName="modal-90w"
         >
             <Modal.Header closeButton>
                 <Modal.Title>Execution Details</Modal.Title>
             </Modal.Header>
-            <Modal.Body>
-                <div className="execution-details">
+            <Modal.Body style={{ maxHeight: 'calc(90vh - 120px)', overflowY: 'auto' }}>
+                <Tabs
+                    activeKey={activeTab}
+                    onSelect={(k) => setActiveTab(k)}
+                    className="mb-3"
+                >
+                    <Tab eventKey="overview" title={<><i className="fas fa-info-circle me-2"></i>Overview</>}>
+                        <div className="execution-details">
                     <Row className="mb-3">
                         <Col md={3}>
                             <h6>Status</h6>
@@ -130,18 +139,19 @@ const ExecutionDetailsModal = ({
                             })}
                         </div>
                     </div>
-
-                    <div>
-                        <h6>Full Execution Data</h6>
-                        <div className="json-viewer" style={{ height: '400px' }}>
+                        </div>
+                    </Tab>
+                    
+                    <Tab eventKey="fullData" title={<><i className="fas fa-code me-2"></i>Full Execution Data</>}>
+                        <div className="json-viewer" style={{ height: 'calc(90vh - 240px)', overflow: 'auto' }}>
                             <JsonView 
                                 data={execution} 
                                 shouldExpandNode={allExpanded}
                                 style={defaultStyles}
                             />
                         </div>
-                    </div>
-                </div>
+                    </Tab>
+                </Tabs>
             </Modal.Body>
         </Modal>
     );

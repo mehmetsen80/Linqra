@@ -233,6 +233,29 @@ const workflowService = {
         }
     },
 
+    getAgentTaskWorkflowStats: async (agentTaskId) => {
+        try {
+            const response = await axiosInstance.get(`/linq/workflows/agent-task/${agentTaskId}/stats`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data
+            };
+        } catch (error) {
+            console.error('Error fetching agent task workflow stats:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch agent task workflow stats'
+            };
+        }
+    },
+
     validateRequest: async (request) => {
         try {
             console.log('Sending validation request:', request);
@@ -333,6 +356,29 @@ const workflowService = {
             return {
                 success: false,
                 error: error.response?.data?.message || 'Failed to fetch team workflow statistics'
+            };
+        }
+    },
+
+    getExecutionByAgentExecutionId: async (agentExecutionId) => {
+        try {
+            const response = await axiosInstance.get(`/linq/workflows/executions/${agentExecutionId}`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-API-Key': import.meta.env.VITE_API_KEY,
+                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                }
+            });
+            return {
+                success: true,
+                data: response.data
+            };
+        } catch (error) {
+            console.error('Error fetching execution by agent execution ID:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch execution'
             };
         }
     }

@@ -4,6 +4,7 @@ import org.lite.gateway.entity.Agent;
 import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.AgentAuthContextService;
 import org.lite.gateway.service.AgentTaskService;
+import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.ErrorCode;
 import org.springframework.http.HttpStatus;
@@ -15,6 +16,8 @@ import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/agents")
 @RequiredArgsConstructor
@@ -24,6 +27,7 @@ public class AgentController {
     private final AgentService agentService;
     private final AgentAuthContextService agentAuthContextService;
     private final AgentTaskService agentTaskService;
+    private final TeamContextService teamContextService;
     
     // ==================== AGENT CRUD OPERATIONS ====================
     
@@ -32,13 +36,19 @@ public class AgentController {
             @RequestBody Agent agent,
             ServerWebExchange exchange) {
         
-        log.info("Creating agent '{}' for team {}", agent.getName(), agent.getTeamId());
+        log.info("Creating agent '{}'", agent.getName());
         
-        return agentAuthContextService.checkTeamAuthorization(agent.getTeamId(), exchange)
-                .flatMap(authContext -> agentService.createAgent(agent, agent.getTeamId(), authContext.getUsername()))
+        return teamContextService.getTeamFromContext()
+                .flatMap(teamId -> {
+                    log.info("Creating agent '{}' for team {}", agent.getName(), teamId);
+                    agent.setTeamId(teamId); // Set teamId from context
+                    
+                    return agentAuthContextService.checkTeamAuthorization(teamId, exchange)
+                            .flatMap(authContext -> agentService.createAgent(agent, teamId, authContext.getUsername()));
+                })
                 .map(createdAgent -> ResponseEntity.ok((Object) createdAgent))
                 .onErrorResume(error -> {
-                    log.warn("Authorization failed for createAgent: {}", error.getMessage());
+                    log.warn("Failed to create agent: {}", error.getMessage());
                     ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                             ErrorCode.FORBIDDEN,
                             error.getMessage(),
@@ -50,10 +60,10 @@ public class AgentController {
                 });
     }
     
-    @GetMapping("/{agentId}")
+    @GetMapping("/team/{teamId}/{agentId}")
     public Mono<ResponseEntity<Agent>> getAgent(
-            @PathVariable String agentId,
-            @RequestParam String teamId) {
+            @PathVariable String teamId,
+            @PathVariable String agentId) {
         
         log.info("Getting agent {} for team {}", agentId, teamId);
         
@@ -77,15 +87,54 @@ public class AgentController {
     }
     
     @DeleteMapping("/{agentId}")
-    public Mono<ResponseEntity<Boolean>> deleteAgent(
+    public Mono<ResponseEntity<Object>> deleteAgent(
             @PathVariable String agentId,
-            @RequestParam String teamId) {
+            ServerWebExchange exchange) {
         
-        log.info("Deleting agent {} for team {}", agentId, teamId);
+        log.info("Deleting agent {}", agentId);
         
-        return agentService.deleteAgent(agentId, teamId)
-                .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.badRequest().build());
+        return teamContextService.getTeamFromContext()
+                .flatMap(teamId -> {
+                    log.info("Deleting agent {} for team {}", agentId, teamId);
+                    
+                    return agentAuthContextService.checkAgentAuthorization(agentId, exchange)
+                            .flatMap(authContext -> {
+                                // First, check if there are any tasks for this agent
+                                return agentTaskService.getTasksByAgent(agentId, teamId)
+                                        .collectList()
+                                        .flatMap(tasks -> {
+                                            if (!tasks.isEmpty()) {
+                                                log.warn("Cannot delete agent {} - has {} tasks", agentId, tasks.size());
+                                                ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                                                        ErrorCode.VALIDATION_ERROR,
+                                                        String.format("Cannot delete agent. Please delete all %d task(s) first.", tasks.size()),
+                                                        HttpStatus.BAD_REQUEST.value()
+                                                );
+                                                return Mono.just(ResponseEntity
+                                                        .status(HttpStatus.BAD_REQUEST)
+                                                        .body((Object) errorResponse));
+                                            }
+                                            
+                                            // No tasks, proceed with deletion
+                                            return agentService.deleteAgent(agentId, teamId)
+                                                    .map(deleted -> ResponseEntity.ok((Object) Map.of(
+                                                            "success", true,
+                                                            "message", "Agent deleted successfully"
+                                                    )));
+                                        });
+                            });
+                })
+                .onErrorResume(error -> {
+                    log.error("Failed to delete agent {}: {}", agentId, error.getMessage());
+                    ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
+                            ErrorCode.INTERNAL_ERROR,
+                            "Failed to delete agent: " + error.getMessage(),
+                            HttpStatus.INTERNAL_SERVER_ERROR.value()
+                    );
+                    return Mono.just(ResponseEntity
+                            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body((Object) errorResponse));
+                });
     }
     
     // ==================== AGENT LISTING & FILTERING ====================

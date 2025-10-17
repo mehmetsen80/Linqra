@@ -44,7 +44,34 @@ public class AgentTaskController {
         log.info("Creating task '{}' for agent {}", task.getName(), task.getAgentId());
         
         return agentAuthContextService.checkAgentAuthorization(task.getAgentId(), exchange)
-                .flatMap(authContext -> agentTaskService.createTask(task))
+                .flatMap(authContext -> {
+                    // Set createdBy from the authenticated user
+                    task.setCreatedBy(authContext.getUsername());
+                    
+                    // Inject default teamId and userId into linq_config params if not already present
+                    if (task.getLinqConfig() != null) {
+                        Map<String, Object> linqConfig = task.getLinqConfig();
+                        if (linqConfig.containsKey("query")) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> query = (Map<String, Object>) linqConfig.get("query");
+                            if (query.containsKey("params")) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> params = (Map<String, Object>) query.get("params");
+                                // Only set if not already provided
+                                params.putIfAbsent("teamId", authContext.getTeamId());
+                                params.putIfAbsent("userId", authContext.getUsername());
+                            } else {
+                                // Create params if it doesn't exist
+                                Map<String, Object> params = new java.util.HashMap<>();
+                                params.put("teamId", authContext.getTeamId());
+                                params.put("userId", authContext.getUsername());
+                                query.put("params", params);
+                            }
+                        }
+                    }
+                    
+                    return agentTaskService.createTask(task);
+                })
                 .map(createdTask -> ResponseEntity.ok((Object) createdTask))
                 .onErrorResume(error -> {
                     log.warn("Authorization failed for createTask: {}", error.getMessage());

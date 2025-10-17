@@ -1,0 +1,116 @@
+.view-agent-page {
+    padding: 20px;
+}
+
+/* Breadcrumb styling */
+.view-agent-page .breadcrumb-item a {
+    color: var(--primary-color, #ed7534);
+    text-decoration: none;
+}
+
+.view-agent-page .breadcrumb-item a:hover {
+    color: var(--primary-dark, #d35f28);
+    text-decoration: underline;
+}
+
+/* Info sections */
+.info-section {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.info-section:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.info-section label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    letter-spacing: 1px;
+    display: block;
+}
+
+.info-section .info-value {
+    margin: 0;
+    color: #212529;
+    font-size: 1.125rem;
+    font-weight: 500;
+    word-wrap: break-word;
+    line-height: 1.6;
+}
+
+/* Card styling */
+.view-agent-page .card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.view-agent-page .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 15px;
+    text-align: left;
+}
+
+.view-agent-page .card-header h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #212529;
+    text-align: left;
+}
+
+.view-agent-page .card-body {
+    text-align: left;
+    padding: 2rem;
+}
+
+/* Stats styling */
+.stat-item {
+    padding: 15px 0;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.stat-item:last-child {
+    border-bottom: none;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.stat-value.text-muted {
+    color: #6c757d !important;
+    font-size: 1rem;
+}
+
+/* Button spacing */
+.d-flex.gap-2 {
+    gap: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+    .view-agent-page .card-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+
+    .view-agent-page .card-header .d-flex {
+        margin-top: 1rem;
+        width: 100%;
+    }
+}
+

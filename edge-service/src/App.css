@@ -64,3 +64,42 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Large modal that takes up 90% of viewport width */
+.modal-90w {
+  max-width: 90vw !important;
+}
+
+.modal-90w .modal-content {
+  max-height: 90vh;
+}
+
+/* Tab styling for better visibility */
+.modal-90w .nav-tabs {
+  background-color: #f8f9fa;
+  padding: 0.5rem 0.5rem 0 0.5rem;
+  border-radius: 0.375rem 0.375rem 0 0;
+}
+
+.modal-90w .nav-tabs .nav-link {
+  color: #495057;
+  background-color: #d1d3d5;
+  border: 1px solid #ced4da;
+  margin-right: 0.25rem;
+  border-radius: 0.375rem 0.375rem 0 0;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.modal-90w .nav-tabs .nav-link:hover {
+  color: #212529;
+  background-color: #c4c6c8;
+  border-color: #ced4da;
+}
+
+.modal-90w .nav-tabs .nav-link.active {
+  color: #ed7534;
+  background-color: white;
+  border-color: #dee2e6 #dee2e6 white;
+  font-weight: 600;
+}

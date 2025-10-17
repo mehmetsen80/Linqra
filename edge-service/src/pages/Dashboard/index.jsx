@@ -6,6 +6,7 @@ import LatencyChart from '../../components/dashboard/LatencyChart';
 import ModulesSection from '../../components/dashboard/ModulesSection';
 import ServiceUsagePie from '../../components/dashboard/ServiceUsagePie';
 import TeamRoutes from '../../components/dashboard/TeamRoutes';
+import AgentTasks from '../../components/dashboard/AgentTasks';
 import Workflows from '../../components/dashboard/Workflows';
 import WorkflowsStats from '../../components/dashboard/WorkflowsStats';
 import { useTeam } from '../../contexts/TeamContext';
@@ -41,6 +42,7 @@ function Dashboard() {
       <UserSummary />
       <TeamRoutes />
       <StatsSection />
+      <AgentTasks />
       <Workflows />
       <WorkflowsStats />
       <div className="dashboard-charts">

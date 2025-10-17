@@ -1,0 +1,90 @@
+/*
+ * Agent Tasks Dashboard Component Styles
+ */
+
+.dashboard-agent-tasks {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.dashboard-section-title {
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-align: left;
+    padding-left: 0;
+}
+
+.dashboard-agent-tasks-table {
+    margin-bottom: 0;
+}
+
+.dashboard-agent-tasks-table th {
+    font-weight: 600;
+    color: #2c3e50;
+    border-bottom: 2px solid #e9ecef;
+    padding: 0.75rem;
+}
+
+.dashboard-agent-tasks-table td {
+    padding: 0.75rem;
+    vertical-align: middle;
+}
+
+/* Column width distribution */
+.dashboard-agent-tasks-table .col-name {
+    width: 18%;
+}
+
+.dashboard-agent-tasks-table .col-agent {
+    width: 13%;
+}
+
+.dashboard-agent-tasks-table .col-type {
+    width: 11%;
+}
+
+.dashboard-agent-tasks-table .col-trigger {
+    width: 11%;
+}
+
+.dashboard-agent-tasks-table .col-updated {
+    width: 14%;
+}
+
+.dashboard-agent-tasks-table .col-status {
+    width: 9%;
+}
+
+.dashboard-agent-tasks-table .col-version {
+    width: 8%;
+    text-align: center;
+}
+
+.dashboard-agent-tasks-table .col-actions {
+    width: 10%;
+    text-align: center;
+}
+
+.dashboard-agent-task-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.dashboard-agent-tasks-loading,
+.dashboard-agent-tasks-error {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+}
+
+.dashboard-agent-tasks-error {
+    color: #dc3545;
+}
+

@@ -32,6 +32,15 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
     private static final String API_KEY_HEADER = "x-api-key";
     private static final String API_KEY_NAME_HEADER = "x-api-key-name";
     private static final String AUTHORIZATION_HEADER = "Authorization";
+    
+    // Allowed Web UI origins
+    private static final java.util.List<String> WEB_UI_ORIGINS = java.util.List.of(
+        "https://localhost:3000",
+        "http://localhost:3000",
+        "https://linqra.com",
+        "https://www.linqra.com",
+        "https://app.linqra.com"
+    );
 
     @Override
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
@@ -47,7 +56,19 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return chain.filter(exchange);
         }
 
-        // Check API Key and API Key name
+        // Check if this is a Web UI request by validating Origin/Referer headers
+        // Web UI (browsers) automatically send Origin/Referer, external APIs typically don't
+        String origin = exchange.getRequest().getHeaders().getFirst("origin");
+        String referer = exchange.getRequest().getHeaders().getFirst("referer");
+        String authHeader = exchange.getRequest().getHeaders().getFirst(AUTHORIZATION_HEADER);
+        
+        // If request has Authorization token AND valid Origin/Referer, it's from Web UI
+        if (authHeader != null && !authHeader.isEmpty() && isFromWebUI(origin, referer)) {
+            log.debug("Web UI request detected (has Authorization + valid origin/referer), skipping API key for path: {}", path);
+            return chain.filter(exchange);
+        }
+
+        // For external API/SDK/Postman requests, API key is required
         String apiKey = exchange.getRequest().getHeaders().getFirst(API_KEY_HEADER);
         String apiKeyName = exchange.getRequest().getHeaders().getFirst(API_KEY_NAME_HEADER);
         log.info("My Exchange Request Headers: " );
@@ -66,7 +87,6 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         }
 
         // Check Bearer Token - now required
-        String authHeader = exchange.getRequest().getHeaders().getFirst(AUTHORIZATION_HEADER);
         if (authHeader == null) {
             log.warn("No Authorization header provided for path: {}", path);
             return Mono.error(new ResponseStatusException(
@@ -126,6 +146,31 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
                 }
                 return Mono.empty();
             });
+    }
+
+    /**
+     * Helper method to check if the request is from an allowed Web UI origin
+     */
+    private boolean isFromWebUI(String origin, String referer) {
+        // Check Origin header
+        if (origin != null) {
+            for (String webOrigin : WEB_UI_ORIGINS) {
+                if (origin.equalsIgnoreCase(webOrigin)) {
+                    return true;
+                }
+            }
+        }
+        
+        // Check Referer header
+        if (referer != null) {
+            for (String webOrigin : WEB_UI_ORIGINS) {
+                if (referer.startsWith(webOrigin)) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     private boolean validateTeamInToken(String teamId, String token) {

@@ -6,9 +6,7 @@ const workflowService = {
             const response = await axiosInstance.get('/linq/workflows', {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -29,9 +27,7 @@ const workflowService = {
             const response = await axiosInstance.get(`/linq/workflows/${workflowId}`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -52,9 +48,7 @@ const workflowService = {
             const response = await axiosInstance.get(`/linq/workflows/${workflowId}/versions`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -75,9 +69,7 @@ const workflowService = {
             const response = await axiosInstance.put(`/linq/workflows/${workflowId}`, workflowData, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -99,9 +91,7 @@ const workflowService = {
             const response = await axiosInstance.post(`/linq/workflows/${workflowId}/versions`, workflowData, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -123,9 +113,7 @@ const workflowService = {
             const response = await axiosInstance.post(`/linq/workflows/${workflowId}/versions/${versionId}/rollback`, {}, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -147,9 +135,7 @@ const workflowService = {
             const response = await axiosInstance.get(`/linq/workflows/${workflowId}/executions`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -170,9 +156,7 @@ const workflowService = {
             const response = await axiosInstance.post(`/linq/workflows/${workflowId}/execute`, {}, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -215,9 +199,7 @@ const workflowService = {
             const response = await axiosInstance.get(`/linq/workflows/${workflowId}/stats`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -238,9 +220,7 @@ const workflowService = {
             const response = await axiosInstance.get(`/linq/workflows/agent-task/${agentTaskId}/stats`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -262,9 +242,7 @@ const workflowService = {
             const response = await axiosInstance.post('/linq/workflows/validate', request, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             console.log('Validation response:', response.data);
@@ -294,9 +272,7 @@ const workflowService = {
             const response = await axiosInstance.post('/linq/workflows', workflowData, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -318,9 +294,7 @@ const workflowService = {
             const response = await axiosInstance.delete(`/linq/workflows/${workflowId}`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -342,9 +316,7 @@ const workflowService = {
             const response = await axiosInstance.get('/linq/workflows/team/stats', {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -365,9 +337,7 @@ const workflowService = {
             const response = await axiosInstance.get(`/linq/workflows/executions/${agentExecutionId}`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {

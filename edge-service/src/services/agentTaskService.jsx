@@ -7,9 +7,7 @@ const agentTaskService = {
             const response = await axiosInstance.post('/api/agent-tasks', taskData, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -32,9 +30,7 @@ const agentTaskService = {
             const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/execute`, {}, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -57,9 +53,7 @@ const agentTaskService = {
             const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/enable`, {}, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -82,9 +76,7 @@ const agentTaskService = {
             const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/disable`, {}, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -107,9 +99,7 @@ const agentTaskService = {
             const response = await axiosInstance.delete(`/api/agent-tasks/${taskId}`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -131,9 +121,7 @@ const agentTaskService = {
             const response = await axiosInstance.get(`/api/agent-tasks/${taskId}`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -155,9 +143,7 @@ const agentTaskService = {
             const response = await axiosInstance.post('/api/agent-tasks/execute-adhoc', adhocTaskData, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -181,9 +167,7 @@ const agentTaskService = {
             }, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -207,9 +191,7 @@ const agentTaskService = {
             const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/versions/scheduling`, schedulingData, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {

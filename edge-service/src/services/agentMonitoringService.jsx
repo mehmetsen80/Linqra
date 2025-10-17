@@ -8,9 +8,7 @@ const agentMonitoringService = {
             const response = await axiosInstance.get(`/api/agents/monitoring/${agentId}/health`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -31,9 +29,7 @@ const agentMonitoringService = {
             const response = await axiosInstance.get(`/api/agents/monitoring/team/${teamId}/health`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -54,9 +50,7 @@ const agentMonitoringService = {
             const response = await axiosInstance.get(`/api/agents/monitoring/team/${teamId}/errors`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -84,9 +78,7 @@ const agentMonitoringService = {
                 params,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -112,9 +104,7 @@ const agentMonitoringService = {
                 params,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -137,9 +127,7 @@ const agentMonitoringService = {
             const response = await axiosInstance.get(`/api/agents/monitoring/team/${teamId}/resource-usage`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -160,9 +148,7 @@ const agentMonitoringService = {
             const response = await axiosInstance.get(`/api/agents/monitoring/team/${teamId}/capabilities`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -186,9 +172,7 @@ const agentMonitoringService = {
                 params: { limit },
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -209,9 +193,7 @@ const agentMonitoringService = {
             const response = await axiosInstance.get(`/api/agents/monitoring/workflow/${workflowExecutionId}/status`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {

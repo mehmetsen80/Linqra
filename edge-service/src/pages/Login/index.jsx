@@ -60,7 +60,7 @@ function Login() {
           <div className={loading ? 'opacity-50' : ''}>
             <div className="auth-header">
               <h2>Welcome Back</h2>
-              <p className="text-muted">Please sign in to continue</p>
+                        <p className="text-muted">Agentic AI Framework - Build intelligent agents with workflows, observability, and enterprise-grade security</p>
             </div>
             
             <Button 

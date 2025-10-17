@@ -7,6 +7,7 @@ import ModulesSection from '../../components/dashboard/ModulesSection';
 import ServiceUsagePie from '../../components/dashboard/ServiceUsagePie';
 import TeamRoutes from '../../components/dashboard/TeamRoutes';
 import AgentTasks from '../../components/dashboard/AgentTasks';
+import AgentStats from '../../components/dashboard/AgentStats';
 import Workflows from '../../components/dashboard/Workflows';
 import WorkflowsStats from '../../components/dashboard/WorkflowsStats';
 import { useTeam } from '../../contexts/TeamContext';
@@ -43,6 +44,7 @@ function Dashboard() {
       <TeamRoutes />
       <StatsSection />
       <AgentTasks />
+      <AgentStats />
       <Workflows />
       <WorkflowsStats />
       <div className="dashboard-charts">

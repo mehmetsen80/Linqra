@@ -3,8 +3,7 @@ import { Table, Badge, Spinner, OverlayTrigger, Tooltip } from 'react-bootstrap'
 import { useTeam } from '../../../contexts/TeamContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
-import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
-import { HiPencilAlt } from 'react-icons/hi';
+import { HiEye } from 'react-icons/hi';
 import Button from '../../../components/common/Button';
 import workflowService from '../../../services/workflowService';
 import { format } from 'date-fns';
@@ -128,7 +127,7 @@ function Workflows() {
                                                 onClick={() => navigate(`/workflows/${workflow.id}/edit`)}
                                                 disabled={!canEditWorkflow && !workflow.public}
                                             >
-                                                <HiPencilAlt className="me-1" /> Edit
+                                                <HiEye className="me-1" /> View
                                             </Button>
                                         </div>
                                     </OverlayTrigger>

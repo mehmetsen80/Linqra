@@ -11,9 +11,7 @@ const agentSchedulingService = {
                 {
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-API-Key': import.meta.env.VITE_API_KEY,
-                        'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                        'Accept': 'application/json'
                     }
                 }
             );
@@ -37,9 +35,7 @@ const agentSchedulingService = {
             const response = await axiosInstance.post(`/api/agent-tasks/scheduling/${taskId}/unschedule`, {}, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -63,9 +59,7 @@ const agentSchedulingService = {
             const response = await axiosInstance.get('/api/agent-tasks/scheduling/ready-to-run', {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -86,9 +80,7 @@ const agentSchedulingService = {
             const response = await axiosInstance.get(`/api/agent-tasks/scheduling/agent/${agentId}/ready-to-run`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -109,9 +101,7 @@ const agentSchedulingService = {
             const response = await axiosInstance.get(`/api/agent-tasks/scheduling/team/${teamId}/ready-to-run`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -137,9 +127,7 @@ const agentSchedulingService = {
                 {
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-API-Key': import.meta.env.VITE_API_KEY,
-                        'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                        'Accept': 'application/json'
                     }
                 }
             );
@@ -165,9 +153,7 @@ const agentSchedulingService = {
                 {
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-API-Key': import.meta.env.VITE_API_KEY,
-                        'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                        'Accept': 'application/json'
                     }
                 }
             );

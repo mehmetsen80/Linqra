@@ -7,9 +7,7 @@ export const linqToolService = {
       const response = await axiosInstance.get(`/api/linq-tools/team/${teamId}`, {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-API-Key': import.meta.env.VITE_API_KEY,
-          'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+          'Accept': 'application/json'
         }
       });
       return response.data;
@@ -25,9 +23,7 @@ export const linqToolService = {
       const response = await axiosInstance.get(`/api/linq-tools/team/${teamId}/target/${target}`, {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-API-Key': import.meta.env.VITE_API_KEY,
-          'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+          'Accept': 'application/json'
         }
       });
       return response.data;
@@ -43,9 +39,7 @@ export const linqToolService = {
       const response = await axiosInstance.post('/api/linq-tools', configuration, {
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-API-Key': import.meta.env.VITE_API_KEY,
-          'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+          'Accept': 'application/json'
         }
       });
       return response.data;

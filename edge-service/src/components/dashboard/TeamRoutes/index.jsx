@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Table, Card, Badge, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Table, Card, Badge, Breadcrumb, OverlayTrigger, Tooltip, Button as BootstrapButton } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { HiEye } from 'react-icons/hi';
 import { useTeam } from '../../../contexts/TeamContext';
@@ -109,7 +109,7 @@ const TeamRoutes = () => {
   return (
     <Card className="team-routes-card">
      
-      <Card.Header className="bg-light">
+      <Card.Header className="bg-light d-flex justify-content-between align-items-center">
         <Breadcrumb className="bg-light mb-0">
           <Breadcrumb.Item 
             linkAs={Link} 
@@ -130,6 +130,16 @@ const TeamRoutes = () => {
             Apps
           </Breadcrumb.Item>
         </Breadcrumb>
+        <BootstrapButton 
+          as={Link} 
+          to="/api-routes" 
+          variant="outline-primary" 
+          size="sm"
+          className="view-apps-btn"
+        >
+          <i className="fas fa-th-large me-1"></i>
+          View Apps
+        </BootstrapButton>
       </Card.Header>
       <Card.Body>
         <Table responsive className="team-routes-table">

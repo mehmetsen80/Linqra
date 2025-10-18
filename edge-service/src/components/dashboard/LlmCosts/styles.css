@@ -29,6 +29,25 @@
   font-weight: 500;
 }
 
+.view-details-btn {
+  border-color: var(--primary-color, #ed7534) !important;
+  color: var(--primary-color, #ed7534) !important;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.view-details-btn:hover {
+  background-color: var(--primary-color, #e2baa5) !important;
+  border-color: var(--primary-color, #e2baa5) !important;
+  color: white !important;
+}
+
+.date-range-text {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
 /* Summary Cards */
 .summary-row {
   margin-bottom: 1.5rem;

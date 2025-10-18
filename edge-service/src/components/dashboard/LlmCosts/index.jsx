@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Spinner, Row, Col } from 'react-bootstrap';
+import { Card, Spinner, Row, Col, Button } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import { Doughnut, Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -30,6 +31,30 @@ const LlmCosts = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
+
+  const formatDateDisplay = (dateStr) => {
+    if (!dateStr) return '';
+    const date = new Date(dateStr + 'T00:00:00');
+    const year = date.getFullYear();
+    const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const getDateRange = () => {
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+    const formatDate = (date) => {
+      const year = date.getFullYear();
+      const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+    
+    return `${formatDate(thirtyDaysAgo)} to ${formatDate(today)}`;
+  };
 
   useEffect(() => {
     if (currentTeam?.id) {
@@ -175,12 +200,22 @@ const LlmCosts = () => {
 
   return (
     <Card className="llm-costs-card">
-      <Card.Header>
+      <Card.Header className="d-flex justify-content-between align-items-center">
         <h5 className="mb-0">
           <i className="fas fa-brain me-2"></i>
           LLM Usage & Costs
           <span className="period-badge ms-2">Last 30 Days</span>
         </h5>
+        <Button 
+          as={Link} 
+          to="/llm-usage" 
+          variant="outline-primary" 
+          size="sm"
+          className="view-details-btn"
+        >
+          <i className="fas fa-chart-line me-1"></i>
+          View Details
+        </Button>
       </Card.Header>
       <Card.Body>
         {/* Summary Cards */}
@@ -261,7 +296,13 @@ const LlmCosts = () => {
 
         {/* Model Breakdown Table */}
         <div className="model-breakdown">
-          <h6 className="section-title">Model Breakdown</h6>
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="section-title mb-0">Model Breakdown</h6>
+            <span className="date-range-text">
+              <i className="fas fa-calendar-alt me-1"></i>
+              {getDateRange()}
+            </span>
+          </div>
           <div className="table-responsive">
             <table className="table table-hover">
               <thead>

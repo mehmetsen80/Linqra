@@ -36,6 +36,7 @@ import Agents from '../pages/Agents';
 import ViewAgent from '../pages/Agents/ViewAgent';
 import ViewAgentTask from '../pages/Agents/ViewAgentTask';
 import LlmUsage from '../pages/LlmUsage';
+import LlmModels from '../pages/LlmModels';
 
 const AppRoutes = () => {
   return (
@@ -83,6 +84,7 @@ const AppRoutes = () => {
         <Route path="/agents/:agentId/tasks/:taskId" element={<ViewAgentTask />} />
         <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
         <Route path="/llm-usage" element={<LlmUsage />} />
+        <Route path="/llm-models" element={<LlmModels />} />
         
         <Route 
           path="/teams" 

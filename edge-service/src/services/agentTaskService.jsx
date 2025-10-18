@@ -4,12 +4,7 @@ const agentTaskService = {
     createAgentTask: async (taskData) => {
         console.log('Creating agent task:', taskData);
         try {
-            const response = await axiosInstance.post('/api/agent-tasks', taskData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.post('/api/agent-tasks', taskData);
             return {
                 success: true,
                 data: response.data,
@@ -27,12 +22,7 @@ const agentTaskService = {
     executeTask: async (taskId) => {
         console.log('Executing agent task:', taskId);
         try {
-            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/execute`, {}, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/execute`, {});
             return {
                 success: true,
                 data: response.data,
@@ -50,12 +40,7 @@ const agentTaskService = {
     enableTask: async (taskId) => {
         console.log('Enabling agent task:', taskId);
         try {
-            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/enable`, {}, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/enable`, {});
             return {
                 success: true,
                 data: response.data,
@@ -73,12 +58,7 @@ const agentTaskService = {
     disableTask: async (taskId) => {
         console.log('Disabling agent task:', taskId);
         try {
-            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/disable`, {}, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/disable`, {});
             return {
                 success: true,
                 data: response.data,
@@ -96,12 +76,7 @@ const agentTaskService = {
     deleteTask: async (taskId) => {
         console.log('Deleting agent task:', taskId);
         try {
-            const response = await axiosInstance.delete(`/api/agent-tasks/${taskId}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.delete(`/api/agent-tasks/${taskId}`);
             return {
                 success: true,
                 data: response.data,
@@ -118,12 +93,7 @@ const agentTaskService = {
 
     getTask: async (taskId) => {
         try {
-            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}`);
             return {
                 success: true,
                 data: response.data
@@ -140,12 +110,7 @@ const agentTaskService = {
     executeAdhocTask: async (adhocTaskData) => {
         console.log('Executing ad-hoc task:', adhocTaskData);
         try {
-            const response = await axiosInstance.post('/api/agent-tasks/execute-adhoc', adhocTaskData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.post('/api/agent-tasks/execute-adhoc', adhocTaskData);
             return {
                 success: true,
                 data: response.data,
@@ -164,11 +129,6 @@ const agentTaskService = {
         try {
             const response = await axiosInstance.post('/api/cron/describe', {
                 cronExpression: cronExpression
-            }, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
             });
             return {
                 success: true,
@@ -188,12 +148,7 @@ const agentTaskService = {
         console.log('🌐 Making HTTP POST to:', `/api/agent-tasks/${taskId}/versions/scheduling`);
         console.log('📤 Request payload:', schedulingData);
         try {
-            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/versions/scheduling`, schedulingData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/versions/scheduling`, schedulingData);
             return {
                 success: true,
                 data: response.data,

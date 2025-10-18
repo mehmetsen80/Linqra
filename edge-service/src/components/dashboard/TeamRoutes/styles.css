@@ -181,4 +181,17 @@
   font-size: 0.875rem;
   font-weight: 500;
   font-family: monospace;  /* For better version number display */
+}
+
+.view-apps-btn {
+  border-color: var(--primary-color, #ed7534) !important;
+  color: var(--primary-color, #ed7534) !important;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.view-apps-btn:hover {
+  background-color: var(--primary-color, #e2baa5) !important;
+  border-color: var(--primary-color, #e2baa5) !important;
+  color: white !important;
 } 

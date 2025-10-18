@@ -150,18 +150,17 @@ function ModulesSection() {
           </button>
         </div>
 
-        <div className="dashboard-card disabled">
-          <Link to="/ai-models" className="card-icon-link">
+        <div className="dashboard-card ">
+          <Link to="/llm-models" className="card-icon-link">
             <div className="card-icon">
-              <i className="fas fa-robot"></i>
+              <i className="fas fa-microchip"></i>
             </div>
           </Link>
-          <h3>AI Models</h3>
-          <p>Manage and explore available AI models for your applications</p>
-          <span className="coming-soon-badge">Coming Soon</span>
-          <button className="card-link" disabled>
+          <h3>LLM Models</h3>
+          <p>Manage and explore available AI LLM models for your applications</p>
+          <Link to="/llm-models" className="card-link">
             Explore Models <i className="fas fa-arrow-right"></i>
-          </button>
+          </Link>
         </div>
 
         <div className="dashboard-card disabled">

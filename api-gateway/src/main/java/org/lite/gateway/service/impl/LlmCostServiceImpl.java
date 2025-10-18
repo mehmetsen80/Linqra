@@ -5,8 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LlmUsageStats;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.LinqWorkflowExecution;
+import org.lite.gateway.entity.LlmModel;
 import org.lite.gateway.entity.LlmPricingSnapshot;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
+import org.lite.gateway.repository.LlmModelRepository;
 import org.lite.gateway.repository.LlmPricingSnapshotRepository;
 import org.lite.gateway.service.LlmCostService;
 import org.springframework.stereotype.Service;
@@ -26,6 +28,7 @@ public class LlmCostServiceImpl implements LlmCostService {
     
     private final LinqWorkflowExecutionRepository executionRepository;
     private final LlmPricingSnapshotRepository pricingSnapshotRepository;
+    private final LlmModelRepository llmModelRepository;
     
     // Pricing per 1M tokens (as of October 2024 - update as needed)
     private static final Map<String, ModelPricing> MODEL_PRICING = new HashMap<>();
@@ -71,11 +74,67 @@ public class LlmCostServiceImpl implements LlmCostService {
     
     @Override
     public double calculateCost(String model, long promptTokens, long completionTokens) {
-        ModelPricing pricing = MODEL_PRICING.getOrDefault(model, MODEL_PRICING.get("default"));
+        // Normalize model name (e.g., "gpt-4o-2024-08-06" -> "gpt-4o")
+        String normalizedModel = normalizeModelName(model);
         
+        // Try to get pricing from database first, fallback to static pricing
+        return llmModelRepository.findByModelName(normalizedModel)
+            .map(llmModel -> {
+                double promptCost = (promptTokens / 1_000_000.0) * llmModel.getInputPricePer1M();
+                double completionCost = (completionTokens / 1_000_000.0) * llmModel.getOutputPricePer1M();
+                return promptCost + completionCost;
+            })
+            .defaultIfEmpty(calculateCostFromStaticPricing(normalizedModel, promptTokens, completionTokens))
+            .block(); // Block here since the interface returns double, not Mono<Double>
+    }
+    
+    /**
+     * Normalize model names by removing version suffixes
+     * 
+     * Examples:
+     * OpenAI:
+     * - "gpt-4o-2024-08-06" -> "gpt-4o"
+     * - "gpt-4-turbo-2024-04-09" -> "gpt-4-turbo"
+     * - "gpt-4-0613" -> "gpt-4"
+     * - "gpt-3.5-turbo-0125" -> "gpt-3.5-turbo"
+     * 
+     * Gemini:
+     * - "gemini-1.5-pro-001" -> "gemini-1.5-pro"
+     * - "gemini-1.5-pro-latest" -> "gemini-1.5-pro"
+     * - "gemini-2.0-flash-exp" -> "gemini-2.0-flash"
+     * 
+     * Anthropic:
+     * - "claude-3-opus-20240229" -> "claude-3-opus"
+     * - "claude-3-sonnet-20240229" -> "claude-3-sonnet"
+     * 
+     * Keeps base model names unchanged:
+     * - "gpt-4o" -> "gpt-4o"
+     * - "gemini-2.0-flash" -> "gemini-2.0-flash"
+     * - "text-embedding-3-small" -> "text-embedding-3-small"
+     */
+    private String normalizeModelName(String model) {
+        if (model == null || model.isEmpty()) return model;
+        
+        // Remove date-based version suffixes (YYYY-MM-DD or YYYYMMDD format)
+        // Examples: gpt-4o-2024-08-06, claude-3-opus-20240229
+        model = model.replaceAll("-\\d{4}-\\d{2}-\\d{2}$", "");  // YYYY-MM-DD
+        model = model.replaceAll("-\\d{8}$", "");                 // YYYYMMDD
+        
+        // Remove short numeric version suffixes (4 digits or less)
+        // Examples: gpt-4-0613, gpt-3.5-turbo-0125
+        model = model.replaceAll("-\\d{1,4}$", "");
+        
+        // Remove text-based version suffixes
+        // Examples: gemini-1.5-pro-latest, gemini-2.0-flash-exp
+        model = model.replaceAll("-(latest|exp|preview|beta|alpha)$", "");
+        
+        return model;
+    }
+    
+    private double calculateCostFromStaticPricing(String model, long promptTokens, long completionTokens) {
+        ModelPricing pricing = MODEL_PRICING.getOrDefault(model, MODEL_PRICING.get("default"));
         double promptCost = (promptTokens / 1_000_000.0) * pricing.inputPricePer1M;
         double completionCost = (completionTokens / 1_000_000.0) * pricing.outputPricePer1M;
-        
         return promptCost + completionCost;
     }
     
@@ -118,7 +177,9 @@ public class LlmCostServiceImpl implements LlmCostService {
                     continue;
                 }
                 
-                String model = stepMetadata.getModel() != null ? stepMetadata.getModel() : "unknown";
+                String rawModel = stepMetadata.getModel() != null ? stepMetadata.getModel() : "unknown";
+                String model = normalizeModelName(rawModel); // Normalize for grouping and pricing lookup
+                
                 long promptTokens = tokenUsage.getPromptTokens();
                 long completionTokens = tokenUsage.getCompletionTokens();
                 long tokens = tokenUsage.getTotalTokens() > 0 ? tokenUsage.getTotalTokens() : (promptTokens + completionTokens);
@@ -127,10 +188,10 @@ public class LlmCostServiceImpl implements LlmCostService {
                 double cost;
                 if (tokenUsage.getCostUsd() != null && tokenUsage.getCostUsd() > 0) {
                     cost = tokenUsage.getCostUsd();
-                    log.debug("Using stored cost for {}: ${}", model, String.format("%.6f", cost));
+                    log.debug("Using stored cost for {} ({}): ${}", model, rawModel, String.format("%.6f", cost));
                 } else {
                     cost = calculateCost(model, promptTokens, completionTokens);
-                    log.debug("Calculated cost for {} with current pricing: ${}", model, String.format("%.6f", cost));
+                    log.debug("Calculated cost for {} ({}) with current pricing: ${}", model, rawModel, String.format("%.6f", cost));
                 }
                 
                 // Update totals
@@ -139,7 +200,7 @@ public class LlmCostServiceImpl implements LlmCostService {
                 totalCompletionTokens += completionTokens;
                 totalCost += cost;
                 
-                // Update model breakdown
+                // Update model breakdown (group by normalized model name)
                 LlmUsageStats.ModelUsage modelUsage = modelBreakdown.computeIfAbsent(model, k -> {
                     LlmUsageStats.ModelUsage mu = new LlmUsageStats.ModelUsage();
                     mu.setModelName(model);
@@ -152,6 +213,11 @@ public class LlmCostServiceImpl implements LlmCostService {
                     mu.setAverageLatencyMs(0.0);
                     return mu;
                 });
+                
+                // Track the raw version if different from normalized name
+                if (!rawModel.equals(model)) {
+                    modelUsage.getVersions().add(rawModel);
+                }
                 
                 modelUsage.setRequests(modelUsage.getRequests() + 1);
                 modelUsage.setPromptTokens(modelUsage.getPromptTokens() + promptTokens);
@@ -279,27 +345,38 @@ public class LlmCostServiceImpl implements LlmCostService {
     
     /**
      * Initialize pricing snapshots for a specific month
+     * Uses database models if available, falls back to static pricing
      */
     private Mono<Void> initializePricingForMonth(YearMonth yearMonth) {
         log.info("Initializing pricing snapshots for {}", yearMonth);
         
-        return Flux.fromIterable(MODEL_PRICING.entrySet())
-            .filter(entry -> !entry.getKey().equals("default")) // Skip default pricing
-            .flatMap(entry -> {
-                String modelName = entry.getKey();
-                ModelPricing pricing = entry.getValue();
-                
-                // Determine provider from model name
-                String provider = modelName.startsWith("gpt-") || modelName.startsWith("text-embedding") ? "openai" : "gemini";
-                
+        return llmModelRepository.findByActive(true)
+            .switchIfEmpty(Flux.fromIterable(MODEL_PRICING.entrySet())
+                .filter(entry -> !entry.getKey().equals("default"))
+                .map(entry -> {
+                    String modelName = entry.getKey();
+                    ModelPricing pricing = entry.getValue();
+                    String provider = modelName.startsWith("gpt-") || modelName.startsWith("text-embedding") ? "openai" : "gemini";
+                    
+                    LlmModel model = new LlmModel();
+                    model.setModelName(modelName);
+                    model.setProvider(provider);
+                    model.setInputPricePer1M(pricing.inputPricePer1M);
+                    model.setOutputPricePer1M(pricing.outputPricePer1M);
+                    return model;
+                })
+            )
+            .flatMap(model -> {
                 LlmPricingSnapshot snapshot = new LlmPricingSnapshot();
                 snapshot.setYearMonth(yearMonth.toString());
-                snapshot.setModel(modelName);
-                snapshot.setProvider(provider);
-                snapshot.setInputPricePer1M(pricing.inputPricePer1M);
-                snapshot.setOutputPricePer1M(pricing.outputPricePer1M);
+                snapshot.setModel(model.getModelName());
+                snapshot.setProvider(model.getProvider());
+                snapshot.setInputPricePer1M(model.getInputPricePer1M());
+                snapshot.setOutputPricePer1M(model.getOutputPricePer1M());
                 snapshot.setSnapshotDate(LocalDateTime.now());
-                snapshot.setSource("system");
+                snapshot.setSource("database");
+                
+                String modelName = model.getModelName();
                 
                 // Check if already exists and handle duplicates
                 return pricingSnapshotRepository.findByYearMonthAndModel(yearMonth.toString(), modelName)
@@ -315,7 +392,7 @@ public class LlmCostServiceImpl implements LlmCostService {
                     .switchIfEmpty(
                         pricingSnapshotRepository.save(snapshot)
                             .doOnSuccess(saved -> log.info("Saved pricing snapshot for {} in {}: ${}/{}", 
-                                modelName, yearMonth, pricing.inputPricePer1M, pricing.outputPricePer1M))
+                                modelName, yearMonth, model.getInputPricePer1M(), model.getOutputPricePer1M()))
                             .onErrorResume(error -> {
                                 // If save fails due to duplicate, try cleanup
                                 log.warn("Error saving pricing snapshot, attempting cleanup: {}", error.getMessage());

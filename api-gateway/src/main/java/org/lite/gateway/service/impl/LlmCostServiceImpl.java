@@ -89,6 +89,57 @@ public class LlmCostServiceImpl implements LlmCostService {
     }
     
     /**
+     * Detect provider from model name
+     * 
+     * @param modelName The model name (normalized or raw)
+     * @return Provider name (openai, gemini, anthropic, etc.)
+     */
+    private String detectProviderFromModelName(String modelName) {
+        if (modelName == null || modelName.isEmpty()) {
+            return "unknown";
+        }
+        
+        String lowerModel = modelName.toLowerCase();
+        
+        // OpenAI models
+        if (lowerModel.startsWith("gpt-") || 
+            lowerModel.startsWith("text-embedding") || 
+            lowerModel.startsWith("davinci") || 
+            lowerModel.startsWith("curie") || 
+            lowerModel.startsWith("babbage") || 
+            lowerModel.startsWith("ada")) {
+            return "openai";
+        }
+        
+        // Google Gemini models
+        if (lowerModel.startsWith("gemini")) {
+            return "gemini";
+        }
+        
+        // Anthropic Claude models
+        if (lowerModel.startsWith("claude")) {
+            return "anthropic";
+        }
+        
+        // Cohere models
+        if (lowerModel.startsWith("command") || lowerModel.startsWith("embed")) {
+            return "cohere";
+        }
+        
+        // Meta Llama models
+        if (lowerModel.startsWith("llama")) {
+            return "meta";
+        }
+        
+        // Mistral models
+        if (lowerModel.startsWith("mistral") || lowerModel.startsWith("mixtral")) {
+            return "mistral";
+        }
+        
+        return "unknown";
+    }
+    
+    /**
      * Normalize model names by removing version suffixes
      * 
      * Examples:
@@ -204,7 +255,7 @@ public class LlmCostServiceImpl implements LlmCostService {
                 LlmUsageStats.ModelUsage modelUsage = modelBreakdown.computeIfAbsent(model, k -> {
                     LlmUsageStats.ModelUsage mu = new LlmUsageStats.ModelUsage();
                     mu.setModelName(model);
-                    mu.setProvider(target.equals("openai") || target.equals("openai-embed") ? "openai" : "gemini");
+                    mu.setProvider(detectProviderFromModelName(model));
                     mu.setRequests(0);
                     mu.setPromptTokens(0);
                     mu.setCompletionTokens(0);
@@ -230,8 +281,8 @@ public class LlmCostServiceImpl implements LlmCostService {
                 double newAvg = (currentAvg * (modelUsage.getRequests() - 1) + stepMetadata.getDurationMs()) / modelUsage.getRequests();
                 modelUsage.setAverageLatencyMs(newAvg);
                 
-                // Update provider breakdown
-                String provider = target.equals("openai") || target.equals("openai-embed") ? "openai" : "gemini";
+                // Update provider breakdown (use the same provider as the model)
+                String provider = modelUsage.getProvider();
                 LlmUsageStats.ProviderUsage providerUsage = providerBreakdown.computeIfAbsent(provider, k -> {
                     LlmUsageStats.ProviderUsage pu = new LlmUsageStats.ProviderUsage();
                     pu.setProvider(provider);
@@ -254,7 +305,24 @@ public class LlmCostServiceImpl implements LlmCostService {
         totalUsage.setTotalCostUsd(totalCost);
         
         stats.setTotalUsage(totalUsage);
-        stats.setModelBreakdown(modelBreakdown);
+        
+        // Sort modelBreakdown by provider, then by model name
+        Map<String, LlmUsageStats.ModelUsage> sortedModelBreakdown = new java.util.LinkedHashMap<>();
+        modelBreakdown.entrySet().stream()
+            .sorted((e1, e2) -> {
+                LlmUsageStats.ModelUsage m1 = e1.getValue();
+                LlmUsageStats.ModelUsage m2 = e2.getValue();
+                // Sort by provider first
+                int providerCompare = m1.getProvider().compareTo(m2.getProvider());
+                if (providerCompare != 0) {
+                    return providerCompare;
+                }
+                // Then by model name
+                return m1.getModelName().compareTo(m2.getModelName());
+            })
+            .forEach(e -> sortedModelBreakdown.put(e.getKey(), e.getValue()));
+        
+        stats.setModelBreakdown(sortedModelBreakdown);
         stats.setProviderBreakdown(providerBreakdown);
         
         log.info("Calculated LLM usage for team {}: {} requests, ${} total cost", 

@@ -4,12 +4,7 @@ const agentService = {
     createAgent: async (agentData) => {
         console.log('Creating agent:', agentData);
         try {
-            const response = await axiosInstance.post('/api/agents', agentData, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.post('/api/agents', agentData);
             return {
                 success: true,
                 data: response.data,
@@ -26,12 +21,7 @@ const agentService = {
 
     getAgentsByTeam: async (teamId) => {
         try {
-            const response = await axiosInstance.get(`/api/agents/team/${teamId}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agents/team/${teamId}`);
             return {
                 success: true,
                 data: response.data
@@ -47,12 +37,7 @@ const agentService = {
 
     getAgent: async (teamId, agentId) => {
         try {
-            const response = await axiosInstance.get(`/api/agents/team/${teamId}/${agentId}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agents/team/${teamId}/${agentId}`);
             return {
                 success: true,
                 data: response.data
@@ -70,11 +55,7 @@ const agentService = {
         console.log('Enabling agent:', agentId);
         try {
             const response = await axiosInstance.post(`/api/agents/${agentId}/enable`, null, {
-                params: { teamId },
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                params: { teamId }
             });
             return {
                 success: true,
@@ -94,11 +75,7 @@ const agentService = {
         console.log('Disabling agent:', agentId);
         try {
             const response = await axiosInstance.post(`/api/agents/${agentId}/disable`, null, {
-                params: { teamId },
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                params: { teamId }
             });
             return {
                 success: true,
@@ -117,12 +94,7 @@ const agentService = {
     updateAgent: async (agentId, agentUpdates) => {
         console.log('Updating agent:', agentId);
         try {
-            const response = await axiosInstance.put(`/api/agents/${agentId}`, agentUpdates, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.put(`/api/agents/${agentId}`, agentUpdates);
             return {
                 success: true,
                 data: response.data,
@@ -140,12 +112,7 @@ const agentService = {
     deleteAgent: async (agentId) => {
         console.log('Deleting agent:', agentId);
         try {
-            const response = await axiosInstance.delete(`/api/agents/${agentId}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.delete(`/api/agents/${agentId}`);
             return {
                 success: true,
                 data: response.data,
@@ -162,12 +129,7 @@ const agentService = {
 
     getTasksByAgent: async (agentId) => {
         try {
-            const response = await axiosInstance.get(`/api/agents/${agentId}/tasks`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agents/${agentId}/tasks`);
             return {
                 success: true,
                 data: response.data

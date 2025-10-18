@@ -1,6 +1,4 @@
-import axios from 'axios';
-
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'https://localhost:7777';
+import axiosInstance from './axiosInstance';
 
 const llmModelService = {
   /**
@@ -9,9 +7,13 @@ const llmModelService = {
    * @returns {Promise} Promise with list of LLM models
    */
   async getAllModels(activeOnly = false) {
-    const params = activeOnly ? '?active=true' : '';
-    const response = await axios.get(`${API_BASE_URL}/api/llm-models${params}`);
-    return response.data;
+    try {
+      const params = activeOnly ? '?active=true' : '';
+      const response = await axiosInstance.get(`/api/llm-models${params}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
@@ -20,8 +22,12 @@ const llmModelService = {
    * @returns {Promise} Promise with model data
    */
   async getModelById(id) {
-    const response = await axios.get(`${API_BASE_URL}/api/llm-models/${id}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.get(`/api/llm-models/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
@@ -30,8 +36,12 @@ const llmModelService = {
    * @returns {Promise} Promise with list of models
    */
   async getModelsByProvider(provider) {
-    const response = await axios.get(`${API_BASE_URL}/api/llm-models/provider/${provider}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.get(`/api/llm-models/provider/${provider}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
@@ -40,8 +50,12 @@ const llmModelService = {
    * @returns {Promise} Promise with created model
    */
   async createModel(model) {
-    const response = await axios.post(`${API_BASE_URL}/api/llm-models`, model);
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/api/llm-models', model);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
@@ -51,8 +65,12 @@ const llmModelService = {
    * @returns {Promise} Promise with updated model
    */
   async updateModel(id, model) {
-    const response = await axios.put(`${API_BASE_URL}/api/llm-models/${id}`, model);
-    return response.data;
+    try {
+      const response = await axiosInstance.put(`/api/llm-models/${id}`, model);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
@@ -61,8 +79,12 @@ const llmModelService = {
    * @returns {Promise} Promise indicating completion
    */
   async deleteModel(id) {
-    const response = await axios.delete(`${API_BASE_URL}/api/llm-models/${id}`);
-    return response.data;
+    try {
+      const response = await axiosInstance.delete(`/api/llm-models/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   },
 
   /**
@@ -70,8 +92,12 @@ const llmModelService = {
    * @returns {Promise} Promise indicating completion
    */
   async initializeDefaultModels() {
-    const response = await axios.post(`${API_BASE_URL}/api/llm-models/initialize-defaults`);
-    return response.data;
+    try {
+      const response = await axiosInstance.post('/api/llm-models/initialize-defaults');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

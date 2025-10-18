@@ -24,12 +24,12 @@ public class LlmModelServiceImpl implements LlmModelService {
     
     @Override
     public Flux<LlmModel> getAllModels() {
-        return llmModelRepository.findAll();
+        return llmModelRepository.findAllSorted();
     }
     
     @Override
     public Flux<LlmModel> getActiveModels() {
-        return llmModelRepository.findByActive(true);
+        return llmModelRepository.findByActiveSorted(true);
     }
     
     @Override

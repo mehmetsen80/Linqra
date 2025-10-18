@@ -167,8 +167,8 @@ const ServiceInteractionStats = ({ serviceName }) => {
       
       <div className="stats-grid">
         {/* Incoming Traffic */}
-        <div className="stats-section">
-          <div className="stats-section-header">
+        <div className="service-stats-section">
+          <div className="service-stats-section-header">
             <FaArrowDown className="incoming-icon" />
             <h4>Incoming Traffic</h4>
           </div>
@@ -216,8 +216,8 @@ const ServiceInteractionStats = ({ serviceName }) => {
         </div>
 
         {/* Outgoing Traffic */}
-        <div className="stats-section">
-          <div className="stats-section-header">
+        <div className="service-stats-section">
+          <div className="service-stats-section-header">
             <FaArrowUp className="outgoing-icon" />
             <h4>Outgoing Traffic</h4>
           </div>

@@ -49,6 +49,8 @@ const Header = () => {
             <Nav.Link as={NavLink} to="/workflows">Workflows</Nav.Link>
             <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/agents">Agents</Nav.Link>
+            <span className="nav-separator"> | </span>
+            <Nav.Link as={NavLink} to="/llm-usage">LLM Usage</Nav.Link>
           </Nav>
           {user ? (
             <div className="d-flex align-items-center gap-3">

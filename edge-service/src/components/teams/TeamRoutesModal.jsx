@@ -122,7 +122,7 @@ const TeamRoutesModal = ({ show, onHide, team, onAddRoute, onRemoveRoute, loadin
         <>
             <Modal show={show} onHide={onHide} size="lg">
                 <Modal.Header closeButton>
-                    <Modal.Title>Team Apps - {team?.name}</Modal.Title>
+                    <Modal.Title>Apps - {team?.name}</Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
                     <Form onSubmit={handleSubmit} className="mb-4">

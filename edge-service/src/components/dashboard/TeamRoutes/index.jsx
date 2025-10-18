@@ -108,23 +108,26 @@ const TeamRoutes = () => {
 
   return (
     <Card className="team-routes-card">
-      <h2 className="team-routes-title">Team Apps</h2>
+     
       <Card.Header className="bg-light">
         <Breadcrumb className="bg-light mb-0">
           <Breadcrumb.Item 
             linkAs={Link} 
             linkProps={{ to: '/organizations' }}
           >
+            <i className="fas fa-building me-2"></i>
             {currentTeam?.organization?.name || 'Organization'}
           </Breadcrumb.Item>
           <Breadcrumb.Item 
             linkAs={Link} 
             linkProps={{ to: '/teams' }}
           >
+            <i className="fas fa-users me-2"></i>
             {currentTeam?.name || 'Team'}
           </Breadcrumb.Item>
           <Breadcrumb.Item active>
-            Team Apps
+            <i className="fas fa-route me-2"></i>
+            Apps
           </Breadcrumb.Item>
         </Breadcrumb>
       </Card.Header>

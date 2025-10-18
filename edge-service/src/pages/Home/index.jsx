@@ -194,7 +194,7 @@ function Home() {
 
       {/* Core Components Section */}
       <div className="core-components-section">
-        <h2 className="section-title">Intelligent Automation at Scale</h2>
+        <h2 className="home-section-title">Intelligent Automation at Scale</h2>
         <p className="section-subtitle">Build, orchestrate, and deploy AI-powered agents with enterprise-grade workflows</p>
         
         <div className="core-components-grid">

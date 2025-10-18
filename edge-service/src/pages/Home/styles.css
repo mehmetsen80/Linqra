@@ -599,7 +599,7 @@ html {
   justify-content: center;
 }
 
-.section-title {
+.home-section-title {
   text-align: center !important;
   font-size: 2.5rem;
   font-weight: 700;
@@ -928,7 +928,7 @@ html {
     gap: 1.5rem;
   }
   
-  .section-title {
+  .home-section-title {
     font-size: 2rem;
   }
   

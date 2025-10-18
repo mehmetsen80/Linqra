@@ -10,6 +10,7 @@ import AgentTasks from '../../components/dashboard/AgentTasks';
 import AgentStats from '../../components/dashboard/AgentStats';
 import Workflows from '../../components/dashboard/Workflows';
 import WorkflowsStats from '../../components/dashboard/WorkflowsStats';
+import LlmCosts from '../../components/dashboard/LlmCosts';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin } from '../../utils/roleUtils';
@@ -41,8 +42,9 @@ function Dashboard() {
   return (
     <div className="dashboard-container">
       <UserSummary />
-      <TeamRoutes />
       <StatsSection />
+      <TeamRoutes />
+      <LlmCosts />
       <AgentTasks />
       <AgentStats />
       <Workflows />

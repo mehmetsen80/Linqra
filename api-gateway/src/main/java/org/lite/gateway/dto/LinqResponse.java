@@ -56,6 +56,7 @@ public class LinqResponse {
             private long promptTokens;
             private long completionTokens;
             private long totalTokens;
+            private Double costUsd;  // Cost calculated at execution time with prices from that period
         }
     }
 

@@ -14,6 +14,7 @@ import org.lite.gateway.service.LinqToolService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.QueuedWorkflowService;
 import org.lite.gateway.service.WorkflowExecutionContext;
+import org.lite.gateway.service.LlmCostService;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -39,6 +40,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private final LinqToolService linqToolService;
     private final LinqMicroService linqMicroService;
     private final QueuedWorkflowService queuedWorkflowService;
+    private final LlmCostService llmCostService;
 
     @Override
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {
@@ -332,19 +334,44 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                     if (stepMetadata.getTarget().equals("openai") && resultMap.containsKey("usage")) {
                                         // Handle OpenAI token usage
                                         Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
-                                        tokenUsage.setPromptTokens(((Number) usage.get("prompt_tokens")).longValue());
-                                        tokenUsage.setCompletionTokens(((Number) usage.get("completion_tokens")).longValue());
-                                        tokenUsage.setTotalTokens(((Number) usage.get("total_tokens")).longValue());
+                                        long promptTokens = ((Number) usage.get("prompt_tokens")).longValue();
+                                        long completionTokens = ((Number) usage.get("completion_tokens")).longValue();
+                                        long totalTokens = ((Number) usage.get("total_tokens")).longValue();
+                                        
+                                        tokenUsage.setPromptTokens(promptTokens);
+                                        tokenUsage.setCompletionTokens(completionTokens);
+                                        tokenUsage.setTotalTokens(totalTokens);
+                                        
                                         // Set OpenAI model
-                                        stepMetadata.setModel((String) resultMap.get("model"));
+                                        String model = (String) resultMap.get("model");
+                                        stepMetadata.setModel(model);
+                                        
+                                        // Calculate and store cost at execution time
+                                        double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
+                                        tokenUsage.setCostUsd(cost);
+                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
+                                            model, promptTokens, completionTokens, String.format("%.6f", cost));
+                                            
                                     } else if (stepMetadata.getTarget().equals("gemini") && resultMap.containsKey("usageMetadata")) {
                                         // Handle Gemini token usage
                                         Map<?, ?> usageMetadata = (Map<?, ?>) resultMap.get("usageMetadata");
-                                        tokenUsage.setPromptTokens(((Number) usageMetadata.get("promptTokenCount")).longValue());
-                                        tokenUsage.setCompletionTokens(((Number) usageMetadata.get("candidatesTokenCount")).longValue());
-                                        tokenUsage.setTotalTokens(((Number) usageMetadata.get("totalTokenCount")).longValue());
+                                        long promptTokens = ((Number) usageMetadata.get("promptTokenCount")).longValue();
+                                        long completionTokens = ((Number) usageMetadata.get("candidatesTokenCount")).longValue();
+                                        long totalTokens = ((Number) usageMetadata.get("totalTokenCount")).longValue();
+                                        
+                                        tokenUsage.setPromptTokens(promptTokens);
+                                        tokenUsage.setCompletionTokens(completionTokens);
+                                        tokenUsage.setTotalTokens(totalTokens);
+                                        
                                         // Set Gemini model
-                                        stepMetadata.setModel((String) resultMap.get("modelVersion"));
+                                        String model = (String) resultMap.get("modelVersion");
+                                        stepMetadata.setModel(model);
+                                        
+                                        // Calculate and store cost at execution time
+                                        double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
+                                        tokenUsage.setCostUsd(cost);
+                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
+                                            model, promptTokens, completionTokens, String.format("%.6f", cost));
                                     }
                                     
                                     stepMetadata.setTokenUsage(tokenUsage);

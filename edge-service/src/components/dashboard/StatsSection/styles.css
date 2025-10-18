@@ -1,4 +1,4 @@
-.stats-section {
+.dashboard-stats-section {
   margin-bottom: 3rem;
   margin-top: 1rem;
 }
@@ -19,6 +19,8 @@
 }
 
 .stat-card {
+  margin-top: 1rem;
+  margin-bottom: 2rem;
   background: white;
   border-radius: 12px;
   padding: 1.25rem;

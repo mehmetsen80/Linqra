@@ -7,6 +7,8 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.LocalDateTime;
+
 @Repository
 public interface LinqWorkflowExecutionRepository extends ReactiveMongoRepository<LinqWorkflowExecution, String> {
     Flux<LinqWorkflowExecution> findByWorkflowId(String workflowId, Sort sort);
@@ -15,4 +17,5 @@ public interface LinqWorkflowExecutionRepository extends ReactiveMongoRepository
     Flux<LinqWorkflowExecution> findByWorkflowIdAndTeamId(String workflowId, String teamId, Sort sort);
     Mono<LinqWorkflowExecution> findByAgentExecutionId(String agentExecutionId);
     Flux<LinqWorkflowExecution> findByAgentTaskId(String agentTaskId, Sort sort);
+    Flux<LinqWorkflowExecution> findByTeamIdAndExecutedAtBetween(String teamId, LocalDateTime from, LocalDateTime to);
 }

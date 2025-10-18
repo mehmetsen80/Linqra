@@ -143,6 +143,26 @@ const statsService = {
       console.error('Error fetching service usage:', error);
       throw new Error('Failed to fetch service usage statistics');
     }
+  },
+
+  /**
+   * Fetches LLM usage and cost statistics
+   * @param {string} fromDate - Start date (ISO format, optional)
+   * @param {string} toDate - End date (ISO format, optional)
+   * @returns {Promise<Object>} LLM usage statistics with cost breakdown
+   */
+  async getLlmUsage(fromDate = null, toDate = null) {
+    try {
+      const params = {};
+      if (fromDate) params.fromDate = fromDate;
+      if (toDate) params.toDate = toDate;
+      
+      const response = await axiosInstance.get('/api/dashboard/llm-usage', { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching LLM usage:', error);
+      throw new Error('Failed to fetch LLM usage statistics');
+    }
   }
 };
 

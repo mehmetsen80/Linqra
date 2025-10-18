@@ -1,0 +1,243 @@
+.llm-costs-card {
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.llm-costs-card .card-header {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border-bottom: 2px solid #e9ecef;
+  padding: 1.25rem 1.5rem;
+}
+
+.llm-costs-card .card-header h5 {
+  color: #1f2937;
+  font-weight: 600;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+}
+
+.period-badge {
+  font-size: 0.75rem;
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.view-details-btn {
+  border-color: var(--primary-color, #ed7534) !important;
+  color: var(--primary-color, #ed7534) !important;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.view-details-btn:hover {
+  background-color: var(--primary-color, #e2baa5) !important;
+  border-color: var(--primary-color, #e2baa5) !important;
+  color: white !important;
+}
+
+.date-range-text {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* Summary Cards */
+.summary-row {
+  margin-bottom: 1.5rem;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  border-left: 4px solid;
+}
+
+.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card.total-cost {
+  border-left-color: #ef4444;
+}
+
+.stat-card.total-requests {
+  border-left-color: #10b981;
+}
+
+.stat-card.total-tokens {
+  border-left-color: #6366f1;
+}
+
+.stat-card.avg-cost {
+  border-left-color: var(--primary-color);
+}
+
+.stat-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.total-cost .stat-icon {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.total-requests .stat-icon {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.total-tokens .stat-icon {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.avg-cost .stat-icon {
+  background: rgba(228, 143, 14, 0.1);
+  color: var(--primary-color);
+}
+
+.stat-details {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #6b7280;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+/* Charts */
+.charts-row {
+  margin-bottom: 2rem;
+}
+
+.chart-container {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 1.5rem;
+  height: 300px;
+}
+
+.chart-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+/* Model Breakdown Table */
+.model-breakdown {
+  margin-top: 1.5rem;
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.model-breakdown table {
+  margin-bottom: 0;
+  font-size: 0.9rem;
+}
+
+.model-breakdown thead th {
+  background-color: #f8f9fa;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #e9ecef;
+  padding: 0.75rem;
+}
+
+.model-breakdown tbody td {
+  padding: 0.875rem 0.75rem;
+  vertical-align: middle;
+}
+
+.provider-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.provider-badge.openai {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.provider-badge.gemini {
+  background-color: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.cost-cell {
+  font-weight: 600;
+  color: #ef4444;
+}
+
+.total-row {
+  background-color: #f8f9fa;
+  font-weight: 700;
+  border-top: 2px solid #e9ecef;
+}
+
+.total-row td {
+  padding: 1rem 0.75rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .stat-card {
+    margin-bottom: 1rem;
+  }
+  
+  .stat-value {
+    font-size: 1.25rem;
+  }
+  
+  .chart-container {
+    height: 250px;
+  }
+  
+  .model-breakdown {
+    overflow-x: auto;
+  }
+}
+

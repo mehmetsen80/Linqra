@@ -12,9 +12,7 @@ const agentTaskVersionService = {
                     params,
                     headers: {
                         'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-API-Key': import.meta.env.VITE_API_KEY,
-                        'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                        'Accept': 'application/json'
                     }
                 }
             );
@@ -38,9 +36,7 @@ const agentTaskVersionService = {
             const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/versions/${version}/rollback`, {}, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -62,9 +58,7 @@ const agentTaskVersionService = {
             const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -85,9 +79,7 @@ const agentTaskVersionService = {
             const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/${version}`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -108,9 +100,7 @@ const agentTaskVersionService = {
             const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/latest`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -131,9 +121,7 @@ const agentTaskVersionService = {
             const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/count`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -159,9 +147,7 @@ const agentTaskVersionService = {
                 },
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {
@@ -184,9 +170,7 @@ const agentTaskVersionService = {
             const response = await axiosInstance.delete(`/api/agent-tasks/${taskId}/versions/duplicates`, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-API-Key': import.meta.env.VITE_API_KEY,
-                    'X-API-Key-Name': import.meta.env.VITE_API_KEY_NAME
+                    'Accept': 'application/json'
                 }
             });
             return {

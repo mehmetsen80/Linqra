@@ -4,11 +4,7 @@ const agentTaskMonitoringService = {
     getTaskExecutionHistory: async (taskId, limit = 10) => {
         try {
             const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/execution-history`, {
-                params: { limit },
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                params: { limit }
             });
             return {
                 success: true,
@@ -30,11 +26,7 @@ const agentTaskMonitoringService = {
             if (to) params.to = to;
 
             const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/metrics`, {
-                params,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
+                params
             });
             return {
                 success: true,
@@ -51,12 +43,7 @@ const agentTaskMonitoringService = {
 
     getTaskStatus: async (taskId) => {
         try {
-            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/status`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/status`);
             return {
                 success: true,
                 data: response.data
@@ -72,12 +59,7 @@ const agentTaskMonitoringService = {
 
     getTaskStatistics: async (taskId) => {
         try {
-            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/stats`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/stats`);
             return {
                 success: true,
                 data: response.data

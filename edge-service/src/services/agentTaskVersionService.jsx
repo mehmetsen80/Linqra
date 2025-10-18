@@ -8,13 +8,7 @@ const agentTaskVersionService = {
             
             const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/versions`, 
                 updatedTask, 
-                {
-                    params,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    }
-                }
+                { params }
             );
             return {
                 success: true,
@@ -33,12 +27,7 @@ const agentTaskVersionService = {
     rollbackToVersion: async (taskId, version) => {
         console.log('Rolling back task:', taskId, 'to version:', version);
         try {
-            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/versions/${version}/rollback`, {}, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/versions/${version}/rollback`, {});
             return {
                 success: true,
                 data: response.data,
@@ -55,12 +44,7 @@ const agentTaskVersionService = {
 
     getVersionHistory: async (taskId) => {
         try {
-            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions`);
             return {
                 success: true,
                 data: response.data
@@ -76,12 +60,7 @@ const agentTaskVersionService = {
 
     getVersion: async (taskId, version) => {
         try {
-            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/${version}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/${version}`);
             return {
                 success: true,
                 data: response.data
@@ -97,12 +76,7 @@ const agentTaskVersionService = {
 
     getLatestVersion: async (taskId) => {
         try {
-            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/latest`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/latest`);
             return {
                 success: true,
                 data: response.data
@@ -118,12 +92,7 @@ const agentTaskVersionService = {
 
     getVersionCount: async (taskId) => {
         try {
-            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/count`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/versions/count`);
             return {
                 success: true,
                 data: response.data
@@ -144,10 +113,6 @@ const agentTaskVersionService = {
                 params: { 
                     confirmationToken,
                     reason 
-                },
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
                 }
             });
             return {
@@ -167,12 +132,7 @@ const agentTaskVersionService = {
     cleanupDuplicateVersions: async (taskId) => {
         console.log('Cleaning up duplicate versions for task:', taskId);
         try {
-            const response = await axiosInstance.delete(`/api/agent-tasks/${taskId}/versions/duplicates`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json'
-                }
-            });
+            const response = await axiosInstance.delete(`/api/agent-tasks/${taskId}/versions/duplicates`);
             return {
                 success: true,
                 data: response.data,

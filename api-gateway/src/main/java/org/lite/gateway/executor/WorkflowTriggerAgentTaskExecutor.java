@@ -78,25 +78,25 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                                                 retrySignal.failure().getMessage());
                                             execution.addRetryAttempt();
                                         }))
-                                .flatMap(workflowExecutionId -> {
-                                    log.info("Workflow triggered, checking status: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
+                                .flatMap(workflowExecution -> {
+                                    log.info("Workflow triggered and saved, checking status: {} for execution: {}", 
+                                            workflowExecution.getId(), execution.getExecutionId());
                                     
-                                    // Check the workflow execution status immediately before starting monitoring
-                                    return workflowExecutionService.getExecution(workflowExecutionId)
-                                            .flatMap(workflowExecution -> {
-                                                // If workflow already failed, mark AgentExecution as failed immediately
-                                                if (org.lite.gateway.model.ExecutionStatus.FAILED.equals(workflowExecution.getStatus())) {
-                                                    log.error("Workflow {} already in FAILED status, marking AgentExecution as FAILED", workflowExecutionId);
-                                                    return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-                                                            "Workflow execution failed", workflowExecutionId);
-                                                }
-                                                
-                                                // Otherwise, set to RUNNING and monitor
-                                                log.info("Workflow {} status is {}, setting AgentExecution to RUNNING and starting monitoring", 
-                                                        workflowExecutionId, workflowExecution.getStatus());
-                                                return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Workflow started", workflowExecutionId)
-                                                        .then(monitorWorkflowCompletion(workflowExecutionId, execution));
-                                            });
+                                    // No need for delay or retry - we have the actual saved execution object
+                                    // If workflow already failed, mark AgentExecution as failed immediately
+                                    if (org.lite.gateway.model.ExecutionStatus.FAILED.equals(workflowExecution.getStatus())) {
+                                        log.error("Workflow {} already in FAILED status, marking AgentExecution as FAILED", 
+                                                workflowExecution.getId());
+                                        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
+                                                "Workflow execution failed", workflowExecution.getId());
+                                    }
+                                    
+                                    // Otherwise, set to RUNNING and monitor
+                                    log.info("Workflow {} status is {}, setting AgentExecution to RUNNING and starting monitoring", 
+                                            workflowExecution.getId(), workflowExecution.getStatus());
+                                    return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Workflow started", 
+                                            workflowExecution.getId())
+                                            .then(monitorWorkflowCompletion(workflowExecution.getId(), execution));
                                 })
                                 .doOnError(error -> {
                                     String msg = error.getMessage() != null ? error.getMessage() : "Workflow execution error";
@@ -124,7 +124,7 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
     /**
      * Trigger a workflow by its ID with agent context
      */
-    public Mono<String> triggerWorkflow(String workflowId, Map<String, Object> parameters, String teamId,
+    public Mono<LinqWorkflowExecution> triggerWorkflow(String workflowId, Map<String, Object> parameters, String teamId,
                                         String agentId, String agentTaskId, AgentExecution execution) {
         log.info("Triggering workflow {} for team {} with agent context: agent={}, task={}", workflowId, teamId, agentId, agentTaskId);
 
@@ -202,11 +202,10 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                                             })
                                             .flatMap(agentContext ->
                                                     workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
-                                                            .map(LinqWorkflowExecution::getId)
                                             )
                             );
                 })
-                .doOnSuccess(executionId -> log.info("✅ Workflow {} triggered and tracked with execution ID: {} for agent: {}", workflowId, executionId, agentId))
+                .doOnSuccess(workflowExecution -> log.info("✅ Workflow {} triggered and tracked with execution ID: {} for agent: {}", workflowId, workflowExecution.getId(), agentId))
                 .doOnError(error -> log.error("❌ Failed to trigger workflow {} for agent {}: {}", workflowId, agentId, error.getMessage()));
     }
 

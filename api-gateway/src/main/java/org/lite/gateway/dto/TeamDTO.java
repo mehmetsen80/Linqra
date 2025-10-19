@@ -27,6 +27,6 @@ public class TeamDTO {
     private OrganizationDTO organization;
     private List<String> roles;
     private ApiKeyDTO apiKey;
-    private List<LinqToolDTO> linqTools;
+    private List<LinqLlmModelDTO> linqLlmModels;
     private LocalDateTime lastActiveAt;
 } 

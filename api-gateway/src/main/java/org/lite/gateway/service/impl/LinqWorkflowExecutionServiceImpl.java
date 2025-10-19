@@ -7,10 +7,10 @@ import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.LinqWorkflowExecution;
 import org.lite.gateway.model.ExecutionStatus;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
-import org.lite.gateway.repository.LinqToolRepository;
+import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.TeamContextService;
-import org.lite.gateway.service.LinqToolService;
+import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.QueuedWorkflowService;
 import org.lite.gateway.service.WorkflowExecutionContext;
@@ -36,8 +36,8 @@ import java.util.stream.Collectors;
 public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionService {
     private final LinqWorkflowExecutionRepository executionRepository;
     private final TeamContextService teamContextService;
-    private final LinqToolRepository linqToolRepository;
-    private final LinqToolService linqToolService;
+    private final LinqLlmModelRepository linqLlmModelRepository;
+    private final LinqLlmModelService linqLlmModelService;
     private final LinqMicroService linqMicroService;
     private final QueuedWorkflowService queuedWorkflowService;
     private final LlmCostService llmCostService;
@@ -126,7 +126,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 stepQuery.setIntent(step.getIntent());
                 stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), context));
                 stepQuery.setPayload(resolvePlaceholders(step.getPayload(), context));
-                stepQuery.setToolConfig(step.getToolConfig());
+                stepQuery.setLlmConfig(step.getLlmConfig());
 
                 // Merge global params (e.g., teamId, userId) so downstream services see them
                 Map<String, Object> mergedParams = new HashMap<>();
@@ -148,21 +148,22 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 // Execute the step
                 return teamIdMono
                     .flatMap(teamId -> {
-                        log.info("Searching for tool with target: {} and team: {}", step.getTarget(), teamId);
-                        return linqToolRepository.findByTargetAndTeamId(step.getTarget(), teamId)
-                            .doOnNext(tool -> log.info("Found tool: {}", tool))
-                            .doOnError(error -> log.error("Error finding tool: {}", error.getMessage()))
-                            .doOnSuccess(tool -> {
-                                if (tool == null) {
-                                    log.info("No tool found for target: {}", step.getTarget());
+                        log.info("🔍 Searching for LLM model configuration: target={}, teamId={}", step.getTarget(), teamId);
+                        return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), teamId)
+                            .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
+                                llmModel.getTarget(), llmModel.getModelType()))
+                            .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", step.getTarget(), error.getMessage()))
+                            .doOnSuccess(llmModel -> {
+                                if (llmModel == null) {
+                                    log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", step.getTarget());
                                 }
                             });
                     })
-                    .doOnNext(tool -> log.info("About to execute tool request"))
-                    .flatMap(tool -> linqToolService.executeToolRequest(stepRequest, tool))
-                    .doOnNext(stepResponse -> log.info("Tool request executed successfully"))
+                    .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for step {}", step.getStep()))
+                    .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest, llmModel))
+                    .doOnNext(stepResponse -> log.info("✅ LLM request executed successfully for step {}", step.getStep()))
                     .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                        log.info("No tool found, executing microservice request");
+                        log.info("📡 No LLM model found, executing microservice request for target: {}", step.getTarget());
                         return linqMicroService.execute(stepRequest);
                     }))
                     .flatMap(stepResponse -> {

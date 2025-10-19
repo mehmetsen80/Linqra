@@ -42,7 +42,7 @@ function WorkflowOverview() {
                                      "use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4",
                         "settings": {
                             "temperature": 0.9,

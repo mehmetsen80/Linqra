@@ -438,15 +438,32 @@ function EditWorkflow() {
         try {
             setExecuting(true);
             const response = await workflowService.executeWorkflow(workflowId);
+            
+            console.log('Execute workflow response:', response);
+            
             if (response.success) {
-                showSuccessToast('Workflow execution started successfully');
+                // Check the workflow execution status from metadata
+                const executionStatus = response.data?.metadata?.status;
+                const finalResult = response.data?.result?.finalResult;
+                
+                if (executionStatus === 'error') {
+                    // Workflow execution failed
+                    showErrorToast('Workflow execution failed: ' + (finalResult || 'Unknown error'));
+                } else if (response.data?.status === 'FAILED') {
+                    // Alternative status field check
+                    showErrorToast('Workflow execution failed: ' + (finalResult || 'Unknown error'));
+                } else {
+                    // Workflow execution succeeded
+                    showSuccessToast('Workflow execution completed successfully');
+                }
                 loadExecutions();
             } else {
                 showErrorToast(response.error || 'Failed to execute workflow');
             }
         } catch (err) {
             console.error('Error executing workflow:', err);
-            showErrorToast('Failed to execute workflow');
+            const errorMessage = err.response?.data?.message || err.message || 'Failed to execute workflow';
+            showErrorToast(errorMessage);
         } finally {
             setExecuting(false);
             setShowExecuteConfirm(false);

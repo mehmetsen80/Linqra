@@ -12,9 +12,10 @@ import java.util.Map;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class LinqToolDTO {
+public class LinqLlmModelDTO {
     private String id;
     private String target;
+    private String modelType;
     private String endpoint;
     private String method;
     private Map<String, String> headers;
@@ -22,4 +23,5 @@ public class LinqToolDTO {
     private String apiKey;
     private List<String> supportedIntents;
     private String team;
-} 
+}
+

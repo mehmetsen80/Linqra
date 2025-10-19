@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Form, Alert, Spinner } from 'react-bootstrap';
 import { HiKey } from 'react-icons/hi';
 import { SiOpenai } from 'react-icons/si';
-import { linqToolService } from '../../services/linqToolService';
+import { linqLlmModelService } from '../../services/linqLlmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import Button from '../../components/common/Button';
 
@@ -46,7 +46,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   const fetchConfiguration = async () => {
     try {
       setLoading(true);
-      const config = await linqToolService.getToolConfiguration(team.id, 'openai');
+      const config = await linqLlmModelService.getLlmModelByTarget(team.id, 'openai');
       if (config) {
         setFormData(prev => ({
           ...prev,
@@ -98,7 +98,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
         supportedIntents: formData.supportedIntents,
         team: formData.teamId
       };
-      await linqToolService.saveConfiguration(config);
+      await linqLlmModelService.saveConfiguration(config);
       showSuccessToast('Configuration saved successfully');
       if (onTeamUpdate) {
         await onTeamUpdate();
@@ -211,7 +211,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
               className="btn-save"
               loading={loading}
             >
-              {team?.linqTools?.some(tool => tool.target === 'openai') ? (
+              {team?.linqLlmModels?.some(model => model.target === 'openai') ? (
                 'Save Configuration'
               ) : (
                 'Create OpenAI Configuration'

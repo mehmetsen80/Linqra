@@ -219,11 +219,11 @@ public class LinqRequestSchemaValidator {
                             validateWorkflowArray(fieldValue, errors);
                         }
                         break;
-                    case "toolConfig":
+                    case "llmConfig":
                         if (!fieldValue.isNull() && !fieldValue.isObject()) {
-                            errors.add("Field 'toolConfig' must be an object");
+                            errors.add("Field 'llmConfig' must be an object");
                         } else if (fieldValue.isObject()) {
-                            validateToolConfig(fieldValue, -1, errors);
+                            validateLlmConfig(fieldValue, -1, errors);
                         }
                         break;
                 }
@@ -271,33 +271,33 @@ public class LinqRequestSchemaValidator {
             }
         }
 
-        // Validate toolConfig if present and not null
-        if (stepNode.has("toolConfig") && !stepNode.get("toolConfig").isNull()) {
-            JsonNode toolConfigNode = stepNode.get("toolConfig");
-            if (!toolConfigNode.isObject()) {
-                errors.add("ToolConfig in workflow step " + (index + 1) + " must be a JSON object");
+        // Validate llmConfig if present and not null
+        if (stepNode.has("llmConfig") && !stepNode.get("llmConfig").isNull()) {
+            JsonNode llmConfigNode = stepNode.get("llmConfig");
+            if (!llmConfigNode.isObject()) {
+                errors.add("LlmConfig in workflow step " + (index + 1) + " must be a JSON object");
             } else {
-                validateToolConfig(toolConfigNode, index, errors);
+                validateLlmConfig(llmConfigNode, index, errors);
             }
         }
     }
 
-    private void validateToolConfig(JsonNode toolConfigNode, int stepIndex, List<String> errors) {
+    private void validateLlmConfig(JsonNode llmConfigNode, int stepIndex, List<String> errors) {
         // Check for invalid fields
-        toolConfigNode.fields().forEachRemaining(entry -> {
-            if (!hasField(LinqRequest.Query.ToolConfig.class, entry.getKey())) {
-                errors.add("Invalid field in toolConfig of workflow step " + (stepIndex + 1) + ": '" + entry.getKey() + "'. Valid fields are: " + getFieldNames(LinqRequest.Query.ToolConfig.class));
+        llmConfigNode.fields().forEachRemaining(entry -> {
+            if (!hasField(LinqRequest.Query.LlmConfig.class, entry.getKey())) {
+                errors.add("Invalid field in llmConfig of workflow step " + (stepIndex + 1) + ": '" + entry.getKey() + "'. Valid fields are: " + getFieldNames(LinqRequest.Query.LlmConfig.class));
             }
         });
 
         // Validate required fields
-        if (!toolConfigNode.has("model")) {
-            errors.add("ToolConfig in workflow step " + (stepIndex + 1) + " must contain 'model' field");
+        if (!llmConfigNode.has("model")) {
+            errors.add("LlmConfig in workflow step " + (stepIndex + 1) + " must contain 'model' field");
         }
-        if (!toolConfigNode.has("settings")) {
-            errors.add("ToolConfig in workflow step " + (stepIndex + 1) + " must contain 'settings' field");
-        } else if (!toolConfigNode.get("settings").isObject()) {
-            errors.add("Settings in toolConfig of workflow step " + (stepIndex + 1) + " must be a JSON object");
+        if (!llmConfigNode.has("settings")) {
+            errors.add("LlmConfig in workflow step " + (stepIndex + 1) + " must contain 'settings' field");
+        } else if (!llmConfigNode.get("settings").isObject()) {
+            errors.add("Settings in llmConfig of workflow step " + (stepIndex + 1) + " must be a JSON object");
         }
     }
 

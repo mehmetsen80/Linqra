@@ -49,17 +49,17 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
         
         return linqLlmModelRepository.findByTargetAndModelTypeAndTeamId(
                 linqLlmModel.getTarget(), linqLlmModel.getModelType(), linqLlmModel.getTeamId())
-            .<LinqLlmModel>flatMap(existingTool -> {
+            .<LinqLlmModel>flatMap(existingLlmModel -> {
                 // Update existing linq llm model
-                existingTool.setEndpoint(linqLlmModel.getEndpoint());
-                existingTool.setMethod(linqLlmModel.getMethod());
-                existingTool.setHeaders(linqLlmModel.getHeaders());
-                existingTool.setAuthType(linqLlmModel.getAuthType());
-                existingTool.setApiKey(linqLlmModel.getApiKey());
-                existingTool.setSupportedIntents(linqLlmModel.getSupportedIntents());
+                existingLlmModel.setEndpoint(linqLlmModel.getEndpoint());
+                existingLlmModel.setMethod(linqLlmModel.getMethod());
+                existingLlmModel.setHeaders(linqLlmModel.getHeaders());
+                existingLlmModel.setAuthType(linqLlmModel.getAuthType());
+                existingLlmModel.setApiKey(linqLlmModel.getApiKey());
+                existingLlmModel.setSupportedIntents(linqLlmModel.getSupportedIntents());
                 
-                log.info("Updating existing LinqLlmModel with ID: {}", existingTool.getId());
-                return linqLlmModelRepository.save(existingTool)
+                log.info("Updating existing LinqLlmModel with ID: {}", existingLlmModel.getId());
+                return linqLlmModelRepository.save(existingLlmModel)
                     .doOnSuccess(saved -> log.info("Updated LinqLlmModel with ID: {}", saved.getId()))
                     .doOnError(error -> log.error("Failed to update LinqLlmModel: {}", error.getMessage()));
             })

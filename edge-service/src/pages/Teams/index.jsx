@@ -494,7 +494,7 @@ function Teams() {
                               disabled={team.status === 'INACTIVE'}
                             >
                               <SiOpenai className="me-1" size={16} /> 
-                              {team.linqTools?.some(tool => tool.target === 'openai') ? 'View Configuration' : 'Configure'}
+                              {team.linqLlmModels?.some(model => model.target === 'openai') ? 'View Configuration' : 'Configure'}
                             </button>
                           </td>
                           <td>
@@ -507,7 +507,7 @@ function Teams() {
                               disabled={team.status === 'INACTIVE'}
                             >
                               <SiGoogle className="me-1" size={14} /> 
-                              {team.linqTools?.some(tool => tool.target === 'gemini') ? 'View Configuration' : 'Configure'}
+                              {team.linqLlmModels?.some(model => model.target === 'gemini') ? 'View Configuration' : 'Configure'}
                             </button>
                           </td>
                           <td>

@@ -36,7 +36,7 @@ public class TeamServiceImpl implements TeamService {
     private final OrganizationRepository organizationRepository;
     private final UserRepository userRepository;
     private final TransactionalOperator transactionalOperator;
-    private final LinqToolRepository linqToolRepository;
+    private final LinqLlmModelRepository linqLlmModelRepository;
 
     private OrganizationDTO convertToOrganizationDTO(Organization org) {
         return OrganizationDTO.builder()
@@ -124,22 +124,23 @@ public class TeamServiceImpl implements TeamService {
                 .createdAt(apiKey.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime())
                 .build());
 
-        Mono<List<LinqToolDTO>> linqToolsMono = linqToolRepository
+        Mono<List<LinqLlmModelDTO>> linqLlmModelsMono = linqLlmModelRepository
             .findByTeamId(team.getId())
-            .map(tool -> LinqToolDTO.builder()
-                .id(tool.getId())
-                .target(tool.getTarget())
-                .endpoint(tool.getEndpoint())
-                .method(tool.getMethod())
-                .headers(tool.getHeaders())
-                .authType(tool.getAuthType())
-                .apiKey(tool.getApiKey())
-                .supportedIntents(tool.getSupportedIntents())
-                .team(tool.getTeamId())
+            .map(llmModel -> LinqLlmModelDTO.builder()
+                .id(llmModel.getId())
+                .target(llmModel.getTarget())
+                .modelType(llmModel.getModelType())
+                .endpoint(llmModel.getEndpoint())
+                .method(llmModel.getMethod())
+                .headers(llmModel.getHeaders())
+                .authType(llmModel.getAuthType())
+                .apiKey(llmModel.getApiKey())
+                .supportedIntents(llmModel.getSupportedIntents())
+                .team(llmModel.getTeamId())
                 .build())
             .collectList();
 
-        return Mono.zip(membersListMono, routesListMono, orgMono, linqToolsMono)
+        return Mono.zip(membersListMono, routesListMono, orgMono, linqLlmModelsMono)
             .flatMap(tuple -> {
                 TeamDTO.TeamDTOBuilder builder = TeamDTO.builder()
                     .id(team.getId())
@@ -153,7 +154,7 @@ public class TeamServiceImpl implements TeamService {
                     .members(tuple.getT1())
                     .routes(tuple.getT2())
                     .organization(tuple.getT3())
-                    .linqTools(tuple.getT4());
+                    .linqLlmModels(tuple.getT4());
 
                 return apiKeyMono
                     .map(apiKey -> builder.apiKey(apiKey).build())

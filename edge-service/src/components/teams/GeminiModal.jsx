@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Form, Alert, Spinner } from 'react-bootstrap';
 import { HiKey } from 'react-icons/hi';
 import { SiGoogle } from 'react-icons/si';
-import { linqToolService } from '../../services/linqToolService';
+import { linqLlmModelService } from '../../services/linqLlmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import Button from '../../components/common/Button';
 
@@ -13,12 +13,12 @@ const GeminiModal = ({ show, onHide, team }) => {
   const [supportedIntents, setSupportedIntents] = useState(['generate', 'summarize', 'translate']);
 
   useEffect(() => {
-    if (team && team.linqTools) {
-      const geminiTool = team.linqTools.find(tool => tool.target === 'gemini');
-      if (geminiTool) {
-        setApiKey(geminiTool.apiKey || '');
-        setEndpoint(geminiTool.endpoint || '');
-        setSupportedIntents(geminiTool.supportedIntents || []);
+    if (team && team.linqLlmModels) {
+      const geminiLlmModel = team.linqLlmModels.find(model => model.target === 'gemini');
+      if (geminiLlmModel) {
+        setApiKey(geminiLlmModel.apiKey || '');
+        setEndpoint(geminiLlmModel.endpoint || '');
+        setSupportedIntents(geminiLlmModel.supportedIntents || []);
       }
     }
   }, [team]);
@@ -57,7 +57,7 @@ const GeminiModal = ({ show, onHide, team }) => {
         supportedIntents: supportedIntents,
         team: team.id
       };
-      await linqToolService.saveConfiguration(config);
+      await linqLlmModelService.saveConfiguration(config);
       showSuccessToast('Configuration saved successfully');
       onHide();
     } catch (error) {
@@ -156,7 +156,7 @@ const GeminiModal = ({ show, onHide, team }) => {
               className="btn-save"
               loading={loading}
             >
-              {team?.linqTools?.some(tool => tool.target === 'gemini') ? (
+              {team?.linqLlmModels?.some(model => model.target === 'gemini') ? (
                 'Save Configuration'
               ) : (
                 'Create Gemini Configuration'

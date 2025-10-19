@@ -22,7 +22,7 @@ const exampleTemplate = {
                     "intent": "/api/people/random",
                     "params": {},
                     "payload": null,
-                    "toolConfig": null,
+                    "llmConfig": null,
                     "cacheConfig": {
                         "enabled": false,
                         "ttl": "86400",  // 24 hours in seconds
@@ -43,7 +43,7 @@ const exampleTemplate = {
                             "content": "Output only a single inspirational saying by {{step1.result.fullName}}. Do not include any other text, explanation, or formatting. Do not use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.9,

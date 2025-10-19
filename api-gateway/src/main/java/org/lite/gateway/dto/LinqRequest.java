@@ -3,7 +3,7 @@ package org.lite.gateway.dto;
 import lombok.Data;
 import org.lite.gateway.validation.annotations.Required;
 import org.lite.gateway.validation.annotations.ValidStep;
-import org.lite.gateway.validation.annotations.ValidToolConfig;
+import org.lite.gateway.validation.annotations.ValidLlmConfig;
 import org.lite.gateway.validation.annotations.ValidAction;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -40,14 +40,14 @@ public class LinqRequest {
         @JsonInclude(JsonInclude.Include.ALWAYS)
         private Map<String, Object> params = new HashMap<>();
         private Object payload; // Request body for POST/PUT/PATCH
-        private ToolConfig toolConfig; // For AI tools
+        private LlmConfig llmConfig; // For AI tools
         
         @ValidStep
         private List<WorkflowStep> workflow; // For chained steps
 
         @Data
-        public static class ToolConfig {
-            @Required(message = "Model is required when toolConfig is present")
+        public static class LlmConfig {
+            @Required(message = "Model is required when llmConfig is present")
             private String model; // e.g., "gpt-4o", "gemini-1.5-pro"
             private Map<String, Object> settings; // e.g., {"temperature": 0.7, "max_tokens": 1000}
         }
@@ -69,8 +69,8 @@ public class LinqRequest {
             private Map<String, Object> params; // e.g., {"prompt": "{{step1.result.name}}"}
             private Object payload; // Request body, e.g., [{"role": "user", "content": "..."}]
             
-            @ValidToolConfig
-            private ToolConfig toolConfig; // For AI tools
+            @ValidLlmConfig
+            private LlmConfig llmConfig; // For AI tools
 
             private Boolean async; // Whether this step should be executed asynchronously
 
@@ -98,16 +98,16 @@ public class LinqRequest {
             }
 
             //Do not delete this, it's being used internally by the json
-            public void setToolConfig(ToolConfig toolConfig) {
-                if (toolConfig != null && toolConfig.getSettings() != null) {
-                    Map<String, Object> settings = new HashMap<>(toolConfig.getSettings());
+            public void setLlmConfig(LlmConfig llmConfig) {
+                if (llmConfig != null && llmConfig.getSettings() != null) {
+                    Map<String, Object> settings = new HashMap<>(llmConfig.getSettings());
                     if (settings.containsKey("max.tokens")) {
                         Object value = settings.remove("max.tokens");
                         settings.put("max_tokens", value);
                     }
-                    toolConfig.setSettings(settings);
+                    llmConfig.setSettings(settings);
                 }
-                this.toolConfig = toolConfig;
+                this.llmConfig = llmConfig;
             }
         }
     }

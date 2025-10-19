@@ -21,11 +21,12 @@ public class LlmModel {
     private String id;
     
     @Indexed(unique = true)
-    private String modelName;              // e.g., "gpt-4o", "gemini-2.0-flash"
+    private String modelName;              // e.g., "gembedding-001", "text-embedding-3-small", "claude-3-sonnet", "gpt-4-turbo"
     
-    private String displayName;            // e.g., "GPT-4 Optimized"
+    private String displayName;            // e.g., "GPT-4 Optimized", "Text Embedding 3 Large", "Claude 3 Sonnet", "GPT-4 Turbo"
     private String provider;               // e.g., "openai", "gemini"
     private String category;               // e.g., "chat", "embedding", "vision"
+    private String endpoint;               // e.g., "https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent"
     
     private double inputPricePer1M;       // Input/prompt price per 1M tokens in USD
     private double outputPricePer1M;      // Output/completion price per 1M tokens in USD

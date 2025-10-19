@@ -312,12 +312,12 @@ public class AgentTask {
     }
     
     @JsonProperty(access = JsonProperty.Access.READ_ONLY)
-    public Map<String, Object> getLinqToolConfig() {
+    public Map<String, Object> getLinqLlmConfig() {
         if (linqConfig != null) {
-            // Extract from query.toolConfig
+            // Extract from query.llmConfig
             Map<String, Object> query = (Map<String, Object>) linqConfig.get("query");
             if (query != null) {
-                return (Map<String, Object>) query.get("toolConfig");
+                return (Map<String, Object>) query.get("llmConfig");
             }
         }
         return null;
@@ -347,9 +347,9 @@ public class AgentTask {
             query.put("payload", payload);
         }
         
-        Map<String, Object> toolConfig = getLinqToolConfig();
-        if (toolConfig != null) {
-            query.put("toolConfig", toolConfig);
+        Map<String, Object> llmConfig = getLinqLlmConfig();
+        if (llmConfig != null) {
+            query.put("llmConfig", llmConfig);
         }
         
         linqRequest.put("query", query);

@@ -40,7 +40,7 @@ const WorkflowCreate = () => {
                                      "Do not use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.9,
@@ -82,7 +82,7 @@ const WorkflowCreate = () => {
                                 "Do not include any other text, explanation, or formatting. " +
                                 "Do not use quotation marks. Only the saying."
                     },
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gemini-2.0-flash",
                         "settings": {
                             "temperature": 0.9,
@@ -120,7 +120,7 @@ const WorkflowCreate = () => {
                     "intent": "/api/people/random",
                     "params": {},
                     "payload": null,
-                    "toolConfig": null
+                    "llmConfig": null
                 },
                 {
                     "step": 2,
@@ -140,7 +140,7 @@ const WorkflowCreate = () => {
                                      "Do not use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.9,
@@ -329,7 +329,7 @@ const WorkflowCreate = () => {
                     "intent": "/api/people/random",
                     "params": {},
                     "payload": null,
-                    "toolConfig": null
+                    "llmConfig": null
                 },
                 {
                     "step": 2,
@@ -342,7 +342,7 @@ const WorkflowCreate = () => {
                                 "Do not use quotation marks. Only the saying."
                     },
                     "payload": null,
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gemini-2.0-flash",
                         "settings": {
                             "temperature": 0.9,

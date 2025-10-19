@@ -8,11 +8,11 @@ import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.RoutePermission;
 import org.lite.gateway.repository.ApiRouteRepository;
-import org.lite.gateway.repository.LinqToolRepository;
+import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.repository.TeamRouteRepository;
 import org.lite.gateway.service.LinqService;
 import org.lite.gateway.service.TeamContextService;
-import org.lite.gateway.service.LinqToolService;
+import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.LinqWorkflowService;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
@@ -41,13 +41,13 @@ public class LinqServiceImpl implements LinqService {
     private final TeamRouteRepository teamRouteRepository;
 
     @NonNull
-    private final LinqToolRepository linqToolRepository;
+    private final LinqLlmModelRepository linqLlmModelRepository;
 
     @NonNull
     private final TeamContextService teamContextService;
 
     @NonNull
-    private final LinqToolService linqToolService;
+    private final LinqLlmModelService linqLlmModelService;
 
     @NonNull
     private final LinqMicroService linqMicroService;
@@ -92,21 +92,24 @@ public class LinqServiceImpl implements LinqService {
                     return teamContextService.getTeamFromContext()
                             .doOnNext(team -> log.info("Got team from context: {}", team))
                             .flatMap(team -> {
-                                log.info("Searching for tool with target: {} and team: {}", request.getLink().getTarget(), team);
-                                return linqToolRepository.findByTargetAndTeamId(request.getLink().getTarget(), team)
-                                        .doOnNext(tool -> log.info("Found tool: {}", tool))
-                                        .doOnError(error -> log.error("Error finding tool: {}", error.getMessage()))
-                                        .doOnSuccess(tool -> {
-                                            if (tool == null) {
-                                                log.info("No tool found for target: {}", request.getLink().getTarget());
+                                log.info("🔍 Searching for LLM model configuration: target={}, teamId={}", request.getLink().getTarget(), team);
+                                return linqLlmModelRepository.findByTargetAndTeamId(request.getLink().getTarget(), team)
+                                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
+                                            llmModel.getTarget(), llmModel.getModelType()))
+                                        .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", 
+                                            request.getLink().getTarget(), error.getMessage()))
+                                        .doOnSuccess(llmModel -> {
+                                            if (llmModel == null) {
+                                                log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", 
+                                                    request.getLink().getTarget());
                                             }
                                         });
                             })
-                            .doOnNext(tool -> log.info("About to execute tool request"))
-                            .flatMap(tool -> linqToolService.executeToolRequest(request, tool))
-                            .doOnNext(response -> log.info("Tool request executed successfully"))
+                            .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for target: {}", request.getLink().getTarget()))
+                            .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(request, llmModel))
+                            .doOnNext(response -> log.info("✅ LLM request executed successfully"))
                             .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                                log.info("No tool found, executing microservice request");
+                                log.info("📡 No LLM model found, executing microservice request for target: {}", request.getLink().getTarget());
                                 return linqMicroService.execute(request);
                             }));
                 }));

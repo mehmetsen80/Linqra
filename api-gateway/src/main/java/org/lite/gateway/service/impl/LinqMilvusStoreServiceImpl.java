@@ -390,12 +390,16 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
                     } else if ("gemini-embed".equals(targetTool)) {
-                        List<Map<String, Object>> data = (List<Map<String, Object>>) result.get("data");
-                        if (data == null || data.isEmpty()) {
-                            throw new IllegalStateException("No data received from Gemini embedding service");
+                        // Gemini embedding response format: {embedding: {values: [...]}}
+                        Map<String, Object> embedding = (Map<String, Object>) result.get("embedding");
+                        if (embedding == null) {
+                            throw new IllegalStateException("No embedding data received from Gemini embedding service");
                         }
-                        List<Object> rawEmbedding = (List<Object>) data.getFirst().get("embedding");
-                        return rawEmbedding.stream()
+                        List<Object> values = (List<Object>) embedding.get("values");
+                        if (values == null || values.isEmpty()) {
+                            throw new IllegalStateException("No embedding values received from Gemini embedding service");
+                        }
+                        return values.stream()
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
                     }

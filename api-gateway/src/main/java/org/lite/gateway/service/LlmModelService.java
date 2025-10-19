@@ -44,5 +44,11 @@ public interface LlmModelService {
      * Initialize default models if database is empty
      */
     Mono<Void> initializeDefaultModels();
+    
+    /**
+     * Clean up all duplicate models (keep first, delete rest)
+     * Returns a flux of model names that were cleaned up
+     */
+    Flux<String> cleanupAllDuplicates();
 }
 

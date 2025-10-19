@@ -41,7 +41,7 @@ public class LinqController {
         if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
             log.info("Workflow steps: {}", request.getQuery().getWorkflow());
             if (request.getQuery().getWorkflow().size() > 1) {
-                log.info("Step 2 toolConfig: {}", request.getQuery().getWorkflow().get(1).getToolConfig());
+                log.info("Step 2 llmConfig: {}", request.getQuery().getWorkflow().get(1).getLlmConfig());
             }
         }
         return linqService.processLinqRequest(request);

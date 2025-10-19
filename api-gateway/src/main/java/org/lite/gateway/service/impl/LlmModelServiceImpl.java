@@ -159,81 +159,107 @@ public class LlmModelServiceImpl implements LlmModelService {
         
         // OpenAI GPT-4 Models
         models.add(createModel("gpt-4o", "GPT-4 Optimized", "openai", "chat", 
-            2.50, 10.00, true, "Latest GPT-4 optimized model with improved performance", now));
+            2.50, 10.00, true, "Latest GPT-4 optimized model with improved performance", 
+            "https://api.openai.com/v1/chat/completions", now));
         models.add(createModel("gpt-4o-mini", "GPT-4 Optimized Mini", "openai", "chat", 
-            0.150, 0.600, true, "Smaller, faster version of GPT-4 optimized", now));
+            0.150, 0.600, true, "Smaller, faster version of GPT-4 optimized", 
+            "https://api.openai.com/v1/chat/completions", now));
         models.add(createModel("gpt-4-turbo", "GPT-4 Turbo", "openai", "chat", 
-            10.00, 30.00, true, "Fast GPT-4 model with extended context", now));
+            10.00, 30.00, true, "Fast GPT-4 model with extended context", 
+            "https://api.openai.com/v1/chat/completions", now));
         models.add(createModel("gpt-4", "GPT-4", "openai", "chat", 
-            30.00, 60.00, true, "Original GPT-4 model", now));
+            30.00, 60.00, true, "Original GPT-4 model", 
+            "https://api.openai.com/v1/chat/completions", now));
         models.add(createModel("gpt-3.5-turbo", "GPT-3.5 Turbo", "openai", "chat", 
-            0.50, 1.50, true, "Fast and cost-effective model", now));
+            0.50, 1.50, true, "Fast and cost-effective model", 
+            "https://api.openai.com/v1/chat/completions", now));
         
         // OpenAI Embeddings
         models.add(createModel("text-embedding-3-small", "Text Embedding 3 Small", "openai", "embedding", 
-            0.020, 0.0, true, "Small embedding model for semantic search", now));
+            0.020, 0.0, true, "Small embedding model for semantic search", 
+            "https://api.openai.com/v1/embeddings", now));
         models.add(createModel("text-embedding-3-large", "Text Embedding 3 Large", "openai", "embedding", 
-            0.130, 0.0, true, "Large embedding model with higher accuracy", now));
+            0.130, 0.0, true, "Large embedding model with higher accuracy", 
+            "https://api.openai.com/v1/embeddings", now));
         models.add(createModel("text-embedding-ada-002", "Text Embedding Ada", "openai", "embedding", 
-            0.100, 0.0, true, "Ada embedding model for semantic search", now));
+            0.100, 0.0, true, "Ada embedding model for semantic search", 
+            "https://api.openai.com/v1/embeddings", now));
         
         // Google Gemini Models
         models.add(createModel("gemini-2.0-flash", "Gemini 2.0 Flash", "gemini", "chat", 
-            0.075, 0.30, true, "Fast and efficient Gemini model", now));
+            0.075, 0.30, true, "Fast and efficient Gemini model", 
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", now));
         models.add(createModel("gemini-1.5-pro", "Gemini 1.5 Pro", "gemini", "chat", 
-            1.25, 5.00, true, "Professional Gemini model with advanced capabilities", now));
+            1.25, 5.00, true, "Professional Gemini model with advanced capabilities", 
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent", now));
         models.add(createModel("gemini-1.5-flash", "Gemini 1.5 Flash", "gemini", "chat", 
-            0.075, 0.30, true, "Fast Gemini model for quick responses", now));
+            0.075, 0.30, true, "Fast Gemini model for quick responses", 
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent", now));
         
         // Google Gemini Embeddings (text-embedding-004 is being deprecated Jan 2026)
         models.add(createModel("text-embedding-004", "Gemini Text Embedding 004 (Legacy)", "gemini", "embedding", 
-            0.00001, 0.0, false, "Legacy Gemini embedding model - deprecated Jan 14, 2026 (768 dimensions)", now));
+            0.00001, 0.0, false, "Legacy Gemini embedding model - deprecated Jan 14, 2026 (768 dimensions)", 
+            "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent", now));
         models.add(createModel("embedding-001", "Gemini Embedding 001", "gemini", "embedding", 
-            0.00001, 0.0, false, "Legacy Gemini embedding model - deprecated Jan 14, 2026 (768 dimensions)", now));
+            0.00001, 0.0, false, "Legacy Gemini embedding model - deprecated Jan 14, 2026 (768 dimensions)", 
+            "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent", now));
         
         // New Gemini Embedding Model (current)
         models.add(createModel("gemini-embedding-001", "Gemini Embedding 001 (Current)", "gemini", "embedding", 
-            0.15, 0.0, true, "Current Gemini embedding model with enhanced performance (768 dimensions)", now));
+            0.15, 0.0, true, "Current Gemini embedding model with enhanced performance (768 dimensions)", 
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent", now));
         
         // Anthropic Claude Models
         models.add(createModel("claude-3-opus", "Claude 3 Opus", "anthropic", "chat", 
-            15.00, 75.00, true, "Most powerful Claude model", now));
+            15.00, 75.00, true, "Most powerful Claude model", 
+            "https://api.anthropic.com/v1/messages", now));
         models.add(createModel("claude-3-sonnet", "Claude 3 Sonnet", "anthropic", "chat", 
-            3.00, 15.00, true, "Balanced Claude model", now));
+            3.00, 15.00, true, "Balanced Claude model", 
+            "https://api.anthropic.com/v1/messages", now));
         models.add(createModel("claude-3-haiku", "Claude 3 Haiku", "anthropic", "chat", 
-            0.25, 1.25, true, "Fast and efficient Claude model", now));
+            0.25, 1.25, true, "Fast and efficient Claude model", 
+            "https://api.anthropic.com/v1/messages", now));
         
         // Cohere Command Models (Chat/Completion)
         models.add(createModel("command-r-plus", "Command R+", "cohere", "chat", 
-            3.00, 15.00, true, "Most capable Cohere model for complex tasks", now));
+            3.00, 15.00, true, "Most capable Cohere model for complex tasks", 
+            "https://api.cohere.ai/v1/chat", now));
         models.add(createModel("command-r", "Command R", "cohere", "chat", 
-            0.50, 1.50, true, "Balanced Cohere model for general use", now));
+            0.50, 1.50, true, "Balanced Cohere model for general use", 
+            "https://api.cohere.ai/v1/chat", now));
         models.add(createModel("command", "Command", "cohere", "chat", 
-            1.00, 2.00, true, "Standard Cohere command model", now));
+            1.00, 2.00, true, "Standard Cohere command model", 
+            "https://api.cohere.ai/v1/chat", now));
         models.add(createModel("command-light", "Command Light", "cohere", "chat", 
-            0.30, 0.60, true, "Lightweight Cohere model for simple tasks", now));
+            0.30, 0.60, true, "Lightweight Cohere model for simple tasks", 
+            "https://api.cohere.ai/v1/chat", now));
         
         // Cohere Embedding Models
         models.add(createModel("embed-english-v3.0", "Embed English v3", "cohere", "embedding", 
-            0.100, 0.0, true, "English-only embedding model (1024 dimensions)", now));
+            0.100, 0.0, true, "English-only embedding model (1024 dimensions)", 
+            "https://api.cohere.ai/v1/embed", now));
         models.add(createModel("embed-multilingual-v3.0", "Embed Multilingual v3", "cohere", "embedding", 
-            0.100, 0.0, true, "Multilingual embedding model (1024 dimensions)", now));
+            0.100, 0.0, true, "Multilingual embedding model (1024 dimensions)", 
+            "https://api.cohere.ai/v1/embed", now));
         models.add(createModel("embed-english-light-v3.0", "Embed English Light v3", "cohere", "embedding", 
-            0.100, 0.0, true, "Lightweight English embedding model (384 dimensions)", now));
+            0.100, 0.0, true, "Lightweight English embedding model (384 dimensions)", 
+            "https://api.cohere.ai/v1/embed", now));
         models.add(createModel("embed-multilingual-light-v3.0", "Embed Multilingual Light v3", "cohere", "embedding", 
-            0.100, 0.0, true, "Lightweight multilingual embedding model (384 dimensions)", now));
+            0.100, 0.0, true, "Lightweight multilingual embedding model (384 dimensions)", 
+            "https://api.cohere.ai/v1/embed", now));
         
         return models;
     }
     
     private LlmModel createModel(String modelName, String displayName, String provider, String category,
                                    double inputPrice, double outputPrice, boolean active, 
-                                   String description, LocalDateTime now) {
+                                   String description, String endpoint, LocalDateTime now) {
         LlmModel model = new LlmModel();
         model.setModelName(modelName);
         model.setDisplayName(displayName);
         model.setProvider(provider);
         model.setCategory(category);
+        model.setEndpoint(endpoint);
         model.setInputPricePer1M(inputPrice);
         model.setOutputPricePer1M(outputPrice);
         model.setActive(active);

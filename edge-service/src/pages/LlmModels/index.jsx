@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Table, Button, Modal, Form, Alert, Spinner, Badge, Breadcrumb } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Button, Modal, Form, Alert, Spinner, Badge, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import llmModelService from '../../services/llmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
@@ -18,6 +18,7 @@ const LlmModels = () => {
     displayName: '',
     provider: 'openai',
     category: 'chat',
+    endpoint: '',
     inputPricePer1M: 0,
     outputPricePer1M: 0,
     active: true,
@@ -51,6 +52,7 @@ const LlmModels = () => {
         displayName: model.displayName || '',
         provider: model.provider,
         category: model.category || 'chat',
+        endpoint: model.endpoint || '',
         inputPricePer1M: model.inputPricePer1M,
         outputPricePer1M: model.outputPricePer1M,
         active: model.active,
@@ -63,6 +65,7 @@ const LlmModels = () => {
         displayName: '',
         provider: 'openai',
         category: 'chat',
+        endpoint: '',
         inputPricePer1M: 0,
         outputPricePer1M: 0,
         active: true,
@@ -214,6 +217,7 @@ const LlmModels = () => {
                     <th>Display Name</th>
                     <th>Provider</th>
                     <th>Category</th>
+                    <th>Endpoint</th>
                     <th className="text-end">Input Price/1M</th>
                     <th className="text-end">Output Price/1M</th>
                     <th className="text-center">Status</th>
@@ -224,20 +228,63 @@ const LlmModels = () => {
                   {models.map((model) => (
                     <tr key={model.id}>
                       <td>
-                        <code className="model-name-code">{model.modelName}</code>
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={
+                            <Tooltip>
+                              {model.endpoint || 'No endpoint configured'}
+                            </Tooltip>
+                          }
+                        >
+                          <code className="model-name-code" style={{ cursor: 'help' }}>
+                            {model.modelName}
+                          </code>
+                        </OverlayTrigger>
                       </td>
-                      <td>{model.displayName || '-'}</td>
+                      <td>
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={
+                            <Tooltip>
+                              {model.endpoint || 'No endpoint configured'}
+                            </Tooltip>
+                          }
+                        >
+                          <span style={{ cursor: 'help' }}>
+                            {model.displayName || '-'}
+                          </span>
+                        </OverlayTrigger>
+                      </td>
                       <td>
                         <Badge bg={
                           model.provider === 'openai' ? 'primary' :
                           model.provider === 'gemini' ? 'warning' :
-                          model.provider === 'anthropic' ? 'info' : 'secondary'
+                          model.provider === 'anthropic' ? 'info' :
+                          model.provider === 'cohere' ? 'success' : 'secondary'
                         }>
                           {model.provider}
                         </Badge>
                       </td>
                       <td>
                         <span className="category-badge">{model.category || 'chat'}</span>
+                      </td>
+                      <td className="endpoint-cell">
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={
+                            <Tooltip>
+                              {model.endpoint || 'No endpoint configured'}
+                            </Tooltip>
+                          }
+                        >
+                          <small className="text-muted endpoint-text" style={{ cursor: 'help' }}>
+                            {model.endpoint ? (
+                              model.endpoint.length > 10 ? 
+                                `${model.endpoint.slice(0,15)}` : 
+                                model.endpoint
+                            ) : '-'}
+                          </small>
+                        </OverlayTrigger>
                       </td>
                       <td className="text-end price-cell">{formatCurrency(model.inputPricePer1M)}</td>
                       <td className="text-end price-cell">{formatCurrency(model.outputPricePer1M)}</td>
@@ -331,6 +378,7 @@ const LlmModels = () => {
                     <option value="openai">OpenAI</option>
                     <option value="gemini">Google Gemini</option>
                     <option value="anthropic">Anthropic</option>
+                    <option value="cohere">Cohere</option>
                     <option value="other">Other</option>
                   </Form.Select>
                 </Form.Group>
@@ -353,6 +401,20 @@ const LlmModels = () => {
                 </Form.Group>
               </Col>
             </Row>
+
+            <Form.Group className="mb-3">
+              <Form.Label>API Endpoint</Form.Label>
+              <Form.Control
+                type="text"
+                name="endpoint"
+                value={formData.endpoint}
+                onChange={handleInputChange}
+                placeholder="e.g., https://api.openai.com/v1/chat/completions"
+              />
+              <Form.Text className="text-muted">
+                API endpoint URL for this model. Use {'{model}'} as placeholder if needed.
+              </Form.Text>
+            </Form.Group>
 
             <Row>
               <Col md={6}>

@@ -78,7 +78,7 @@ public class MilvusController {
                 return linqMilvusStoreService.storeRecord(
                                 collectionName,
                                 request.getRecord(),
-                                request.getTargetTool(),
+                                request.getTarget(),
                                 request.getModelType(),
                                 request.getTextField(),
                                 request.getTeamId()
@@ -105,8 +105,8 @@ public class MilvusController {
             String collectionName, 
             MilvusStoreRecordRequest request) {
         Mono<Map<String, String>> storeMono = userService.findByUsername(username)
-            .doOnNext(user -> log.info("Milvus storeRecord requested by user: {} (id={}), teamId={}, collection={}, textField={}, targetTool={}, modelType={}",
-                    user.getUsername(), user.getId(), request.getTeamId(), collectionName, request.getTextField(), request.getTargetTool(), request.getModelType()))
+            .doOnNext(user -> log.info("Milvus storeRecord requested by user: {} (id={}), teamId={}, collection={}, textField={}, target={}, modelType={}",
+                    user.getUsername(), user.getId(), request.getTeamId(), collectionName, request.getTextField(), request.getTarget(), request.getModelType()))
             .doOnNext(u -> log.info("Milvus storeRecord payload: {}", request.getRecord()))
             .flatMap(user -> 
                 teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
@@ -118,7 +118,7 @@ public class MilvusController {
                         return linqMilvusStoreService.storeRecord(
                                 collectionName,
                                 request.getRecord(),
-                                request.getTargetTool(),
+                                request.getTarget(),
                                 request.getModelType(),
                                 request.getTextField(),
                                 request.getTeamId()
@@ -135,7 +135,7 @@ public class MilvusController {
                             return linqMilvusStoreService.storeRecord(
                                     collectionName,
                                     request.getRecord(),
-                                    request.getTargetTool(),
+                                    request.getTarget(),
                                     request.getModelType(),
                                     request.getTextField(),
                                     request.getTeamId()
@@ -239,7 +239,7 @@ public class MilvusController {
                         request.getTextField(), 
                         request.getText(), 
                         request.getTeamId(),
-                        request.getTargetTool() != null ? request.getTargetTool() : "openai-embed",
+                        request.getTarget() != null ? request.getTarget() : "openai-embed",
                         request.getModelType() != null ? request.getModelType() : "text-embedding-3-small"
                     ))
             )
@@ -283,7 +283,7 @@ public class MilvusController {
                         request.getTextField(), 
                         request.getText(), 
                         request.getTeamId(),
-                        request.getTargetTool() != null ? request.getTargetTool() : "openai-embed",
+                        request.getTarget() != null ? request.getTarget() : "openai-embed",
                         request.getModelType() != null ? request.getModelType() : "text-embedding-3-small",
                         request.getNResults() != null ? request.getNResults() : 10,
                         request.getMetadataFilters()
@@ -299,7 +299,7 @@ public class MilvusController {
                                 request.getTextField(),
                                 request.getText(),
                                 request.getTeamId(),
-                                request.getTargetTool() != null ? request.getTargetTool() : "openai-embed",
+                                request.getTarget() != null ? request.getTarget() : "openai-embed",
                                 request.getModelType() != null ? request.getModelType() : "text-embedding-3-small",
                                 request.getNResults() != null ? request.getNResults() : 10,
                                 request.getMetadataFilters()

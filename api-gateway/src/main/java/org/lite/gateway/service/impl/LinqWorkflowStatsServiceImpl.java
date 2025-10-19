@@ -115,7 +115,7 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                 String model = execution.getRequest().getQuery().getWorkflow().stream()
                                     .filter(step -> step.getStep() == stepMetadata.getStep())
                                     .findFirst()
-                                    .map(step -> step.getToolConfig().getModel())
+                                    .map(step -> step.getLlmConfig().getModel())
                                     .orElse("unknown");
                                 
                                 LinqWorkflowStats.ModelStats modelStats = stats.getModelStats().computeIfAbsent(model, k -> new LinqWorkflowStats.ModelStats());
@@ -299,7 +299,7 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                                 model = execution.getRequest().getQuery().getWorkflow().stream()
                                                     .filter(step -> step != null && step.getStep() == stepMetadata.getStep())
                                                     .findFirst()
-                                                    .map(step -> step.getToolConfig() != null ? step.getToolConfig().getModel() : "unknown")
+                                                    .map(step -> step.getLlmConfig() != null ? step.getLlmConfig().getModel() : "unknown")
                                                     .orElse("unknown");
                                             }
                                             

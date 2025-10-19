@@ -152,7 +152,7 @@ Authorization: Bearer {Token}
                             "content": "Output only a single inspirational saying by {{step1.result.fullName}} about {{params.topic}}. Do not include any other text, explanation, or formatting. Do not use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.9,
@@ -199,7 +199,7 @@ The system automatically adds several fields when saving the workflow. Here's th
                     "intent": "/api/people/random",
                     "params": {},
                     "payload": null,
-                    "toolConfig": null,
+                    "llmConfig": null,
                     "async": null,
                     "cacheConfig": {
                         "enabled": true,
@@ -221,7 +221,7 @@ The system automatically adds several fields when saving the workflow. Here's th
                             "content": "Output only a single inspirational saying by {{step1.result.fullName}} about {{params.topic}}. Do not include any other text, explanation, or formatting. Do not use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.9,
@@ -519,7 +519,7 @@ Authorization: Bearer {Token}
                             "content": "Output only a single inspirational saying by {{step1.result.fullName}}. Do not include any other text, explanation, or formatting. Do not use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.9,
@@ -564,7 +564,7 @@ Authorization: Bearer {Token}
                     "intent": "/api/people/random",
                     "params": {},
                     "payload": null,
-                    "toolConfig": null,
+                    "llmConfig": null,
                     "async": null,
                     "cacheConfig": {
                         "enabled": false,
@@ -593,7 +593,7 @@ Authorization: Bearer {Token}
                         "textField": "description",
                         "teamId": "{{params.teamId}}"
                     },
-                    "toolConfig": null,
+                    "llmConfig": null,
                     "async": null,
                     "cacheConfig": null
                 },
@@ -611,7 +611,7 @@ Authorization: Bearer {Token}
                             "content": "Output only a single inspirational saying by {{step1.result.fullName}}. Do not include any other text, explanation, or formatting. Do not use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.9,
@@ -1042,7 +1042,7 @@ Authorization: Bearer {Token}
                             "content": "Random person: {{step1.result.fullName}}\nTopic: {{params.topic}}\nSearch results: {{step2.result.results}}\nTotal found: {{step2.result.total_results}}\n\nIf the search results contain relevant quotes from people other than {{step1.result.fullName}}, return the most relevant one. If no relevant quotes found from other people, generate a new inspirational quote by {{step1.result.fullName}} about {{params.topic}}. Return only the quote text, no explanations."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.8,
@@ -1065,7 +1065,7 @@ Authorization: Bearer {Token}
                             "content": "Detect the language of this quote: {{step3.result.choices[0].message.content}}"
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.1,
@@ -1133,7 +1133,7 @@ Authorization: Bearer {Token}
                     "intent": "/api/people/random",
                     "params": {},
                     "payload": null,
-                    "toolConfig": null,
+                    "llmConfig": null,
                     "async": null,
                     "cacheConfig": {
                         "enabled": false,
@@ -1154,7 +1154,7 @@ Authorization: Bearer {Token}
                         "targetTool": "openai-embed",
                         "modelType": "text-embedding-3-small"
                     },
-                    "toolConfig": null,
+                    "llmConfig": null,
                     "async": null,
                     "cacheConfig": null
                 },
@@ -1174,7 +1174,7 @@ Authorization: Bearer {Token}
                             "content": "Random person: {{step1.result.fullName}}\nTopic: {{params.topic}}\nSearch results: {{step2.result.results}}\nTotal found: {{step2.result.total_results}}\n\nIf the search results contain relevant quotes from people other than {{step1.result.fullName}}, return the most relevant one. If no relevant quotes found from other people, generate a new inspirational quote by {{step1.result.fullName}} about {{params.topic}}. Return only the quote text, no explanations."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.8,
@@ -1200,7 +1200,7 @@ Authorization: Bearer {Token}
                             "content": "Detect the language of this quote: {{step3.result.choices[0].message.content}}"
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.1,
@@ -1232,7 +1232,7 @@ Authorization: Bearer {Token}
                         "textField": "quotetext",
                         "teamId": "{{params.teamId}}"
                     },
-                    "toolConfig": null,
+                    "llmConfig": null,
                     "async": null,
                     "cacheConfig": null
                 }
@@ -1330,7 +1330,7 @@ Authorization: Bearer {Token}
                             "content": "Random person: {{step1.result.fullName}}\nTopic: {{params.topic}}\nSearch results: {{step2.result.results}}\nTotal found: {{step2.result.total_results}}\n\nIf the search results contain relevant quotes from people other than {{step1.result.fullName}}, return the most relevant one. If no relevant quotes found from other people, generate a new inspirational quote by {{step1.result.fullName}} about {{params.topic}}. Return only the quote text, no explanations."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.8,
@@ -1353,7 +1353,7 @@ Authorization: Bearer {Token}
                             "content": "Detect the language of this quote: {{step3.result.choices[0].message.content}}"
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.1,

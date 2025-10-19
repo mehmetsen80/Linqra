@@ -213,7 +213,7 @@ function ViewAgent() {
                                 intent: "/api/placeholder",
                                 params: {},
                                 payload: null,
-                                toolConfig: null,
+                                llmConfig: null,
                                 async: null,
                                 cacheConfig: null
                             }

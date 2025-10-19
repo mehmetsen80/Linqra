@@ -6,10 +6,10 @@ import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.dto.LinqResponse.QueuedWorkflowStep;
 import org.lite.gateway.service.QueuedWorkflowService;
-import org.lite.gateway.service.LinqToolService;
+import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.TeamContextService;
-import org.lite.gateway.repository.LinqToolRepository;
+import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
@@ -38,8 +38,8 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     private final ReactiveRedisTemplate<String, String> asyncStepQueueRedisTemplate;
     private final ReactiveRedisTemplate<String, QueuedWorkflowStep> asyncStepStatusRedisTemplate;
     private final ObjectMapper objectMapper;
-    private final LinqToolRepository linqToolRepository;
-    private final LinqToolService linqToolService;
+    private final LinqLlmModelRepository linqLlmModelRepository;
+    private final LinqLlmModelService linqLlmModelService;
     private final LinqMicroService linqMicroService;
     private final TeamContextService teamContextService;
     private final LinqWorkflowExecutionRepository executionRepository;
@@ -228,21 +228,23 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
         
         return Mono.just(teamId)
             .flatMap(id -> {
-                log.info("Searching for tool with target: {} and team: {}", step.getTarget(), id);
-                return linqToolRepository.findByTargetAndTeamId(step.getTarget(), id)
-                    .doOnNext(tool -> log.info("Found tool: {}", tool))
-                    .doOnError(error -> log.error("Error finding tool: {}", error.getMessage()))
-                    .doOnSuccess(tool -> {
-                        if (tool == null) {
-                            log.info("No tool found for target: {}", step.getTarget());
+                log.info("🔍 Searching for LLM model configuration for async step {}: target={}, teamId={}", step.getStep(), step.getTarget(), id);
+                return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), id)
+                    .doOnNext(llmModel -> log.info("✅ Found LLM model configuration for async step {}: target={}, modelType={}", 
+                        step.getStep(), llmModel.getTarget(), llmModel.getModelType()))
+                    .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", step.getTarget(), error.getMessage()))
+                    .doOnSuccess(llmModel -> {
+                        if (llmModel == null) {
+                            log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", step.getTarget());
                         }
                     });
             })
-            .doOnNext(tool -> log.info("About to execute tool request"))
-            .flatMap(tool -> linqToolService.executeToolRequest(stepRequest, tool))
-            .doOnNext(stepResponse -> log.info("Tool request executed successfully"))
+            .doOnNext(llmModel -> log.info("🚀 About to execute async LLM request for step {}", step.getStep()))
+            .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest, llmModel))
+            .doOnNext(stepResponse -> log.info("✅ Async LLM request executed successfully for step {}", step.getStep()))
             .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                log.info("No tool found, executing microservice request");
+                log.info("📡 No LLM model found for async step {}, executing microservice request for target: {}", 
+                    step.getStep(), step.getTarget());
                 return linqMicroService.execute(stepRequest);
             }));
     }

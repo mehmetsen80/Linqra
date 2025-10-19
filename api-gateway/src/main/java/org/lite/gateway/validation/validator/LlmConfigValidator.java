@@ -11,25 +11,25 @@ import java.util.Map;
 
 @Slf4j
 @Component
-public class ToolConfigValidator {
+public class LlmConfigValidator {
 
-    public ValidationResult validateToolConfig(LinqRequest.Query.ToolConfig toolConfig, int stepNumber) {
+    public ValidationResult validateLlmConfig(LinqRequest.Query.LlmConfig llmConfig, int stepNumber) {
         ValidationResult result = new ValidationResult();
         List<String> errors = new ArrayList<>();
 
-        if (toolConfig == null) {
-            errors.add("Tool configuration is required");
+        if (llmConfig == null) {
+            errors.add("LLM configuration is required");
             result.setValid(false);
             result.setErrors(errors);
             return result;
         }
 
-        if (toolConfig.getModel() == null || toolConfig.getModel().trim().isEmpty()) {
-            errors.add("Model is required in tool configuration");
+        if (llmConfig.getModel() == null || llmConfig.getModel().trim().isEmpty()) {
+            errors.add("Model is required in LLM configuration");
         }
 
-        if (toolConfig.getSettings() != null) {
-            Map<String, Object> settings = toolConfig.getSettings();
+        if (llmConfig.getSettings() != null) {
+            Map<String, Object> settings = llmConfig.getSettings();
             
             // Validate temperature if present
             if (settings.containsKey("temperature")) {

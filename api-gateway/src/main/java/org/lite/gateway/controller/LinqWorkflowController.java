@@ -301,8 +301,8 @@ public class LinqWorkflowController {
                 // Fix the max.tokens issue in the workflow steps
                 if (workflowSteps != null) {
                     workflowSteps.forEach(step -> {
-                        if (step.getToolConfig() != null && step.getToolConfig().getSettings() != null) {
-                            Map<String, Object> settings = step.getToolConfig().getSettings();
+                        if (step.getLlmConfig() != null && step.getLlmConfig().getSettings() != null) {
+                            Map<String, Object> settings = step.getLlmConfig().getSettings();
                             if (settings.containsKey("max.tokens")) {
                                 Object value = settings.remove("max.tokens");
                                 settings.put("max_tokens", value);

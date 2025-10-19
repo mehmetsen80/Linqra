@@ -206,8 +206,8 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                                             )
                             );
                 })
-                .doOnSuccess(executionId -> log.info("Workflow {} triggered successfully with execution ID: {} for agent: {}", workflowId, executionId, agentId))
-                .doOnError(error -> log.error("Failed to trigger workflow {} for agent {}: {}", workflowId, agentId, error.getMessage()));
+                .doOnSuccess(executionId -> log.info("✅ Workflow {} triggered and tracked with execution ID: {} for agent: {}", workflowId, executionId, agentId))
+                .doOnError(error -> log.error("❌ Failed to trigger workflow {} for agent {}: {}", workflowId, agentId, error.getMessage()));
     }
 
 }

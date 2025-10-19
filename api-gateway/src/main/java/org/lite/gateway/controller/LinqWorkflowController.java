@@ -322,8 +322,17 @@ public class LinqWorkflowController {
                                 .thenReturn(response));
                     });
             })
-            .doOnSuccess(r -> log.info("Workflow executed successfully: {}", workflowId))
-            .doOnError(error -> log.error("Error executing workflow: {}", error.getMessage()));
+            .doOnSuccess(response -> {
+                String status = response.getMetadata() != null ? response.getMetadata().getStatus() : "unknown";
+                if ("error".equals(status)) {
+                    log.error("❌ Workflow {} execution FAILED with status: {}", workflowId, status);
+                } else if ("success".equals(status)) {
+                    log.info("✅ Workflow {} executed successfully with status: {}", workflowId, status);
+                } else {
+                    log.warn("⚠️ Workflow {} executed with UNKNOWN status: {}", workflowId, status);
+                }
+            })
+            .doOnError(error -> log.error("💥 Error executing workflow {}: {}", workflowId, error.getMessage()));
     }
 
     @GetMapping("/{workflowId}/executions")

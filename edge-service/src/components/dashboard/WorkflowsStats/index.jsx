@@ -64,7 +64,11 @@ const WorkflowsStats = () => {
                 label: 'Executions per Hour',
                 data: Object.values(stats.hourlyExecutions || {}),
                 borderColor: 'rgb(75, 192, 192)',
-                tension: 0.1,
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 5,
+                pointHoverRadius: 7,
             },
         ],
     };
@@ -135,35 +139,44 @@ const WorkflowsStats = () => {
                 {/* Charts */}
                 <div className="workflow-stats-chart">
                     <h3>Execution Trends</h3>
-                    <Line 
-                        data={executionTrendsData}
-                        options={{
-                            responsive: true,
-                            plugins: {
-                                legend: {
-                                    position: 'top',
+                    {Object.keys(stats.hourlyExecutions || {}).length > 0 ? (
+                        <Line 
+                            data={executionTrendsData}
+                            options={{
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                plugins: {
+                                    legend: {
+                                        position: 'top',
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                return `Executions: ${context.raw}`;
+                                            },
+                                            title: function(context) {
+                                                return `Hour: ${context[0].label}`;
+                                            }
+                                        }
+                                    }
                                 },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            return `Executions: ${context.raw}`;
-                                        },
-                                        title: function(context) {
-                                            return `Hour: ${context[0].label}`;
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: {
+                                            precision: 0,
+                                            stepSize: 1
                                         }
                                     }
                                 }
-                            },
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    ticks: {
-                                        precision: 0
-                                    }
-                                }
-                            }
-                        }}
-                    />
+                            }}
+                        />
+                    ) : (
+                        <div className="text-center text-muted py-5">
+                            <i className="fas fa-chart-line fa-3x mb-3 opacity-25"></i>
+                            <p>No execution data available yet</p>
+                        </div>
+                    )}
                 </div>
 
                 <div className="workflow-stats-chart">

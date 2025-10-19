@@ -111,7 +111,7 @@ const WorkflowCreate = () => {
             "workflowId": null,
             "params": null,
             "payload": null,
-            "toolConfig": null,
+            "llmConfig": null,
             "workflow": [
                 {
                     "step": 1,
@@ -320,7 +320,7 @@ const WorkflowCreate = () => {
             "workflowId": null,
             "params": null,
             "payload": null,
-            "toolConfig": null,
+            "llmConfig": null,
             "workflow": [
                 {
                     "step": 1,

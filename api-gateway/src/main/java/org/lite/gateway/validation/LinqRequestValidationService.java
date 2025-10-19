@@ -5,10 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.validation.annotations.Required;
 import org.lite.gateway.validation.annotations.ValidStep;
-import org.lite.gateway.validation.annotations.ValidToolConfig;
+import org.lite.gateway.validation.annotations.ValidLlmConfig;
 import org.lite.gateway.validation.annotations.ValidAction;
 import org.lite.gateway.validation.validator.StepValidator;
-import org.lite.gateway.validation.validator.ToolConfigValidator;
+import org.lite.gateway.validation.validator.LlmConfigValidator;
 import org.lite.gateway.validation.validator.ActionValidator;
 import org.lite.gateway.validation.validator.LinqRequestSchemaValidator;
 import org.springframework.stereotype.Service;
@@ -24,7 +24,7 @@ import java.util.List;
 public class LinqRequestValidationService {
     private final ActionValidator actionValidator;
     private final StepValidator stepValidator;
-    private final ToolConfigValidator toolConfigValidator;
+    private final LlmConfigValidator llmConfigValidator;
     private final LinqRequestSchemaValidator schemaValidator;
     private final ObjectMapper objectMapper;
 
@@ -117,14 +117,14 @@ public class LinqRequestValidationService {
                 }
             }
 
-            // Check for @ValidToolConfig annotation
-            if (field.isAnnotationPresent(ValidToolConfig.class)) {
-                if (value instanceof LinqRequest.Query.ToolConfig) {
-                    log.info("Validating tool config");
-                    ValidationResult toolConfigResult = toolConfigValidator.validateToolConfig((LinqRequest.Query.ToolConfig) value, 0);
-                    if (!toolConfigResult.isValid()) {
-                        log.info("Tool config validation failed: {}", toolConfigResult.getErrors());
-                        errors.addAll(toolConfigResult.getErrors());
+            // Check for @ValidLlmConfig annotation
+            if (field.isAnnotationPresent(ValidLlmConfig.class)) {
+                if (value instanceof LinqRequest.Query.LlmConfig) {
+                    log.info("Validating LLM config");
+                    ValidationResult llmConfigResult = llmConfigValidator.validateLlmConfig((LinqRequest.Query.LlmConfig) value, 0);
+                    if (!llmConfigResult.isValid()) {
+                        log.info("LLM config validation failed: {}", llmConfigResult.getErrors());
+                        errors.addAll(llmConfigResult.getErrors());
                     }
                 }
             }

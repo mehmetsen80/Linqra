@@ -205,11 +205,11 @@ const ViewStepDescriptionModal = ({ show, onHide, step }) => {
                                         </div>
                                     )}
 
-                                    {step.toolConfig && (
+                                    {step.llmConfig && (
                                         <div className="detail-item">
                                             <div className="detail-label">AI Model</div>
                                             <div className="detail-value">
-                                                <Badge bg="success">{step.toolConfig.model}</Badge>
+                                                <Badge bg="success">{step.llmConfig.model}</Badge>
                                             </div>
                                         </div>
                                     )}
@@ -259,7 +259,7 @@ const ViewStepDescriptionModal = ({ show, onHide, step }) => {
                         </div>
                     </Tab>
 
-                    {step.toolConfig && (
+                    {step.llmConfig && (
                         <Tab eventKey="ai-config" title="AI Settings">
                             <div className="tab-content-wrapper">
                                 <div className="ai-config-section">
@@ -272,11 +272,11 @@ const ViewStepDescriptionModal = ({ show, onHide, step }) => {
                                         <div className="detail-item">
                                             <div className="detail-label">Model</div>
                                             <div className="detail-value">
-                                                <Badge bg="primary">{step.toolConfig.model}</Badge>
+                                                <Badge bg="primary">{step.llmConfig.model}</Badge>
                                             </div>
                                         </div>
 
-                                        {step.toolConfig.settings && Object.entries(step.toolConfig.settings).map(([key, value]) => (
+                                        {step.llmConfig.settings && Object.entries(step.llmConfig.settings).map(([key, value]) => (
                                             <div key={key} className="detail-item">
                                                 <div className="detail-label">{key}</div>
                                                 <div className="detail-value">
@@ -289,11 +289,11 @@ const ViewStepDescriptionModal = ({ show, onHide, step }) => {
                                     <div className="json-section mt-4">
                                         <h6 className="section-title">
                                             <i className="fas fa-cog me-2"></i>
-                                            Tool Configuration (JSON)
+                                            LLM Configuration (JSON)
                                         </h6>
                                         <div className="json-editor-container">
                                             <JSONEditor
-                                                placeholder={step.toolConfig}
+                                                placeholder={step.llmConfig}
                                                 locale={locale}
                                                 height="300px"
                                                 width="100%"

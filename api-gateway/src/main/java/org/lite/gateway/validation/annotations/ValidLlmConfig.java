@@ -7,6 +7,6 @@ import java.lang.annotation.Target;
 
 @Target({ElementType.FIELD})
 @Retention(RetentionPolicy.RUNTIME)
-public @interface ValidToolConfig {
-    String message() default "Invalid tool configuration";
+public @interface ValidLlmConfig {
+    String message() default "Invalid LLM configuration";
 } 

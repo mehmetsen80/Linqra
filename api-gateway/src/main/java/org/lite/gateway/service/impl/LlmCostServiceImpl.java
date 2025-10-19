@@ -77,15 +77,9 @@ public class LlmCostServiceImpl implements LlmCostService {
         // Normalize model name (e.g., "gpt-4o-2024-08-06" -> "gpt-4o")
         String normalizedModel = normalizeModelName(model);
         
-        // Try to get pricing from database first, fallback to static pricing
-        return llmModelRepository.findByModelName(normalizedModel)
-            .map(llmModel -> {
-                double promptCost = (promptTokens / 1_000_000.0) * llmModel.getInputPricePer1M();
-                double completionCost = (completionTokens / 1_000_000.0) * llmModel.getOutputPricePer1M();
-                return promptCost + completionCost;
-            })
-            .defaultIfEmpty(calculateCostFromStaticPricing(normalizedModel, promptTokens, completionTokens))
-            .block(); // Block here since the interface returns double, not Mono<Double>
+        // Use static pricing to avoid blocking in reactive context
+        // Database pricing is used for pricing snapshots
+        return calculateCostFromStaticPricing(normalizedModel, promptTokens, completionTokens);
     }
     
     /**
@@ -375,56 +369,131 @@ public class LlmCostServiceImpl implements LlmCostService {
     public Mono<Void> backfillHistoricalPricing(YearMonth fromYearMonth, YearMonth toYearMonth) {
         log.info("Backfilling pricing snapshots from {} to {}", fromYearMonth, toYearMonth);
         
-        java.util.List<YearMonth> months = new java.util.ArrayList<>();
-        YearMonth current = fromYearMonth;
-        while (!current.isAfter(toYearMonth)) {
-            months.add(current);
-            current = current.plusMonths(1);
-        }
-        
-        return Flux.fromIterable(months)
-            .flatMap(this::initializePricingForMonth)
-            .then()
+        // First clean up any duplicates
+        return cleanupAllPricingDuplicates()
+            .flatMap(deletedCount -> {
+                if (deletedCount > 0) {
+                    log.info("✅ Cleaned up {} duplicate pricing snapshots before backfill", deletedCount);
+                }
+                
+                java.util.List<YearMonth> months = new java.util.ArrayList<>();
+                YearMonth current = fromYearMonth;
+                while (!current.isAfter(toYearMonth)) {
+                    months.add(current);
+                    current = current.plusMonths(1);
+                }
+                
+                // Use concatMap to process months sequentially, preventing race conditions
+                return Flux.fromIterable(months)
+                    .concatMap(this::initializePricingForMonth)
+                    .then();
+            })
             .doOnSuccess(v -> log.info("Historical pricing backfill complete from {} to {}", fromYearMonth, toYearMonth));
     }
     
+    @Override
+    public Mono<Integer> cleanupAllPricingDuplicates() {
+        log.info("Starting cleanup of all duplicate pricing snapshots...");
+        
+        return pricingSnapshotRepository.findAll()
+            .groupBy(snapshot -> snapshot.getYearMonth() + "-" + snapshot.getModel())
+            .flatMap(group -> 
+                group.collectList()
+                    .flatMap(snapshots -> {
+                        if (snapshots.size() <= 1) {
+                            return Mono.just(0);
+                        }
+                        
+                        log.info("Found {} duplicates for {}, keeping most recent", snapshots.size(), group.key());
+                        
+                        // Keep the most recent one, delete the rest
+                        LlmPricingSnapshot mostRecent = snapshots.stream()
+                            .max((s1, s2) -> s1.getSnapshotDate().compareTo(s2.getSnapshotDate()))
+                            .orElse(snapshots.get(0));
+                        
+                        return Flux.fromIterable(snapshots)
+                            .filter(s -> !s.getId().equals(mostRecent.getId()))
+                            .flatMap(pricingSnapshotRepository::delete)
+                            .count()
+                            .map(Long::intValue);
+                    })
+            )
+            .reduce(0, Integer::sum)
+            .doOnSuccess(total -> {
+                if (total > 0) {
+                    log.info("✅ Pricing snapshot cleanup completed: {} duplicates removed", total);
+                } else {
+                    log.info("✅ No duplicate pricing snapshots found");
+                }
+            });
+    }
+    
     /**
-     * Cleanup duplicate pricing snapshots and save a new one
+     * Cleanup duplicate pricing snapshots by keeping first, deleting rest
      */
-    private Mono<LlmPricingSnapshot> cleanupDuplicatesAndSave(String yearMonth, String modelName, LlmPricingSnapshot newSnapshot) {
+    private Mono<LlmPricingSnapshot> cleanupDuplicatesAndSave(String yearMonth, String modelName, LlmPricingSnapshot templateSnapshot) {
         return pricingSnapshotRepository.findByYearMonth(yearMonth)
             .filter(snapshot -> snapshot.getModel().equals(modelName))
             .collectList()
             .flatMap(duplicates -> {
                 if (duplicates.isEmpty()) {
-                    // No duplicates found, just save
-                    return pricingSnapshotRepository.save(newSnapshot);
+                    // No duplicates found, save new snapshot
+                    return pricingSnapshotRepository.save(templateSnapshot);
                 }
                 
-                log.info("Deleting {} duplicate pricing snapshots for {} in {}", duplicates.size(), modelName, yearMonth);
+                // Keep the first one, delete the rest
+                LlmPricingSnapshot toKeep = duplicates.get(0);
                 
-                // Delete all duplicates
-                return Flux.fromIterable(duplicates)
-                    .flatMap(duplicate -> pricingSnapshotRepository.delete(duplicate))
-                    .then(pricingSnapshotRepository.save(newSnapshot))
-                    .doOnSuccess(saved -> log.info("Cleaned up duplicates and saved new pricing snapshot for {} in {}", modelName, yearMonth));
+                if (duplicates.size() > 1) {
+                    log.info("Found {} duplicate pricing snapshots for {} in {}, keeping first and deleting rest", 
+                        duplicates.size(), modelName, yearMonth);
+                    
+                    return Flux.fromIterable(duplicates.subList(1, duplicates.size()))
+                        .flatMap(duplicate -> pricingSnapshotRepository.delete(duplicate))
+                        .then(Mono.just(toKeep))
+                        .doOnSuccess(kept -> log.info("Cleaned up {} duplicates for {} in {}, kept one", 
+                            duplicates.size() - 1, modelName, yearMonth));
+                }
+                
+                // Only one entry exists, just return it
+                log.debug("Single pricing snapshot found for {} in {}, using it", modelName, yearMonth);
+                return Mono.just(toKeep);
             });
     }
     
     /**
      * Initialize pricing snapshots for a specific month
      * Uses database models if available, falls back to static pricing
+     * Uses concatMap to ensure sequential processing and avoid race conditions
      */
     private Mono<Void> initializePricingForMonth(YearMonth yearMonth) {
-        log.info("Initializing pricing snapshots for {}", yearMonth);
+        log.info("Checking if pricing snapshots exist for {}", yearMonth);
         
+        // First check if this month already has pricing snapshots
+        return pricingSnapshotRepository.findByYearMonth(yearMonth.toString())
+            .hasElements()
+            .flatMap(hasSnapshots -> {
+                if (hasSnapshots) {
+                    log.info("Pricing snapshots already exist for {}, skipping initialization", yearMonth);
+                    return Mono.empty();
+                }
+                
+                log.info("No pricing snapshots found for {}, initializing...", yearMonth);
+                return initializePricingForMonthInternal(yearMonth);
+            });
+    }
+    
+    /**
+     * Internal method to actually initialize pricing for a month
+     */
+    private Mono<Void> initializePricingForMonthInternal(YearMonth yearMonth) {
         return llmModelRepository.findByActive(true)
             .switchIfEmpty(Flux.fromIterable(MODEL_PRICING.entrySet())
                 .filter(entry -> !entry.getKey().equals("default"))
                 .map(entry -> {
                     String modelName = entry.getKey();
                     ModelPricing pricing = entry.getValue();
-                    String provider = modelName.startsWith("gpt-") || modelName.startsWith("text-embedding") ? "openai" : "gemini";
+                    String provider = detectProviderFromModelName(modelName);
                     
                     LlmModel model = new LlmModel();
                     model.setModelName(modelName);
@@ -434,7 +503,7 @@ public class LlmCostServiceImpl implements LlmCostService {
                     return model;
                 })
             )
-            .flatMap(model -> {
+            .concatMap(model -> {
                 LlmPricingSnapshot snapshot = new LlmPricingSnapshot();
                 snapshot.setYearMonth(yearMonth.toString());
                 snapshot.setModel(model.getModelName());

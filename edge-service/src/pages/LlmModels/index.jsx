@@ -132,8 +132,8 @@ const LlmModels = () => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 4
+      minimumFractionDigits: 5,
+      maximumFractionDigits: 5
     }).format(amount);
   };
 
@@ -360,7 +360,7 @@ const LlmModels = () => {
                   <Form.Label>Input Price per 1M Tokens (USD) *</Form.Label>
                   <Form.Control
                     type="number"
-                    step="0.001"
+                    step="0.00001"
                     min="0"
                     name="inputPricePer1M"
                     value={formData.inputPricePer1M}
@@ -377,7 +377,7 @@ const LlmModels = () => {
                   <Form.Label>Output Price per 1M Tokens (USD) *</Form.Label>
                   <Form.Control
                     type="number"
-                    step="0.001"
+                    step="0.00001"
                     min="0"
                     name="outputPricePer1M"
                     value={formData.outputPricePer1M}

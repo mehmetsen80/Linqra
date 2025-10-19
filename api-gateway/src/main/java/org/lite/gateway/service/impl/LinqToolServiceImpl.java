@@ -187,6 +187,14 @@ public class LinqToolServiceImpl implements LinqToolService {
                 payload.put("model", model);
                 log.info("Building OpenAI embedding payload - text: {}, model: {}", text, model);
                 break;
+            case "gemini-embed":
+                Object geminiTextParam = request.getQuery().getParams().getOrDefault("text", "");
+                String geminiText = geminiTextParam != null ? geminiTextParam.toString() : "";
+                String geminiModel = toolConfig != null && toolConfig.getModel() != null ? toolConfig.getModel() : "text-embedding-004";
+                // Gemini embedContent API format
+                payload.put("content", Map.of("parts", List.of(Map.of("text", geminiText))));
+                log.info("Building Gemini embedding payload - text: {}, model: {}", geminiText, geminiModel);
+                break;
             default:
                 payload.putAll(request.getQuery().getParams());
                 break;

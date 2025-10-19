@@ -106,5 +106,25 @@ public class LlmModelController {
                 return response;
             }));
     }
+    
+    /**
+     * Clean up all duplicate models (keep first, delete rest)
+     */
+    @PostMapping("/cleanup-duplicates")
+    public Mono<Map<String, Object>> cleanupDuplicates() {
+        log.info("Manually triggering duplicate models cleanup");
+        return llmModelService.cleanupAllDuplicates()
+            .collectList()
+            .map(cleanedModels -> {
+                Map<String, Object> response = new java.util.HashMap<>();
+                response.put("status", "success");
+                response.put("message", "Duplicate cleanup completed");
+                response.put("modelsProcessed", cleanedModels.size());
+                response.put("models", cleanedModels);
+                return response;
+            })
+            .doOnSuccess(result -> log.info("Duplicate cleanup completed: {} models processed", result.get("modelsProcessed")))
+            .doOnError(error -> log.error("Error during duplicate cleanup: {}", error.getMessage()));
+    }
 }
 

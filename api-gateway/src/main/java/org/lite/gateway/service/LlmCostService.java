@@ -65,5 +65,12 @@ public interface LlmCostService {
      * @return Mono indicating completion
      */
     Mono<Void> backfillHistoricalPricing(YearMonth fromYearMonth, YearMonth toYearMonth);
+    
+    /**
+     * Clean up all duplicate pricing snapshots
+     * Keeps the most recent snapshot for each yearMonth-model combination
+     * @return Mono with count of deleted duplicates
+     */
+    Mono<Integer> cleanupAllPricingDuplicates();
 }
 

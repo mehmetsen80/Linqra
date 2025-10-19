@@ -10,13 +10,14 @@ import reactor.core.publisher.Mono;
 @Repository
 public interface LlmModelRepository extends ReactiveMongoRepository<LlmModel, String> {
     Mono<LlmModel> findByModelName(String modelName);
+    Flux<LlmModel> findAllByModelName(String modelName);
     Flux<LlmModel> findByProvider(String provider);
     
-    // Sorted queries
-    @Query(value = "{}", sort = "{ 'provider': 1, 'modelName': 1 }")
+    // Sorted queries (by provider, then category, then modelName)
+    @Query(value = "{}", sort = "{ 'provider': 1, 'category': 1, 'modelName': 1 }")
     Flux<LlmModel> findAllSorted();
     
-    @Query(value = "{ 'active': ?0 }", sort = "{ 'provider': 1, 'modelName': 1 }")
+    @Query(value = "{ 'active': ?0 }", sort = "{ 'provider': 1, 'category': 1, 'modelName': 1 }")
     Flux<LlmModel> findByActiveSorted(boolean active);
     
     // Original unsorted methods (kept for backward compatibility)

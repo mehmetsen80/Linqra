@@ -55,9 +55,8 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                 return updateExecutionStatus(execution, ExecutionStatus.FAILED, "No workflow ID configured", null);
             }
 
-            // Ensure workflow exists before proceeding
-            return linqWorkflowService.getWorkflow(workflowId)
-                    .switchIfEmpty(Mono.defer(() -> Mono.error(new ResourceNotFoundException("Workflow not found: " + workflowId, ErrorCode.WORKFLOW_NOT_FOUND))))
+            // Ensure workflow exists before proceeding (bypass context for scheduler)
+            return linqWorkflowService.getWorkflowByIdAndTeam(workflowId, execution.getTeamId())
                     .flatMap(existing -> {
                         // Prepare workflow parameters
                         Map<String, Object> parameters = prepareWorkflowParameters(execution, task, agent);
@@ -128,7 +127,8 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                                         String agentId, String agentTaskId, AgentExecution execution) {
         log.info("Triggering workflow {} for team {} with agent context: agent={}, task={}", workflowId, teamId, agentId, agentTaskId);
 
-        return linqWorkflowService.getWorkflow(workflowId)
+        // Use service method that bypasses team context (scheduler has no HTTP context)
+        return linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId)
                 .flatMap(workflow -> {
                     // Use the workflow's request directly
                     LinqRequest request = workflow.getRequest();

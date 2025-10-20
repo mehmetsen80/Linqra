@@ -389,14 +389,16 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         
         // Enhanced logging based on whether it's agent-triggered or not
         if (agentContext != null) {
+            log.info("💾 Saving agent workflow execution with agentExecutionId: {}", execution.getAgentExecutionId());
             return executionRepository.save(execution)
-                .doOnSuccess(e -> log.info("Tracked agent workflow execution: {} for agent: {} with status: {}", 
-                    e.getId(), e.getAgentName(), e.getStatus()))
-                .doOnError(error -> log.error("Error tracking agent workflow execution: {}", error.getMessage()));
+                .doOnSuccess(e -> log.info("✅ Tracked agent workflow execution: {} (agentExecutionId: {}) for agent: {} with status: {}", 
+                    e.getId(), e.getAgentExecutionId(), e.getAgentName(), e.getStatus()))
+                .doOnError(error -> log.error("❌ Error tracking agent workflow execution: {}", error.getMessage()));
         } else {
+            log.info("💾 Saving workflow execution");
             return executionRepository.save(execution)
-                .doOnSuccess(e -> log.info("Tracked workflow execution: {} with status: {}", e.getId(), e.getStatus()))
-                .doOnError(error -> log.error("Error tracking workflow execution: {}", error.getMessage()));
+                .doOnSuccess(e -> log.info("✅ Tracked workflow execution: {} with status: {}", e.getId(), e.getStatus()))
+                .doOnError(error -> log.error("❌ Error tracking workflow execution: {}", error.getMessage()));
         }
     }
 

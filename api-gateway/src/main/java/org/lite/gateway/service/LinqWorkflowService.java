@@ -13,11 +13,19 @@ public interface LinqWorkflowService {
     Mono<LinqWorkflow> createWorkflow(LinqWorkflow workflow);
 
     /**
-     * Get a workflow by ID
+     * Get a workflow by ID (uses team from context)
      * @param workflowId The ID of the workflow to retrieve
      * @return Mono containing the workflow if found
      */
     Mono<LinqWorkflow> getWorkflow(String workflowId);
+
+    /**
+     * Get a workflow by ID and team ID (bypasses context - for schedulers)
+     * @param workflowId The ID of the workflow to retrieve
+     * @param teamId The team ID to check
+     * @return Mono containing the workflow if found
+     */
+    Mono<LinqWorkflow> getWorkflowByIdAndTeam(String workflowId, String teamId);
 
     /**
      * Update an existing workflow

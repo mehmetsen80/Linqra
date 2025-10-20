@@ -2903,6 +2903,7 @@ function ViewAgentTask() {
                                     scheduleOnStartup: task?.scheduleOnStartup || false,
                                     executionTrigger: cronExpression.trim() ? 'CRON' : 'MANUAL'
                                 };
+                                console.log('🔍 Current task.scheduleOnStartup:', task?.scheduleOnStartup);
                                 console.log('🚀 Calling updateSchedulingConfiguration with:', { taskId, schedulingUpdate });
                                 const response = await agentTaskService.updateSchedulingConfiguration(taskId, schedulingUpdate);
                                 console.log('📥 Response from updateSchedulingConfiguration:', response);

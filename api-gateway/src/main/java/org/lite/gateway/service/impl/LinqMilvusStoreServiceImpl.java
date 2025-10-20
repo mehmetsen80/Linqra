@@ -384,7 +384,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         return rawEmbedding.stream()
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
-                    } else if ("huggingface".equals(target)) {
+                    } else if ("huggingface-embed".equals(target)) {
                         List<Object> rawEmbedding = (List<Object>) result.get("embedding");
                         return rawEmbedding.stream()
                             .map(value -> ((Number) value).floatValue())
@@ -400,6 +400,19 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             throw new IllegalStateException("No embedding values received from Gemini embedding service");
                         }
                         return values.stream()
+                            .map(value -> ((Number) value).floatValue())
+                            .collect(Collectors.toList());
+                    } else if ("cohere-embed".equals(target)) {
+                        // Cohere embedding response format: {embeddings: [[...]]}
+                        List<List<Object>> embeddings = (List<List<Object>>) result.get("embeddings");
+                        if (embeddings == null || embeddings.isEmpty()) {
+                            throw new IllegalStateException("No embeddings received from Cohere embedding service");
+                        }
+                        List<Object> firstEmbedding = embeddings.getFirst();
+                        if (firstEmbedding == null || firstEmbedding.isEmpty()) {
+                            throw new IllegalStateException("No embedding values received from Cohere embedding service");
+                        }
+                        return firstEmbedding.stream()
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
                     }
@@ -733,7 +746,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 return Mono.just(errorResponse);
             }
 
-            // Get embedding for the search text using dynamic tool and model
+            // Get embedding for the search text using dynamic llm target and model
             return getEmbedding(text, target, modelType, teamId)
                 .flatMap(searchEmbedding -> {
                     try {

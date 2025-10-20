@@ -63,6 +63,8 @@ public class AgentTaskVersionServiceImpl implements AgentTaskVersionService {
         if (updatedTask.getCronExpression() != null) existingTask.setCronExpression(updatedTask.getCronExpression());
         if (updatedTask.getCronDescription() != null) existingTask.setCronDescription(updatedTask.getCronDescription());
         if (updatedTask.getExecutionTrigger() != null) existingTask.setExecutionTrigger(updatedTask.getExecutionTrigger());
+        // Always update scheduleOnStartup (boolean primitive, can't be null)
+        existingTask.setScheduleOnStartup(updatedTask.isScheduleOnStartup());
         
         // If linq_config is updated, auto-detect and set the appropriate task type
         if (updatedTask.getLinqConfig() != null) {

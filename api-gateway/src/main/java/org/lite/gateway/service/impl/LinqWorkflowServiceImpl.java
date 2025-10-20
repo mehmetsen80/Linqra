@@ -120,6 +120,14 @@ public class LinqWorkflowServiceImpl implements LinqWorkflowService {
     }
 
     @Override
+    public Mono<LinqWorkflow> getWorkflowByIdAndTeam(String workflowId, String teamId) {
+        log.info("Fetching workflow {} for team {} (bypassing context)", workflowId, teamId);
+        return workflowRepository.findByIdAndTeamId(workflowId, teamId)
+            .doOnError(error -> log.error("Error fetching workflow: {}", error.getMessage()))
+            .switchIfEmpty(Mono.error(new RuntimeException("Workflow not found: " + workflowId + " for team: " + teamId)));
+    }
+
+    @Override
     public Flux<LinqWorkflow> searchWorkflows(String searchTerm) {
         return workflowRepository.findByNameContainingIgnoreCaseOrDescriptionContainingIgnoreCase(
             searchTerm, searchTerm)

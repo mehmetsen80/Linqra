@@ -271,10 +271,17 @@ function ViewAgent() {
     const formatDate = (dateValue, formatStr = 'MMM dd, yyyy HH:mm') => {
         if (!dateValue) return 'N/A';
         try {
-            // Handle array format [year, month, day, hour, minute, second, nano]
-            if (Array.isArray(dateValue) && dateValue.length >= 6) {
-                const [year, month, day, hour, minute, second] = dateValue;
-                const date = new Date(year, month - 1, day, hour, minute, second);
+            // Handle array format [year, month, day, hour, minute, second?, nano?]
+            if (Array.isArray(dateValue) && dateValue.length >= 5) {
+                const year = dateValue[0];
+                const month = dateValue[1] - 1; // JavaScript months are 0-based
+                const day = dateValue[2];
+                const hour = dateValue[3];
+                const minute = dateValue[4];
+                const second = dateValue[5] || 0;
+                
+                // Create UTC date
+                const date = new Date(Date.UTC(year, month, day, hour, minute, second));
                 return isValid(date) ? format(date, formatStr) : 'N/A';
             }
             // Handle string or Date object
@@ -283,6 +290,47 @@ function ViewAgent() {
         } catch (error) {
             console.error('Error formatting date:', dateValue, error);
             return 'N/A';
+        }
+    };
+
+    const convertCronDescriptionToLocal = (cronDescription, cronExpression) => {
+        if (!cronDescription || !cronExpression) return cronDescription || 'N/A';
+        
+        try {
+            // Parse cron expression to get UTC hour and minute
+            const cronParts = cronExpression.trim().split(/\s+/);
+            if (cronParts.length < 6) return cronDescription;
+            
+            const utcMinute = parseInt(cronParts[1]) || 0;
+            const utcHour = parseInt(cronParts[2]) || 0;
+            
+            // Convert UTC to local time
+            const utcDate = new Date(Date.UTC(2000, 0, 1, utcHour, utcMinute));
+            const localHour = utcDate.getHours();
+            const localMinute = utcDate.getMinutes();
+            
+            // Convert to 12-hour format
+            const utcHour12 = utcHour === 0 ? 12 : utcHour > 12 ? utcHour - 12 : utcHour;
+            const utcAmPm = utcHour >= 12 ? 'PM' : 'AM';
+            const localHour12 = localHour === 0 ? 12 : localHour > 12 ? localHour - 12 : localHour;
+            const localAmPm = localHour >= 12 ? 'PM' : 'AM';
+            
+            let localDescription = cronDescription;
+            
+            // Try different time patterns
+            const utcPattern1 = `${utcHour12}:${utcMinute.toString().padStart(2, '0')} ${utcAmPm}`;
+            const localPattern1 = `${localHour12}:${localMinute.toString().padStart(2, '0')} ${localAmPm}`;
+            
+            if (localDescription.includes(utcPattern1)) {
+                localDescription = localDescription.replace(new RegExp(utcPattern1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern1);
+            } else if (localDescription.includes(`${utcHour12} ${utcAmPm}`)) {
+                localDescription = localDescription.replace(new RegExp(`${utcHour12} ${utcAmPm}`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `${localHour12} ${localAmPm}`);
+            }
+            
+            return localDescription;
+        } catch (error) {
+            console.error('Error converting cron description to local:', error);
+            return cronDescription;
         }
     };
 
@@ -593,7 +641,7 @@ function ViewAgent() {
                                                 )}
                                             </td>
                                             <td className="text-muted">
-                                                {task.cronDescription || 'N/A'}
+                                                {convertCronDescriptionToLocal(task.cronDescription, task.cronExpression)}
                                             </td>
                                             <td className="text-muted">{formatDate(task.lastRun)}</td>
                                             <td className="text-muted">{formatDate(task.nextRun)}</td>

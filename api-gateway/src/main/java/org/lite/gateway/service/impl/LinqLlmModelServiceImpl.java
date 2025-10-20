@@ -222,6 +222,44 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 payload.put("content", Map.of("parts", List.of(Map.of("text", geminiText))));
                 log.info("Building Gemini embedding payload - text: {}, model: {}", geminiText, geminiModel);
                 break;
+            case "cohere":
+                // Cohere Chat API format
+                String cohereModel = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "command-r-08-2024";
+                payload.put("model", cohereModel);
+                
+                // Handle payload which can be either a Map (with message/preamble) or fall back to params
+                if (request.getQuery().getPayload() instanceof Map) {
+                    Map<String, Object> coherePayload = (Map<String, Object>) request.getQuery().getPayload();
+                    if (coherePayload.containsKey("message")) {
+                        payload.put("message", coherePayload.get("message"));
+                    }
+                    if (coherePayload.containsKey("preamble")) {
+                        payload.put("preamble", coherePayload.get("preamble"));
+                    }
+                    // Add any other fields from the payload
+                    coherePayload.forEach((key, value) -> {
+                        if (!key.equals("message") && !key.equals("preamble")) {
+                            payload.put(key, value);
+                        }
+                    });
+                }
+                
+                // Add settings from llmConfig
+                if (llmConfig != null && llmConfig.getSettings() != null) {
+                    payload.putAll(llmConfig.getSettings());
+                }
+                log.info("Building Cohere payload for model: {}", cohereModel);
+                break;
+            case "cohere-embed":
+                // Cohere Embed API format
+                Object cohereTextParam = request.getQuery().getParams().getOrDefault("text", "");
+                String cohereText = cohereTextParam != null ? cohereTextParam.toString() : "";
+                String cohereEmbedModel = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "embed-english-v3.0";
+                payload.put("texts", List.of(cohereText));
+                payload.put("model", cohereEmbedModel);
+                payload.put("input_type", "search_document");
+                log.info("Building Cohere embedding payload - text: {}, model: {}", cohereText, cohereEmbedModel);
+                break;
             default:
                 payload.putAll(request.getQuery().getParams());
                 break;

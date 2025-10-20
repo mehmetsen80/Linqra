@@ -19,6 +19,7 @@ const LlmModels = () => {
     provider: 'openai',
     category: 'chat',
     endpoint: '',
+    dimensions: null,
     inputPricePer1M: 0,
     outputPricePer1M: 0,
     active: true,
@@ -53,6 +54,7 @@ const LlmModels = () => {
         provider: model.provider,
         category: model.category || 'chat',
         endpoint: model.endpoint || '',
+        dimensions: model.dimensions || null,
         inputPricePer1M: model.inputPricePer1M,
         outputPricePer1M: model.outputPricePer1M,
         active: model.active,
@@ -66,6 +68,7 @@ const LlmModels = () => {
         provider: 'openai',
         category: 'chat',
         endpoint: '',
+        dimensions: null,
         inputPricePer1M: 0,
         outputPricePer1M: 0,
         active: true,
@@ -415,6 +418,23 @@ const LlmModels = () => {
                 API endpoint URL for this model. Use {'{model}'} as placeholder if needed.
               </Form.Text>
             </Form.Group>
+
+            {formData.category === 'embedding' && (
+              <Form.Group className="mb-3">
+                <Form.Label>Dimensions</Form.Label>
+                <Form.Control
+                  type="number"
+                  min="1"
+                  name="dimensions"
+                  value={formData.dimensions || ''}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 768, 1024, 1536"
+                />
+                <Form.Text className="text-muted">
+                  Vector dimensions for embedding models (e.g., 768, 1024, 1536, 3072)
+                </Form.Text>
+              </Form.Group>
+            )}
 
             <Row>
               <Col md={6}>

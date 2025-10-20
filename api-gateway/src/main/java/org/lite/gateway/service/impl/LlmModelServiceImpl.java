@@ -177,13 +177,13 @@ public class LlmModelServiceImpl implements LlmModelService {
         // OpenAI Embeddings
         models.add(createModel("text-embedding-3-small", "Text Embedding 3 Small", "openai", "embedding", 
             0.020, 0.0, true, "Small embedding model for semantic search", 
-            "https://api.openai.com/v1/embeddings", now));
+            "https://api.openai.com/v1/embeddings", 1536, now));
         models.add(createModel("text-embedding-3-large", "Text Embedding 3 Large", "openai", "embedding", 
             0.130, 0.0, true, "Large embedding model with higher accuracy", 
-            "https://api.openai.com/v1/embeddings", now));
+            "https://api.openai.com/v1/embeddings", 3072, now));
         models.add(createModel("text-embedding-ada-002", "Text Embedding Ada", "openai", "embedding", 
             0.100, 0.0, true, "Ada embedding model for semantic search", 
-            "https://api.openai.com/v1/embeddings", now));
+            "https://api.openai.com/v1/embeddings", 1536, now));
         
         // Google Gemini Models
         models.add(createModel("gemini-2.0-flash", "Gemini 2.0 Flash", "gemini", "chat", 
@@ -198,16 +198,16 @@ public class LlmModelServiceImpl implements LlmModelService {
         
         // Google Gemini Embeddings (text-embedding-004 is being deprecated Jan 2026)
         models.add(createModel("text-embedding-004", "Gemini Text Embedding 004 (Legacy)", "gemini", "embedding", 
-            0.00001, 0.0, false, "Legacy Gemini embedding model - deprecated Jan 14, 2026 (768 dimensions)", 
-            "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent", now));
+            0.00001, 0.0, false, "Legacy Gemini embedding model - deprecated Jan 14, 2026", 
+            "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent", 768, now));
         models.add(createModel("embedding-001", "Gemini Embedding 001", "gemini", "embedding", 
-            0.00001, 0.0, false, "Legacy Gemini embedding model - deprecated Jan 14, 2026 (768 dimensions)", 
-            "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent", now));
+            0.00001, 0.0, false, "Legacy Gemini embedding model - deprecated Jan 14, 2026", 
+            "https://generativelanguage.googleapis.com/v1beta/models/embedding-001:embedContent", 768, now));
         
         // New Gemini Embedding Model (current)
         models.add(createModel("gemini-embedding-001", "Gemini Embedding 001 (Current)", "gemini", "embedding", 
-            0.15, 0.0, true, "Current Gemini embedding model with enhanced performance (768 dimensions)", 
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent", now));
+            0.15, 0.0, true, "Current Gemini embedding model with enhanced performance", 
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent", 768, now));
         
         // Anthropic Claude Models
         models.add(createModel("claude-3-opus", "Claude 3 Opus", "anthropic", "chat", 
@@ -221,32 +221,39 @@ public class LlmModelServiceImpl implements LlmModelService {
             "https://api.anthropic.com/v1/messages", now));
         
         // Cohere Command Models (Chat/Completion)
-        models.add(createModel("command-r-plus", "Command R+", "cohere", "chat", 
-            3.00, 15.00, true, "Most capable Cohere model for complex tasks", 
-            "https://api.cohere.ai/v1/chat", now));
-        models.add(createModel("command-r", "Command R", "cohere", "chat", 
-            0.50, 1.50, true, "Balanced Cohere model for general use", 
-            "https://api.cohere.ai/v1/chat", now));
-        models.add(createModel("command", "Command", "cohere", "chat", 
-            1.00, 2.00, true, "Standard Cohere command model", 
-            "https://api.cohere.ai/v1/chat", now));
-        models.add(createModel("command-light", "Command Light", "cohere", "chat", 
-            0.30, 0.60, true, "Lightweight Cohere model for simple tasks", 
-            "https://api.cohere.ai/v1/chat", now));
+        models.add(createModel("command-a-reasoning-08-2025", "Command A Reasoning", "cohere", "chat", 
+            0.0, 0.0, true, "First reasoning model from Cohere (111B params, 256K context, 32K max output) - Free until rate limits. Excels at agentic tasks, tool use, and multilingual reasoning", 
+            "https://api.cohere.ai/v2/chat", now));
+        models.add(createModel("command-a-03-2025", "Command A", "cohere", "chat", 
+            2.50, 10.00, true, "Most performant Cohere model (111B params, 256K context) for enterprise agents, RAG, and multilingual tasks", 
+            "https://api.cohere.ai/v2/chat", now));
+        models.add(createModel("command-r-plus-08-2024", "Command R+", "cohere", "chat", 
+            2.50, 10.00, true, "Optimized for conversational interaction and long-context tasks (128K context) with 50% higher throughput. Excellent for complex RAG and multi-step tool use", 
+            "https://api.cohere.ai/v2/chat", now));
+        models.add(createModel("command-r-08-2024", "Command R", "cohere", "chat", 
+            0.15, 0.60, true, "Scalable model balancing high performance with strong accuracy (128K context) - 50% higher throughput. Optimized for RAG, tool use, and multilingual tasks", 
+            "https://api.cohere.ai/v2/chat", now));
+        models.add(createModel("command-r7b-12-2024", "Command R7B", "cohere", "chat", 
+            0.0375, 0.15, true, "Smallest and fastest R family model (7B params, 128K context) - Ideal for high throughput, chatbots, and on-device inference", 
+            "https://api.cohere.ai/v2/chat", now));
         
         // Cohere Embedding Models
+        // Note: Embedding models only have input pricing (no output tokens)
+        models.add(createModel("embed-v4.0", "Embed v4", "cohere", "embedding", 
+            0.120, 0.0, true, "Latest Cohere embedding model with configurable dimensions (256/512/1024/1536, default 1536) and 128k context. Supports text, images, and PDFs", 
+            "https://api.cohere.ai/v1/embed", 1536, now));
         models.add(createModel("embed-english-v3.0", "Embed English v3", "cohere", "embedding", 
-            0.100, 0.0, true, "English-only embedding model (1024 dimensions)", 
-            "https://api.cohere.ai/v1/embed", now));
+            0.100, 0.0, true, "English-only embedding model. Supports text and images", 
+            "https://api.cohere.ai/v1/embed", 1024, now));
         models.add(createModel("embed-multilingual-v3.0", "Embed Multilingual v3", "cohere", "embedding", 
-            0.100, 0.0, true, "Multilingual embedding model (1024 dimensions)", 
-            "https://api.cohere.ai/v1/embed", now));
+            0.100, 0.0, true, "Multilingual embedding model supporting multiple languages. Supports text and images", 
+            "https://api.cohere.ai/v1/embed", 1024, now));
         models.add(createModel("embed-english-light-v3.0", "Embed English Light v3", "cohere", "embedding", 
-            0.100, 0.0, true, "Lightweight English embedding model (384 dimensions)", 
-            "https://api.cohere.ai/v1/embed", now));
+            0.100, 0.0, true, "Smaller, faster version of embed-english-v3.0. Almost as capable, but a lot faster. English only. Supports text and images", 
+            "https://api.cohere.ai/v1/embed", 384, now));
         models.add(createModel("embed-multilingual-light-v3.0", "Embed Multilingual Light v3", "cohere", "embedding", 
-            0.100, 0.0, true, "Lightweight multilingual embedding model (384 dimensions)", 
-            "https://api.cohere.ai/v1/embed", now));
+            0.100, 0.0, true, "Smaller, faster version of embed-multilingual-v3.0. Almost as capable, but a lot faster. Supports multiple languages and images", 
+            "https://api.cohere.ai/v1/embed", 384, now));
         
         return models;
     }
@@ -254,12 +261,20 @@ public class LlmModelServiceImpl implements LlmModelService {
     private LlmModel createModel(String modelName, String displayName, String provider, String category,
                                    double inputPrice, double outputPrice, boolean active, 
                                    String description, String endpoint, LocalDateTime now) {
+        return createModel(modelName, displayName, provider, category, inputPrice, outputPrice, active, 
+                          description, endpoint, null, now);
+    }
+    
+    private LlmModel createModel(String modelName, String displayName, String provider, String category,
+                                   double inputPrice, double outputPrice, boolean active, 
+                                   String description, String endpoint, Integer dimensions, LocalDateTime now) {
         LlmModel model = new LlmModel();
         model.setModelName(modelName);
         model.setDisplayName(displayName);
         model.setProvider(provider);
         model.setCategory(category);
         model.setEndpoint(endpoint);
+        model.setDimensions(dimensions);
         model.setInputPricePer1M(inputPrice);
         model.setOutputPricePer1M(outputPrice);
         model.setActive(active);

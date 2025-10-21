@@ -207,6 +207,11 @@
   color: #6366f1;
 }
 
+.provider-badge.cohere {
+  background-color: rgba(249, 115, 22, 0.1);
+  color: #f97316;
+}
+
 .cost-cell {
   font-weight: 600;
   color: #ef4444;

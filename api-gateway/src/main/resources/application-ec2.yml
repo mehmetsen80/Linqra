@@ -102,11 +102,11 @@ eureka:
     enabled: true
     register-with-eureka: true
     fetch-registry: true
-    eureka-server-connect-timeout-seconds: 30
-    eureka-server-read-timeout-seconds: 30
-    registry-fetch-interval-seconds: 10
-    instance-info-replication-interval-seconds: 15
-    initial-instance-info-replication-interval-seconds: 40
+    eureka-server-connect-timeout-seconds: 60
+    eureka-server-read-timeout-seconds: 60
+    registry-fetch-interval-seconds: 30  # Reduced frequency: refresh every 30s instead of 10s
+    instance-info-replication-interval-seconds: 30
+    initial-instance-info-replication-interval-seconds: 60
   instance:
     hostname: ${EUREKA_INSTANCE_URL:localhost}
     instance-id: ${spring.application.name}:${instanceId:${random.value}}
@@ -153,7 +153,8 @@ logging:
     org.springframework.web.socket: INFO
     org.springframework.messaging: INFO
     org.springframework.security.web.server.authentication.AuthenticationWebFilter: ERROR
-    javax.net.ssl: OFF
+    javax.net.ssl: OFF  # Suppress SSL handshake warnings/timeouts completely
+    sun.security.ssl: ERROR  # Suppress SSL debug logs
     org.mongodb.driver: ERROR
     org.mongodb.driver.cluster: INFO
     org.mongodb.driver.connection: INFO

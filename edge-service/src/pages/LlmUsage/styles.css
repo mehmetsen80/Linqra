@@ -301,6 +301,11 @@
   color: #92400e;
 }
 
+.provider-badge.cohere {
+  background-color: #fed7aa;
+  color: #c2410c;
+}
+
 .cost-value {
   color: #10b981;
   font-weight: 600;

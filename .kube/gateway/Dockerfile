@@ -94,8 +94,6 @@ EXPOSE 7777
 
 # Run the API gateway-service application with SSL configuration
 ENTRYPOINT ["java", \
-            "-Djavax.net.debug=all", \
-            "-Djavax.net.debug=ssl", \
             "-Dhttps.protocols=TLSv1.2,TLSv1.3", \
             "-Djavax.net.ssl.keyStore=${GATEWAY_KEY_STORE}", \
             "-Djavax.net.ssl.keyStorePassword=${GATEWAY_KEY_STORE_PASSWORD}", \

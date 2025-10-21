@@ -11,6 +11,7 @@ import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.lite.gateway.repository.LlmModelRepository;
 import org.lite.gateway.repository.LlmPricingSnapshotRepository;
 import org.lite.gateway.service.LlmCostService;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -212,8 +213,10 @@ public class LlmCostServiceImpl implements LlmCostService {
             for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
                 String target = stepMetadata.getTarget();
                 
-                // Only process OpenAI and Gemini steps
-                if (!target.equals("openai") && !target.equals("gemini") && !target.equals("openai-embed")) {
+                // Only process LLM provider steps (OpenAI, Gemini, Cohere)
+                if (!target.equals("openai") && !target.equals("gemini") && !target.equals("openai-embed") 
+                    && !target.equals("cohere") && !target.equals("cohere-embed") 
+                    && !target.equals("gemini-embed")) {
                     continue;
                 }
                 
@@ -326,8 +329,9 @@ public class LlmCostServiceImpl implements LlmCostService {
     }
     
     @Override
-    public Mono<Double> calculateCostForMonth(String model, long promptTokens, long completionTokens, YearMonth yearMonth) {
-        return pricingSnapshotRepository.findByYearMonthAndModel(yearMonth.toString(), model)
+    public Mono<Double> calculateCostForMonth(String teamId, String model, long promptTokens, long completionTokens, YearMonth yearMonth) {
+        return pricingSnapshotRepository.findByTeamIdAndYearMonthAndModel(teamId, yearMonth.toString(), model)
+            .switchIfEmpty(pricingSnapshotRepository.findByYearMonthAndModel(yearMonth.toString(), model)) // Fallback to global pricing
             .onErrorResume(org.springframework.dao.IncorrectResultSizeDataAccessException.class, error -> {
                 // If duplicates exist, log warning and use the first one we can find
                 log.warn("Found duplicate pricing snapshots for {} in {}, using first match", model, yearMonth);
@@ -355,19 +359,20 @@ public class LlmCostServiceImpl implements LlmCostService {
     }
     
     @Override
-    public Flux<LlmPricingSnapshot> getPricingSnapshotsForMonth(YearMonth yearMonth) {
-        return pricingSnapshotRepository.findByYearMonth(yearMonth.toString());
+    public Flux<LlmPricingSnapshot> getPricingSnapshotsForMonth(String teamId, YearMonth yearMonth) {
+        return pricingSnapshotRepository.findByTeamIdAndYearMonth(teamId, yearMonth.toString())
+            .switchIfEmpty(pricingSnapshotRepository.findByYearMonth(yearMonth.toString())); // Fallback to global pricing
     }
     
     @Override
-    public Mono<Void> initializeCurrentMonthPricing() {
+    public Mono<Void> initializeCurrentMonthPricing(String teamId) {
         YearMonth currentMonth = YearMonth.now();
-        return initializePricingForMonth(currentMonth);
+        return initializePricingForMonth(teamId, currentMonth);
     }
     
     @Override
-    public Mono<Void> backfillHistoricalPricing(YearMonth fromYearMonth, YearMonth toYearMonth) {
-        log.info("Backfilling pricing snapshots from {} to {}", fromYearMonth, toYearMonth);
+    public Mono<Void> backfillHistoricalPricing(String teamId, YearMonth fromYearMonth, YearMonth toYearMonth) {
+        log.info("Backfilling pricing snapshots for team {} from {} to {}", teamId, fromYearMonth, toYearMonth);
         
         // First clean up any duplicates
         return cleanupAllPricingDuplicates()
@@ -385,10 +390,10 @@ public class LlmCostServiceImpl implements LlmCostService {
                 
                 // Use concatMap to process months sequentially, preventing race conditions
                 return Flux.fromIterable(months)
-                    .concatMap(this::initializePricingForMonth)
+                    .concatMap(month -> initializePricingForMonth(teamId, month))
                     .then();
             })
-            .doOnSuccess(v -> log.info("Historical pricing backfill complete from {} to {}", fromYearMonth, toYearMonth));
+            .doOnSuccess(v -> log.info("Historical pricing backfill complete for team {} from {} to {}", teamId, fromYearMonth, toYearMonth));
     }
     
     @Override
@@ -466,27 +471,27 @@ public class LlmCostServiceImpl implements LlmCostService {
      * Uses database models if available, falls back to static pricing
      * Uses concatMap to ensure sequential processing and avoid race conditions
      */
-    private Mono<Void> initializePricingForMonth(YearMonth yearMonth) {
-        log.info("Checking if pricing snapshots exist for {}", yearMonth);
+    private Mono<Void> initializePricingForMonth(String teamId, YearMonth yearMonth) {
+        log.info("Checking if pricing snapshots exist for team {} in {}", teamId, yearMonth);
         
-        // First check if this month already has pricing snapshots
-        return pricingSnapshotRepository.findByYearMonth(yearMonth.toString())
+        // First check if this team+month already has pricing snapshots
+        return pricingSnapshotRepository.findByTeamIdAndYearMonth(teamId, yearMonth.toString())
             .hasElements()
             .flatMap(hasSnapshots -> {
                 if (hasSnapshots) {
-                    log.info("Pricing snapshots already exist for {}, skipping initialization", yearMonth);
+                    log.info("Pricing snapshots already exist for team {} in {}, skipping initialization", teamId, yearMonth);
                     return Mono.empty();
                 }
                 
-                log.info("No pricing snapshots found for {}, initializing...", yearMonth);
-                return initializePricingForMonthInternal(yearMonth);
+                log.info("No pricing snapshots found for team {} in {}, initializing...", teamId, yearMonth);
+                return initializePricingForMonthInternal(teamId, yearMonth);
             });
     }
     
     /**
      * Internal method to actually initialize pricing for a month
      */
-    private Mono<Void> initializePricingForMonthInternal(YearMonth yearMonth) {
+    private Mono<Void> initializePricingForMonthInternal(String teamId, YearMonth yearMonth) {
         return llmModelRepository.findByActive(true)
             .switchIfEmpty(Flux.fromIterable(MODEL_PRICING.entrySet())
                 .filter(entry -> !entry.getKey().equals("default"))
@@ -505,6 +510,7 @@ public class LlmCostServiceImpl implements LlmCostService {
             )
             .concatMap(model -> {
                 LlmPricingSnapshot snapshot = new LlmPricingSnapshot();
+                snapshot.setTeamId(teamId); // ← SET TEAM ID HERE
                 snapshot.setYearMonth(yearMonth.toString());
                 snapshot.setModel(model.getModelName());
                 snapshot.setProvider(model.getProvider());
@@ -515,30 +521,308 @@ public class LlmCostServiceImpl implements LlmCostService {
                 
                 String modelName = model.getModelName();
                 
-                // Check if already exists and handle duplicates
-                return pricingSnapshotRepository.findByYearMonthAndModel(yearMonth.toString(), modelName)
-                    .onErrorResume(org.springframework.dao.IncorrectResultSizeDataAccessException.class, error -> {
-                        // If duplicates exist, delete all and recreate
-                        log.warn("Found duplicate pricing snapshots for {} in {}, cleaning up", modelName, yearMonth);
-                        return cleanupDuplicatesAndSave(yearMonth.toString(), modelName, snapshot);
-                    })
+                // Check if already exists for this team (team-specific check with fallback to global)
+                return pricingSnapshotRepository.findByTeamIdAndYearMonthAndModel(teamId, yearMonth.toString(), modelName)
                     .flatMap(existing -> {
-                        log.debug("Pricing snapshot already exists for {} in {}, skipping", modelName, yearMonth);
+                        log.debug("Pricing snapshot already exists for team {} / {} in {}, skipping", teamId, modelName, yearMonth);
                         return Mono.empty();
                     })
                     .switchIfEmpty(
                         pricingSnapshotRepository.save(snapshot)
-                            .doOnSuccess(saved -> log.info("Saved pricing snapshot for {} in {}: ${}/{}", 
-                                modelName, yearMonth, model.getInputPricePer1M(), model.getOutputPricePer1M()))
+                            .doOnSuccess(saved -> log.info("Saved pricing snapshot for team {} / {} in {}: ${}/{}", 
+                                teamId, modelName, yearMonth, model.getInputPricePer1M(), model.getOutputPricePer1M()))
                             .onErrorResume(error -> {
-                                // If save fails due to duplicate, try cleanup
-                                log.warn("Error saving pricing snapshot, attempting cleanup: {}", error.getMessage());
-                                return cleanupDuplicatesAndSave(yearMonth.toString(), modelName, snapshot);
+                                // If save fails due to duplicate key violation, just skip it
+                                if (error.getMessage() != null && error.getMessage().contains("duplicate key")) {
+                                    log.debug("Pricing snapshot already exists (duplicate key), skipping");
+                                    return Mono.empty();
+                                }
+                                log.error("Error saving pricing snapshot: {}", error.getMessage());
+                                return Mono.error(error);
                             })
                     );
             })
             .then()
             .doOnSuccess(v -> log.info("Pricing snapshot initialization complete for {}", yearMonth));
+    }
+    
+    @Override
+    public Mono<Integer> backfillExecutionCosts(String teamId, boolean dryRun) {
+        log.info("🔄 Starting cost backfill for executions (dryRun: {}, teamId: {})", dryRun, teamId);
+        
+        Flux<LinqWorkflowExecution> executionsFlux;
+        
+        // Get executions based on teamId filter
+        if (teamId != null && !teamId.isEmpty()) {
+            executionsFlux = executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt"));
+        } else {
+            executionsFlux = executionRepository.findAll(Sort.by(Sort.Direction.DESC, "executedAt"));
+        }
+        
+        return executionsFlux
+            .filter(execution -> {
+                // Only process executions that have response metadata
+                if (execution.getResponse() == null || 
+                    execution.getResponse().getMetadata() == null || 
+                    execution.getResponse().getMetadata().getWorkflowMetadata() == null) {
+                    return false;
+                }
+                
+                // Check if any LLM step is missing cost calculation
+                return execution.getResponse().getMetadata().getWorkflowMetadata().stream()
+                    .anyMatch(stepMetadata -> {
+                        String target = stepMetadata.getTarget();
+                        boolean isLlmStep = target.equals("openai") || target.equals("gemini") 
+                            || target.equals("cohere") || target.equals("openai-embed") 
+                            || target.equals("gemini-embed") || target.equals("cohere-embed");
+                        
+                        // Has token usage but missing cost
+                        if (isLlmStep && stepMetadata.getTokenUsage() != null) {
+                            return stepMetadata.getTokenUsage().getCostUsd() == null 
+                                || stepMetadata.getTokenUsage().getCostUsd() == 0.0;
+                        }
+                        return false;
+                    });
+            })
+            .flatMap(execution -> {
+                boolean updated = false;
+                
+                // Process each workflow step
+                for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
+                    String target = stepMetadata.getTarget();
+                    
+                    // Check if it's an LLM step
+                    if (!target.equals("openai") && !target.equals("gemini") && !target.equals("cohere") 
+                        && !target.equals("openai-embed") && !target.equals("gemini-embed") && !target.equals("cohere-embed")) {
+                        continue;
+                    }
+                    
+                    // Check if token usage exists but cost is missing OR model is missing
+                    var tokenUsage = stepMetadata.getTokenUsage();
+                    if (tokenUsage == null) {
+                        continue;
+                    }
+                    
+                    boolean needsCostUpdate = (tokenUsage.getCostUsd() == null || tokenUsage.getCostUsd() == 0.0);
+                    boolean needsModelUpdate = (stepMetadata.getModel() == null || stepMetadata.getModel().isEmpty());
+                    
+                    if (!needsCostUpdate && !needsModelUpdate) {
+                        continue; // Skip if both cost and model are already set
+                    }
+                    
+                    // Extract model from the request's workflow step
+                    String model = null;
+                    if (execution.getRequest() != null && 
+                        execution.getRequest().getQuery() != null && 
+                        execution.getRequest().getQuery().getWorkflow() != null) {
+                        
+                        model = execution.getRequest().getQuery().getWorkflow().stream()
+                            .filter(ws -> ws.getStep() == stepMetadata.getStep())
+                            .findFirst()
+                            .map(ws -> ws.getLlmConfig() != null ? ws.getLlmConfig().getModel() : null)
+                            .orElse(null);
+                    }
+                    
+                    // Use model from step metadata if available, or try to extract from result
+                    if (model == null) {
+                        model = stepMetadata.getModel();
+                    }
+                    
+                    // Set default model if still not found
+                    if (model == null) {
+                        if (target.equals("openai") || target.equals("openai-embed")) {
+                            model = "gpt-4o-mini"; // Default OpenAI model
+                        } else if (target.equals("gemini") || target.equals("gemini-embed")) {
+                            model = "gemini-2.0-flash"; // Default Gemini model
+                        } else if (target.equals("cohere") || target.equals("cohere-embed")) {
+                            model = "command-r-08-2024"; // Default Cohere model
+                        }
+                    }
+                    
+                    // Calculate cost
+                    long promptTokens = tokenUsage.getPromptTokens();
+                    long completionTokens = tokenUsage.getCompletionTokens();
+                    double cost = needsCostUpdate ? calculateCost(model, promptTokens, completionTokens) : tokenUsage.getCostUsd();
+                    
+                    log.info("📊 {} execution {} - step {} ({}): model={}, tokens={}p/{}c, cost=${}, updates=[{}]", 
+                        dryRun ? "[DRY RUN]" : "Updating",
+                        execution.getId(), 
+                        stepMetadata.getStep(), 
+                        target, 
+                        model, 
+                        promptTokens, 
+                        completionTokens, 
+                        String.format("%.6f", cost),
+                        (needsCostUpdate ? "cost" : "") + (needsCostUpdate && needsModelUpdate ? "," : "") + (needsModelUpdate ? "model" : ""));
+                    
+                    // Update the fields that need updating
+                    if (!dryRun) {
+                        if (needsCostUpdate) {
+                            tokenUsage.setCostUsd(cost);
+                        }
+                        if (needsModelUpdate) {
+                            stepMetadata.setModel(model);
+                        }
+                        updated = true;
+                    }
+                }
+                
+                // Save the updated execution if not in dry run mode
+                if (!dryRun && updated) {
+                    return executionRepository.save(execution).thenReturn(1);
+                } else {
+                    return Mono.just(dryRun ? 1 : 0);
+                }
+            })
+            .reduce(0, Integer::sum)
+            .doOnSuccess(count -> {
+                if (dryRun) {
+                    log.info("✅ [DRY RUN] Would update {} executions with backfilled costs", count);
+                } else {
+                    log.info("✅ Successfully backfilled costs for {} executions", count);
+                }
+            })
+            .doOnError(error -> log.error("❌ Error during cost backfill: {}", error.getMessage()));
+    }
+    
+    @Override
+    public Mono<Integer> backfillTokenUsageFromResponses(String teamId, boolean dryRun) {
+        log.info("🔄 Starting ADVANCED token usage backfill from response data (dryRun: {}, teamId: {})", dryRun, teamId);
+        
+        Flux<LinqWorkflowExecution> executionsFlux;
+        
+        // Get executions based on teamId filter
+        if (teamId != null && !teamId.isEmpty()) {
+            executionsFlux = executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt"));
+        } else {
+            executionsFlux = executionRepository.findAll(Sort.by(Sort.Direction.DESC, "executedAt"));
+        }
+        
+        return executionsFlux
+            .filter(execution -> {
+                // Only process executions that have response with result
+                return execution.getResponse() != null && 
+                       execution.getResponse().getResult() instanceof LinqResponse.WorkflowResult &&
+                       execution.getResponse().getMetadata() != null &&
+                       execution.getResponse().getMetadata().getWorkflowMetadata() != null;
+            })
+            .flatMap(execution -> {
+                boolean updated = false;
+                LinqResponse.WorkflowResult workflowResult = (LinqResponse.WorkflowResult) execution.getResponse().getResult();
+                
+                if (workflowResult.getSteps() == null) {
+                    return Mono.just(0);
+                }
+                
+                // Process each workflow step
+                for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
+                    String target = stepMetadata.getTarget();
+                    
+                    // Check if it's a Cohere step (can be extended for other providers later)
+                    if (!target.equals("cohere") && !target.equals("cohere-embed")) {
+                        continue;
+                    }
+                    
+                    // Skip if already has token usage
+                    if (stepMetadata.getTokenUsage() != null) {
+                        continue;
+                    }
+                    
+                    // Find the corresponding step in the result
+                    LinqResponse.WorkflowStep resultStep = workflowResult.getSteps().stream()
+                        .filter(s -> s.getStep() == stepMetadata.getStep())
+                        .findFirst()
+                        .orElse(null);
+                    
+                    if (resultStep == null || !(resultStep.getResult() instanceof Map)) {
+                        continue;
+                    }
+                    
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> resultMap = (Map<String, Object>) resultStep.getResult();
+                    
+                    // Extract Cohere token usage from meta.billed_units
+                    if (!resultMap.containsKey("meta")) {
+                        continue;
+                    }
+                    
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> meta = (Map<String, Object>) resultMap.get("meta");
+                    
+                    if (!meta.containsKey("billed_units")) {
+                        continue;
+                    }
+                    
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> billedUnits = (Map<String, Object>) meta.get("billed_units");
+                    
+                    long promptTokens = billedUnits.containsKey("input_tokens") 
+                        ? ((Number) billedUnits.get("input_tokens")).longValue() : 0;
+                    long completionTokens = billedUnits.containsKey("output_tokens") 
+                        ? ((Number) billedUnits.get("output_tokens")).longValue() : 0;
+                    long totalTokens = promptTokens + completionTokens;
+                    
+                    // Extract model from request workflow
+                    String model = null;
+                    if (execution.getRequest() != null && 
+                        execution.getRequest().getQuery() != null && 
+                        execution.getRequest().getQuery().getWorkflow() != null) {
+                        
+                        model = execution.getRequest().getQuery().getWorkflow().stream()
+                            .filter(ws -> ws.getStep() == stepMetadata.getStep())
+                            .findFirst()
+                            .map(ws -> ws.getLlmConfig() != null ? ws.getLlmConfig().getModel() : null)
+                            .orElse(null);
+                    }
+                    
+                    // Use default model if not found
+                    if (model == null) {
+                        model = "command-r-08-2024"; // Default Cohere model
+                    }
+                    
+                    // Calculate cost
+                    double cost = calculateCost(model, promptTokens, completionTokens);
+                    
+                    log.info("🔍 {} execution {} - step {} ({}): EXTRACTING tokenUsage from response → model={}, tokens={}p/{}c, cost=${}", 
+                        dryRun ? "[DRY RUN]" : "Updating",
+                        execution.getId(), 
+                        stepMetadata.getStep(), 
+                        target, 
+                        model, 
+                        promptTokens, 
+                        completionTokens, 
+                        String.format("%.6f", cost));
+                    
+                    // Create and set token usage
+                    if (!dryRun) {
+                        LinqResponse.WorkflowStepMetadata.TokenUsage tokenUsage = new LinqResponse.WorkflowStepMetadata.TokenUsage();
+                        tokenUsage.setPromptTokens(promptTokens);
+                        tokenUsage.setCompletionTokens(completionTokens);
+                        tokenUsage.setTotalTokens(totalTokens);
+                        tokenUsage.setCostUsd(cost);
+                        
+                        stepMetadata.setTokenUsage(tokenUsage);
+                        stepMetadata.setModel(model);
+                        updated = true;
+                    }
+                }
+                
+                // Save the updated execution if not in dry run mode
+                if (!dryRun && updated) {
+                    return executionRepository.save(execution).thenReturn(1);
+                } else {
+                    return Mono.just(dryRun && updated ? 1 : 0);
+                }
+            })
+            .reduce(0, Integer::sum)
+            .doOnSuccess(count -> {
+                if (dryRun) {
+                    log.info("✅ [DRY RUN] Would extract and populate tokenUsage for {} executions", count);
+                } else {
+                    log.info("✅ Successfully extracted and populated tokenUsage for {} executions", count);
+                }
+            })
+            .doOnError(error -> log.error("❌ Error during advanced token usage backfill: {}", error.getMessage()));
     }
     
     private static class ModelPricing {

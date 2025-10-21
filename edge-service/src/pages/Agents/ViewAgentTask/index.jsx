@@ -2391,7 +2391,7 @@ function ViewAgentTask() {
                                     <Form.Control
                                         type="number"
                                         name="timeoutMinutes"
-                                        value={task?.timeoutMinutes || 30}
+                                        value={task?.timeoutMinutes || 120}
                                         onChange={handleInputChange}
                                         min="1"
                                     />

@@ -121,7 +121,7 @@ public class SecurityConfig {
                         .principalExtractor(principal -> {
                             // Extract the CN from the certificate (adjust this logic as needed)
                             String dn = principal.getSubjectX500Principal().getName();
-                            log.info("dn: {}", dn);
+                            // log.info("dn: {}", dn);
                             String cn = dn.split(",")[0].replace("CN=", "");
                             return cn;  // Return the Common Name (CN) as the principal
                         })
@@ -168,11 +168,10 @@ public class SecurityConfig {
                 path.startsWith("/favicon")) {
                 return chain.filter(exchange);
             }
-            log.info("TokenRelayWebFilter for path: {}", path);
+            // log.info("TokenRelayWebFilter for path: {}", path);
 
             // Store the original user token if it exists
             String userToken = exchange.getRequest().getHeaders().getFirst("Authorization");
-            log.info("Incoming token: {}", userToken);
 
             OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest
                     .withClientRegistrationId(clientId)
@@ -197,7 +196,7 @@ public class SecurityConfig {
                                     String token = userToken.startsWith("Bearer ") ? 
                                         userToken.substring(7) : userToken;
                                     headers.set("X-User-Token", token);
-                                    log.info("User token set for path: {}", path);
+                                    // log.info("User token set for path: {}", path);
                                 }
                             })
                                 .build();
@@ -213,7 +212,6 @@ public class SecurityConfig {
                                     String token = userToken.startsWith("Bearer ") ? 
                                         userToken.substring(7) : userToken;
                                     headers.set("X-User-Token", token);
-                                    log.info("Only user token set for path: {}", path);
                                 }
                             })
                             .build();
@@ -288,9 +286,9 @@ public class SecurityConfig {
 
     private Mono<AuthorizationDecision> dynamicPathAuthorization(Mono<Authentication> authenticationMono, AuthorizationContext authorizationContext) {
         String path = authorizationContext.getExchange().getRequest().getPath().toString();
-        log.info("Security check for path: {}", path);
-        log.info("Checking authorization for path: {} with method: {}", path, 
-            authorizationContext.getExchange().getRequest().getMethod());
+        // log.info("Security check for path: {}", path);
+        // log.info("Checking authorization for path: {} with method: {}", path, 
+        //     authorizationContext.getExchange().getRequest().getMethod());
 
         // Allow public access to any endpoint in PUBLIC_ENDPOINTS
         AntPathMatcher matcher = new AntPathMatcher();
@@ -304,11 +302,11 @@ public class SecurityConfig {
         // Use the path matcher from the DynamicRouteService to check if the path is whitelisted.
         // whitelisted means either hard coded or read from mongodb
         boolean isWhitelisted = dynamicRouteService.isPathWhitelisted(path);
-        log.info("Is path {} whitelisted? {}", path, isWhitelisted);
+        // log.info("Is path {} whitelisted? {}", path, isWhitelisted);
 
         // Check if this is a health endpoint - these should be completely public
         if (path.endsWith("/health") || path.endsWith("/health/")) {
-            log.info("Health endpoint detected, allowing public access: {}", path);
+            // log.info("Health endpoint detected, allowing public access: {}", path);
             return Mono.just(new AuthorizationDecision(true));
         }
 
@@ -324,7 +322,7 @@ public class SecurityConfig {
         if (isWhitelisted) {
             // For /r/ paths, check route permissions first
             if (path.startsWith("/r/") && !path.contains("/whatsapp/webhook")) {
-                log.info("Checking route permissions for path: {}", path);
+                // log.info("Checking route permissions for path: {}", path);
                 return checkRoutePermission(path)
                         .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path, hasPermission))
                         .flatMap(hasPermission -> {
@@ -332,7 +330,7 @@ public class SecurityConfig {
                                 log.warn("Route permission denied for: {}. Team does not have USE permission for this route.", path);
                                 return Mono.just(new AuthorizationDecision(false));
                             }
-                            log.info("Route permission granted for: {}. Proceeding with JWT checks.", path);
+                            // log.info("Route permission granted for: {}. Proceeding with JWT checks.", path);
                             // Continue with JWT checks if route permission granted
                             return continueWithJwtChecks(authenticationMono, path, scope);
                         })
@@ -359,7 +357,7 @@ public class SecurityConfig {
                     .map(JwtAuthenticationToken::getToken)  // Get the JWT token
                     .map(jwt -> {
                         String scopes = jwt.getClaimAsString("scope");
-                        log.info("scopes: {}", scopes);
+                        // log.info("scopes: {}", scopes);
                         boolean hasGatewayReadScope = scopes != null && scopes.contains("gateway.read");//does the gateway itself has this scope
                         if (!hasGatewayReadScope) {
                             log.warn("JWT is missing 'gateway.read' scope");
@@ -431,19 +429,19 @@ public class SecurityConfig {
         }
 
         String routeIdentifier = routeMatcher.group(1);
-        log.info("Route identifier found: {}", routeIdentifier);
+        // log.info("Route identifier found: {}", routeIdentifier);
 
         return teamContextService.getTeamFromContext()
                 .doOnNext(teamId -> log.info("Checking team {} permission for route: {}", teamId, routeIdentifier))
                 .flatMap(teamId -> {
                     String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);
-                    log.info("Checking Redis cache for key: {}", permissionCacheKey);
+                    // log.info("Checking Redis cache for key: {}", permissionCacheKey);
 
                     return Mono.fromCallable(() -> redisTemplate.opsForValue().get(permissionCacheKey))
                             .filter(Objects::nonNull)
                             .map(cachedPermission -> {
                                 boolean hasPermission = Boolean.parseBoolean(cachedPermission);
-                                log.info("Using cached permission for team {} route {}: {}", teamId, routeIdentifier, hasPermission);
+                                // log.info("Using cached permission for team {} route {}: {}", teamId, routeIdentifier, hasPermission);
                                 return hasPermission;
                             })
                             .switchIfEmpty(
@@ -454,13 +452,13 @@ public class SecurityConfig {
                                                             .doOnNext(teamRoute -> log.info("Found team route for team {} and route {}: {}", teamId, apiRoute.getId(), teamRoute.getPermissions()))
                                                             .map(teamRoute -> {
                                                                 boolean hasUsePermission = teamRoute.getPermissions().contains(RoutePermission.USE);
-                                                                log.info("Team {} has USE permission for route {}: {}", teamId, routeIdentifier, hasUsePermission);
+                                                                // log.info("Team {} has USE permission for route {}: {}", teamId, routeIdentifier, hasUsePermission);
                                                                 
                                                                 // Cache the result
                                                                 redisTemplate.opsForValue().set(permissionCacheKey,
                                                                         String.valueOf(hasUsePermission),
                                                                         Duration.ofMinutes(5));
-                                                                log.info("Cached permission result for team {} route {}: {}", teamId, routeIdentifier, hasUsePermission);
+                                                                // log.info("Cached permission result for team {} route {}: {}", teamId, routeIdentifier, hasUsePermission);
                                                                 
                                                                 return hasUsePermission;
                                                             })

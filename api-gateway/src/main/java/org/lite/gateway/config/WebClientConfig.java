@@ -56,10 +56,10 @@ public class WebClientConfig {
 
         HttpClient httpClient = HttpClient.create(provider)
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
-            .responseTimeout(Duration.ofSeconds(30))
+            .responseTimeout(Duration.ofSeconds(120))
             .doOnConnected(conn -> conn
-                .addHandlerLast(new ReadTimeoutHandler(30))
-                .addHandlerLast(new WriteTimeoutHandler(30)))
+                .addHandlerLast(new ReadTimeoutHandler(120))
+                .addHandlerLast(new WriteTimeoutHandler(120)))
             .secure(spec -> {
                 try {
                     spec.sslContext(SslContextBuilder

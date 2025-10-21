@@ -322,7 +322,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             
             // Set token usage for AI models
             response.getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
-                if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini")) {
+                if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini") 
+                    || stepMetadata.getTarget().equals("cohere")) {
                     // Get token usage from the step's result if available
                     if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
                         workflowResult.getSteps().stream()
@@ -373,6 +374,42 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                         tokenUsage.setCostUsd(cost);
                                         log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
                                             model, promptTokens, completionTokens, String.format("%.6f", cost));
+                                            
+                                    } else if (stepMetadata.getTarget().equals("cohere") && resultMap.containsKey("meta")) {
+                                        // Handle Cohere token usage
+                                        Map<?, ?> meta = (Map<?, ?>) resultMap.get("meta");
+                                        if (meta.containsKey("billed_units")) {
+                                            Map<?, ?> billedUnits = (Map<?, ?>) meta.get("billed_units");
+                                            long promptTokens = billedUnits.containsKey("input_tokens") 
+                                                ? ((Number) billedUnits.get("input_tokens")).longValue() : 0;
+                                            long completionTokens = billedUnits.containsKey("output_tokens") 
+                                                ? ((Number) billedUnits.get("output_tokens")).longValue() : 0;
+                                            long totalTokens = promptTokens + completionTokens;
+                                            
+                                            tokenUsage.setPromptTokens(promptTokens);
+                                            tokenUsage.setCompletionTokens(completionTokens);
+                                            tokenUsage.setTotalTokens(totalTokens);
+                                            
+                                            // Extract model from the original request's workflow step llmConfig
+                                            String model = "command-r-08-2024"; // default
+                                            if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
+                                                request.getQuery().getWorkflow().stream()
+                                                    .filter(ws -> ws.getStep() == stepMetadata.getStep())
+                                                    .findFirst()
+                                                    .ifPresent(ws -> {
+                                                        if (ws.getLlmConfig() != null && ws.getLlmConfig().getModel() != null) {
+                                                            stepMetadata.setModel(ws.getLlmConfig().getModel());
+                                                        }
+                                                    });
+                                            }
+                                            model = stepMetadata.getModel() != null ? stepMetadata.getModel() : model;
+                                            
+                                            // Calculate and store cost at execution time
+                                            double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
+                                            tokenUsage.setCostUsd(cost);
+                                            log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
+                                                model, promptTokens, completionTokens, String.format("%.6f", cost));
+                                        }
                                     }
                                     
                                     stepMetadata.setTokenUsage(tokenUsage);

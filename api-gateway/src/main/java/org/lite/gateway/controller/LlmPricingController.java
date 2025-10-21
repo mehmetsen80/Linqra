@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.LlmPricingSnapshot;
 import org.lite.gateway.repository.LlmPricingSnapshotRepository;
 import org.lite.gateway.service.LlmCostService;
+import org.lite.gateway.service.TeamContextService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
@@ -21,16 +22,18 @@ public class LlmPricingController {
     
     private final LlmCostService llmCostService;
     private final LlmPricingSnapshotRepository pricingSnapshotRepository;
+    private final TeamContextService teamContextService;
     
     /**
-     * Get all pricing snapshots for a specific month
+     * Get all pricing snapshots for a specific month for the current team
      */
     @GetMapping("/{yearMonth}")
     public Flux<LlmPricingSnapshot> getPricingForMonth(
         @PathVariable @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth
     ) {
-        log.info("Fetching pricing snapshots for: {}", yearMonth);
-        return llmCostService.getPricingSnapshotsForMonth(yearMonth);
+        return teamContextService.getTeamFromContext()
+            .doOnNext(teamId -> log.info("Fetching pricing snapshots for team {} in {}", teamId, yearMonth))
+            .flatMapMany(teamId -> llmCostService.getPricingSnapshotsForMonth(teamId, yearMonth));
     }
     
     /**
@@ -43,24 +46,27 @@ public class LlmPricingController {
     }
     
     /**
-     * Initialize current month's pricing from the static table
+     * Initialize current month's pricing from the static table for the current team
      * Useful for manual refresh or when prices are updated
      */
     @PostMapping("/initialize-current-month")
     public Mono<Map<String, String>> initializeCurrentMonthPricing() {
-        log.info("Manually initializing current month pricing snapshots");
-        return llmCostService.initializeCurrentMonthPricing()
-            .thenReturn(Map.of(
-                "status", "success",
-                "message", "Current month pricing snapshots initialized successfully",
-                "month", YearMonth.now().toString()
-            ))
+        return teamContextService.getTeamFromContext()
+            .doOnNext(teamId -> log.info("Manually initializing current month pricing snapshots for team {}", teamId))
+            .flatMap(teamId -> llmCostService.initializeCurrentMonthPricing(teamId)
+                .thenReturn(Map.of(
+                    "status", "success",
+                    "message", "Current month pricing snapshots initialized successfully for team",
+                    "teamId", teamId,
+                    "month", YearMonth.now().toString()
+                ))
+            )
             .doOnSuccess(result -> log.info("Current month pricing initialization completed"))
             .doOnError(error -> log.error("Error initializing current month pricing: {}", error.getMessage()));
     }
     
     /**
-     * Backfill pricing snapshots for historical months
+     * Backfill pricing snapshots for historical months for the current team
      * Use this for initial deployment to populate pricing for all past months
      * 
      * Example: POST /api/llm-pricing/backfill?fromMonth=2024-01&toMonth=2025-10
@@ -70,21 +76,24 @@ public class LlmPricingController {
         @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth fromMonth,
         @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth toMonth
     ) {
-        log.info("Starting backfill of pricing snapshots from {} to {}", fromMonth, toMonth);
-        
         // Calculate number of months
         long monthCount = java.time.temporal.ChronoUnit.MONTHS.between(fromMonth, toMonth) + 1;
         
-        return llmCostService.backfillHistoricalPricing(fromMonth, toMonth)
-            .then(Mono.fromSupplier(() -> {
-                Map<String, Object> response = new java.util.HashMap<>();
-                response.put("status", "success");
-                response.put("message", "Historical pricing snapshots backfilled successfully");
-                response.put("fromMonth", fromMonth.toString());
-                response.put("toMonth", toMonth.toString());
-                response.put("monthsProcessed", monthCount);
-                return response;
-            }))
+        return teamContextService.getTeamFromContext()
+            .doOnNext(teamId -> log.info("Starting backfill of pricing snapshots for team {} from {} to {}", 
+                teamId, fromMonth, toMonth))
+            .flatMap(teamId -> llmCostService.backfillHistoricalPricing(teamId, fromMonth, toMonth)
+                .then(Mono.fromSupplier(() -> {
+                    Map<String, Object> response = new java.util.HashMap<>();
+                    response.put("status", "success");
+                    response.put("message", "Historical pricing snapshots backfilled successfully for team");
+                    response.put("teamId", teamId);
+                    response.put("fromMonth", fromMonth.toString());
+                    response.put("toMonth", toMonth.toString());
+                    response.put("monthsProcessed", monthCount);
+                    return response;
+                }))
+            )
             .doOnSuccess(result -> log.info("Historical pricing backfill completed: {} months", monthCount))
             .doOnError(error -> log.error("Error backfilling historical pricing: {}", error.getMessage()));
     }

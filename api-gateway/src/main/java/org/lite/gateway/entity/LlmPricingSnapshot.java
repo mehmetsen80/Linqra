@@ -22,20 +22,21 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 @NoArgsConstructor
 @AllArgsConstructor
 @CompoundIndexes({
-    @CompoundIndex(name = "month_model_idx", def = "{'yearMonth': 1, 'model': 1}", unique = true)
+    @CompoundIndex(name = "team_month_model_idx", def = "{'teamId': 1, 'yearMonth': 1, 'model': 1}", unique = true)
 })
 public class LlmPricingSnapshot {
     @Id
     private String id;
     
-    private String yearMonth;                 // e.g., "2025-10" (stored as string in MongoDB)
-    private String model;                      // e.g., "gpt-4o", "gemini-2.0-flash"
-    private String provider;                   // e.g., "openai", "gemini"
+    private String teamId;                     // Team ID - allows team-specific pricing and audit trail
+    private String yearMonth;                  // e.g., "2025-10" (stored as string in MongoDB)
+    private String model;                      // e.g., "gpt-4o", "gemini-2.0-flash", "command-r-08-2024"
+    private String provider;                   // e.g., "openai", "gemini", "cohere"
     private double inputPricePer1M;           // Input/prompt price per 1M tokens in USD
     private double outputPricePer1M;          // Output/completion price per 1M tokens in USD
     private LocalDateTime snapshotDate;        // When this pricing was recorded
     private String source;                     // "manual", "api", "imported"
-    private Map<String, Object> metadata;     // Additional info (currency, region, etc.)
+    private Map<String, Object> metadata;     // Additional info (currency, region, custom rates, etc.)
     
     // Helper methods for YearMonth conversion
     @JsonIgnore

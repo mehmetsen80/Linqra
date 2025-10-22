@@ -176,8 +176,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     }
 
     @Override
-    public Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String target, String modelType, String textField, String teamId) {
-        log.info("Storing record in collection {} for team {}", collectionName, teamId);
+    public Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String target, String modelType, String textField, String teamId, List<Float> embedding) {
+        log.info("Storing record in collection {} for team {} (embedding: {})", collectionName, teamId, embedding != null ? "pre-computed" : "will generate");
         try {
             String text = (String) record.get(textField);
             if (text == null) {
@@ -188,156 +188,171 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 return Mono.error(new IllegalArgumentException("teamId cannot be null or empty"));
             }
 
-            return getEmbedding(text, target, modelType, teamId)
-                    .flatMap(embedding -> {
-                        try {
-                            // First get the collection schema to ensure we provide all fields
-                            R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
-                                DescribeCollectionParam.newBuilder()
-                                    .withCollectionName(collectionName)
-                                    .withDatabaseName("default")
-                                    .build()
-                            );
-                            
-                            List<InsertParam.Field> fields = new ArrayList<>();
-                            
-                            // Add ID field with timestamp-based unique ID
-                            long uniqueId = System.currentTimeMillis();
-                            fields.add(new InsertParam.Field("id", Collections.singletonList(uniqueId)));
-                            
-                            // Add created_at field with the same timestamp
-                            fields.add(new InsertParam.Field("created_at", Collections.singletonList(uniqueId)));
-                            
-                            // Add embedding field
-                            fields.add(new InsertParam.Field("embedding", Collections.singletonList(embedding)));
-                            
-                            // Add text field
-                            fields.add(new InsertParam.Field(textField, Collections.singletonList(text)));
-                            
-                            // Add all other fields from the schema, using null if not provided in the record
-                            for (io.milvus.grpc.FieldSchema fieldSchema : describeResponse.getData().getSchema().getFieldsList()) {
-                                String fieldName = fieldSchema.getName();
-                                if (!fieldName.equals("id") && !fieldName.equals("embedding") && !fieldName.equals(textField)) {
-                                    Object value = record.get(fieldName);
-                                    
-                                    // Check if field is required (not nullable) and value is null
-                                    if (value == null && !fieldSchema.getNullable()) {
-                                        // For non-nullable fields, provide a default value based on the data type
-                                        value = switch (fieldSchema.getDataType()) {
-                                            case Int64, Int32 -> 0L;
-                                            case Float -> 0.0f;
-                                            case Double -> 0.0;
-                                            case VarChar, String -> "";
-                                            default ->
-                                                    throw new IllegalArgumentException("Field '" + fieldName + "' is required but no value was provided and no default value is available for its type");
-                                        };
-                                    }
-                                    
-                                    // If value is null, pass it through as-is
-                                    Object convertedValue = value;
-                                    if (value != null) {
-                                        try {
-                                            // Convert values based on the field's data type from schema
-                                            switch (fieldSchema.getDataType()) {
-                                                case Int64:
-                                                    if (value instanceof String) {
-                                                        String strValue = ((String) value).trim();
-                                                        if (strValue.isEmpty()) {
-                                                            convertedValue = 0L; // Default value for empty string
-                                                        } else {
-                                                            convertedValue = Long.parseLong(strValue);
-                                                        }
-                                                    } else if (value instanceof Number) {
-                                                        convertedValue = ((Number) value).longValue();
-                                                    } else {
-                                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Long for field " + fieldName);
-                                                    }
-                                                    break;
-                                                case Int32:
-                                                    if (value instanceof String) {
-                                                        String strValue = ((String) value).trim();
-                                                        if (strValue.isEmpty()) {
-                                                            convertedValue = 0; // Default value for empty string
-                                                        } else {
-                                                            convertedValue = Integer.parseInt(strValue);
-                                                        }
-                                                    } else if (value instanceof Number) {
-                                                        convertedValue = ((Number) value).intValue();
-                                                    } else {
-                                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Integer for field " + fieldName);
-                                                    }
-                                                    break;
-                                                case Float:
-                                                    if (value instanceof String) {
-                                                        String strValue = ((String) value).trim();
-                                                        if (strValue.isEmpty()) {
-                                                            convertedValue = 0.0f; // Default value for empty string
-                                                        } else {
-                                                            convertedValue = Float.parseFloat(strValue);
-                                                        }
-                                                    } else if (value instanceof Number) {
-                                                        convertedValue = ((Number) value).floatValue();
-                                                    } else {
-                                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Float for field " + fieldName);
-                                                    }
-                                                    break;
-                                                case Double:
-                                                    if (value instanceof String) {
-                                                        String strValue = ((String) value).trim();
-                                                        if (strValue.isEmpty()) {
-                                                            convertedValue = 0.0; // Default value for empty string
-                                                        } else {
-                                                            convertedValue = Double.parseDouble(strValue);
-                                                        }
-                                                    } else if (value instanceof Number) {
-                                                        convertedValue = ((Number) value).doubleValue();
-                                                    } else {
-                                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Double for field " + fieldName);
-                                                    }
-                                                    break;
-                                                case VarChar:
-                                                case String:
-                                                    convertedValue = value.toString();
-                                                    break;
-                                                default:
-                                            }
-                                        } catch (NumberFormatException e) {
-                                            log.warn("Failed to parse number for field {} with value '{}': {}. Using default value.", fieldName, value, e.getMessage());
-                                            // Use default values for number fields when parsing fails
-                                            switch (fieldSchema.getDataType()) {
-                                                case Int64 -> convertedValue = 0L;
-                                                case Int32 -> convertedValue = 0;
-                                                case Float -> convertedValue = 0.0f;
-                                                case Double -> convertedValue = 0.0;
-                                                default -> convertedValue = value; // Keep original for non-numeric fields
-                                            }
-                                        } catch (Exception e) {
-                                            log.warn("Failed to convert value for field {}: {}. Using original value.", fieldName, e.getMessage());
-                                        }
-                                    }
-                                    
-                                    // Add the field with either the converted value or null
-                                    fields.add(new InsertParam.Field(fieldName, Collections.singletonList(convertedValue)));
-                                }
-                            }
+            // If pre-computed embedding is provided, use it directly
+            if (embedding != null && !embedding.isEmpty()) {
+                log.info("✅ Using pre-computed embedding (size: {}) - skipping embedding generation", embedding.size());
+                return storeWithEmbedding(collectionName, record, embedding, textField, teamId);
+            }
 
-                            InsertParam insertParam = InsertParam.newBuilder()
-                                    .withCollectionName(collectionName)
-                                    .withFields(fields)
-                                    .build();
-                            
-                            log.info("Inserting record with fields: {}", fields.stream()
-                                    .map(f -> f.getName() + ": " + f.getValues().getFirst())
-                                    .collect(Collectors.joining(", ")));
-                            
-                            milvusClient.insert(insertParam);
-                            log.info("Stored record in collection {}", collectionName);
-                            return Mono.just(Map.of("message", "Record stored successfully in collection " + collectionName));
+            // Otherwise, generate embedding as usual
+            log.info("🔄 Generating new embedding using target: {}, model: {}", target, modelType);
+            return getEmbedding(text, target, modelType, teamId)
+                    .flatMap(generatedEmbedding -> storeWithEmbedding(collectionName, record, generatedEmbedding, textField, teamId));
+        } catch (Exception e) {
+            log.error("Failed to store record in collection {}: {}", collectionName, e.getMessage(), e);
+            return Mono.error(e);
+        }
+    }
+
+    /**
+     * Internal method to store a record with a given embedding
+     */
+    private Mono<Map<String, String>> storeWithEmbedding(String collectionName, Map<String, Object> record, List<Float> embedding, String textField, String teamId) {
+        try {
+            String text = (String) record.get(textField);
+            
+            // First get the collection schema to ensure we provide all fields
+            R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
+                DescribeCollectionParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withDatabaseName("default")
+                    .build()
+            );
+            
+            List<InsertParam.Field> fields = new ArrayList<>();
+            
+            // Add ID field with timestamp-based unique ID
+            long uniqueId = System.currentTimeMillis();
+            fields.add(new InsertParam.Field("id", Collections.singletonList(uniqueId)));
+            
+            // Add created_at field with the same timestamp
+            fields.add(new InsertParam.Field("created_at", Collections.singletonList(uniqueId)));
+            
+            // Add embedding field
+            fields.add(new InsertParam.Field("embedding", Collections.singletonList(embedding)));
+            
+            // Add text field
+            fields.add(new InsertParam.Field(textField, Collections.singletonList(text)));
+            
+            // Add all other fields from the schema, using null if not provided in the record
+            for (io.milvus.grpc.FieldSchema fieldSchema : describeResponse.getData().getSchema().getFieldsList()) {
+                String fieldName = fieldSchema.getName();
+                if (!fieldName.equals("id") && !fieldName.equals("embedding") && !fieldName.equals(textField)) {
+                    Object value = record.get(fieldName);
+                    
+                    // Check if field is required (not nullable) and value is null
+                    if (value == null && !fieldSchema.getNullable()) {
+                        // For non-nullable fields, provide a default value based on the data type
+                        value = switch (fieldSchema.getDataType()) {
+                            case Int64, Int32 -> 0L;
+                            case Float -> 0.0f;
+                            case Double -> 0.0;
+                            case VarChar, String -> "";
+                            default ->
+                                    throw new IllegalArgumentException("Field '" + fieldName + "' is required but no value was provided and no default value is available for its type");
+                        };
+                    }
+                    
+                    // If value is null, pass it through as-is
+                    Object convertedValue = value;
+                    if (value != null) {
+                        try {
+                            // Convert values based on the field's data type from schema
+                            switch (fieldSchema.getDataType()) {
+                                case Int64:
+                                    if (value instanceof String) {
+                                        String strValue = ((String) value).trim();
+                                        if (strValue.isEmpty()) {
+                                            convertedValue = 0L; // Default value for empty string
+                                        } else {
+                                            convertedValue = Long.parseLong(strValue);
+                                        }
+                                    } else if (value instanceof Number) {
+                                        convertedValue = ((Number) value).longValue();
+                                    } else {
+                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Long for field " + fieldName);
+                                    }
+                                    break;
+                                case Int32:
+                                    if (value instanceof String) {
+                                        String strValue = ((String) value).trim();
+                                        if (strValue.isEmpty()) {
+                                            convertedValue = 0; // Default value for empty string
+                                        } else {
+                                            convertedValue = Integer.parseInt(strValue);
+                                        }
+                                    } else if (value instanceof Number) {
+                                        convertedValue = ((Number) value).intValue();
+                                    } else {
+                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Integer for field " + fieldName);
+                                    }
+                                    break;
+                                case Float:
+                                    if (value instanceof String) {
+                                        String strValue = ((String) value).trim();
+                                        if (strValue.isEmpty()) {
+                                            convertedValue = 0.0f;
+                                        } else {
+                                            convertedValue = Float.parseFloat(strValue);
+                                        }
+                                    } else if (value instanceof Number) {
+                                        convertedValue = ((Number) value).floatValue();
+                                    } else {
+                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Float for field " + fieldName);
+                                    }
+                                    break;
+                                case Double:
+                                    if (value instanceof String) {
+                                        String strValue = ((String) value).trim();
+                                        if (strValue.isEmpty()) {
+                                            convertedValue = 0.0;
+                                        } else {
+                                            convertedValue = Double.parseDouble(strValue);
+                                        }
+                                    } else if (value instanceof Number) {
+                                        convertedValue = ((Number) value).doubleValue();
+                                    } else {
+                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Double for field " + fieldName);
+                                    }
+                                    break;
+                                case VarChar:
+                                case String:
+                                    convertedValue = value.toString();
+                                    break;
+                                default:
+                            }
+                        } catch (NumberFormatException e) {
+                            log.warn("Failed to parse number for field {} with value '{}': {}. Using default value.", fieldName, value, e.getMessage());
+                            // Use default values for number fields when parsing fails
+                            switch (fieldSchema.getDataType()) {
+                                case Int64 -> convertedValue = 0L;
+                                case Int32 -> convertedValue = 0;
+                                case Float -> convertedValue = 0.0f;
+                                case Double -> convertedValue = 0.0;
+                                default -> convertedValue = value;
+                            }
                         } catch (Exception e) {
-                            log.error("Failed to store record in collection {}: {}", collectionName, e.getMessage(), e);
-                            return Mono.error(e);
+                            log.warn("Failed to convert value for field {}: {}. Using original value.", fieldName, e.getMessage());
                         }
-                    });
+                    }
+                    
+                    // Add the field with either the converted value or null
+                    fields.add(new InsertParam.Field(fieldName, Collections.singletonList(convertedValue)));
+                }
+            }
+
+            InsertParam insertParam = InsertParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withFields(fields)
+                    .build();
+            
+            log.info("Inserting record with fields: {}", fields.stream()
+                    .map(f -> f.getName() + ": " + f.getValues().getFirst())
+                    .collect(Collectors.joining(", ")));
+            
+            milvusClient.insert(insertParam);
+            log.info("Stored record in collection {}", collectionName);
+            return Mono.just(Map.of("message", "Record stored successfully in collection " + collectionName));
         } catch (Exception e) {
             log.error("Failed to store record in collection {}: {}", collectionName, e.getMessage(), e);
             return Mono.error(e);

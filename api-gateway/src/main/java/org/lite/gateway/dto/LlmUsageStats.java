@@ -1,10 +1,7 @@
 package org.lite.gateway.dto;
 
 import lombok.Data;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @Data
 public class LlmUsageStats {
@@ -13,6 +10,7 @@ public class LlmUsageStats {
     private TotalUsage totalUsage;
     private Map<String, ModelUsage> modelBreakdown = new HashMap<>();
     private Map<String, ProviderUsage> providerBreakdown = new HashMap<>();
+    private List<DailyUsage> dailyBreakdown = new ArrayList<>();
     
     @Data
     public static class Period {
@@ -49,6 +47,14 @@ public class LlmUsageStats {
     @Data
     public static class ProviderUsage {
         private String provider;
+        private long requests;
+        private long totalTokens;
+        private double costUsd;
+    }
+    
+    @Data
+    public static class DailyUsage {
+        private String date;                // yyyy-MM-dd format
         private long requests;
         private long totalTokens;
         private double costUsd;

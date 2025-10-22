@@ -19,10 +19,10 @@ public interface LinqMilvusStoreService {
     Mono<Map<String, String>> createCollection(String collectionName, List<Map<String, Object>> schemaFields, String description, String teamId);
 
     /**
-     * Generates an embedding for a given text using the specified embedding tool.
+     * Generates an embedding for a given text using the specified embedding llm.
      *
      * @param text The text to embed.
-     * @param targetTool Target of the embedding tool (e.g., "openai-embed", "huggingface", "gemini-embed").
+     * @param target Target of the embedding target (e.g., "openai-embed", "huggingface", "gemini-embed").
      * @param modelType The embedding model (e.g., "text-embedding-ada-002", "all-MiniLM-L6-v2").
      * @param teamId The team ID for the embedding request.
      * @return A Mono emitting the embedding as a List of Floats.
@@ -34,13 +34,14 @@ public interface LinqMilvusStoreService {
      *
      * @param collectionName The name of the collection.
      * @param record A map of field names to values (e.g., id, text, embedding).
-     * @param targetTool The embedding tool for generating embeddings.
-     * @param modelType The embedding model.
+     * @param target The embedding target for generating embeddings (can be null if embedding is provided).
+     * @param modelType The embedding model (can be null if embedding is provided).
      * @param textField The field name containing the text to embed.
      * @param teamId The team ID for the record.
+     * @param embedding Optional pre-computed embedding from previous workflow step. If provided, skips embedding generation.
      * @return A Mono indicating completion.
      */
-    Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String target, String modelType, String textField, String teamId);
+    Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String target, String modelType, String textField, String teamId, List<Float> embedding);
 
     /**
      * Queries the specified Milvus collection for similar records.
@@ -84,7 +85,7 @@ public interface LinqMilvusStoreService {
      * @param textField The name of the text field to search
      * @param text The text to search for
      * @param teamId The team ID
-     * @param targetTool The embedding tool to use (e.g., "openai-embed")
+     * @param target The embedding target to use (e.g., "openai-embed")
      * @param modelType The embedding model to use (e.g., "text-embedding-3-small")
      * @return A Mono containing the verification results
      */
@@ -109,7 +110,7 @@ public interface LinqMilvusStoreService {
      * @param textField The name of the text field to search
      * @param text The text to search for
      * @param teamId The team ID
-     * @param targetTool The embedding tool to use (e.g., "openai-embed")
+     * @param target The embedding target to use (e.g., "openai-embed")
      * @param modelType The embedding model to use (e.g., "text-embedding-3-small")
      * @param nResults The number of results to return (default: 10)
      * @param metadataFilters Optional metadata filters to apply before vector search

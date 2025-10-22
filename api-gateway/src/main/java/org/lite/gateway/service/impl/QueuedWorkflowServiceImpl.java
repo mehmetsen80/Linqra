@@ -228,16 +228,19 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
         
         return Mono.just(teamId)
             .flatMap(id -> {
-                log.info("🔍 Searching for LLM model configuration for async step {}: target={}, teamId={}", step.getStep(), step.getTarget(), id);
+                // For async steps, we only have access to target and teamId from LinqResponse.WorkflowStep
+                // We cannot access modelType since LinqResponse.WorkflowStep doesn't have llmConfig
+                log.info("🔍 Searching for LLM model configuration for async step {}: target={}, teamId={}", 
+                    step.getStep(), step.getTarget(), id);
                 return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), id)
                     .doOnNext(llmModel -> log.info("✅ Found LLM model configuration for async step {}: target={}, modelType={}", 
                         step.getStep(), llmModel.getTarget(), llmModel.getModelType()))
-                    .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", step.getTarget(), error.getMessage()))
-                    .doOnSuccess(llmModel -> {
-                        if (llmModel == null) {
-                            log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", step.getTarget());
-                        }
-                    });
+                    .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", step.getTarget(), error.getMessage()));
+            })
+            .doOnSuccess(llmModel -> {
+                if (llmModel == null) {
+                    log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", step.getTarget());
+                }
             })
             .doOnNext(llmModel -> log.info("🚀 About to execute async LLM request for step {}", step.getStep()))
             .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest, llmModel))

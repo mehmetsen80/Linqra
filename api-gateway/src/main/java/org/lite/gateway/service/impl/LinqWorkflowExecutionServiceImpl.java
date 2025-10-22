@@ -148,16 +148,36 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 // Execute the step
                 return teamIdMono
                     .flatMap(teamId -> {
-                        log.info("🔍 Searching for LLM model configuration: target={}, teamId={}", step.getTarget(), teamId);
-                        return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), teamId)
-                            .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
-                                llmModel.getTarget(), llmModel.getModelType()))
-                            .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", step.getTarget(), error.getMessage()))
-                            .doOnSuccess(llmModel -> {
-                                if (llmModel == null) {
-                                    log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", step.getTarget());
-                                }
-                            });
+                        // Try to get modelType from llmConfig first, then fallback to target-only search
+                        final String modelType = (step.getLlmConfig() != null && step.getLlmConfig().getModel() != null) 
+                            ? step.getLlmConfig().getModel() : null;
+                        
+                        if (modelType != null) {
+                            log.info("🔍 Searching for LLM model configuration: target={}, modelType={}, teamId={}", 
+                                step.getTarget(), modelType, teamId);
+                            return linqLlmModelRepository.findByTargetAndModelTypeAndTeamId(step.getTarget(), modelType, teamId)
+                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
+                                    llmModel.getTarget(), llmModel.getModelType()))
+                                .doOnError(error -> log.error("❌ Error finding LLM model for target {} with modelType {}: {}", 
+                                    step.getTarget(), modelType, error.getMessage()))
+                                .switchIfEmpty(Mono.defer(() -> {
+                                    log.warn("⚠️ No LLM model found with modelType {}, falling back to target-only search", modelType);
+                                    return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), teamId)
+                                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration (fallback): target={}, modelType={}", 
+                                            llmModel.getTarget(), llmModel.getModelType()));
+                                }));
+                        } else {
+                            log.info("🔍 Searching for LLM model configuration: target={}, teamId={}", step.getTarget(), teamId);
+                            return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), teamId)
+                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
+                                    llmModel.getTarget(), llmModel.getModelType()))
+                                .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", step.getTarget(), error.getMessage()));
+                        }
+                    })
+                    .doOnSuccess(llmModel -> {
+                        if (llmModel == null) {
+                            log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", step.getTarget());
+                        }
                     })
                     .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for step {}", step.getStep()))
                     .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest, llmModel))
@@ -241,7 +261,19 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 response.setMetadata(metadata);
                 return response;
             })
-        ).onErrorResume(error -> {
+        ).doFinally(signalType -> {
+            // Clean up memory-intensive data structures after workflow completion
+            // Note: stepResults and globalParams are copied to response, so they can be safely cleared
+            // stepMetadata is directly referenced in response, so we don't clear it
+            if (stepResults != null) {
+                stepResults.clear();
+            }
+            if (globalParams != null) {
+                globalParams.clear();
+            }
+            // Force garbage collection hint for memory cleanup
+            System.gc();
+        }).onErrorResume(error -> {
             // Create error response
             LinqResponse errorResponse = new LinqResponse();
             LinqResponse.Metadata metadata = new LinqResponse.Metadata();

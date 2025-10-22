@@ -1,17 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { Bar, Doughnut } from 'react-chartjs-2';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 import {
     Chart as ChartJS,
     CategoryScale,
     LinearScale,
     BarElement,
     ArcElement,
+    LineElement,
+    PointElement,
     Title,
     Tooltip,
     Legend,
 } from 'chart.js';
 import { useTeam } from '../../../contexts/TeamContext';
 import agentMonitoringService from '../../../services/agentMonitoringService';
+import agentService from '../../../services/agentService';
 import './styles.css';
 
 // Register ChartJS components
@@ -20,29 +23,57 @@ ChartJS.register(
     LinearScale,
     BarElement,
     ArcElement,
+    LineElement,
+    PointElement,
     Title,
     Tooltip,
     Legend
 );
 
-const AgentStats = () => {
+const AgentStats = ({ agentId = null }) => {
     const { currentTeam } = useTeam();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [agentInfo, setAgentInfo] = useState(null);
 
     useEffect(() => {
         if (currentTeam) {
             fetchStats();
+            // Also fetch agent info if we have an agentId
+            if (agentId) {
+                fetchAgentInfo();
+            }
         }
-    }, [currentTeam]);
+    }, [currentTeam, agentId]);
+
+
+    const fetchAgentInfo = async () => {
+        if (!agentId || !currentTeam) return;
+        
+        try {
+            console.log('Fetching agent info for agentId:', agentId, 'teamId:', currentTeam.id);
+            const agentResult = await agentService.getAgent(currentTeam.id, agentId);
+            if (agentResult.success) {
+                console.log('Agent info loaded:', agentResult.data);
+                setAgentInfo(agentResult.data);
+            } else {
+                console.error('Failed to fetch agent info:', agentResult.error);
+            }
+        } catch (err) {
+            console.error('Error fetching agent info:', err);
+        }
+    };
 
     const fetchStats = async () => {
         try {
             setLoading(true);
-            const result = await agentMonitoringService.getTeamExecutionStats(currentTeam.id);
+            // Always use getTeamExecutionStats, but pass agentId if provided
+            const result = await agentMonitoringService.getTeamExecutionStats(currentTeam.id, null, null, agentId);
+            
             if (result.success) {
                 console.log('Agent stats data:', result.data);
+                console.log('Hourly executions data:', result.data.hourlyExecutions);
                 setStats(result.data);
             } else {
                 setError(result.error);
@@ -106,9 +137,37 @@ const AgentStats = () => {
         ],
     };
 
+    // Prepare data for execution trends chart (Line)
+    const executionTrendsData = {
+        labels: Object.keys(stats.hourlyExecutions || {}).sort().map(hour => {
+            const hourNum = parseInt(hour);
+            return `${hourNum.toString().padStart(2, '0')}:00`;
+        }),
+        datasets: [
+            {
+                label: 'Agent Executions',
+                data: Object.keys(stats.hourlyExecutions || {}).sort().map(hour => 
+                    stats.hourlyExecutions[hour] || 0
+                ),
+                borderColor: 'rgb(75, 192, 192)',
+                backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                tension: 0.4,
+                fill: true,
+            },
+        ],
+    };
+
+    // Check if we have hourly execution data
+    const hasHourlyData = stats.hourlyExecutions && Object.keys(stats.hourlyExecutions).length > 0;
+
     return (
         <div className="agent-stats-container">
-            <h2 className="agent-stats-title">Agent Analytics</h2>
+            <h2 className="agent-stats-title">
+                {agentId ? 
+                    `Agent Analytics${agentInfo ? ` - ${agentInfo.name}` : ''}` : 
+                    `Team Agent Analytics${currentTeam?.name ? ` - ${currentTeam.name}` : ''}`
+                }
+            </h2>
             
             <div className="agent-stats-grid">
                 {/* Summary Cards */}
@@ -134,7 +193,7 @@ const AgentStats = () => {
                         {stats.resultBreakdown?.failed || 0}
                     </p>
                 </div>
-                <div className="agent-stats-card">
+                <div className="agent-stats-card wide">
                     <h3>Avg Execution Time</h3>
                     <p className="stats-number">
                         {stats.averageExecutionTimeMs 
@@ -203,6 +262,48 @@ const AgentStats = () => {
                             }
                         }}
                     />
+                </div>
+
+                <div className="agent-stats-chart full-width">
+                    <h3>Execution Trends</h3>
+                    {hasHourlyData ? (
+                        <Line 
+                            data={executionTrendsData}
+                            options={{
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                plugins: {
+                                    legend: {
+                                        position: 'top',
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                return `Executions: ${context.raw}`;
+                                            },
+                                            title: function(context) {
+                                                return `Hour: ${context[0].label}`;
+                                            }
+                                        }
+                                    }
+                                },
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: {
+                                            precision: 0,
+                                            stepSize: 1
+                                        }
+                                    }
+                                }
+                            }}
+                        />
+                    ) : (
+                        <div className="text-center text-muted py-5">
+                            <i className="fas fa-chart-line fa-3x mb-3 opacity-25"></i>
+                            <p>No execution data available yet</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

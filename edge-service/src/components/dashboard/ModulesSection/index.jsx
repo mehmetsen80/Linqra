@@ -94,7 +94,10 @@ function ModulesSection() {
               </Link>
             </div>
 
-            <div className="dashboard-card">
+            {/* Workflows card removed - workflow functionality is now integrated into Agents
+                Users can create and manage workflows directly within the Agent interface,
+                eliminating the need for a separate workflows management section */}
+            {/* <div className="dashboard-card">
               <Link to="/workflows" className="card-icon-link">
                 <div className="card-icon">
                   <i className="fas fa-project-diagram"></i>
@@ -105,7 +108,7 @@ function ModulesSection() {
               <Link to="/workflows" className="card-link">
                 Manage Workflows <i className="fas fa-arrow-right"></i>
               </Link>
-            </div>
+            </div> */}
 
             <div className="dashboard-card">
               <Link to="/agents" className="card-icon-link">

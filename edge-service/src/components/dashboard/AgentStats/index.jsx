@@ -42,6 +42,7 @@ const AgentStats = () => {
             setLoading(true);
             const result = await agentMonitoringService.getTeamExecutionStats(currentTeam.id);
             if (result.success) {
+                console.log('Agent stats data:', result.data);
                 setStats(result.data);
             } else {
                 setError(result.error);
@@ -131,6 +132,14 @@ const AgentStats = () => {
                     <h3>Failed</h3>
                     <p className="stats-number text-danger">
                         {stats.resultBreakdown?.failed || 0}
+                    </p>
+                </div>
+                <div className="agent-stats-card">
+                    <h3>Avg Execution Time</h3>
+                    <p className="stats-number">
+                        {stats.averageExecutionTimeMs 
+                            ? stats.averageExecutionTimeMs.toFixed(2) 
+                            : '0.00'}ms
                     </p>
                 </div>
 

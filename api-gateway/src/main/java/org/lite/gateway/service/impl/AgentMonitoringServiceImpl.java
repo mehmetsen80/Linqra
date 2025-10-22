@@ -273,10 +273,18 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                                         .filter(e -> ExecutionStatus.TIMEOUT.equals(e.getStatus()))
                                         .count();
                                 
+                                // Calculate average execution time (only for executions with duration)
+                                double averageExecutionTimeMs = executions.stream()
+                                        .filter(e -> e.getExecutionDurationMs() != null && e.getExecutionDurationMs() > 0)
+                                        .mapToLong(e -> e.getExecutionDurationMs())
+                                        .average()
+                                        .orElse(0.0);
+                                
                                 return Map.ofEntries(
                                         Map.entry("teamId", teamId),
                                         Map.entry("totalExecutions", totalExecutions),
                                         Map.entry("successRate", totalExecutions > 0 ? (successfulExecutions * 100.0 / totalExecutions) : 0.0),
+                                        Map.entry("averageExecutionTimeMs", averageExecutionTimeMs),
                                         Map.entry("period", Map.of("from", from, "to", to)),
                                         Map.entry("resultBreakdown", Map.of(
                                                 "successful", successfulExecutions,

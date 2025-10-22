@@ -170,14 +170,16 @@ const LlmCosts = () => {
       tooltip: {
         callbacks: {
           label: function(context) {
-            let label = context.label || '';
+            let label = context.dataset.label || '';
             if (label) {
               label += ': ';
             }
+            // For bar charts, use context.parsed.y; for doughnut charts, use context.parsed
+            const value = context.parsed.y !== undefined ? context.parsed.y : context.parsed;
             if (context.dataset.label === 'Cost (USD)') {
-              label += '$' + context.parsed.toFixed(4);
+              label += '$' + (typeof value === 'number' ? value.toFixed(6) : value);
             } else {
-              label += context.parsed;
+              label += value;
             }
             return label;
           }

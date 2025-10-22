@@ -20,11 +20,12 @@
 
 .agent-stats-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(10, 1fr);
     gap: 1.5rem;
 }
 
 .agent-stats-card {
+    grid-column: span 2;
     background-color: #f8f9fa;
     border-radius: 8px;
     padding: 1.5rem;
@@ -56,7 +57,7 @@
 }
 
 .agent-stats-chart {
-    grid-column: span 2;
+    grid-column: span 5;
     background-color: #f8f9fa;
     border-radius: 8px;
     padding: 1.5rem;
@@ -87,7 +88,11 @@
 /* Responsive adjustments */
 @media (max-width: 1200px) {
     .agent-stats-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: repeat(4, 1fr);
+    }
+    
+    .agent-stats-card {
+        grid-column: span 2;
     }
     
     .agent-stats-chart {
@@ -98,6 +103,10 @@
 @media (max-width: 768px) {
     .agent-stats-grid {
         grid-template-columns: 1fr;
+    }
+    
+    .agent-stats-card {
+        grid-column: span 1;
     }
     
     .agent-stats-chart {

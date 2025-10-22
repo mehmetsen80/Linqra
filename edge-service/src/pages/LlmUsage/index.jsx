@@ -2,15 +2,41 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Table, Form, Button, Alert, Spinner, Breadcrumb } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { format, subDays } from 'date-fns';
+import { Line, Bar } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import llmCostService from '../../services/llmCostService';
 import { useTeam } from '../../contexts/TeamContext';
 import './styles.css';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 const LlmUsage = () => {
   const { currentTeam } = useTeam();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [usageData, setUsageData] = useState(null);
+  const [exportingPDF, setExportingPDF] = useState(false);
   
   // Date range state - default to last 30 days
   const [fromDate, setFromDate] = useState(format(subDays(new Date(), 30), 'yyyy-MM-dd'));
@@ -63,6 +89,81 @@ const LlmUsage = () => {
     const month = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  };
+
+  const exportToPDF = async () => {
+    try {
+      setExportingPDF(true);
+      
+      const element = document.querySelector('.llm-usage-container');
+      if (!element) return;
+
+      // Small delay to allow the button to show loading state
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Capture the page as canvas
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      // Create PDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = canvas.width;
+      const imgHeight = canvas.height;
+      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
+      const imgX = (pdfWidth - imgWidth * ratio) / 2;
+      const imgY = 10;
+
+      // Add title page
+      pdf.setFontSize(20);
+      pdf.text('LLM Usage & Cost Report', pdfWidth / 2, 20, { align: 'center' });
+      pdf.setFontSize(12);
+      pdf.text(`Team: ${currentTeam?.name || 'N/A'}`, pdfWidth / 2, 30, { align: 'center' });
+      pdf.text(`Period: ${formatDateDisplay(fromDate)} to ${formatDateDisplay(toDate)}`, pdfWidth / 2, 37, { align: 'center' });
+      pdf.text(`Generated: ${new Date().toLocaleString()}`, pdfWidth / 2, 44, { align: 'center' });
+
+      // Add content starting from second page
+      pdf.addPage();
+      
+      // Calculate how many pages we need
+      const totalPages = Math.ceil(imgHeight * ratio / pdfHeight);
+      
+      for (let i = 0; i < totalPages; i++) {
+        if (i > 0) pdf.addPage();
+        
+        const sourceY = i * (pdfHeight / ratio);
+        const sourceHeight = Math.min(imgHeight - sourceY, pdfHeight / ratio);
+        
+        pdf.addImage(
+          imgData,
+          'PNG',
+          imgX,
+          imgY,
+          imgWidth * ratio,
+          imgHeight * ratio,
+          undefined,
+          'FAST',
+          0,
+          -sourceY * ratio
+        );
+      }
+
+      // Save the PDF
+      const fileName = `LLM_Usage_Report_${currentTeam?.name || 'Team'}_${formatDateDisplay(fromDate)}_to_${formatDateDisplay(toDate)}.pdf`;
+      pdf.save(fileName);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('Failed to generate PDF. Please try again.');
+    } finally {
+      setExportingPDF(false);
+    }
   };
 
   if (!currentTeam) {
@@ -142,7 +243,7 @@ const LlmUsage = () => {
                 />
               </Form.Group>
             </Col>
-            <Col md={4}>
+            <Col md={2}>
               <Button 
                 variant="primary" 
                 onClick={handleApplyDateRange}
@@ -151,6 +252,27 @@ const LlmUsage = () => {
               >
                 <i className="fas fa-search me-2"></i>
                 Apply Date Range
+              </Button>
+            </Col>
+            <Col md={2}>
+              <Button 
+                variant="success" 
+                onClick={exportToPDF}
+                disabled={loading || !usageData || exportingPDF}
+                className="w-100 export-pdf-btn"
+                title="Export to PDF"
+              >
+                {exportingPDF ? (
+                  <>
+                    <Spinner animation="border" size="sm" className="me-2" />
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-file-pdf me-2"></i>
+                    Export to PDF
+                  </>
+                )}
               </Button>
             </Col>
           </Row>
@@ -226,6 +348,283 @@ const LlmUsage = () => {
                       )}
                     </h3>
                   </div>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+
+          {/* Cost Over Time Chart */}
+          {usageData.dailyBreakdown && usageData.dailyBreakdown.length > 0 && (
+            <Card className="cost-over-time-card mb-4">
+              <Card.Header className="d-flex justify-content-between align-items-center">
+                <h5 className="mb-0">
+                  <i className="fas fa-chart-line me-2"></i>
+                  Cost Over Time
+                </h5>
+                <span className="date-range-badge">
+                  <i className="fas fa-calendar-alt me-1"></i>
+                  {formatDateDisplay(fromDate)} to {formatDateDisplay(toDate)}
+                </span>
+              </Card.Header>
+              <Card.Body>
+                <div className="chart-container" style={{ height: '300px' }}>
+                  <Line
+                    data={{
+                      labels: usageData.dailyBreakdown.map(d => {
+                        const date = new Date(d.date + 'T00:00:00');
+                        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                      }),
+                      datasets: [{
+                        label: 'Daily Cost (USD)',
+                        data: usageData.dailyBreakdown.map(d => d.costUsd),
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: 'rgba(75, 192, 192, 1)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      interaction: {
+                        mode: 'index',
+                        intersect: false,
+                      },
+                      plugins: {
+                        legend: {
+                          display: true,
+                          position: 'top',
+                        },
+                        tooltip: {
+                          callbacks: {
+                            label: function(context) {
+                              let label = context.dataset.label || '';
+                              if (label) {
+                                label += ': ';
+                              }
+                              label += '$' + context.parsed.y.toFixed(6);
+                              return label;
+                            },
+                            footer: function(tooltipItems) {
+                              const index = tooltipItems[0].dataIndex;
+                              const dailyData = usageData.dailyBreakdown[index];
+                              return [
+                                `Requests: ${dailyData.requests.toLocaleString()}`,
+                                `Tokens: ${dailyData.totalTokens.toLocaleString()}`
+                              ];
+                            }
+                          }
+                        }
+                      },
+                      scales: {
+                        x: {
+                          grid: {
+                            display: false
+                          }
+                        },
+                        y: {
+                          beginAtZero: true,
+                          ticks: {
+                            callback: function(value) {
+                              return '$' + value.toFixed(4);
+                            }
+                          },
+                          grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </div>
+              </Card.Body>
+            </Card>
+          )}
+
+          {/* Tokens by Model and Requests by Provider Charts */}
+          <Row className="mb-4">
+            <Col md={6}>
+              <Card className="tokens-by-model-card">
+                <Card.Header className="d-flex justify-content-between align-items-center">
+                  <h5 className="mb-0">
+                    <i className="fas fa-layer-group me-2"></i>
+                    Tokens by Model
+                  </h5>
+                  <span className="date-range-badge">
+                    <i className="fas fa-calendar-alt me-1"></i>
+                    {formatDateDisplay(fromDate)} to {formatDateDisplay(toDate)}
+                  </span>
+                </Card.Header>
+                <Card.Body>
+                  {usageData.modelBreakdown && Object.keys(usageData.modelBreakdown).length > 0 ? (
+                    <div className="chart-container" style={{ height: '300px' }}>
+                      <Bar
+                        data={{
+                          labels: Object.values(usageData.modelBreakdown).map(m => m.modelName),
+                          datasets: [
+                            {
+                              label: 'Input Tokens',
+                              data: Object.values(usageData.modelBreakdown).map(m => m.promptTokens),
+                              backgroundColor: 'rgba(54, 162, 235, 0.8)',
+                              borderColor: 'rgba(54, 162, 235, 1)',
+                              borderWidth: 1
+                            },
+                            {
+                              label: 'Output Tokens',
+                              data: Object.values(usageData.modelBreakdown).map(m => m.completionTokens),
+                              backgroundColor: 'rgba(255, 99, 132, 0.8)',
+                              borderColor: 'rgba(255, 99, 132, 1)',
+                              borderWidth: 1
+                            }
+                          ]
+                        }}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: {
+                              display: true,
+                              position: 'top',
+                            },
+                            tooltip: {
+                              callbacks: {
+                                label: function(context) {
+                                  let label = context.dataset.label || '';
+                                  if (label) {
+                                    label += ': ';
+                                  }
+                                  const value = context.parsed.y !== undefined ? context.parsed.y : context.parsed;
+                                  label += value.toLocaleString();
+                                  return label;
+                                }
+                              }
+                            }
+                          },
+                          scales: {
+                            x: {
+                              stacked: true,
+                              grid: {
+                                display: false
+                              }
+                            },
+                            y: {
+                              stacked: true,
+                              beginAtZero: true,
+                              ticks: {
+                                callback: function(value) {
+                                  return value.toLocaleString();
+                                }
+                              },
+                              grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                              }
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-muted text-center">No token data available</p>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+
+            <Col md={6}>
+              <Card className="requests-by-provider-card">
+                <Card.Header className="d-flex justify-content-between align-items-center">
+                  <h5 className="mb-0">
+                    <i className="fas fa-server me-2"></i>
+                    Requests by Provider
+                  </h5>
+                  <span className="date-range-badge">
+                    <i className="fas fa-calendar-alt me-1"></i>
+                    {formatDateDisplay(fromDate)} to {formatDateDisplay(toDate)}
+                  </span>
+                </Card.Header>
+                <Card.Body>
+                  {usageData.providerBreakdown && Object.keys(usageData.providerBreakdown).length > 0 ? (
+                    <div className="chart-container" style={{ height: '300px' }}>
+                      <Bar
+                        data={{
+                          labels: Object.values(usageData.providerBreakdown).map(p => 
+                            p.provider.charAt(0).toUpperCase() + p.provider.slice(1)
+                          ),
+                          datasets: [{
+                            label: 'Requests',
+                            data: Object.values(usageData.providerBreakdown).map(p => p.requests),
+                            backgroundColor: [
+                              'rgba(16, 185, 129, 0.8)',  // Green for first provider
+                              'rgba(59, 130, 246, 0.8)',  // Blue for second
+                              'rgba(228, 143, 14, 0.8)'   // Orange for third
+                            ],
+                            borderColor: [
+                              'rgba(16, 185, 129, 1)',
+                              'rgba(59, 130, 246, 1)',
+                              'rgba(228, 143, 14, 1)'
+                            ],
+                            borderWidth: 2
+                          }]
+                        }}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: {
+                              display: false
+                            },
+                            tooltip: {
+                              callbacks: {
+                                label: function(context) {
+                                  let label = context.dataset.label || '';
+                                  if (label) {
+                                    label += ': ';
+                                  }
+                                  const value = context.parsed.y !== undefined ? context.parsed.y : context.parsed;
+                                  label += value.toLocaleString();
+                                  return label;
+                                },
+                                footer: function(tooltipItems) {
+                                  const index = tooltipItems[0].dataIndex;
+                                  const provider = Object.values(usageData.providerBreakdown)[index];
+                                  return [
+                                    `Tokens: ${provider.totalTokens.toLocaleString()}`,
+                                    `Cost: $${provider.costUsd.toFixed(6)}`
+                                  ];
+                                }
+                              }
+                            }
+                          },
+                          scales: {
+                            x: {
+                              grid: {
+                                display: false
+                              }
+                            },
+                            y: {
+                              beginAtZero: true,
+                              ticks: {
+                                precision: 0,
+                                callback: function(value) {
+                                  return value.toLocaleString();
+                                }
+                              },
+                              grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                              }
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-muted text-center">No provider data available</p>
+                  )}
                 </Card.Body>
               </Card>
             </Col>

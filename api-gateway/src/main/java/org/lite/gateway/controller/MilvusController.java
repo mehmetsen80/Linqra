@@ -81,7 +81,8 @@ public class MilvusController {
                                 request.getTarget(),
                                 request.getModelType(),
                                 request.getTextField(),
-                                request.getTeamId()
+                                request.getTeamId(),
+                                request.getEmbedding()  // ← Pass embedding
                         )
                         .doOnSuccess(v -> log.info("linqMilvusStoreService.storeRecord completed for collection {} (scheduler path)", collectionName))
                         .map(v -> ResponseEntity.ok(Map.of(
@@ -121,7 +122,8 @@ public class MilvusController {
                                 request.getTarget(),
                                 request.getModelType(),
                                 request.getTextField(),
-                                request.getTeamId()
+                                request.getTeamId(),
+                                request.getEmbedding()  // ← Pass embedding
                         );
                     }))
             )
@@ -138,7 +140,8 @@ public class MilvusController {
                                     request.getTarget(),
                                     request.getModelType(),
                                     request.getTextField(),
-                                    request.getTeamId()
+                                    request.getTeamId(),
+                                    request.getEmbedding()  // ← Pass embedding
                             );
                         }));
             }))

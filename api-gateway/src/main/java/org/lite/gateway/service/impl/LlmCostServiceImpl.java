@@ -19,8 +19,7 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 @Service
 @RequiredArgsConstructor
@@ -322,8 +321,64 @@ public class LlmCostServiceImpl implements LlmCostService {
         stats.setModelBreakdown(sortedModelBreakdown);
         stats.setProviderBreakdown(providerBreakdown);
         
-        log.info("Calculated LLM usage for team {}: {} requests, ${} total cost", 
-            teamId, totalRequests, String.format("%.4f", totalCost));
+        // Calculate daily breakdown
+        Map<String, LlmUsageStats.DailyUsage> dailyMap = new HashMap<>();
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        
+        for (LinqWorkflowExecution execution : executions) {
+            if (execution.getResponse() == null || 
+                execution.getResponse().getMetadata() == null || 
+                execution.getResponse().getMetadata().getWorkflowMetadata() == null) {
+                continue;
+            }
+            
+            for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
+                String target = stepMetadata.getTarget();
+                
+                // Only process LLM provider steps
+                if (!target.equals("openai") && !target.equals("gemini") && !target.equals("openai-embed") 
+                    && !target.equals("cohere") && !target.equals("cohere-embed") 
+                    && !target.equals("gemini-embed")) {
+                    continue;
+                }
+                
+                var tokenUsage = stepMetadata.getTokenUsage();
+                if (tokenUsage == null) {
+                    continue;
+                }
+                
+                // Get the execution date (use executedAt from step metadata if available, otherwise from execution)
+                LocalDateTime executedAt = stepMetadata.getExecutedAt() != null 
+                    ? stepMetadata.getExecutedAt() 
+                    : execution.getExecutedAt();
+                String dateKey = executedAt.format(dateFormatter);
+                
+                LlmUsageStats.DailyUsage dailyUsage = dailyMap.computeIfAbsent(dateKey, k -> {
+                    LlmUsageStats.DailyUsage du = new LlmUsageStats.DailyUsage();
+                    du.setDate(dateKey);
+                    du.setRequests(0);
+                    du.setTotalTokens(0);
+                    du.setCostUsd(0.0);
+                    return du;
+                });
+                
+                long tokens = tokenUsage.getTotalTokens() > 0 ? tokenUsage.getTotalTokens() : 
+                    (tokenUsage.getPromptTokens() + tokenUsage.getCompletionTokens());
+                double cost = tokenUsage.getCostUsd() != null ? tokenUsage.getCostUsd() : 0.0;
+                
+                dailyUsage.setRequests(dailyUsage.getRequests() + 1);
+                dailyUsage.setTotalTokens(dailyUsage.getTotalTokens() + tokens);
+                dailyUsage.setCostUsd(dailyUsage.getCostUsd() + cost);
+            }
+        }
+        
+        // Convert to sorted list (by date)
+        List<LlmUsageStats.DailyUsage> dailyBreakdown = new ArrayList<>(dailyMap.values());
+        dailyBreakdown.sort(Comparator.comparing(LlmUsageStats.DailyUsage::getDate));
+        stats.setDailyBreakdown(dailyBreakdown);
+        
+        log.info("Calculated LLM usage for team {}: {} requests, ${} total cost, {} days", 
+            teamId, totalRequests, String.format("%.4f", totalCost), dailyBreakdown.size());
         
         return stats;
     }

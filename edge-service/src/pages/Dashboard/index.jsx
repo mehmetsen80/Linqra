@@ -47,8 +47,12 @@ function Dashboard() {
       <LlmCosts />
       <AgentTasks />
       <AgentStats />
-      <Workflows />
-      <WorkflowsStats />
+      {/* Workflows functionality has been removed - Agents now handle workflow execution directly
+          This eliminates redundancy and simplifies the user experience by consolidating
+          workflow management within the Agent interface where users can create and execute
+          workflows as part of agent tasks */}
+      {/* <Workflows /> */}
+      {/* <WorkflowsStats /> */}
       <div className="dashboard-charts">
         <LatencyChart />
         <ServiceUsagePie />

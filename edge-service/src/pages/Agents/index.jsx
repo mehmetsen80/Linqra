@@ -10,6 +10,7 @@ import agentService from '../../services/agentService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import { format, isValid, parseISO } from 'date-fns';
 import { Link, useNavigate } from 'react-router-dom';
+import AgentStats from '../../components/dashboard/AgentStats';
 import './styles.css';
 
 function Agents() {
@@ -180,6 +181,9 @@ function Agents() {
             )}
 
             <Card className="agents-table-card">
+                        <Card.Header className="text-start">
+                            <h5 className="mb-0">Agents{currentTeam?.name ? ` - ${currentTeam.name}` : ''}</h5>
+                        </Card.Header>
                         <Card.Body>
                             {agents.length === 0 ? (
                                 <div className="text-center py-5">
@@ -256,6 +260,12 @@ function Agents() {
                             )}
                         </Card.Body>
                     </Card>
+
+            {/* Agent Analytics */}
+            
+            <div className="mt-4">
+                <AgentStats />
+            </div>
 
             {/* Create Agent Modal */}
             <Modal

@@ -20,7 +20,7 @@
 
 .agent-stats-grid {
     display: grid;
-    grid-template-columns: repeat(10, 1fr);
+    grid-template-columns: repeat(12, 1fr);
     gap: 1.5rem;
 }
 
@@ -31,6 +31,10 @@
     padding: 1.5rem;
     text-align: center;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.agent-stats-card.wide {
+    grid-column: span 4;
 }
 
 .agent-stats-card h3 {
@@ -57,11 +61,15 @@
 }
 
 .agent-stats-chart {
-    grid-column: span 5;
+    grid-column: span 6;
     background-color: #f8f9fa;
     border-radius: 8px;
     padding: 1.5rem;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.agent-stats-chart.full-width {
+    grid-column: span 12;
 }
 
 .agent-stats-chart h3 {

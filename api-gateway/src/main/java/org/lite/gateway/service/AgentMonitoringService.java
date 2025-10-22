@@ -39,6 +39,11 @@ public interface AgentMonitoringService {
      */
     Mono<Map<String, Object>> getTeamExecutionStats(String teamId, LocalDateTime from, LocalDateTime to);
     
+    /**
+     * Get execution statistics for a team with optional agent filtering
+     */
+    Mono<Map<String, Object>> getTeamExecutionStats(String teamId, LocalDateTime from, LocalDateTime to, String agentId);
+    
     // ==================== RESOURCE MONITORING ====================
     
     /**

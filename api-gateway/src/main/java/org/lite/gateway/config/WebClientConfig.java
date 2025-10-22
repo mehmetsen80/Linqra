@@ -47,11 +47,11 @@ public class WebClientConfig {
 
         ConnectionProvider provider = ConnectionProvider
             .builder("fixed")
-            .maxConnections(500)
-            .maxIdleTime(Duration.ofSeconds(20))
-            .maxLifeTime(Duration.ofSeconds(60))
-            .pendingAcquireTimeout(Duration.ofSeconds(5))
-            .evictInBackground(Duration.ofSeconds(30))
+            .maxConnections(200)  // Reduced from 500 to prevent resource exhaustion
+            .maxIdleTime(Duration.ofSeconds(30))  // Increased idle time
+            .maxLifeTime(Duration.ofSeconds(120))  // Increased connection lifetime
+            .pendingAcquireTimeout(Duration.ofSeconds(10))  // Increased timeout
+            .evictInBackground(Duration.ofSeconds(60))  // Less frequent eviction
             .build();
 
         HttpClient httpClient = HttpClient.create(provider)

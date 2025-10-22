@@ -94,11 +94,12 @@ const agentMonitoringService = {
         }
     },
 
-    getTeamExecutionStats: async (teamId, from = null, to = null) => {
+    getTeamExecutionStats: async (teamId, from = null, to = null, agentId = null) => {
         try {
             const params = {};
             if (from) params.from = from;
             if (to) params.to = to;
+            if (agentId) params.agentId = agentId;
 
             const response = await axiosInstance.get(`/api/agents/monitoring/team/${teamId}/execution-stats`, {
                 params,

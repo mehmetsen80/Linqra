@@ -111,11 +111,11 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                             );
                             
                             // Model stats for AI targets
-                            if (target.equals("openai") || target.equals("gemini")) {
+                            if (target.equals("openai") || target.equals("gemini") || target.equals("cohere") || target.equals("openai-embed") || target.equals("gemini-embed") || target.equals("cohere-embed")) {
                                 String model = execution.getRequest().getQuery().getWorkflow().stream()
                                     .filter(step -> step.getStep() == stepMetadata.getStep())
                                     .findFirst()
-                                    .map(step -> step.getLlmConfig().getModel())
+                                    .map(step -> step.getLlmConfig() != null ? step.getLlmConfig().getModel() : null)
                                     .orElse("unknown");
                                 
                                 LinqWorkflowStats.ModelStats modelStats = stats.getModelStats().computeIfAbsent(model, k -> new LinqWorkflowStats.ModelStats());

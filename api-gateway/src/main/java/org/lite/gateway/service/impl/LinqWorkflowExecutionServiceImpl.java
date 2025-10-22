@@ -323,7 +323,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             // Set token usage for AI models
             response.getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
                 if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini") 
-                    || stepMetadata.getTarget().equals("cohere")) {
+                    || stepMetadata.getTarget().equals("cohere") || stepMetadata.getTarget().equals("openai-embed") 
+                    || stepMetadata.getTarget().equals("gemini-embed") || stepMetadata.getTarget().equals("cohere-embed")) {
                     // Get token usage from the step's result if available
                     if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
                         workflowResult.getSteps().stream()
@@ -332,12 +333,15 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                             .ifPresent(step -> {
                                 if (step.getResult() instanceof Map<?, ?> resultMap) {
                                     LinqResponse.WorkflowStepMetadata.TokenUsage tokenUsage = new LinqResponse.WorkflowStepMetadata.TokenUsage();
+                                    boolean hasTokenUsage = false;
                                     
-                                    if (stepMetadata.getTarget().equals("openai") && resultMap.containsKey("usage")) {
-                                        // Handle OpenAI token usage
+                                    if ((stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("openai-embed")) 
+                                        && resultMap.containsKey("usage")) {
+                                        // Handle OpenAI and OpenAI Embed token usage
                                         Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
                                         long promptTokens = ((Number) usage.get("prompt_tokens")).longValue();
-                                        long completionTokens = ((Number) usage.get("completion_tokens")).longValue();
+                                        long completionTokens = usage.containsKey("completion_tokens") 
+                                            ? ((Number) usage.get("completion_tokens")).longValue() : 0;
                                         long totalTokens = ((Number) usage.get("total_tokens")).longValue();
                                         
                                         tokenUsage.setPromptTokens(promptTokens);
@@ -353,12 +357,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                         tokenUsage.setCostUsd(cost);
                                         log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
                                             model, promptTokens, completionTokens, String.format("%.6f", cost));
+                                        hasTokenUsage = true;
                                             
                                     } else if (stepMetadata.getTarget().equals("gemini") && resultMap.containsKey("usageMetadata")) {
-                                        // Handle Gemini token usage
+                                        // Handle Gemini chat token usage (has usageMetadata)
                                         Map<?, ?> usageMetadata = (Map<?, ?>) resultMap.get("usageMetadata");
                                         long promptTokens = ((Number) usageMetadata.get("promptTokenCount")).longValue();
-                                        long completionTokens = ((Number) usageMetadata.get("candidatesTokenCount")).longValue();
+                                        long completionTokens = usageMetadata.containsKey("candidatesTokenCount") 
+                                            ? ((Number) usageMetadata.get("candidatesTokenCount")).longValue() : 0;
                                         long totalTokens = ((Number) usageMetadata.get("totalTokenCount")).longValue();
                                         
                                         tokenUsage.setPromptTokens(promptTokens);
@@ -374,9 +380,61 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                         tokenUsage.setCostUsd(cost);
                                         log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
                                             model, promptTokens, completionTokens, String.format("%.6f", cost));
+                                        hasTokenUsage = true;
+                                        
+                                    } else if (stepMetadata.getTarget().equals("gemini-embed")) {
+                                        // Handle Gemini embedding token usage (NO usageMetadata in response)
+                                        // Gemini embedding API doesn't return token usage, so we estimate from input text
+                                        
+                                        // Get the input text from the original request
+                                        String inputText = "";
+                                        if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
+                                            for (LinqRequest.Query.WorkflowStep ws : request.getQuery().getWorkflow()) {
+                                                if (ws.getStep() == stepMetadata.getStep()) {
+                                                    if (ws.getParams() != null && ws.getParams().containsKey("text")) {
+                                                        Object textObj = ws.getParams().get("text");
+                                                        // The text param should already be resolved in the stored request
+                                                        if (textObj instanceof String) {
+                                                            inputText = (String) textObj;
+                                                        }
+                                                    }
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Estimate tokens: roughly 1 token per 4 characters for English text
+                                        // This is a reasonable approximation used by many tokenizers
+                                        long estimatedTokens = Math.max(1, inputText.length() / 4);
+                                        
+                                        tokenUsage.setPromptTokens(estimatedTokens);
+                                        tokenUsage.setCompletionTokens(0);
+                                        tokenUsage.setTotalTokens(estimatedTokens);
+                                        
+                                        // Extract model from request's workflow step llmConfig
+                                        String model = "text-embedding-004"; // default
+                                        if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
+                                            request.getQuery().getWorkflow().stream()
+                                                .filter(ws -> ws.getStep() == stepMetadata.getStep())
+                                                .findFirst()
+                                                .ifPresent(ws -> {
+                                                    if (ws.getLlmConfig() != null && ws.getLlmConfig().getModel() != null) {
+                                                        stepMetadata.setModel(ws.getLlmConfig().getModel());
+                                                    }
+                                                });
+                                        }
+                                        model = stepMetadata.getModel() != null ? stepMetadata.getModel() : model;
+                                        
+                                        // Calculate and store cost
+                                        double cost = llmCostService.calculateCost(model, estimatedTokens, 0);
+                                        tokenUsage.setCostUsd(cost);
+                                        log.info("⚠️ Gemini embedding - estimated {} tokens from {} chars (API doesn't return usage), cost: ${}", 
+                                            estimatedTokens, inputText.length(), String.format("%.6f", cost));
+                                        hasTokenUsage = true;
                                             
-                                    } else if (stepMetadata.getTarget().equals("cohere") && resultMap.containsKey("meta")) {
-                                        // Handle Cohere token usage
+                                    } else if ((stepMetadata.getTarget().equals("cohere") || stepMetadata.getTarget().equals("cohere-embed")) 
+                                        && resultMap.containsKey("meta")) {
+                                        // Handle Cohere and Cohere Embed token usage
                                         Map<?, ?> meta = (Map<?, ?>) resultMap.get("meta");
                                         if (meta.containsKey("billed_units")) {
                                             Map<?, ?> billedUnits = (Map<?, ?>) meta.get("billed_units");
@@ -409,10 +467,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                             tokenUsage.setCostUsd(cost);
                                             log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
                                                 model, promptTokens, completionTokens, String.format("%.6f", cost));
+                                            hasTokenUsage = true;
                                         }
                                     }
                                     
-                                    stepMetadata.setTokenUsage(tokenUsage);
+                                    // Only set tokenUsage if it was actually populated
+                                    if (hasTokenUsage) {
+                                        stepMetadata.setTokenUsage(tokenUsage);
+                                    }
                                 }
                             });
                     }
@@ -496,6 +558,19 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private Object resolvePlaceholders(Object input, WorkflowExecutionContext context) {
         if (input == null) return null;
         if (input instanceof String stringInput) {
+            // Check if the entire string is EXACTLY a single placeholder
+            // If so, return the actual object instead of converting to string
+            Pattern singlePlaceholderPattern = Pattern.compile("^\\{\\{(step\\d+\\.result(?:\\.[^}]+)?|params\\.[\\w.]+)\\}\\}$");
+            Matcher singleMatcher = singlePlaceholderPattern.matcher(stringInput);
+            if (singleMatcher.matches()) {
+                String placeholderContent = singleMatcher.group(1);
+                Object resolvedObject = extractObjectValue(placeholderContent, context);
+                if (resolvedObject != null) {
+                    log.debug("🔍 Resolved placeholder {{{}}} as object type: {}", placeholderContent, resolvedObject.getClass().getSimpleName());
+                    return resolvedObject;
+                }
+            }
+            // Otherwise, resolve as string (for string interpolation cases)
             return resolvePlaceholder(stringInput, context);
         }
         if (input instanceof List<?> list) {
@@ -511,6 +586,77 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     )), context);
         }
         return input;
+    }
+
+    private Object extractObjectValue(String placeholderContent, WorkflowExecutionContext context) {
+        // Handle step result placeholders
+        Pattern stepPattern = Pattern.compile("^step(\\d+)\\.result(?:\\.([^}]+))?$");
+        Matcher stepMatcher = stepPattern.matcher(placeholderContent);
+        if (stepMatcher.matches()) {
+            int stepNum = Integer.parseInt(stepMatcher.group(1));
+            String path = stepMatcher.group(2);
+            Object stepResult = context.getStepResults().get(stepNum);
+            if (stepResult != null) {
+                return path != null ? extractObjectFromPath(stepResult, path) : stepResult;
+            }
+        }
+        
+        // Handle params placeholders
+        Pattern paramsPattern = Pattern.compile("^params\\.([\\w.]+)$");
+        Matcher paramsMatcher = paramsPattern.matcher(placeholderContent);
+        if (paramsMatcher.matches()) {
+            String paramPath = paramsMatcher.group(1);
+            if (context.getGlobalParams() != null) {
+                return extractObjectFromPath(context.getGlobalParams(), paramPath);
+            }
+        }
+        
+        return null;
+    }
+
+    private Object extractObjectFromPath(Object obj, String path) {
+        String[] parts = path.split("\\.");
+        Object current = obj;
+        for (String part : parts) {
+            if (current == null) return null;
+            
+            // Check if this part contains array access (e.g., "embeddings[0]")
+            if (part.contains("[")) {
+                String arrayName = part.substring(0, part.indexOf("["));
+                String indexStr = part.substring(part.indexOf("[") + 1, part.indexOf("]"));
+                
+                if (current instanceof Map<?, ?> map) {
+                    current = map.get(arrayName);
+                    if (current instanceof List<?> list && indexStr.matches("\\d+")) {
+                        int index = Integer.parseInt(indexStr);
+                        if (index >= 0 && index < list.size()) {
+                            current = list.get(index);
+                        } else {
+                            return null;
+                        }
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            } else {
+                // Regular property access
+                if (current instanceof Map<?, ?> map) {
+                    current = map.get(part);
+                } else if (current instanceof List<?> list && part.matches("\\d+")) {
+                    int index = Integer.parseInt(part);
+                    if (index >= 0 && index < list.size()) {
+                        current = list.get(index);
+                    } else {
+                        return null;
+                    }
+                } else {
+                    return null;
+                }
+            }
+        }
+        return current;
     }
 
     private String resolvePlaceholder(String value, WorkflowExecutionContext context) {
@@ -543,48 +689,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     private String extractValue(Object obj, String path) {
-        String[] parts = path.split("\\.");
-        Object current = obj;
-        for (String part : parts) {
-            if (current == null) return "";
-            
-            // Check if this part contains array access (e.g., "choices[0]")
-            if (part.contains("[")) {
-                String arrayName = part.substring(0, part.indexOf("["));
-                String indexStr = part.substring(part.indexOf("[") + 1, part.indexOf("]"));
-                
-                if (current instanceof Map<?, ?> map) {
-                    current = map.get(arrayName);
-                    if (current instanceof List<?> list && indexStr.matches("\\d+")) {
-                        int index = Integer.parseInt(indexStr);
-                        if (index >= 0 && index < list.size()) {
-                            current = list.get(index);
-                        } else {
-                            return "";
-                        }
-                    } else {
-                        return "";
-                    }
-                } else {
-                    return "";
-                }
-            } else {
-                // Regular property access
-                if (current instanceof Map<?, ?> map) {
-                    current = map.get(part);
-                } else if (current instanceof List<?> list && part.matches("\\d+")) {
-                    int index = Integer.parseInt(part);
-                    if (index >= 0 && index < list.size()) {
-                        current = list.get(index);
-                    } else {
-                        return "";
-                    }
-                } else {
-                    return "";
-                }
-            }
-        }
-        return current != null ? String.valueOf(current) : "";
+        Object result = extractObjectFromPath(obj, path);
+        return result != null ? String.valueOf(result) : "";
     }
 
     private String extractFinalResult(Object result) {

@@ -14,8 +14,6 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import llmCostService from '../../services/llmCostService';
 import { useTeam } from '../../contexts/TeamContext';
 import './styles.css';
@@ -91,77 +89,20 @@ const LlmUsage = () => {
     return `${year}-${month}-${day}`;
   };
 
-  const exportToPDF = async () => {
+  const exportToPDF = () => {
     try {
       setExportingPDF(true);
       
-      const element = document.querySelector('.llm-usage-container');
-      if (!element) return;
-
-      // Small delay to allow the button to show loading state
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Capture the page as canvas
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-
-      // Create PDF
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-      const imgX = (pdfWidth - imgWidth * ratio) / 2;
-      const imgY = 10;
-
-      // Add title page
-      pdf.setFontSize(20);
-      pdf.text('LLM Usage & Cost Report', pdfWidth / 2, 20, { align: 'center' });
-      pdf.setFontSize(12);
-      pdf.text(`Team: ${currentTeam?.name || 'N/A'}`, pdfWidth / 2, 30, { align: 'center' });
-      pdf.text(`Period: ${formatDateDisplay(fromDate)} to ${formatDateDisplay(toDate)}`, pdfWidth / 2, 37, { align: 'center' });
-      pdf.text(`Generated: ${new Date().toLocaleString()}`, pdfWidth / 2, 44, { align: 'center' });
-
-      // Add content starting from second page
-      pdf.addPage();
-      
-      // Calculate how many pages we need
-      const totalPages = Math.ceil(imgHeight * ratio / pdfHeight);
-      
-      for (let i = 0; i < totalPages; i++) {
-        if (i > 0) pdf.addPage();
-        
-        const sourceY = i * (pdfHeight / ratio);
-        const sourceHeight = Math.min(imgHeight - sourceY, pdfHeight / ratio);
-        
-        pdf.addImage(
-          imgData,
-          'PNG',
-          imgX,
-          imgY,
-          imgWidth * ratio,
-          imgHeight * ratio,
-          undefined,
-          'FAST',
-          0,
-          -sourceY * ratio
-        );
-      }
-
-      // Save the PDF
-      const fileName = `LLM_Usage_Report_${currentTeam?.name || 'Team'}_${formatDateDisplay(fromDate)}_to_${formatDateDisplay(toDate)}.pdf`;
-      pdf.save(fileName);
+      // Small delay to show the loading state
+      setTimeout(() => {
+        // Use browser's native print dialog to save as PDF
+        // This is the cleanest approach without external dependencies
+        window.print();
+        setExportingPDF(false);
+      }, 100);
     } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF. Please try again.');
-    } finally {
+      console.error('Error opening print dialog:', error);
+      alert('Failed to open print dialog. Please try again.');
       setExportingPDF(false);
     }
   };

@@ -367,3 +367,65 @@
   }
 }
 
+/* Print Styles for PDF Export */
+@media print {
+  /* Hide navigation and controls */
+  .breadcrumb-card,
+  .filter-card,
+  .export-pdf-btn,
+  .page-header {
+    display: none !important;
+  }
+
+  /* Optimize for printing */
+  .llm-usage-container {
+    padding: 0;
+    max-width: 100%;
+  }
+
+  /* Ensure cards don't break across pages */
+  .summary-card,
+  .cost-over-time-card,
+  .tokens-by-model-card,
+  .requests-by-provider-card,
+  .model-breakdown-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+    box-shadow: none;
+    border: 1px solid #e5e7eb;
+  }
+
+  /* Make charts print-friendly */
+  .chart-container {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Optimize table for printing */
+  .model-breakdown-table {
+    font-size: 0.75rem;
+  }
+
+  .model-breakdown-table thead th,
+  .model-breakdown-table tbody td {
+    padding: 0.5rem;
+  }
+
+  /* Add page header */
+  @page {
+    margin: 1.5cm;
+  }
+
+  /* Add report title on first page */
+  .llm-usage-container::before {
+    content: "LLM Usage & Cost Report";
+    display: block;
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e5e7eb;
+  }
+}
+

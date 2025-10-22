@@ -12,6 +12,7 @@ import agentMonitoringService from '../../../services/agentMonitoringService';
 import agentTaskService from '../../../services/agentTaskService';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { format, isValid, parseISO } from 'date-fns';
+import AgentStats from '../../../components/dashboard/AgentStats';
 import './styles.css';
 
 function ViewAgent() {
@@ -35,7 +36,7 @@ function ViewAgent() {
         taskType: 'WORKFLOW_EMBEDDED',
         priority: 5,
         maxRetries: 3,
-        timeoutMinutes: 30
+        timeoutMinutes: 120
     });
     const [creatingTask, setCreatingTask] = useState(false);
     const [showEditAgentModal, setShowEditAgentModal] = useState(false);
@@ -424,7 +425,7 @@ function ViewAgent() {
                 <Col lg={8}>
                     <Card className="mb-4">
                         <Card.Header>
-                            <h5 className="mb-0">Agent Information</h5>
+                            <h5 className="mb-0">Agent Information{agent?.name ? ` - ${agent.name}` : ''}</h5>
                         </Card.Header>
                         <Card.Body>
                             <Row>
@@ -518,7 +519,7 @@ function ViewAgent() {
                 <Col lg={4}>
                     <Card className="mb-4">
                         <Card.Header>
-                            <h5 className="mb-0">Quick Stats</h5>
+                            <h5 className="mb-0">Quick Stats{agent?.name ? ` - ${agent.name}` : ''}</h5>
                         </Card.Header>
                         <Card.Body>
                             {loadingStats ? (
@@ -566,9 +567,10 @@ function ViewAgent() {
                 </Col>
             </Row>
 
+
             <Card className="mb-4">
                 <Card.Header className="d-flex justify-content-between align-items-center">
-                    <h5 className="mb-0">Agent Tasks</h5>
+                    <h5 className="mb-0">Agent Tasks{agent?.name ? ` - ${agent.name}` : ''}</h5>
                     {canEditAgent && (
                         <Button 
                             variant="primary"
@@ -659,7 +661,7 @@ function ViewAgent() {
                     <Col lg={6}>
                         <Card>
                             <Card.Header>
-                                <h5 className="mb-0">Status Breakdown</h5>
+                                <h5 className="mb-0">Status Breakdown{agent?.name ? ` - ${agent.name}` : ''}</h5>
                             </Card.Header>
                             <Card.Body>
                                 <div className="stat-item">
@@ -688,7 +690,7 @@ function ViewAgent() {
                     <Col lg={6}>
                         <Card>
                             <Card.Header>
-                                <h5 className="mb-0">Result Breakdown</h5>
+                                <h5 className="mb-0">Result Breakdown{agent?.name ? ` - ${agent.name}` : ''}</h5>
                             </Card.Header>
                             <Card.Body>
                                 <div className="stat-item">
@@ -716,6 +718,11 @@ function ViewAgent() {
                     </Col>
                 </Row>
             )}
+
+            {/* Agent Statistics Dashboard */}
+            <div className="mb-4">
+                <AgentStats agentId={agentId} />
+            </div>
 
             {/* Create Task Modal */}
             <Modal
@@ -759,10 +766,14 @@ function ViewAgent() {
                                 onChange={handleNewTaskChange}
                             >
                                 <option value="WORKFLOW_EMBEDDED">Workflow Embedded</option>
-                                <option value="WORKFLOW_TRIGGER">Workflow Trigger</option>
+                                {/* Workflow Trigger option disabled - workflow functionality is now integrated into Agents
+                                    Users can create and execute workflows directly within the Agent interface,
+                                    eliminating the need for separate workflow triggers. Additional task types
+                                    will be added in future updates. */}
+                                {/* <option value="WORKFLOW_TRIGGER">Workflow Trigger</option> */}
                             </Form.Select>
                             <Form.Text className="text-muted">
-                                Embedded: Steps defined inline. Trigger: Reference an existing workflow.
+                                Steps defined inline. More task types coming soon.
                             </Form.Text>
                         </Form.Group>
 

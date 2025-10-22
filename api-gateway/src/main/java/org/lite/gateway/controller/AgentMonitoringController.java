@@ -82,16 +82,17 @@ public class AgentMonitoringController {
     public Mono<ResponseEntity<Map<String, Object>>> getTeamExecutionStats(
             @PathVariable String teamId,
             @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to) {
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String agentId) {
         
         try {
             // Default to last month if not provided
             LocalDateTime toDate = (to != null) ? LocalDateTime.parse(to) : LocalDateTime.now();
             LocalDateTime fromDate = (from != null) ? LocalDateTime.parse(from) : toDate.minusMonths(1);
             
-            log.info("Getting execution statistics for team {} from {} to {}", teamId, fromDate, toDate);
+            log.info("Getting execution statistics for team {} from {} to {} (agentId: {})", teamId, fromDate, toDate, agentId);
             
-            return agentMonitoringService.getTeamExecutionStats(teamId, fromDate, toDate)
+            return agentMonitoringService.getTeamExecutionStats(teamId, fromDate, toDate, agentId)
                     .map(ResponseEntity::ok)
                     .onErrorReturn(ResponseEntity.badRequest().build());
         } catch (Exception e) {

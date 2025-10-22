@@ -92,8 +92,14 @@ ENV MILVUS_PASSWORD=Linqra2024!
 # Expose the API gateway port
 EXPOSE 7777
 
-# Run the API gateway-service application with SSL configuration
+# Run the API gateway-service application with SSL configuration and memory management
 ENTRYPOINT ["java", \
+            "-Xms1g", \
+            "-Xmx2g", \
+            "-XX:+UseG1GC", \
+            "-XX:MaxGCPauseMillis=200", \
+            "-XX:+UnlockExperimentalVMOptions", \
+            "-XX:+UseStringDeduplication", \
             "-Dhttps.protocols=TLSv1.2,TLSv1.3", \
             "-Djavax.net.ssl.keyStore=${GATEWAY_KEY_STORE}", \
             "-Djavax.net.ssl.keyStorePassword=${GATEWAY_KEY_STORE_PASSWORD}", \

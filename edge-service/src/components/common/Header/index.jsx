@@ -45,8 +45,11 @@ const Header = () => {
             <Nav.Link as={NavLink} to="/dashboard">Dashboard</Nav.Link>
             <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/api-routes">Apps</Nav.Link>
-            <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/workflows">Workflows</Nav.Link>
+            {/* Workflows navigation removed - workflow functionality is now integrated into Agents
+                Users can create and execute workflows directly within the Agent interface,
+                eliminating the need for a separate workflows section */}
+            {/* <span className="nav-separator"> | </span> */}
+            {/* <Nav.Link as={NavLink} to="/workflows">Workflows</Nav.Link> */}
             <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/agents">Agents</Nav.Link>
             <span className="nav-separator"> | </span>

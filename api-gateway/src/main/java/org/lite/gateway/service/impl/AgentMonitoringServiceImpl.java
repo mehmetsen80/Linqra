@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -224,6 +225,10 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
     
     @Override
     public Mono<Map<String, Object>> getTeamExecutionStats(String teamId, LocalDateTime from, LocalDateTime to) {
+        return getTeamExecutionStats(teamId, from, to, null);
+    }
+    
+    public Mono<Map<String, Object>> getTeamExecutionStats(String teamId, LocalDateTime from, LocalDateTime to, String specificAgentId) {
         // First get all agents for the team, then get their executions
         return agentRepository.findByTeamId(teamId)
                 .map(Agent::getId)
@@ -233,7 +238,16 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                         return Mono.error(new RuntimeException("No agents assigned to team: " + teamId));
                     }
                     
-                    return Flux.fromIterable(agentIds)
+                    // Filter to specific agent if provided
+                    List<String> targetAgentIds = specificAgentId != null 
+                        ? (agentIds.contains(specificAgentId) ? List.of(specificAgentId) : List.of())
+                        : agentIds;
+                    
+                    if (targetAgentIds.isEmpty()) {
+                        return Mono.error(new RuntimeException("Agent not found in team: " + specificAgentId));
+                    }
+                    
+                    return Flux.fromIterable(targetAgentIds)
                             .flatMap(agentId -> agentExecutionRepository.findByAgentIdAndStartedAtBetween(agentId, from, to))
                             .collectList()
                             .map(executions -> {
@@ -280,6 +294,15 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                                         .average()
                                         .orElse(0.0);
                                 
+                                // Calculate hourly execution distribution
+                                Map<String, Integer> hourlyExecutions = new HashMap<>();
+                                for (AgentExecution execution : executions) {
+                                    if (execution.getStartedAt() != null) {
+                                        int hour = execution.getStartedAt().getHour();
+                                        hourlyExecutions.merge(String.valueOf(hour), 1, Integer::sum);
+                                    }
+                                }
+
                                 return Map.ofEntries(
                                         Map.entry("teamId", teamId),
                                         Map.entry("totalExecutions", totalExecutions),
@@ -299,7 +322,8 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                                                 "failed", failedStatusExecutions,
                                                 "cancelled", cancelledExecutions,
                                                 "timeout", timeoutExecutions
-                                        ))
+                                        )),
+                                        Map.entry("hourlyExecutions", hourlyExecutions)
                                 );
                             });
                 });

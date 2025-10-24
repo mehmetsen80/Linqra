@@ -1,6 +1,8 @@
 networks:
   linqra-network:
     external: true
+    driver_opts:
+      com.docker.network.driver.mtu: 1500
 
 services:
   # postgres
@@ -344,6 +346,9 @@ services:
       MILVUS_PORT: 19530
       MILVUS_USERNAME: milvus_admin
       MILVUS_PASSWORD: Linqra2024!
+      # Docker networking optimizations
+      JAVA_OPTS: "-Djava.net.preferIPv4Stack=true -Dsun.net.client.defaultConnectTimeout=5000 -Dsun.net.client.defaultReadTimeout=30000"
+      DOCKER_CONTAINER: "true"
     volumes:
       - ./api-gateway:/app/api-gateway
       - ./keys:/app/keys

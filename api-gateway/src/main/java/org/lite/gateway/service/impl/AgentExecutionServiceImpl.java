@@ -12,6 +12,9 @@ import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentExecutionRepository;
 import org.lite.gateway.service.AgentExecutionService;
+import org.lite.gateway.service.ExecutionMonitoringService;
+import org.lite.gateway.service.ExecutionQueueService;
+import org.lite.gateway.dto.ExecutionProgressUpdate;
 import org.springframework.stereotype.Service;
 
 
@@ -21,6 +24,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import org.lite.gateway.enums.ExecutionType;
@@ -38,6 +43,8 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
     private final WorkflowTriggerAgentTaskExecutor workflowTriggerExecutor;
     private final WorkflowEmbeddedAgentTaskExecutor workflowEmbeddedExecutor;
     private final WorkflowAdHocAgentTaskExecutor workflowAdhocExecutor;
+    private final ExecutionMonitoringService executionMonitoringService;
+    private final ExecutionQueueService executionQueueService;
     
     // ==================== EXECUTION MANAGEMENT ====================
     
@@ -79,9 +86,11 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
             }
             
             // Create execution record
+            String executionId = UUID.randomUUID().toString();
             AgentExecution execution = AgentExecution.builder()
-                    .executionId(UUID.randomUUID().toString())
+                    .executionId(executionId)
                     .agentId(agentId)
+                    .agentName(agent.getName())  // Set the agent name
                     .taskId(taskId)
                     .taskName(task.getName())
                     .teamId(teamId)
@@ -93,7 +102,14 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                     .maxRetries(task.getMaxRetries())
                     .build();
             
+            // Add to queue first, then execute after a delay
             return agentExecutionRepository.save(execution)
+            .then(executionQueueService.addToQueue(executionId, agentId, agent.getName(), taskId, task.getName(), teamId, executedBy))
+            .then(Mono.delay(java.time.Duration.ofSeconds(2))) // Wait 2 seconds to show queue
+            .then(executionQueueService.markAsStarting(executionId))
+            .then(Mono.delay(java.time.Duration.ofSeconds(1))) // Wait 1 more second for starting animation
+            .then(executionQueueService.markAsStartedAndRemove(executionId))
+            .then(sendExecutionStartedUpdate(execution, agent, task))
             .then(executeWorkflow(execution, task, agent))
             .thenReturn(execution)  // Return the execution object immediately
             .onErrorResume(error -> {
@@ -102,6 +118,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                 execution.markAsFailed(error.getMessage(), "Workflow execution failed");
                 
                 return agentExecutionRepository.save(execution)
+                .then(sendExecutionFailedUpdate(execution, agent, task, error.getMessage()))
                 .then(Mono.error(error));
             });
         })
@@ -150,6 +167,24 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                 .take(limit);
     }
     
+    @Override
+    public Mono<AgentExecution> getExecutionById(String executionId) {
+        return agentExecutionRepository.findById(executionId)
+                .doOnSuccess(execution -> log.debug("Found execution: {} for executionId: {}", 
+                    execution != null ? execution.getExecutionId() : "null", executionId))
+                .doOnError(error -> log.error("Error fetching execution by id {}: {}", executionId, error.getMessage()))
+                .switchIfEmpty(Mono.error(new RuntimeException("Execution not found with id: " + executionId)));
+    }
+    
+    @Override
+    public Flux<AgentExecution> getRecentExecutions(String teamId, int limit) {
+        return agentExecutionRepository.findByTeamIdOrderByCreatedAtDesc(teamId)
+                .take(limit)
+                .doOnNext(execution -> log.debug("Found recent execution: {} for team: {}", 
+                    execution.getExecutionId(), teamId))
+                .doOnError(error -> log.error("Error fetching recent executions for team {}: {}", teamId, error.getMessage()));
+    }
+    
     // ==================== WORKFLOW INTEGRATION ====================
     
     /**
@@ -175,5 +210,74 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
             return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED_ADHOC tasks are supported for ad-hoc execution"));
         }
         return workflowAdhocExecutor.executeAdhocTask(agentTask, teamId, executedBy, null);
+    }
+    
+    // ==================== EXECUTION MONITORING ====================
+    
+    private Mono<Void> sendExecutionStartedUpdate(AgentExecution execution, Agent agent, AgentTask task) {
+        // Calculate duration from start time to now (both in UTC)
+        java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        long durationMs = java.time.Duration.between(execution.getStartedAt(), now).toMillis();
+        
+        log.info("📊 STARTED message - startedAt: {}, now: {}, durationMs: {}", 
+            execution.getStartedAt(), now, durationMs);
+        
+        ExecutionProgressUpdate update = ExecutionProgressUpdate.builder()
+                .executionId(execution.getExecutionId())
+                .agentId(agent.getId())
+                .agentName(agent.getName())
+                .taskId(task.getId())
+                .taskName(task.getName())
+                .teamId(execution.getTeamId())
+                .status("STARTED")
+                .currentStep(0)
+                .totalSteps(getTotalSteps(task))
+                .startedAt(execution.getStartedAt())
+                .lastUpdatedAt(now)
+                .executionDurationMs(durationMs)
+                .build();
+        
+        return executionMonitoringService.sendExecutionStarted(update);
+    }
+    
+    private Mono<Void> sendExecutionFailedUpdate(AgentExecution execution, Agent agent, AgentTask task, String errorMessage) {
+        // Calculate duration from start time to now (both in UTC)
+        java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        long durationMs = java.time.Duration.between(execution.getStartedAt(), now).toMillis();
+        
+        ExecutionProgressUpdate update = ExecutionProgressUpdate.builder()
+                .executionId(execution.getExecutionId())
+                .agentId(agent.getId())
+                .agentName(agent.getName())
+                .taskId(task.getId())
+                .taskName(task.getName())
+                .teamId(execution.getTeamId())
+                .status("FAILED")
+                .currentStep(0)
+                .totalSteps(getTotalSteps(task))
+                .startedAt(execution.getStartedAt())
+                .lastUpdatedAt(now)
+                .executionDurationMs(durationMs)
+                .errorMessage(errorMessage)
+                .build();
+        
+        return executionMonitoringService.sendExecutionFailed(update, errorMessage);
+    }
+    
+    private int getTotalSteps(AgentTask task) {
+        try {
+            // Extract workflow steps from the task's linq_config
+            Map<String, Object> linqConfig = task.getLinqConfig();
+            if (linqConfig != null && linqConfig.containsKey("query")) {
+                Map<String, Object> query = (Map<String, Object>) linqConfig.get("query");
+                if (query.containsKey("workflow")) {
+                    List<?> workflow = (List<?>) query.get("workflow");
+                    return workflow.size();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract step count from task {}, using default: {}", task.getId(), e.getMessage());
+        }
+        return 1; // Default fallback
     }
 }

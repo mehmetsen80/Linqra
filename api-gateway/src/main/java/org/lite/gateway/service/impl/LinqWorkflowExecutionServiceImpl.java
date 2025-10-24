@@ -297,7 +297,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 if (val != null) fallbackTeamId = String.valueOf(val);
             }
             if (fallbackTeamId == null || fallbackTeamId.isBlank()) {
-                fallbackTeamId = teamContextService.getTeamFromContext().block();
+                fallbackTeamId = "unknown-team"; // Use fallback instead of blocking
             }
             metadata.setTeamId(fallbackTeamId);
             metadata.setCacheHit(false);
@@ -785,25 +785,11 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 // Try to get the actual execution start time from the AgentExecution
                 if (executionId != null) {
                     try {
-                        // Fetch the AgentExecution to get the actual start time
-                        AgentExecution agentExecution = agentExecutionRepository.findByExecutionId(executionId).block();
-                        log.info("📊 Fetched AgentExecution: {} for executionId: {}", agentExecution != null ? "found" : "null", executionId);
-                        if (agentExecution != null) {
-                            log.info("📊 AgentExecution details - startedAt: {}, now: {}", agentExecution.getStartedAt(), now);
-                            if (agentExecution.getStartedAt() != null) {
-                                startedAt = agentExecution.getStartedAt();
-                                durationMs = java.time.Duration.between(startedAt, now).toMillis();
-                                log.info("📊 Calculated execution duration: {}ms for execution {}", durationMs, executionId);
-                            } else {
-                                log.info("📊 No start time found for execution {}, using current time", executionId);
-                                startedAt = now;
-                                durationMs = 0; // No duration if we can't get start time
-                            }
-                        } else {
-                            log.info("📊 No AgentExecution found for executionId: {}", executionId);
-                            startedAt = now;
-                            durationMs = 0; // No duration if we can't get execution
-                        }
+                        // Skip fetching AgentExecution to avoid blocking in reactive context
+                        // Use current time as approximation
+                        log.info("📊 Skipping AgentExecution fetch to avoid blocking in reactive context for executionId: {}", executionId);
+                        startedAt = now;
+                        durationMs = 0; // No duration calculation to avoid blocking
                     } catch (Exception e) {
                         log.warn("Failed to fetch AgentExecution for duration calculation: {}", e.getMessage());
                         startedAt = now;

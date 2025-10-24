@@ -1,5 +1,6 @@
 package org.lite.gateway.config;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.MessageChannel;
@@ -9,7 +10,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 public class MessagingConfig {
     
     @Bean
-    public SimpMessagingTemplate simpMessagingTemplate(MessageChannel messageChannel) {
+    public SimpMessagingTemplate simpMessagingTemplate(@Qualifier("healthMessageChannel") MessageChannel messageChannel) {
         return new SimpMessagingTemplate(messageChannel);
     }
 } 

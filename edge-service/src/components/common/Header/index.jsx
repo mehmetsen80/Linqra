@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import './styles.css';
-import { Navbar, Container, Nav } from 'react-bootstrap';
+import { Navbar, Container, Nav, Dropdown } from 'react-bootstrap';
 import UserTeamMenu from './UserTeamMenu';
 import { useTeam } from '../../../contexts/TeamContext';
 import TokenExpiryDisplay from './TokenExpiryDisplay';
@@ -13,6 +13,7 @@ const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentTeam } = useTeam();
+  const [showLLMDropdown, setShowLLMDropdown] = useState(false);
 
   const handleNavClick = (path, e) => {
     if (e) e.preventDefault();
@@ -53,9 +54,21 @@ const Header = () => {
             <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/agents">Agents</Nav.Link>
             <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/llm-usage">LLM Usage</Nav.Link>
+            <Dropdown 
+              show={showLLMDropdown}
+              onMouseEnter={() => setShowLLMDropdown(true)}
+              onMouseLeave={() => setShowLLMDropdown(false)}
+            >
+              <Dropdown.Toggle variant="link" className="nav-link-dropdown">
+                LLMs
+              </Dropdown.Toggle>
+              <Dropdown.Menu>
+                <Dropdown.Item as={NavLink} to="/llm-usage">LLM Usage</Dropdown.Item>
+                <Dropdown.Item as={NavLink} to="/llm-models">LLM Models</Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown>
             <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/llm-models">LLM Models</Nav.Link>
+            <Nav.Link as={NavLink} to="/execution-monitoring">Executions</Nav.Link>
           </Nav>
           {user ? (
             <div className="d-flex align-items-center gap-3">

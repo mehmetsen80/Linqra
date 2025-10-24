@@ -619,36 +619,19 @@ function ViewAgentTask() {
 
         try {
             setExecuting(true);
-            const response = await agentTaskService.executeTask(taskId);
             
+            // Show success message and redirect immediately
+            showSuccessToast('Task execution started! Redirecting to monitoring...');
+            navigate('/execution-monitoring');
+            
+            // Execute the task in the background
+            const response = await agentTaskService.executeTask(taskId);
             console.log('Execute task response:', response);
             
-            if (response.success) {
-                // Check the task execution status from metadata
-                const executionStatus = response.data?.metadata?.status;
-                const finalResult = response.data?.result?.finalResult;
-                
-                if (executionStatus === 'error') {
-                    // Task execution failed
-                    showErrorToast('Task execution failed: ' + (finalResult || 'Unknown error'));
-                } else if (response.data?.status === 'FAILED') {
-                    // Alternative status field check
-                    showErrorToast('Task execution failed: ' + (finalResult || 'Unknown error'));
-                } else {
-                    // Task execution succeeded
-                    showSuccessToast('Task execution completed successfully');
-                }
-                
-                // Reload stats, metrics, and execution history
-                setTimeout(() => {
-                    loadStats();
-                    loadMetrics();
-                    loadExecutionHistory();
-                    loadTask();
-                }, 2000); // Wait 2 seconds for execution to complete
-            } else {
+            if (!response.success) {
                 showErrorToast(response.error || 'Failed to execute task');
             }
+            
         } catch (err) {
             console.error('Error executing task:', err);
             const errorMessage = err.response?.data?.message || err.message || 'Failed to execute task';

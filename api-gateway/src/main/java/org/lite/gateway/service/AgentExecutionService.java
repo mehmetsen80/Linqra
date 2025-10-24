@@ -34,6 +34,13 @@ public interface AgentExecutionService {
      */
     Flux<AgentExecution> getExecutionsByTeamAndStatus(String teamId, String status, int limit);
     
+    Mono<AgentExecution> getExecutionById(String executionId);
+    
+    /**
+     * Get recent executions for a team
+     */
+    Flux<AgentExecution> getRecentExecutions(String teamId, int limit);
+    
     /**
      * Execute an ad-hoc task without storing it in database or creating execution records
      */

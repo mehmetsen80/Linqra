@@ -1,0 +1,138 @@
+.execution-monitoring {
+    padding: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.execution-card {
+    height: 100%;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.execution-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.execution-card .MuiCardContent-root {
+    padding: 20px;
+}
+
+.execution-card .MuiLinearProgress-root {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.execution-card .MuiLinearProgress-bar {
+    background: linear-gradient(90deg, #4caf50, #8bc34a);
+}
+
+/* Status-specific colors */
+.execution-card[data-status="STARTED"] .MuiLinearProgress-bar,
+.execution-card[data-status="RUNNING"] .MuiLinearProgress-bar {
+    background: linear-gradient(90deg, #2196f3, #64b5f6);
+}
+
+.execution-card[data-status="COMPLETED"] .MuiLinearProgress-bar {
+    background: linear-gradient(90deg, #4caf50, #8bc34a);
+}
+
+.execution-card[data-status="FAILED"] .MuiLinearProgress-bar {
+    background: linear-gradient(90deg, #f44336, #ef5350);
+}
+
+.execution-card[data-status="CANCELLED"] .MuiLinearProgress-bar {
+    background: linear-gradient(90deg, #ff9800, #ffb74d);
+}
+
+/* Memory usage indicators */
+.memory-usage-good {
+    color: #4caf50;
+}
+
+.memory-usage-warning {
+    color: #ff9800;
+}
+
+.memory-usage-critical {
+    color: #f44336;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .execution-monitoring {
+        padding: 16px;
+    }
+    
+    .execution-card .MuiCardContent-root {
+        padding: 16px;
+    }
+}
+
+/* Animation for new executions */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.execution-card {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* Connection status indicator */
+.connection-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.connection-indicator.connected {
+    color: #4caf50;
+}
+
+.connection-indicator.connecting {
+    color: #2196f3;
+}
+
+.connection-indicator.disconnected {
+    color: #ff9800;
+}
+
+.connection-indicator.error {
+    color: #f44336;
+}
+
+/* Countdown timer styles */
+.countdown-timer {
+    animation: pulse 1s ease-in-out infinite;
+}
+
+.countdown-timer.warning {
+    animation: pulse 0.5s ease-in-out infinite;
+}
+
+.countdown-timer.error {
+    animation: pulse 0.3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Close button hover effect */
+.close-button:hover {
+    background-color: rgba(0, 0, 0, 0.04);
+}

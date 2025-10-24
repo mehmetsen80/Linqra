@@ -37,6 +37,60 @@ const agentTaskService = {
         }
     },
 
+    cancelExecution: async (executionId) => {
+        console.log('Cancelling execution:', executionId);
+        try {
+            const response = await axiosInstance.post(`/api/agent-tasks/executions/${executionId}/cancel`, {});
+            return {
+                success: true,
+                data: response.data,
+                message: 'Execution cancelled successfully'
+            };
+        } catch (error) {
+            console.error('Error cancelling execution:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to cancel execution'
+            };
+        }
+    },
+
+    getRecentExecutions: async (limit = 100) => {
+        console.log('Fetching recent executions with limit:', limit);
+        try {
+            const response = await axiosInstance.get(`/api/agent-tasks/executions/recent?limit=${limit}`);
+            return {
+                success: true,
+                data: response.data,
+                message: 'Recent executions retrieved successfully'
+            };
+        } catch (error) {
+            console.error('Error fetching recent executions:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch recent executions'
+            };
+        }
+    },
+
+    getExecutionDetails: async (executionId) => {
+        console.log('Fetching execution details for:', executionId);
+        try {
+            const response = await axiosInstance.get(`/api/linq/workflows/executions/${executionId}`);
+            return {
+                success: true,
+                data: response.data, // The execution data is directly in response.data
+                message: 'Execution details retrieved successfully'
+            };
+        } catch (error) {
+            console.error('Error fetching execution details:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch execution details'
+            };
+        }
+    },
+
     enableTask: async (taskId) => {
         console.log('Enabling agent task:', taskId);
         try {

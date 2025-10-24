@@ -41,26 +41,26 @@ public class WebClientConfig {
                 clientCodecConfigurer.defaultCodecs().jackson2JsonEncoder(
                     new Jackson2JsonEncoder(mapper, MediaType.APPLICATION_JSON)
                 );
-                clientCodecConfigurer.defaultCodecs().maxInMemorySize(8 * 1024 * 1024);  // Reduced for EC2
+                clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024);  // Further reduced for EC2
             })
             .build();
 
         ConnectionProvider provider = ConnectionProvider
             .builder("fixed")
-            .maxConnections(50)  // Much more conservative for EC2
-            .maxIdleTime(Duration.ofSeconds(15))  // Shorter idle time to free connections faster
-            .maxLifeTime(Duration.ofSeconds(60))  // Shorter connection lifetime
-            .pendingAcquireTimeout(Duration.ofSeconds(5))  // Shorter timeout
-            .evictInBackground(Duration.ofSeconds(30))  // More frequent eviction
+            .maxConnections(25)  // Even more conservative for EC2
+            .maxIdleTime(Duration.ofSeconds(10))  // Very short idle time
+            .maxLifeTime(Duration.ofSeconds(30))  // Very short connection lifetime
+            .pendingAcquireTimeout(Duration.ofSeconds(3))  // Very short timeout
+            .evictInBackground(Duration.ofSeconds(15))  // Very frequent eviction
             .build();
 
         HttpClient httpClient = HttpClient.create(provider)
-            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
-            .responseTimeout(Duration.ofSeconds(60))  // Reduced timeout
+            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)  // Reduced connect timeout
+            .responseTimeout(Duration.ofSeconds(30))  // Much shorter timeout
             .option(ChannelOption.SO_REUSEADDR, true)  // Reuse addresses
             .doOnConnected(conn -> conn
-                .addHandlerLast(new ReadTimeoutHandler(60))  // Reduced timeout
-                .addHandlerLast(new WriteTimeoutHandler(60)))  // Reduced timeout
+                .addHandlerLast(new ReadTimeoutHandler(30))  // Much shorter timeout
+                .addHandlerLast(new WriteTimeoutHandler(30)))  // Much shorter timeout
             .secure(spec -> {
                 try {
                     spec.sslContext(SslContextBuilder

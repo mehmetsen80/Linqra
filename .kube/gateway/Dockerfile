@@ -105,4 +105,9 @@ ENTRYPOINT ["java", \
             "-Djavax.net.ssl.keyStorePassword=${GATEWAY_KEY_STORE_PASSWORD}", \
             "-Djavax.net.ssl.trustStore=${CACERTS_PATH}", \
             "-Djavax.net.ssl.trustStorePassword=${GATEWAY_TRUST_STORE_PASSWORD}", \
+            "-Djava.net.preferIPv4Stack=true", \
+            "-Djava.awt.headless=true", \
+            "-Dfile.encoding=UTF-8", \
+            "-Dsun.net.client.defaultConnectTimeout=5000", \
+            "-Dsun.net.client.defaultReadTimeout=30000", \
             "-jar", "LiteGateway.jar"]

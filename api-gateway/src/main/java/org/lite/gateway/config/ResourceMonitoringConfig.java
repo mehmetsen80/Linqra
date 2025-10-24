@@ -19,9 +19,9 @@ public class ResourceMonitoringConfig {
     private final MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
 
     /**
-     * Monitor memory usage every 30 seconds and log warnings if memory usage is high
+     * Monitor memory usage every 15 seconds and log warnings if memory usage is high
      */
-    @Scheduled(fixedRate = 30000) // Every 30 seconds
+    @Scheduled(fixedRate = 15000) // Every 15 seconds for EC2 monitoring
     public void monitorMemoryUsage() {
         try {
             MemoryUsage heapUsage = memoryBean.getHeapMemoryUsage();
@@ -33,19 +33,19 @@ public class ResourceMonitoringConfig {
             
             double heapUsagePercent = (double) heapUsed / heapMax * 100;
             
-            if (heapUsagePercent > 80) {
+            if (heapUsagePercent > 70) {  // Lowered threshold for EC2
                 log.warn("⚠️ HIGH MEMORY USAGE: Heap usage is {}% ({}MB / {}MB). Non-heap: {}MB", 
                     String.format("%.1f", heapUsagePercent),
                     heapUsed / 1024 / 1024,
                     heapMax / 1024 / 1024,
                     nonHeapUsed / 1024 / 1024);
                 
-                // Suggest garbage collection if memory usage is very high
-                if (heapUsagePercent > 90) {
+                // Force garbage collection more aggressively on EC2
+                if (heapUsagePercent > 80) {  // Lowered critical threshold
                     log.warn("🚨 CRITICAL MEMORY USAGE: Forcing garbage collection...");
                     System.gc();
                 }
-            } else if (heapUsagePercent > 60) {
+            } else if (heapUsagePercent > 50) {  // Lowered warning threshold
                 log.info("📊 Memory usage: {}% ({}MB / {}MB)", 
                     String.format("%.1f", heapUsagePercent),
                     heapUsed / 1024 / 1024,

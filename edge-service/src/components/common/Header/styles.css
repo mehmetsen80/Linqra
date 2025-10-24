@@ -256,6 +256,63 @@
   opacity: 0.4;
 }
 
+/* Style the LLM dropdown */
+.nav-link-dropdown {
+  color: var(--text-muted) !important;
+  text-decoration: none !important;
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+  margin: 0 0.1rem;
+  background: none !important;
+  border: none !important;
+}
+
+.nav-link-dropdown:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-light) !important;
+}
+
+.nav-link-dropdown:focus {
+  box-shadow: none !important;
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.nav-link-dropdown::after {
+  display: none !important;
+}
+
+/* Style the dropdown menu */
+.dropdown-menu {
+  background-color: #ffffff !important;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 160px;
+}
+
+.dropdown-item {
+  color: #333333 !important;
+  padding: 0.5rem 1rem;
+  transition: all 0.2s ease;
+  text-decoration: none !important;
+}
+
+.dropdown-item:hover {
+  background-color: #f8f9fa;
+  color: #333333 !important;
+}
+
+.dropdown-item:focus {
+  background-color: #f8f9fa;
+  color: #333333 !important;
+}
+
+.dropdown-item.active {
+  background-color: #e9ecef;
+  color: #333333 !important;
+}
+
 /* Style the navbar brand/logo area */
 .app-header .navbar-brand {
   opacity: 1;

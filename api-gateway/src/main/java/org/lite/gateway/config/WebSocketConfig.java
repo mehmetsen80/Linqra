@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.lang.NonNull;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -32,9 +33,12 @@ public class WebSocketConfig {
     private final Sinks.Many<String> messagesSink = Sinks.many()
         .multicast()
         .onBackpressureBuffer(1024, false);
+    private final Sinks.Many<String> executionMessagesSink = Sinks.many()
+        .multicast()
+        .onBackpressureBuffer(1024, false);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
 
-    @Bean
+    @Bean("healthMessageChannel")
     public MessageChannel messageChannel(ObjectMapper objectMapper) {
         return new AbstractMessageChannel() {
             @Override
@@ -74,6 +78,48 @@ public class WebSocketConfig {
         };
     }
 
+    @Bean("executionMessageChannel")
+    public MessageChannel executionMessageChannel(ObjectMapper objectMapper) {
+        return new AbstractMessageChannel() {
+            @Override
+            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
+                try {
+                    // Check if there are any active sessions
+                    log.info("📊 WebSocket sessions count: {}", sessions.size());
+                    if (sessions.isEmpty()) {
+                        log.info("📊 No active WebSocket sessions, skipping execution message emission");
+                        return true;
+                    }
+
+                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
+                    log.info("📊 WebSocket sending JSON payload: {}", jsonPayload);
+                    Sinks.EmitResult result;
+                    int attempts = 0;
+                    do {
+                        result = executionMessagesSink.tryEmitNext(jsonPayload);
+                        if (result.isFailure()) {
+                            attempts++;
+                            log.warn("Attempt {} failed to emit execution message. Reason: {}. Retrying...", 
+                                attempts, result.name());
+                            Thread.sleep(100); // Small delay before retry
+                        }
+                    } while (result.isFailure() && attempts < 3);
+                    
+                    if (result.isFailure()) {
+                        log.error("Failed to emit execution message after {} attempts. Reason: {}. Payload: {}", 
+                            attempts, result.name(), jsonPayload);
+                        return false;
+                    }
+                    log.debug("Successfully emitted execution message after {} attempts", attempts + 1);
+                    return true;
+                } catch (Exception e) {
+                    log.error("Error converting execution message to JSON", e);
+                    return false;
+                }
+            }
+        };
+    }
+
     @Bean
     public HandlerMapping webSocketHandlerMapping() {
         Map<String, WebSocketHandler> map = new HashMap<>();
@@ -102,8 +148,11 @@ public class WebSocketConfig {
             sessions.put(sessionId, session);
             log.info("WebSocket session connected: {}", sessionId);
 
-            // Handle outbound messages
-            Flux<WebSocketMessage> outbound = messagesSink.asFlux()
+            // Handle outbound messages - merge health and execution updates
+            Flux<WebSocketMessage> outbound = Flux.merge(
+                    messagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/health")),
+                    executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution"))
+                )
                 .onBackpressureBuffer(256)
                 .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
                     .maxBackoff(Duration.ofSeconds(1))
@@ -113,9 +162,8 @@ public class WebSocketConfig {
                 .doOnNext(message -> log.debug("Processing outbound message for session {}: {}", 
                     sessionId, message))
                 .map(message -> {
-                    String stompFrame = createStompFrame(message);
-                    log.debug("Created STOMP frame for session {}: {}", sessionId, stompFrame);
-                    return session.textMessage(stompFrame);
+                    log.debug("Created STOMP frame for session {}: {}", sessionId, message);
+                    return session.textMessage(message);
                 })
                 .doOnSubscribe(sub -> 
                     log.info("Session {} subscribed to message stream", sessionId))
@@ -151,15 +199,16 @@ public class WebSocketConfig {
         };
     }
 
-    private String createStompFrame(String message) {
-        log.debug("Creating STOMP frame for message: {}", message);
+    private String createStompFrame(String message, String destination) {
+        log.debug("Creating STOMP frame for message: {} to destination: {}", message, destination);
         return String.format(
             "MESSAGE\n" +
-            "destination:/topic/health\n" +
+            "destination:%s\n" +
             "content-type:application/json\n" +
             "subscription:sub-0\n" +
             "message-id:%s\n\n" +
             "%s\n\u0000",
+            destination,
             UUID.randomUUID().toString(),
             message
         );

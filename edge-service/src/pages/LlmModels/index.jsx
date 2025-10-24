@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Table, Button, Modal, Form, Alert, Spinner, Badge, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Modal, Form, Alert, Spinner, Badge, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import llmModelService from '../../services/llmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import { useTeam } from '../../contexts/TeamContext';
+import Button from '../../components/common/Button';
 import './styles.css';
 
 const LlmModels = () => {
@@ -181,12 +182,12 @@ const LlmModels = () => {
             </Breadcrumb.Item>
           </Breadcrumb>
           <div>
-            <Button variant="primary" onClick={() => handleShowModal()} size="sm" className="add-model-btn">
+            <Button variant="primary" onClick={() => handleShowModal()} className="add-model-btn">
               <i className="fas fa-plus me-2"></i>
               Add Model
             </Button>
             {models.length === 0 && (
-              <Button variant="outline-secondary" onClick={handleInitializeDefaults} size="sm" className="ms-2">
+              <Button variant="secondary" onClick={handleInitializeDefaults} className="ms-2">
                 <i className="fas fa-download me-2"></i>
                 Initialize Defaults
               </Button>
@@ -297,21 +298,22 @@ const LlmModels = () => {
                         </Badge>
                       </td>
                       <td className="text-center">
-                        <Button 
-                          variant="outline-primary" 
-                          size="sm" 
-                          onClick={() => handleShowModal(model)}
-                          className="me-2"
-                        >
-                          <i className="fas fa-edit"></i>
-                        </Button>
-                        <Button 
-                          variant="outline-danger" 
-                          size="sm" 
-                          onClick={() => handleDelete(model.id, model.modelName)}
-                        >
-                          <i className="fas fa-trash"></i>
-                        </Button>
+                        <div className="d-flex justify-content-center gap-1">
+                          <Button 
+                            variant="secondary" 
+                            onClick={() => handleShowModal(model)}
+                            className="btn-sm"
+                          >
+                            <i className="fas fa-edit"></i>
+                          </Button>
+                          <Button 
+                            variant="secondary" 
+                            onClick={() => handleDelete(model.id, model.modelName)}
+                            className="btn-sm"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

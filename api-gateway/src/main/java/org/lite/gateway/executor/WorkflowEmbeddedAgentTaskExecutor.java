@@ -144,6 +144,17 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                     request.getQuery().setParams(mergedParams);
                 }
             }
+            
+            // Add execution context for monitoring
+            if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                Map<String, Object> params = request.getQuery().getParams();
+                params.put("agentExecutionId", execution.getExecutionId());
+                params.put("agentId", agentId);
+                params.put("agentName", execution.getAgentName());
+                params.put("agentTaskId", agentTaskId);
+                params.put("agentTaskName", execution.getTaskName());
+                params.put("teamId", teamId);
+            }
 
             // Fix the max.tokens issue in the workflow steps (same as controller)
             assert request.getQuery() != null;

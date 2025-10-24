@@ -15,6 +15,10 @@ import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.QueuedWorkflowService;
 import org.lite.gateway.service.WorkflowExecutionContext;
 import org.lite.gateway.service.LlmCostService;
+import org.lite.gateway.service.ExecutionMonitoringService;
+import org.lite.gateway.dto.ExecutionProgressUpdate;
+import org.lite.gateway.repository.AgentExecutionRepository;
+import org.lite.gateway.entity.AgentExecution;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,6 +45,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private final LinqMicroService linqMicroService;
     private final QueuedWorkflowService queuedWorkflowService;
     private final LlmCostService llmCostService;
+    private final ExecutionMonitoringService executionMonitoringService;
+    private final AgentExecutionRepository agentExecutionRepository;
 
     @Override
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {
@@ -72,6 +78,10 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             workflowMono = workflowMono.flatMap(response -> {
                 Instant start = Instant.now();
                 
+                // Send step progress update
+                return sendStepProgressUpdate(request, step, steps.size())
+                    .then(Mono.defer(() -> {
+                
                 // Check if step should be executed asynchronously
                 if (step.getAsync() != null && step.getAsync()) {
                     // Create a WorkflowStep for async execution
@@ -96,7 +106,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                 meta.setStatus("error");
                                 meta.setDurationMs(0);
                                 meta.setTarget(step.getTarget());
-                                meta.setExecutedAt(LocalDateTime.now());
+                                meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
                                 meta.setAsync(true);
                                 stepMetadata.add(meta);
                             })
@@ -107,7 +117,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                 meta.setStatus("queued");
                                 meta.setDurationMs(0);
                                 meta.setTarget(step.getTarget());
-                                meta.setExecutedAt(LocalDateTime.now());
+                                meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
                                 meta.setAsync(true);  // Set isAsync to true for async steps
                                 stepMetadata.add(meta);
                                 
@@ -205,7 +215,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         meta.setStatus("success");
                         meta.setDurationMs(durationMs);
                         meta.setTarget(step.getTarget());
-                        meta.setExecutedAt(LocalDateTime.now());
+                        meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
                         stepMetadata.add(meta);
                         return Mono.just(response);
                     })
@@ -216,7 +226,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         meta.setStatus("error");
                         meta.setDurationMs(durationMs);
                         meta.setTarget(step.getTarget());
-                        meta.setExecutedAt(LocalDateTime.now());
+                        meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
                         stepMetadata.add(meta);
                         log.error("Error in workflow step {}: {}", step.getStep(), error.getMessage());
                         return Mono.error(new ResponseStatusException(
@@ -224,6 +234,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                             String.format("Workflow step %d failed: %s", step.getStep(), error.getMessage())
                         ));
                     });
+                    }));
             });
         }
 
@@ -329,7 +340,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         execution.setTeamId(response.getMetadata().getTeamId());
         execution.setRequest(request);
         execution.setResponse(response);
-        execution.setExecutedAt(LocalDateTime.now());
+        execution.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
         
         // Set status based on metadata status
         execution.setStatus("success".equals(response.getMetadata().getStatus()) ? 
@@ -612,6 +623,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         }
         if (input instanceof Map<?, ?> map) {
             return resolvePlaceholdersForMap(map.entrySet().stream()
+                    .filter(entry -> entry.getKey() != null && entry.getValue() != null) // Filter out null keys and values
                     .collect(Collectors.toMap(
                             entry -> entry.getKey().toString(),
                             Map.Entry::getValue
@@ -740,5 +752,153 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
         }
         return result != null ? result.toString() : "";
+    }
+    
+    /**
+     * Send step progress update for execution monitoring
+     */
+    private Mono<Void> sendStepProgressUpdate(LinqRequest request, LinqRequest.Query.WorkflowStep step, int totalSteps) {
+        return Mono.defer(() -> {
+            try {
+                // Extract execution context from request
+                String executionId = extractExecutionId(request);
+                String agentId = extractAgentId(request);
+                String agentName = extractAgentName(request);
+                String taskId = extractTaskId(request);
+                String taskName = extractTaskName(request);
+                String teamId = extractTeamId(request);
+                
+                log.info("🔍 Execution monitoring context - executionId: {}, agentId: {}, agentName: {}, taskId: {}, taskName: {}, teamId: {}", 
+                    executionId, agentId, agentName, taskId, taskName, teamId);
+                
+                if (executionId == null) {
+                    // Not an agent execution, skip monitoring
+                    log.info("⏭️ Skipping execution monitoring - no executionId found");
+                    return Mono.empty();
+                }
+                
+                // Get the actual execution start time and calculate duration
+                java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+                java.time.LocalDateTime startedAt = now; // Default to now if we can't get the actual start time
+                long durationMs = 0;
+                
+                // Try to get the actual execution start time from the AgentExecution
+                if (executionId != null) {
+                    try {
+                        // Fetch the AgentExecution to get the actual start time
+                        AgentExecution agentExecution = agentExecutionRepository.findByExecutionId(executionId).block();
+                        log.info("📊 Fetched AgentExecution: {} for executionId: {}", agentExecution != null ? "found" : "null", executionId);
+                        if (agentExecution != null) {
+                            log.info("📊 AgentExecution details - startedAt: {}, now: {}", agentExecution.getStartedAt(), now);
+                            if (agentExecution.getStartedAt() != null) {
+                                startedAt = agentExecution.getStartedAt();
+                                durationMs = java.time.Duration.between(startedAt, now).toMillis();
+                                log.info("📊 Calculated execution duration: {}ms for execution {}", durationMs, executionId);
+                            } else {
+                                log.info("📊 No start time found for execution {}, using current time", executionId);
+                                startedAt = now;
+                                durationMs = 0; // No duration if we can't get start time
+                            }
+                        } else {
+                            log.info("📊 No AgentExecution found for executionId: {}", executionId);
+                            startedAt = now;
+                            durationMs = 0; // No duration if we can't get execution
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to fetch AgentExecution for duration calculation: {}", e.getMessage());
+                        startedAt = now;
+                        durationMs = 0; // No duration if we can't fetch execution
+                    }
+                }
+                
+                log.info("📊 About to build ExecutionProgressUpdate with durationMs: {}", durationMs);
+                
+                ExecutionProgressUpdate update = ExecutionProgressUpdate.builder()
+                        .executionId(executionId)
+                        .agentId(agentId)
+                        .agentName(agentName)
+                        .taskId(taskId)
+                        .taskName(taskName)
+                        .teamId(teamId)
+                        .status("RUNNING")
+                        .currentStep(step.getStep())
+                        .totalSteps(totalSteps)
+                        .currentStepName("Step " + step.getStep())
+                        .currentStepTarget(step.getTarget())
+                        .currentStepAction(step.getAction())
+                        .startedAt(startedAt)
+                        .lastUpdatedAt(now)
+                        .executionDurationMs(durationMs)
+                        .build();
+                        
+                log.info("📊 Built ExecutionProgressUpdate - executionDurationMs: {}", update.getExecutionDurationMs());
+                log.info("📊 Built ExecutionProgressUpdate - all fields: executionId={}, agentId={}, status={}, currentStep={}, totalSteps={}, startedAt={}, lastUpdatedAt={}, executionDurationMs={}", 
+                    update.getExecutionId(), update.getAgentId(), update.getStatus(), update.getCurrentStep(), update.getTotalSteps(), 
+                    update.getStartedAt(), update.getLastUpdatedAt(), update.getExecutionDurationMs());
+                
+                log.info("📊 Sending ExecutionProgressUpdate with durationMs: {} for execution: {}", durationMs, executionId);
+                
+                return executionMonitoringService.sendStepProgress(update)
+                    .doOnSubscribe(subscription -> log.info("📊 Subscribed to sendStepProgress for execution: {}", executionId))
+                    .doOnSuccess(result -> log.info("📊 sendStepProgress completed successfully for execution: {}", executionId))
+                    .doOnError(error -> log.error("📊 sendStepProgress failed for execution: {} with error: {}", executionId, error.getMessage()))
+                    .doOnCancel(() -> log.warn("📊 sendStepProgress cancelled for execution: {}", executionId));
+            } catch (Exception e) {
+                log.warn("Failed to send step progress update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+    
+    private String extractExecutionId(LinqRequest request) {
+        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            Object executionId = request.getQuery().getParams().get("agentExecutionId");
+            log.debug("🔍 Extracting executionId from params: {}", executionId);
+            return executionId != null ? executionId.toString() : null;
+        }
+        log.debug("🔍 No query or params found in request");
+        return null;
+    }
+    
+    private String extractAgentId(LinqRequest request) {
+        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            Object agentId = request.getQuery().getParams().get("agentId");
+            return agentId != null ? agentId.toString() : null;
+        }
+        return null;
+    }
+    
+    private String extractAgentName(LinqRequest request) {
+        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            Object agentName = request.getQuery().getParams().get("agentName");
+            log.debug("🔍 Extracting agentName from params: {}", agentName);
+            return agentName != null ? agentName.toString() : null;
+        }
+        log.debug("🔍 No query or params found in request for agentName");
+        return null;
+    }
+    
+    private String extractTaskId(LinqRequest request) {
+        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            Object taskId = request.getQuery().getParams().get("agentTaskId");
+            return taskId != null ? taskId.toString() : null;
+        }
+        return null;
+    }
+    
+    private String extractTaskName(LinqRequest request) {
+        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            Object taskName = request.getQuery().getParams().get("agentTaskName");
+            return taskName != null ? taskName.toString() : null;
+        }
+        return null;
+    }
+    
+    private String extractTeamId(LinqRequest request) {
+        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            Object teamId = request.getQuery().getParams().get("teamId");
+            return teamId != null ? teamId.toString() : null;
+        }
+        return null;
     }
 } 

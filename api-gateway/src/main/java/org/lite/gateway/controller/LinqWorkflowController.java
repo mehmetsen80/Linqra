@@ -351,15 +351,21 @@ public class LinqWorkflowController {
     }
 
     @GetMapping("/executions/{executionId}")
-    public Mono<LinqWorkflowExecution> getExecution(@PathVariable String executionId) {
+    public Mono<LinqWorkflowExecution> getExecution(
+            @PathVariable String executionId,
+            ServerWebExchange exchange) {
         log.info("Fetching execution: {}", executionId);
         
-        // First, try to find by agentExecutionId (UUID format)
-        // If not found, fall back to finding by MongoDB _id
-        return workflowExecutionService.getExecutionByAgentExecutionId(executionId)
-            .onErrorResume(error -> {
-                log.info("Not found by agentExecutionId, trying by _id: {}", executionId);
-                return workflowExecutionService.getExecution(executionId);
+        // Add basic team context validation
+        return teamContextService.getTeamFromContext()
+            .flatMap(teamId -> {
+                // First, try to find by agentExecutionId (UUID format)
+                // If not found, fall back to finding by MongoDB _id
+                return workflowExecutionService.getExecutionByAgentExecutionId(executionId)
+                    .onErrorResume(error -> {
+                        log.info("Not found by agentExecutionId, trying by _id: {}", executionId);
+                        return workflowExecutionService.getExecution(executionId);
+                    });
             })
             .doOnSuccess(e -> log.info("Execution fetched successfully: {}", e.getId()))
             .doOnError(error -> log.error("Error fetching execution: {}", error.getMessage()));

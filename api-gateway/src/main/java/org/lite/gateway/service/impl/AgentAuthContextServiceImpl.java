@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.service.AgentAuthContextService;
 import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.AgentTaskService;
+import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.UserService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.TeamService;
@@ -29,6 +30,7 @@ public class AgentAuthContextServiceImpl implements AgentAuthContextService {
     private final TeamService teamService;
     private final AgentService agentService;
     private final AgentTaskService agentTaskService;
+    private final AgentExecutionService agentExecutionService;
     
     @Override
     public Mono<AgentAuthContext> checkAgentAuthorization(String agentId, ServerWebExchange exchange) {
@@ -155,5 +157,29 @@ public class AgentAuthContextServiceImpl implements AgentAuthContextService {
                     log.debug("User {} authorized as team ADMIN for team {}", user.getUsername(), teamId);
                     return new AgentAuthContext(null, teamId, user.getUsername(), false);
                 });
+    }
+    
+    @Override
+    public Mono<AgentAuthContext> checkExecutionAuthorization(String executionId, ServerWebExchange exchange) {
+        log.debug("Checking execution authorization for executionId: {}", executionId);
+        
+        return userContextService.getCurrentUsername(exchange)
+                .flatMap(userService::findByUsername)
+                .flatMap(user -> {
+                    // Get execution details to find the associated agent and team
+                    return agentExecutionService.getExecutionById(executionId)
+                            .flatMap(execution -> {
+                                String agentId = execution.getAgentId();
+                                String teamId = execution.getTeamId();
+                                
+                                log.debug("Execution {} belongs to agent {} in team {}", executionId, agentId, teamId);
+                                
+                                // Check authorization using helper method (no taskId for execution operations)
+                                return performAuthorizationCheck(user, agentId, null, teamId, "execution");
+                            });
+                })
+                .doOnSuccess(authContext -> log.debug("Execution authorization successful for user {} on execution {}", 
+                        authContext.getUsername(), executionId))
+                .doOnError(error -> log.warn("Execution authorization failed for execution {}: {}", executionId, error.getMessage()));
     }
 } 

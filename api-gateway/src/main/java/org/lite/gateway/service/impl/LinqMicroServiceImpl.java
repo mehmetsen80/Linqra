@@ -179,7 +179,10 @@ public class LinqMicroServiceImpl implements LinqMicroService {
         String path = intent;
         if (params != null) {
             for (Map.Entry<String, Object> entry : params.entrySet()) {
-                path = path.replace("{" + entry.getKey() + "}", entry.getValue().toString());
+                Object value = entry.getValue();
+                if (value != null) {
+                    path = path.replace("{" + entry.getKey() + "}", value.toString());
+                }
             }
         }
 
@@ -201,7 +204,7 @@ public class LinqMicroServiceImpl implements LinqMicroService {
         // Add remaining params as query parameters
         Map<String, String> queryParams = params != null ?
                 params.entrySet().stream()
-                        .filter(e -> !intent.contains("{" + e.getKey() + "}"))
+                        .filter(e -> !intent.contains("{" + e.getKey() + "}") && e.getValue() != null)
                         .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toString()))
                 : Map.of();
 
@@ -302,7 +305,10 @@ public class LinqMicroServiceImpl implements LinqMicroService {
         // Replace path variables
         if (params != null) {
             for (Map.Entry<String, Object> entry : params.entrySet()) {
-                path = path.replace("{" + entry.getKey() + "}", entry.getValue().toString());
+                Object value = entry.getValue();
+                if (value != null) {
+                    path = path.replace("{" + entry.getKey() + "}", value.toString());
+                }
             }
         }
 

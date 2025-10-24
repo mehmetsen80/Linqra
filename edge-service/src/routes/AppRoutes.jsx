@@ -37,6 +37,7 @@ import ViewAgent from '../pages/Agents/ViewAgent';
 import ViewAgentTask from '../pages/Agents/ViewAgentTask';
 import LlmUsage from '../pages/LlmUsage';
 import LlmModels from '../pages/LlmModels';
+import ExecutionMonitoring from '../pages/ExecutionMonitoring';
 
 const AppRoutes = () => {
   return (
@@ -84,6 +85,7 @@ const AppRoutes = () => {
         <Route path="/agents/:agentId/tasks/:taskId" element={<ViewAgentTask />} />
         <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
         <Route path="/llm-usage" element={<LlmUsage />} />
+        <Route path="/execution-monitoring" element={<ExecutionMonitoring />} />
         <Route path="/llm-models" element={<LlmModels />} />
         
         <Route 

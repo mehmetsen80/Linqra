@@ -311,6 +311,9 @@ public interface AgentExecutionRepository extends ReactiveMongoRepository<AgentE
     // Count executions by task and max retries
     Mono<Long> countByTaskIdAndMaxRetries(String taskId, int maxRetries);
     
+    // Find execution by execution ID
+    Mono<AgentExecution> findByExecutionId(String executionId);
+    
     // Check if execution exists by execution ID
     Mono<Boolean> existsByExecutionId(String executionId);
     
@@ -325,6 +328,9 @@ public interface AgentExecutionRepository extends ReactiveMongoRepository<AgentE
     
     // Find executions by task priority order (for analysis)
     Flux<AgentExecution> findByTaskIdOrderByCreatedAtDesc(String taskId);
+    
+    // Find executions by team priority order (for recent executions)
+    Flux<AgentExecution> findByTeamIdOrderByCreatedAtDesc(String teamId);
     
     // Find executions by execution time order (for performance analysis)
     Flux<AgentExecution> findByAgentIdOrderByExecutionDurationMsDesc(String agentId);

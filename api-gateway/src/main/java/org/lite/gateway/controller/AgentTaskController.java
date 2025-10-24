@@ -1,6 +1,7 @@
 package org.lite.gateway.controller;
 
 import org.lite.gateway.entity.AgentTask;
+import org.lite.gateway.entity.AgentExecution;
 import org.lite.gateway.enums.AgentTaskType;
 import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
@@ -19,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import jakarta.validation.Valid;
+
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -287,6 +290,65 @@ public class AgentTaskController {
                 })
                 .doOnSuccess(response -> log.info("Task {} execution started successfully", taskId))
                 .doOnError(error -> log.error("Failed to execute task {}: {}", taskId, error.getMessage()));
+    }
+
+    @PostMapping("/executions/{executionId}/cancel")
+    public Mono<ResponseEntity<Object>> cancelExecution(
+            @PathVariable String executionId,
+            ServerWebExchange exchange) {
+        
+        log.info("Cancelling execution {} by user from context", executionId);
+        
+        return agentAuthContextService.checkExecutionAuthorization(executionId, exchange)
+                .flatMap(authContext -> 
+                    agentExecutionService.cancelExecution(
+                            executionId, 
+                            authContext.getTeamId(), 
+                            authContext.getUsername())
+                    .map(cancelled -> {
+                        Map<String, Object> response = Map.of(
+                                "executionId", executionId,
+                                "cancelled", cancelled,
+                                "message", "Execution cancelled successfully"
+                        );
+                        return ResponseEntity.ok((Object) response);
+                    })
+                    .onErrorReturn(ResponseEntity.badRequest().build())
+                )
+                .onErrorResume(error -> {
+                    return Mono.just(ResponseEntity
+                            .status(HttpStatus.FORBIDDEN)
+                            .body((Object) ErrorResponse.fromErrorCode(
+                                    ErrorCode.FORBIDDEN,
+                                    error.getMessage(),
+                                    HttpStatus.FORBIDDEN.value()
+                            )));
+                })
+                .doOnSuccess(response -> log.info("Execution {} cancelled successfully", executionId))
+                .doOnError(error -> log.error("Failed to cancel execution {}: {}", executionId, error.getMessage()));
+    }
+
+    @GetMapping("/executions/recent")
+    public Mono<ResponseEntity<List<AgentExecution>>> getRecentExecutions(
+            @RequestParam(defaultValue = "100") int limit,
+            ServerWebExchange exchange) {
+        
+        return teamContextService.getTeamFromContext()
+                .flatMap(teamId -> 
+                    agentAuthContextService.checkTeamAuthorization(teamId, exchange)
+                            .flatMap(authContext -> 
+                                agentExecutionService.getRecentExecutions(authContext.getTeamId(), limit)
+                                        .collectList()
+                                        .map(executions -> {
+                                            log.info("Retrieved {} recent executions for team {}", executions.size(), authContext.getTeamId());
+                                            return ResponseEntity.ok(executions);
+                                        })
+                            )
+                )
+                .onErrorResume(error -> {
+                    log.error("Failed to get recent executions: {}", error.getMessage());
+                    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+                });
     }
 
     @PostMapping("/execute-adhoc")

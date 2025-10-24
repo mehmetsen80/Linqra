@@ -39,6 +39,15 @@ public interface AgentAuthContextService {
     Mono<AgentAuthContext> checkTeamAuthorization(String teamId, ServerWebExchange exchange);
     
     /**
+     * Check authorization for execution-specific operations (like cancelling executions).
+     * 
+     * @param executionId The execution ID to authorize against
+     * @param exchange The ServerWebExchange containing user context
+     * @return Mono containing AgentAuthContext if authorized, or error if not authorized
+     */
+    Mono<AgentAuthContext> checkExecutionAuthorization(String executionId, ServerWebExchange exchange);
+    
+    /**
      * Context object containing authorization information for agent and task operations
      */
     class AgentAuthContext {

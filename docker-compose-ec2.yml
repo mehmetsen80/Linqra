@@ -330,7 +330,14 @@ services:
       GATEWAY_API_HOST: api-gateway-service
       GATEWAY_ALIAS_NAME: gateway-app-container
       REDIS_GATEWAY_URL: redis-service
-      MONGO_GATEWAY_URL: "mongodb://root:mongopw@mongodb1:27017,mongodb2:27018,mongodb3:27019/admin?replicaSet=rs0"
+      # Redis connection pool optimizations for Docker
+      SPRING_REDIS_TIMEOUT: 5000
+      SPRING_REDIS_CONNECT_TIMEOUT: 5000
+      SPRING_REDIS_POOL_MAX_ACTIVE: 10
+      SPRING_REDIS_POOL_MAX_IDLE: 5
+      SPRING_REDIS_POOL_MIN_IDLE: 2
+      SPRING_REDIS_POOL_MAX_WAIT: 5000
+      MONGO_GATEWAY_URL: "mongodb://root:mongopw@mongodb1:27017,mongodb2:27018,mongodb3:27019/admin?replicaSet=rs0&maxPoolSize=10&minPoolSize=2&maxIdleTimeMS=30000&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=30000&maxConnecting=5"
       KEYCLOAK_GATEWAY_URL: keycloak-service
       KEYCLOAK_GATEWAY_PORT: 8080
       KEYCLOAK_CLIENT_SECRET: TixdWtVigsJ0qUUvwP4ccso6QTMLGC6W
@@ -349,6 +356,11 @@ services:
       # Docker networking optimizations
       JAVA_OPTS: "-Djava.net.preferIPv4Stack=true -Dsun.net.client.defaultConnectTimeout=5000 -Dsun.net.client.defaultReadTimeout=30000"
       DOCKER_CONTAINER: "true"
+      # Debug logging for container identification
+      #LOGGING_LEVEL_ORG_LITE_GATEWAY: "DEBUG"
+      #LOGGING_LEVEL_REACTOR_NETTY: "DEBUG"
+      #LOGGING_LEVEL_ORG_SPRING_DATA_MONGODB: "DEBUG"
+      #LOGGING_LEVEL_ORG_MONGODB_DRIVER: "DEBUG"
     volumes:
       - ./api-gateway:/app/api-gateway
       - ./keys:/app/keys

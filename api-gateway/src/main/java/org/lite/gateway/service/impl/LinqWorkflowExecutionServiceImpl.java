@@ -366,8 +366,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             // Set token usage for AI models
             response.getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
                 if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini") 
-                    || stepMetadata.getTarget().equals("cohere") || stepMetadata.getTarget().equals("openai-embed") 
-                    || stepMetadata.getTarget().equals("gemini-embed") || stepMetadata.getTarget().equals("cohere-embed")) {
+                    || stepMetadata.getTarget().equals("cohere") || stepMetadata.getTarget().equals("claude")
+                    || stepMetadata.getTarget().equals("openai-embed") || stepMetadata.getTarget().equals("gemini-embed") 
+                    || stepMetadata.getTarget().equals("cohere-embed")) {
                     // Get token usage from the step's result if available
                     if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
                         workflowResult.getSteps().stream()
@@ -512,6 +513,39 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                 model, promptTokens, completionTokens, String.format("%.6f", cost));
                                             hasTokenUsage = true;
                                         }
+                                    } else if (stepMetadata.getTarget().equals("claude") && resultMap.containsKey("usage")) {
+                                        // Handle Claude token usage
+                                        Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
+                                        long promptTokens = usage.containsKey("input_tokens") 
+                                            ? ((Number) usage.get("input_tokens")).longValue() : 0;
+                                        long completionTokens = usage.containsKey("output_tokens") 
+                                            ? ((Number) usage.get("output_tokens")).longValue() : 0;
+                                        long totalTokens = promptTokens + completionTokens;
+                                        
+                                        tokenUsage.setPromptTokens(promptTokens);
+                                        tokenUsage.setCompletionTokens(completionTokens);
+                                        tokenUsage.setTotalTokens(totalTokens);
+                                        
+                                        // Extract model from the original request's workflow step llmConfig
+                                        String model = "claude-sonnet-4-5"; // default
+                                        if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
+                                            request.getQuery().getWorkflow().stream()
+                                                .filter(ws -> ws.getStep() == stepMetadata.getStep())
+                                                .findFirst()
+                                                .ifPresent(ws -> {
+                                                    if (ws.getLlmConfig() != null && ws.getLlmConfig().getModel() != null) {
+                                                        stepMetadata.setModel(ws.getLlmConfig().getModel());
+                                                    }
+                                                });
+                                        }
+                                        model = stepMetadata.getModel() != null ? stepMetadata.getModel() : model;
+                                        
+                                        // Calculate and store cost at execution time
+                                        double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
+                                        tokenUsage.setCostUsd(cost);
+                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
+                                            model, promptTokens, completionTokens, String.format("%.6f", cost));
+                                        hasTokenUsage = true;
                                     }
                                     
                                     // Only set tokenUsage if it was actually populated

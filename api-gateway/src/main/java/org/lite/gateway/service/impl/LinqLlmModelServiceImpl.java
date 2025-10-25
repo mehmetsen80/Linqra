@@ -138,15 +138,19 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     switch (authType) {
                         case "bearer":
                             headers.put("Authorization", "Bearer " + apiKey);
-                            log.info("Using Bearer token authentication for {}", llmModel.getTarget());
+                            log.debug("Using Bearer token authentication for {}", llmModel.getTarget());
+                            break;
+                        case "api_key":
+                            headers.put("x-api-key", apiKey);
+                            log.debug("Using x-api-key header authentication for {}", llmModel.getTarget());
                             break;
                         case "api_key_query":
                             url.set(url.get() + (url.get().contains("?") ? "&" : "?") + "key=" + apiKey);
-                            log.info("Using API key query parameter authentication for {}", llmModel.getTarget());
+                            log.debug("Using API key query parameter authentication for {}", llmModel.getTarget());
                             break;
                         case "none":
                         default:
-                            log.info("No authentication required for {}", llmModel.getTarget());
+                            log.debug("No authentication required for {}", llmModel.getTarget());
                             break;
                     }
 
@@ -205,6 +209,31 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     payload.put("generationConfig", llmConfig.getSettings());
                 }
+                break;
+            case "claude":
+                // Claude API format
+                String claudeModel = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "claude-sonnet-4-5";
+                payload.put("model", claudeModel);
+                
+                // Handle messages array from payload
+                if (request.getQuery().getPayload() instanceof List) {
+                    payload.put("messages", request.getQuery().getPayload());
+                } else if (request.getQuery().getPayload() instanceof Map) {
+                    // If payload is a Map, convert to messages format
+                    Map<String, Object> payloadMap = (Map<String, Object>) request.getQuery().getPayload();
+                    if (payloadMap.containsKey("messages")) {
+                        payload.put("messages", payloadMap.get("messages"));
+                    } else {
+                        // Create a single user message from the payload
+                        payload.put("messages", List.of(Map.of("role", "user", "content", payloadMap.getOrDefault("content", ""))));
+                    }
+                }
+                
+                // Add settings from llmConfig (e.g., max_tokens)
+                if (llmConfig != null && llmConfig.getSettings() != null) {
+                    payload.putAll(llmConfig.getSettings());
+                }
+                log.info("Building Claude payload for model: {}", claudeModel);
                 break;
             case "openai-embed":
                 Object textParam = request.getQuery().getParams().getOrDefault("text", "");

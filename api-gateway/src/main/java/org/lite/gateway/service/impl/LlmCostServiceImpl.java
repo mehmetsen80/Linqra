@@ -212,10 +212,10 @@ public class LlmCostServiceImpl implements LlmCostService {
             for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
                 String target = stepMetadata.getTarget();
                 
-                // Only process LLM provider steps (OpenAI, Gemini, Cohere)
+                // Only process LLM provider steps (OpenAI, Gemini, Cohere, Claude)
                 if (!target.equals("openai") && !target.equals("gemini") && !target.equals("openai-embed") 
                     && !target.equals("cohere") && !target.equals("cohere-embed") 
-                    && !target.equals("gemini-embed")) {
+                    && !target.equals("gemini-embed") && !target.equals("claude")) {
                     continue;
                 }
                 

@@ -129,9 +129,27 @@ const ExecutionDetailsModal = ({
                                                 {step.target}
                                             </div>
                                             <div className="step-pipeline-result">
-                                                {step.result?.content || 
-                                                 step.result?.fullName || 
-                                                 JSON.stringify(step.result).slice(0, 50) + '...'}
+                                                {(() => {
+                                                    // Handle Claude API response (content is array of objects with type and text)
+                                                    if (step.result?.content && Array.isArray(step.result.content) && step.result.content.length > 0) {
+                                                        // If content array has text property (Claude format)
+                                                        const firstContent = step.result.content[0];
+                                                        if (typeof firstContent === 'object' && firstContent.text) {
+                                                            return firstContent.text;
+                                                        }
+                                                        // Otherwise stringify the content
+                                                        return JSON.stringify(step.result.content);
+                                                    }
+                                                    // Handle other providers
+                                                    if (step.result?.content) {
+                                                        return step.result.content;
+                                                    }
+                                                    if (step.result?.fullName) {
+                                                        return step.result.fullName;
+                                                    }
+                                                    // Fallback to stringifying the result
+                                                    return JSON.stringify(step.result).slice(0, 50) + '...';
+                                                })()}
                                             </div>
                                         </div>
                                     </OverlayTrigger>

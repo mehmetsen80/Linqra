@@ -276,14 +276,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             // Clean up memory-intensive data structures after workflow completion
             // Note: stepResults and globalParams are copied to response, so they can be safely cleared
             // stepMetadata is directly referenced in response, so we don't clear it
-            if (stepResults != null) {
-                stepResults.clear();
-            }
+            stepResults.clear();
             if (globalParams != null) {
                 globalParams.clear();
             }
             // Force garbage collection hint for memory cleanup
+            log.info("🧹 Starting post-execution cleanup for workflow");
             System.gc();
+            log.info("🧹 Completed post-execution cleanup for workflow");
         }).onErrorResume(error -> {
             // Create error response
             LinqResponse errorResponse = new LinqResponse();

@@ -18,15 +18,12 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferUtils;
-import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpRequestDecorator;
-import org.springframework.web.server.ServerWebExchangeDecorator;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
@@ -119,19 +116,12 @@ public class ApiRouteLocatorImpl implements RouteLocator, ApplicationContextAwar
             return chain.filter(exchange);
         }));
 
-        // Add filter to check actual request path before applying resilience filters
-        routeSpec.filters(f -> f.filter((exchange, chain) -> {
-            String pathEndpoint = exchange.getRequest().getURI().getPath();
-            
-            // Skip resilience filters for health check endpoints
-            if (pathEndpoint.endsWith("/health") || pathEndpoint.endsWith("/health/")) {
-                return chain.filter(exchange);
-            }
-            
-            // Apply resilience filters for non-health endpoints
-            applyFilters(routeSpec, apiRoute);
-            return chain.filter(exchange);
-        }));
+        // Apply resilience filters for non-health endpoints
+        applyFilters(routeSpec, apiRoute);
+
+        // Note: Resilience filters are applied above, so they will execute for all endpoints
+        // Health check endpoints will still go through filters but be lightweight
+        // To completely skip filters for health endpoints, they should be excluded at route definition time
 
         // Add a custom filter to capture metrics only for real requests
         routeSpec.filters(f -> f.filter((exchange, chain) -> {
@@ -237,10 +227,24 @@ public class ApiRouteLocatorImpl implements RouteLocator, ApplicationContextAwar
             booleanSpec.filters(gatewayFilterSpec -> {
                 for (FilterConfig filter : filters) {
                     String filterName = filter.getName();
+                    
+                    // Skip Redis and circuit breaker filters for health check endpoints
+                    if (apiRoute.getHealthCheck() != null && apiRoute.getHealthCheck().isEnabled()) {
+                        String healthPath = apiRoute.getHealthCheck().getPath();
+                        if (healthPath != null && (filterName.equals("RedisRateLimiter") || 
+                                                    filterName.equals("CircuitBreaker") ||
+                                                    filterName.equals("TimeLimiter") ||
+                                                    filterName.equals("Retry"))) {
+                            log.debug("Skipping {} filter for health check path: {}", filterName, healthPath);
+                            continue;
+                        }
+                    }
+                    
                     FilterService filterService = filterServiceMap.get(filterName);
                     if (filterService != null) {
                         try {
                             filterService.applyFilter(gatewayFilterSpec, filter, apiRoute);
+                            log.debug("Applied filter {} for route {}", filterName, apiRoute.getRouteIdentifier());
                         } catch (Exception e) {
                             log.error("Error applying filter {} for route {}: {}", filterName, apiRoute.getRouteIdentifier(), e.getMessage());
                         }

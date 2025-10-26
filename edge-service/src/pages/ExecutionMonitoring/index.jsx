@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { executionMonitoringWebSocket } from '../../services/executionMonitoringService';
 import { Alert, Box, Grid2, Card, CardContent, Typography, Chip, LinearProgress, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
-import { PlayArrow, Stop, Refresh, Memory, Timer, CheckCircle, Error, Cancel, Replay, Close } from '@mui/icons-material';
+import { PlayArrow, Stop, Refresh, Memory, Timer, CheckCircle, Error, Cancel, Replay, Close, Visibility } from '@mui/icons-material';
 import agentTaskService from '../../services/agentTaskService';
 import executionQueueService from '../../services/executionQueueService';
 import workflowService from '../../services/workflowService';
@@ -13,6 +14,7 @@ import './styles.css';
 const ExecutionMonitoring = () => {
     const { user } = useAuth();
     const { currentTeam } = useTeam();
+    const navigate = useNavigate();
     const [executions, setExecutions] = useState(new Map());
     const [queue, setQueue] = useState([]);
     const [connectionStatus, setConnectionStatus] = useState('disconnected');
@@ -326,6 +328,14 @@ const ExecutionMonitoring = () => {
         } catch (error) {
             console.error('Error rerunning execution:', error);
             setError('Failed to rerun execution: ' + error.message);
+        }
+    };
+
+    const handleViewTask = (execution) => {
+        if (execution.taskId) {
+            navigate(`/agents/${execution.agentId}/tasks/${execution.taskId}`);
+        } else {
+            setError('Cannot view task: Task ID not found');
         }
     };
 
@@ -758,17 +768,30 @@ const ExecutionMonitoring = () => {
                                             {formatDate(execution.startedAt)}
                                         </TableCell>
                                         <TableCell>
-                                            <IconButton
-                                                size="small"
-                                                onClick={(e) => {
-                                                    e.stopPropagation(); // Prevent row click
-                                                    handleRerunExecution(execution);
-                                                }}
-                                                title="Rerun Execution"
-                                                color="primary"
-                                            >
-                                                <Replay />
-                                            </IconButton>
+                                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation(); // Prevent row click
+                                                        handleRerunExecution(execution);
+                                                    }}
+                                                    title="Rerun Execution"
+                                                    color="primary"
+                                                >
+                                                    <Replay />
+                                                </IconButton>
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation(); // Prevent row click
+                                                        handleViewTask(execution);
+                                                    }}
+                                                    title="View Task"
+                                                    color="primary"
+                                                >
+                                                    <Visibility />
+                                                </IconButton>
+                                            </Box>
                                         </TableCell>
                                     </TableRow>
                                 ))}

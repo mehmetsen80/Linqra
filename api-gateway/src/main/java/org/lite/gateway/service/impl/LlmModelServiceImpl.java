@@ -209,15 +209,29 @@ public class LlmModelServiceImpl implements LlmModelService {
             0.15, 0.0, true, "Current Gemini embedding model with enhanced performance", 
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent", 768, now));
         
-        // Anthropic Claude Models
-        models.add(createModel("claude-3-opus", "Claude 3 Opus", "anthropic", "chat", 
-            15.00, 75.00, true, "Most powerful Claude model", 
+        // Anthropic Claude Models - Latest 2025
+        models.add(createModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (Latest)", "anthropic", "chat", 
+            3.00, 15.00, true, "Latest smartest model for complex agents and coding (claude-sonnet-4-5-20250929)", 
             "https://api.anthropic.com/v1/messages", now));
-        models.add(createModel("claude-3-sonnet", "Claude 3 Sonnet", "anthropic", "chat", 
-            3.00, 15.00, true, "Balanced Claude model", 
+        models.add(createModel("claude-haiku-4-5", "Claude Haiku 4.5 (Latest)", "anthropic", "chat", 
+            0.80, 4.00, true, "Fastest model with near-frontier intelligence (claude-haiku-4-5-20251001)", 
             "https://api.anthropic.com/v1/messages", now));
-        models.add(createModel("claude-3-haiku", "Claude 3 Haiku", "anthropic", "chat", 
-            0.25, 1.25, true, "Fast and efficient Claude model", 
+        models.add(createModel("claude-opus-4-1", "Claude Opus 4.1 (Premium)", "anthropic", "chat", 
+            15.00, 75.00, true, "Premium model for specialized reasoning tasks. Cost: $15/$75 per 1M tokens (claude-opus-4-1-20250805)", 
+            "https://api.anthropic.com/v1/messages", now));
+        
+        // Legacy Claude 3 models
+        models.add(createModel("claude-3-opus", "Claude 3 Opus (Legacy)", "anthropic", "chat", 
+            15.00, 75.00, true, "Legacy most powerful Claude model", 
+            "https://api.anthropic.com/v1/messages", now));
+        models.add(createModel("claude-3-sonnet", "Claude 3 Sonnet (Legacy)", "anthropic", "chat", 
+            3.00, 15.00, true, "Legacy balanced Claude model", 
+            "https://api.anthropic.com/v1/messages", now));
+        models.add(createModel("claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet (Legacy)", "anthropic", "chat", 
+            3.00, 15.00, true, "Legacy Claude 3.5 Sonnet - high performance", 
+            "https://api.anthropic.com/v1/messages", now));
+        models.add(createModel("claude-3-haiku", "Claude 3 Haiku (Legacy)", "anthropic", "chat", 
+            0.25, 1.25, true, "Legacy fast and efficient Claude model", 
             "https://api.anthropic.com/v1/messages", now));
         
         // Cohere Command Models (Chat/Completion)

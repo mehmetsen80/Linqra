@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FaRoute, FaNetworkWired } from 'react-icons/fa';
-import { Form } from 'react-bootstrap';
 import { LoadingSpinner } from '../../../components/common/LoadingSpinner';
 import { apiRouteService } from '../../../services/apiRouteService';
 import RouteDetails from '../../../components/apiroutes/RouteDetails';

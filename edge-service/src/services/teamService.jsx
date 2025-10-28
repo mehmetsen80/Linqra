@@ -231,7 +231,7 @@ export const teamService = {
   },
 
   // Get team by ID
-  getTeam: async (teamId) => {
+  getTeamById: async (teamId) => {
     try {
       const response = await axiosInstance.get(`/api/teams/${teamId}`);
       return {

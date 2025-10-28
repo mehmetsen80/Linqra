@@ -14,8 +14,8 @@ import java.util.Map;
 @AllArgsConstructor
 public class LinqLlmModelDTO {
     private String id;
-    private String target;
-    private String modelType;
+    private String modelCategory;
+    private String modelName;
     private String endpoint;
     private String method;
     private Map<String, String> headers;

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Alert, Spinner, Table, Row, Col, Accordion, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { HiKey, HiTrash, HiEye } from 'react-icons/hi';
-import { SiOpenai } from 'react-icons/si';
 import { linqLlmModelService } from '../../services/linqLlmModelService';
 import llmModelService from '../../services/llmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
@@ -9,21 +8,21 @@ import Button from '../../components/common/Button';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 
 const initialFormData = {
-  modelCategory: 'openai-chat',
-  provider: 'openai',
-  endpoint: 'https://api.openai.com/v1/chat/completions',
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  authType: 'bearer',
-  apiKey: '',
-  modelName: '',
-  supportedIntents: ['generate', 'summarize', 'translate'],
-  teamId: ''
+    modelCategory: 'claude-chat',
+    provider: 'claude',
+    endpoint: '',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    authType: 'api_key',
+    apiKey: '',
+    modelName: '',
+    supportedIntents: ['generate', 'summarize', 'translate'],
+    teamId: ''
 };
 
-function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
+const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
   const [existingConfigs, setExistingConfigs] = useState([]);
@@ -57,18 +56,16 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   const fetchConfiguration = async () => {
     try {
       setLoading(true);
-      // Fetch both 'openai' and 'openai-embed' configurations in one call
-      const allConfigs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['openai-chat', 'openai-embed']);
+      const allConfigs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['claude']);
       
       if (allConfigs && allConfigs.length > 0) {
-        const config = allConfigs[0]; // Use the first configuration
-        // Convert supportedIntents to react-select format if they exist
+        const config = allConfigs[0];
         const intents = config.supportedIntents || [];
         setFormData(prev => ({
           ...prev,
-          modelCategory: config.modelCategory || 'openai-chat',
+          modelCategory: config.modelCategory || 'claude-chat',
           endpoint: config.endpoint,
-          authType: config.authType || 'bearer',
+          authType: config.authType || 'api_key',
           apiKey: config.apiKey,
           supportedIntents: intents,
           modelName: config.modelName || ''
@@ -84,7 +81,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   const fetchAvailableModels = async () => {
     try {
       setLoadingModels(true);
-      const models = await llmModelService.getModelsByProvider('openai');
+      const models = await llmModelService.getModelsByProvider('anthropic');
       setAvailableModels(models || []);
     } catch (error) {
       console.error('Error fetching available models:', error);
@@ -96,8 +93,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   const fetchExistingConfigs = async () => {
     try {
       setLoadingConfigs(true);
-      // Fetch both 'openai' and 'openai-embed' configurations in one call
-      const configs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['openai-chat', 'openai-embed']);
+      const configs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['claude']);
       setExistingConfigs(configs || []);
     } catch (error) {
       console.error('Error fetching existing configurations:', error);
@@ -115,7 +111,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   if (!team) return null;
 
   const handleSave = async (e) => {
-    e.preventDefault(); // Prevent form submission
+    e.preventDefault();
     
     // Validate required fields
     const requiredFields = {
@@ -139,7 +135,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
     try {
       setLoading(true);
       const config = {
-        provider: 'openai',
+        provider: 'claude',
         modelCategory: formData.modelCategory,
         endpoint: formData.endpoint,
         method: 'POST',
@@ -156,7 +152,6 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       if (onTeamUpdate) {
         await onTeamUpdate();
       }
-      // Reset form for next configuration
       setFormData({
         ...initialFormData,
         team: team.name,
@@ -202,7 +197,6 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   };
 
   const handleModelNameChange = async (modelName) => {
-    // Find the selected model
     const selectedModel = availableModels.find(model => model.modelName === modelName);
     
     if (!selectedModel || !selectedModel.endpoint) {
@@ -210,16 +204,11 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       return;
     }
     
-    const category = selectedModel.category.toLowerCase();
-    const isEmbedding = category === 'embedding';
-    
-    const modelCategory = isEmbedding ? 'openai-embed' : 'openai-chat';
+    const category = selectedModel.category.toLowerCase();//claude does not have embedding, it's only chat
+    const modelCategory = category;
     const endpoint = selectedModel.endpoint;
-    const supportedIntents = isEmbedding 
-      ? ['embed']
-      : ['generate', 'summarize', 'translate'];
+    const supportedIntents = ['generate', 'summarize', 'translate'];
     
-    // Check if this model is already configured and load its data
     const existingConfig = existingConfigs.find(config => config.modelName === modelName);
     
     setFormData({
@@ -228,7 +217,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       modelCategory: existingConfig?.modelCategory || modelCategory,
       endpoint: existingConfig?.endpoint || endpoint,
       supportedIntents: existingConfig?.supportedIntents || supportedIntents,
-      apiKey: existingConfig?.apiKey || '', // Clear API key if no config found
+      apiKey: existingConfig?.apiKey || '',
       authType: existingConfig?.authType || formData.authType
     });
   };
@@ -243,9 +232,8 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       <Modal show={show} onHide={onHide} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>
-            <SiOpenai className="me-2" size={24} />
-            OpenAI Configuration
-            <span className="ms-2 text-muted">- {team.name}</span>
+            Claude Configuration
+            <span className="ms-2 text-muted">- {team?.name}</span>
           </Modal.Title>
         </Modal.Header>
       <Form onSubmit={handleSave}>
@@ -257,13 +245,13 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
           ) : (
             <>
               <Alert variant="info">
-                Configure OpenAI API settings for team: <strong>{team.name}</strong>
+                Configure Claude API settings for team: <strong>{team?.name}</strong>
               </Alert>
 
               <Row>
                 <Col md={12}>
                   <Form.Group className="mb-3">
-                    <Form.Label>Model Name</Form.Label>
+                    <Form.Label>Model Type</Form.Label>
                     {loadingModels ? (
                       <Spinner animation="border" size="sm" className="me-2" />
                     ) : (
@@ -274,7 +262,6 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                       >
                         <option value="">Select a model...</option>
                         {availableModels.map(model => {
-                          // Check if this model is already configured
                           const isConfigured = existingConfigs.some(config => config.modelName === model.modelName);
                           return (
                             <option 
@@ -291,7 +278,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                       </Form.Select>
                     )}
                     <Form.Text className="text-muted">
-                      Select the OpenAI model to use for this configuration
+                      Select the Claude model to use for this configuration
                     </Form.Text>
                   </Form.Group>
                 </Col>
@@ -341,7 +328,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                     type={showApiKey ? 'text' : 'password'}
                     value={formData.apiKey || ''}
                     onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                    placeholder="Enter your OpenAI API key"
+                    placeholder="Enter your Claude API key"
                     required
                   />
                   <button 
@@ -364,13 +351,9 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                   </button>
                 </div>
                 <Form.Text className="text-muted">
-                  Your API key will be securely stored and used for OpenAI API requests.
+                  Your API key will be securely stored and used for Claude API requests.
                 </Form.Text>
               </Form.Group>
-
-
-
-
             </>
           )}
         </Modal.Body>
@@ -413,13 +396,13 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       
       {/* Existing Configurations */}
       <div className="p-3">
-        <h5>Existing OpenAI Configurations</h5>
+        <h5>Existing Claude Configurations</h5>
         {loadingConfigs ? (
           <div className="text-center py-4">
             <Spinner animation="border" size="sm" /> Loading configurations...
           </div>
         ) : existingConfigs.length === 0 ? (
-          <p className="text-muted">No OpenAI configurations for this team yet.</p>
+          <p className="text-muted">No Claude configurations for this team yet.</p>
         ) : (
           <Table hover className="mt-3">
             <thead>
@@ -437,7 +420,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                   style={{ cursor: 'pointer' }}
                   onClick={() => handleModelNameChange(config.modelName)}
                 >
-                  <td>{config.modelCategory || 'openai-chat'}</td>
+                  <td>{config.modelCategory || 'claude'}</td>
                   <td>{config.modelName || 'N/A'}</td>
                   <td>
                     {config.endpoint && config.endpoint.length > 50 ? (
@@ -490,6 +473,6 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
     </Modal>
     </>
   );
-}
+};
 
-export default OpenAIModal;
+export default ClaudeModal;

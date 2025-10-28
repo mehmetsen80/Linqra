@@ -176,7 +176,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     }
 
     @Override
-    public Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String target, String modelType, String textField, String teamId, List<Float> embedding) {
+    public Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String target, String modelName, String textField, String teamId, List<Float> embedding) {
         log.info("Storing record in collection {} for team {} (embedding: {})", collectionName, teamId, embedding != null ? "pre-computed" : "will generate");
         try {
             String text = (String) record.get(textField);
@@ -195,8 +195,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
 
             // Otherwise, generate embedding as usual
-            log.info("🔄 Generating new embedding using target: {}, model: {}", target, modelType);
-            return getEmbedding(text, target, modelType, teamId)
+            log.info("🔄 Generating new embedding using target: {}, model: {}", target, modelName);
+            return getEmbedding(text, target, modelName, teamId)
                     .flatMap(generatedEmbedding -> storeWithEmbedding(collectionName, record, generatedEmbedding, textField, teamId));
         } catch (Exception e) {
             log.error("Failed to store record in collection {}: {}", collectionName, e.getMessage(), e);
@@ -360,11 +360,11 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     }
 
     @Override
-    public Mono<List<Float>> getEmbedding(String text, String target, String modelType, String teamId) {
-        log.info("Getting embedding for text: {} with target: {} and model: {} for team: {}", text, target, modelType, teamId);
+    public Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId) {
+        log.info("Getting embedding for text: {} with modelCategory: {} and model name: {} for team: {}", text, modelCategory, modelName, teamId);
         LinqRequest request = new LinqRequest();
         LinqRequest.Link link = new LinqRequest.Link();
-        link.setTarget(target);
+        link.setTarget(modelCategory);
         link.setAction("generate");
         request.setLink(link);
 
@@ -373,12 +373,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         query.setParams(Map.of("text", text));
         
         LinqRequest.Query.LlmConfig llmConfig = new LinqRequest.Query.LlmConfig();
-        llmConfig.setModel(modelType);
+        llmConfig.setModel(modelName);
         query.setLlmConfig(llmConfig);
         request.setQuery(query);
 
-        return linqLlmModelService.findByTargetAndModelTypeAndTeamId(target, modelType, teamId)
-                .switchIfEmpty(Mono.error(new IllegalArgumentException("Embedding target " + target + " with model " + modelType + " not found for team: " + teamId)))
+        return linqLlmModelService.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId)
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Embedding modelCategory " + modelCategory + " with model name " + modelName + " not found for team: " + teamId)))
                 .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(request, llmModel))
                 .map(response -> {
                     Map<String, Object> result = (Map<String, Object>) response.getResult();
@@ -390,7 +390,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         throw new IllegalStateException("Embedding service error: " + result.get("error"));
                     }
 
-                    if ("openai-embed".equals(target)) {
+                    if ("openai-embed".equals(modelCategory)) {
                         List<Map<String, Object>> data = (List<Map<String, Object>>) result.get("data");
                         if (data == null || data.isEmpty()) {
                             throw new IllegalStateException("No data received from OpenAI embedding service");
@@ -399,12 +399,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         return rawEmbedding.stream()
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
-                    } else if ("huggingface-embed".equals(target)) {
+                    } else if ("huggingface-embed".equals(modelCategory)) {
                         List<Object> rawEmbedding = (List<Object>) result.get("embedding");
                         return rawEmbedding.stream()
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
-                    } else if ("gemini-embed".equals(target)) {
+                    } else if ("gemini-embed".equals(modelCategory)) {
                         // Gemini embedding response format: {embedding: {values: [...]}}
                         Map<String, Object> embedding = (Map<String, Object>) result.get("embedding");
                         if (embedding == null) {
@@ -417,7 +417,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         return values.stream()
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
-                    } else if ("cohere-embed".equals(target)) {
+                    } else if ("cohere-embed".equals(modelCategory)) {
                         // Cohere embedding response format: {embeddings: [[...]]}
                         List<List<Object>> embeddings = (List<List<Object>>) result.get("embeddings");
                         if (embeddings == null || embeddings.isEmpty()) {
@@ -431,7 +431,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             .map(value -> ((Number) value).floatValue())
                             .collect(Collectors.toList());
                     }
-                    throw new IllegalArgumentException("Unsupported embedding target: " + target);
+                    throw new IllegalArgumentException("Unsupported embedding modelCategory: " + modelCategory);
                 });
     }
 
@@ -671,14 +671,14 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     }
 
     @Override
-    public Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String target, String modelType) {
-        return verifyRecord(collectionName, textField, text, teamId, target, modelType, null);
+    public Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String target, String modelName) {
+        return verifyRecord(collectionName, textField, text, teamId, target, modelName, null);
     }
 
     @Override
-    public Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String target, String modelType, Map<String, Object> metadataFilters) {
+    public Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String target, String modelName, Map<String, Object> metadataFilters) {
         log.info("Verifying record in collection {} for team {} with text: {} using target: {} and model: {} with filters: {}", 
-            collectionName, teamId, text, target, modelType, metadataFilters);
+            collectionName, teamId, text, target, modelName, metadataFilters);
         try {
             // First verify the collection belongs to the team
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
@@ -762,7 +762,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
 
             // Get embedding for the search text using dynamic llm target and model
-            return getEmbedding(text, target, modelType, teamId)
+            return getEmbedding(text, target, modelName, teamId)
                 .flatMap(searchEmbedding -> {
                     try {
                         // Build dynamic filter expression
@@ -1053,14 +1053,14 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     }
 
     @Override
-    public Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String target, String modelType) {
-        return searchRecord(collectionName, textField, text, teamId, target, modelType, 10, null);
+    public Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String target, String modelName) {
+        return searchRecord(collectionName, textField, text, teamId, target, modelName, 10, null);
     }
 
     @Override
-    public Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String target, String modelType, int nResults, Map<String, Object> metadataFilters) {
+    public Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String target, String modelName, int nResults, Map<String, Object> metadataFilters) {
         log.info("Searching records in collection {} for team {} with text: {} using target: {} and model: {} with filters: {} and nResults: {}", 
-            collectionName, teamId, text, target, modelType, metadataFilters, nResults);
+            collectionName, teamId, text, target, modelName, metadataFilters, nResults);
         try {
             // First verify the collection belongs to the team
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
@@ -1120,7 +1120,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
 
             // Get embedding for the search text using dynamic tool and model
-            return getEmbedding(text, target, modelType, teamId)
+            return getEmbedding(text, target, modelName, teamId)
                 .flatMap(searchEmbedding -> {
                     try {
                         // Build dynamic filter expression

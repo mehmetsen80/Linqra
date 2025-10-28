@@ -8,9 +8,12 @@ import reactor.core.publisher.Mono;
 
 public interface LinqLlmModelService {
     Mono<LinqLlmModel> saveLinqLlmModel(LinqLlmModel linqLlmModel);
+    Mono<Void> deleteLinqLlmModel(String id);
     Mono<LinqResponse> executeLlmRequest(LinqRequest request, LinqLlmModel llmModel);
+    Mono<LinqLlmModel> findById(String id);
     Flux<LinqLlmModel> findByTeamId(String teamId);
-    Mono<LinqLlmModel> findByTargetAndTeam(String target, String teamId);
-    Mono<LinqLlmModel> findByTargetAndModelTypeAndTeamId(String target, String modelType, String teamId);
+    Flux<LinqLlmModel> findByModelCategoryAndTeamId(String modelCategory, String teamId);
+    Flux<LinqLlmModel> findByModelCategoriesAndTeamId(java.util.List<String> targets, String teamId);
+    Mono<LinqLlmModel> findByModelCategoryAndModelNameAndTeamId(String target, String modelName, String teamId);
 }
 

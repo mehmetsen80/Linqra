@@ -8,7 +8,6 @@ import org.lite.gateway.dto.ErrorCode;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.RouteExistenceRequest;
 import org.lite.gateway.dto.RouteExistenceResponse;
-import org.lite.gateway.dto.RouteExistenceResponse.ExistenceDetail;
 import org.lite.gateway.entity.*;
 import org.lite.gateway.exception.DuplicateRouteException;
 import org.lite.gateway.repository.TeamRouteRepository;

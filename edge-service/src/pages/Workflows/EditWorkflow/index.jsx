@@ -125,7 +125,7 @@ function EditWorkflow() {
 
     const loadTeamDetails = async () => {
         try {
-            const response = await teamService.getTeam(workflow.teamId);
+            const response = await teamService.getTeamById(workflow.teamId);
             if (response.success) {
                 setTeamDetails(response.data);
             }

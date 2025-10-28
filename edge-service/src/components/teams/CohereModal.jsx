@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Alert, Spinner, Table, Row, Col, Accordion, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { HiKey, HiTrash, HiEye } from 'react-icons/hi';
-import { SiOpenai } from 'react-icons/si';
 import { linqLlmModelService } from '../../services/linqLlmModelService';
 import llmModelService from '../../services/llmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
@@ -9,9 +8,9 @@ import Button from '../../components/common/Button';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 
 const initialFormData = {
-  modelCategory: 'openai-chat',
-  provider: 'openai',
-  endpoint: 'https://api.openai.com/v1/chat/completions',
+    modelCategory: 'cohere-chat',
+    provider: 'cohere',
+  endpoint: '',
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
@@ -23,7 +22,7 @@ const initialFormData = {
   teamId: ''
 };
 
-function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
+const CohereModal = ({ show, onHide, team, onTeamUpdate }) => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
   const [existingConfigs, setExistingConfigs] = useState([]);
@@ -57,16 +56,14 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   const fetchConfiguration = async () => {
     try {
       setLoading(true);
-      // Fetch both 'openai' and 'openai-embed' configurations in one call
-      const allConfigs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['openai-chat', 'openai-embed']);
+      const allConfigs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['cohere-chat', 'cohere-embed']);
       
       if (allConfigs && allConfigs.length > 0) {
-        const config = allConfigs[0]; // Use the first configuration
-        // Convert supportedIntents to react-select format if they exist
+        const config = allConfigs[0];
         const intents = config.supportedIntents || [];
         setFormData(prev => ({
           ...prev,
-          modelCategory: config.modelCategory || 'openai-chat',
+          modelCategory: config.modelCategory || 'cohere-chat',
           endpoint: config.endpoint,
           authType: config.authType || 'bearer',
           apiKey: config.apiKey,
@@ -84,7 +81,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   const fetchAvailableModels = async () => {
     try {
       setLoadingModels(true);
-      const models = await llmModelService.getModelsByProvider('openai');
+      const models = await llmModelService.getModelsByProvider('cohere');
       setAvailableModels(models || []);
     } catch (error) {
       console.error('Error fetching available models:', error);
@@ -96,8 +93,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   const fetchExistingConfigs = async () => {
     try {
       setLoadingConfigs(true);
-      // Fetch both 'openai' and 'openai-embed' configurations in one call
-      const configs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['openai-chat', 'openai-embed']);
+      const configs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['cohere-chat', 'cohere-embed']);
       setExistingConfigs(configs || []);
     } catch (error) {
       console.error('Error fetching existing configurations:', error);
@@ -115,7 +111,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   if (!team) return null;
 
   const handleSave = async (e) => {
-    e.preventDefault(); // Prevent form submission
+    e.preventDefault();
     
     // Validate required fields
     const requiredFields = {
@@ -139,7 +135,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
     try {
       setLoading(true);
       const config = {
-        provider: 'openai',
+        provider: 'cohere',
         modelCategory: formData.modelCategory,
         endpoint: formData.endpoint,
         method: 'POST',
@@ -156,7 +152,6 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       if (onTeamUpdate) {
         await onTeamUpdate();
       }
-      // Reset form for next configuration
       setFormData({
         ...initialFormData,
         team: team.name,
@@ -202,7 +197,6 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
   };
 
   const handleModelNameChange = async (modelName) => {
-    // Find the selected model
     const selectedModel = availableModels.find(model => model.modelName === modelName);
     
     if (!selectedModel || !selectedModel.endpoint) {
@@ -213,13 +207,12 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
     const category = selectedModel.category.toLowerCase();
     const isEmbedding = category === 'embedding';
     
-    const modelCategory = isEmbedding ? 'openai-embed' : 'openai-chat';
+    const modelCategory = isEmbedding ? 'cohere-embed' : 'cohere-chat';
     const endpoint = selectedModel.endpoint;
     const supportedIntents = isEmbedding 
       ? ['embed']
       : ['generate', 'summarize', 'translate'];
     
-    // Check if this model is already configured and load its data
     const existingConfig = existingConfigs.find(config => config.modelName === modelName);
     
     setFormData({
@@ -228,7 +221,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       modelCategory: existingConfig?.modelCategory || modelCategory,
       endpoint: existingConfig?.endpoint || endpoint,
       supportedIntents: existingConfig?.supportedIntents || supportedIntents,
-      apiKey: existingConfig?.apiKey || '', // Clear API key if no config found
+      apiKey: existingConfig?.apiKey || '',
       authType: existingConfig?.authType || formData.authType
     });
   };
@@ -243,9 +236,8 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       <Modal show={show} onHide={onHide} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>
-            <SiOpenai className="me-2" size={24} />
-            OpenAI Configuration
-            <span className="ms-2 text-muted">- {team.name}</span>
+            Cohere Configuration
+            <span className="ms-2 text-muted">- {team?.name}</span>
           </Modal.Title>
         </Modal.Header>
       <Form onSubmit={handleSave}>
@@ -257,13 +249,13 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
           ) : (
             <>
               <Alert variant="info">
-                Configure OpenAI API settings for team: <strong>{team.name}</strong>
+                Configure Cohere API settings for team: <strong>{team?.name}</strong>
               </Alert>
 
               <Row>
                 <Col md={12}>
                   <Form.Group className="mb-3">
-                    <Form.Label>Model Name</Form.Label>
+                    <Form.Label>Model Type</Form.Label>
                     {loadingModels ? (
                       <Spinner animation="border" size="sm" className="me-2" />
                     ) : (
@@ -274,14 +266,13 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                       >
                         <option value="">Select a model...</option>
                         {availableModels.map(model => {
-                          // Check if this model is already configured
                           const isConfigured = existingConfigs.some(config => config.modelName === model.modelName);
                           return (
                             <option 
                               key={model.id} 
                               value={model.modelName}
-                              disabled={isConfigured}
                               className={isConfigured ? 'text-secondary' : ''}
+                              disabled={isConfigured}
                             >
                               {model.displayName} ({model.modelName}) - {model.category}
                               {isConfigured ? ' (Configured)' : ''}
@@ -291,7 +282,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                       </Form.Select>
                     )}
                     <Form.Text className="text-muted">
-                      Select the OpenAI model to use for this configuration
+                      Select the Cohere model to use for this configuration
                     </Form.Text>
                   </Form.Group>
                 </Col>
@@ -341,7 +332,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                     type={showApiKey ? 'text' : 'password'}
                     value={formData.apiKey || ''}
                     onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                    placeholder="Enter your OpenAI API key"
+                    placeholder="Enter your Cohere API key"
                     required
                   />
                   <button 
@@ -364,13 +355,9 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                   </button>
                 </div>
                 <Form.Text className="text-muted">
-                  Your API key will be securely stored and used for OpenAI API requests.
+                  Your API key will be securely stored and used for Cohere API requests.
                 </Form.Text>
               </Form.Group>
-
-
-
-
             </>
           )}
         </Modal.Body>
@@ -413,13 +400,13 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       
       {/* Existing Configurations */}
       <div className="p-3">
-        <h5>Existing OpenAI Configurations</h5>
+        <h5>Existing Cohere Configurations</h5>
         {loadingConfigs ? (
           <div className="text-center py-4">
             <Spinner animation="border" size="sm" /> Loading configurations...
           </div>
         ) : existingConfigs.length === 0 ? (
-          <p className="text-muted">No OpenAI configurations for this team yet.</p>
+          <p className="text-muted">No Cohere configurations for this team yet.</p>
         ) : (
           <Table hover className="mt-3">
             <thead>
@@ -437,7 +424,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                   style={{ cursor: 'pointer' }}
                   onClick={() => handleModelNameChange(config.modelName)}
                 >
-                  <td>{config.modelCategory || 'openai-chat'}</td>
+                  <td>{config.modelCategory || 'cohere-chat'}</td>
                   <td>{config.modelName || 'N/A'}</td>
                   <td>
                     {config.endpoint && config.endpoint.length > 50 ? (
@@ -490,6 +477,6 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
     </Modal>
     </>
   );
-}
+};
 
-export default OpenAIModal;
+export default CohereModal;

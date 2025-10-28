@@ -38,6 +38,7 @@ public class LinqResponse {
         private String action; // Step action
         private String intent; // Step intent
         private String executionId; // Unique identifier for this execution of the step
+        private LinqRequest.Query.LlmConfig llmConfig; // LLM configuration for AI tools
     }
 
     @Data

@@ -24,7 +24,7 @@ const WorkflowCreate = () => {
                 },
                 {
                     "step": 2,
-                    "target": "openai",
+                    "target": "openai-chat",
                     "action": "generate",
                     "intent": "generate",
                     "params": {
@@ -74,7 +74,7 @@ const WorkflowCreate = () => {
                 },
                 {
                     "step": 2,
-                    "target": "gemini",
+                    "target": "gemini-chat",
                     "action": "generate",
                     "intent": "generate",
                     "params": {
@@ -124,7 +124,7 @@ const WorkflowCreate = () => {
                 },
                 {
                     "step": 2,
-                    "target": "openai",
+                    "target": "openai-chat",
                     "action": "generate",
                     "intent": "generate",
                     "params": {
@@ -333,7 +333,7 @@ const WorkflowCreate = () => {
                 },
                 {
                     "step": 2,
-                    "target": "gemini",
+                    "target": "gemini-chat",
                     "action": "generate",
                     "intent": "generate",
                     "params": {

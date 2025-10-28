@@ -22,26 +22,26 @@ public interface LinqMilvusStoreService {
      * Generates an embedding for a given text using the specified embedding llm.
      *
      * @param text The text to embed.
-     * @param target Target of the embedding target (e.g., "openai-embed", "huggingface", "gemini-embed").
-     * @param modelType The embedding model (e.g., "text-embedding-ada-002", "all-MiniLM-L6-v2").
+     * @param modelCategory Target of the embedding modelCategory (e.g., "openai-embed", "huggingface", "gemini-embed").
+     * @param modelName The embedding model (e.g., "text-embedding-ada-002", "all-MiniLM-L6-v2").
      * @param teamId The team ID for the embedding request.
      * @return A Mono emitting the embedding as a List of Floats.
      */
-    Mono<List<Float>> getEmbedding(String text, String target, String modelType, String teamId);
+    Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId);
 
     /**
      * Stores a record in the specified Milvus collection.
      *
      * @param collectionName The name of the collection.
      * @param record A map of field names to values (e.g., id, text, embedding).
-     * @param target The embedding target for generating embeddings (can be null if embedding is provided).
-     * @param modelType The embedding model (can be null if embedding is provided).
+     * @param modelCategory The embedding modelCategory for generating embeddings (can be null if embedding is provided).
+     * @param modelName The embedding model (can be null if embedding is provided).
      * @param textField The field name containing the text to embed.
      * @param teamId The team ID for the record.
      * @param embedding Optional pre-computed embedding from previous workflow step. If provided, skips embedding generation.
      * @return A Mono indicating completion.
      */
-    Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String target, String modelType, String textField, String teamId, List<Float> embedding);
+    Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String modelCategory, String modelName, String textField, String teamId, List<Float> embedding);
 
     /**
      * Queries the specified Milvus collection for similar records.
@@ -85,11 +85,11 @@ public interface LinqMilvusStoreService {
      * @param textField The name of the text field to search
      * @param text The text to search for
      * @param teamId The team ID
-     * @param target The embedding target to use (e.g., "openai-embed")
-     * @param modelType The embedding model to use (e.g., "text-embedding-3-small")
+     * @param modelCategory The embedding modelCategory to use (e.g., "openai-embed")
+     * @param modelName The embedding model to use (e.g., "text-embedding-3-small")
      * @return A Mono containing the verification results
      */
-    Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String target, String modelType);
+    Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String modelCategory, String modelName);
 
     /**
      * Verify a record in the collection by searching for it using the text field with metadata filtering
@@ -97,12 +97,12 @@ public interface LinqMilvusStoreService {
      * @param textField The name of the text field to search
      * @param text The text to search for
      * @param teamId The team ID
-     * @param target The embedding target to use (e.g., "openai-embed", "gemini-embed")
-     * @param modelType The embedding model to use (e.g., "text-embedding-3-small", "gemini-embedding-001")
+     * @param modelCategory The embedding modelCategory to use (e.g., "openai-embed", "gemini-embed")
+     * @param modelName The embedding model to use (e.g., "text-embedding-3-small", "gemini-embedding-001")
      * @param metadataFilters Optional metadata filters to apply before vector search
      * @return A Mono containing the verification results with metadata
      */
-    Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String target, String modelType, Map<String, Object> metadataFilters);
+    Mono<Map<String, Object>> verifyRecord(String collectionName, String textField, String text, String teamId, String modelCategory, String modelName, Map<String, Object> metadataFilters);
 
     /**
      * Search for multiple relevant records in the collection using semantic similarity
@@ -110,13 +110,13 @@ public interface LinqMilvusStoreService {
      * @param textField The name of the text field to search
      * @param text The text to search for
      * @param teamId The team ID
-     * @param target The embedding target to use (e.g., "openai-embed")
-     * @param modelType The embedding model to use (e.g., "text-embedding-3-small")
+     * @param modelCategory The embedding modelCategory to use (e.g., "openai-embed")
+     * @param modelName The embedding model to use (e.g., "text-embedding-3-small")
      * @param nResults The number of results to return (default: 10)
      * @param metadataFilters Optional metadata filters to apply before vector search
      * @return A Mono containing the search results with multiple records
      */
-    Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String target, String modelType, int nResults, Map<String, Object> metadataFilters);
+    Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String modelCategory, String modelName, int nResults, Map<String, Object> metadataFilters);
 
     /**
      * Search for multiple relevant records in the collection using semantic similarity (with default nResults=10)
@@ -124,11 +124,11 @@ public interface LinqMilvusStoreService {
      * @param textField The name of the text field to search
      * @param text The text to search for
      * @param teamId The team ID
-     * @param target The embedding target to use (e.g., "openai-embed", "gemini-embed")
-     * @param modelType The embedding model to use (e.g., "text-embedding-3-small", "gemini-embedding-001")
+     * @param modelCategory The embedding modelCategory to use (e.g., "openai-embed", "gemini-embed")
+     * @param modelName The embedding model to use (e.g., "text-embedding-3-small", "gemini-embedding-001")
      * @return A Mono containing the search results with multiple records
      */
-    Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String target, String modelType);
+    Mono<Map<String, Object>> searchRecord(String collectionName, String textField, String text, String teamId, String modelCategory, String modelName);
 
     /**
      * Lists all collections with detailed information including schema and statistics.

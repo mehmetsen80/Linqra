@@ -92,6 +92,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     asyncStep.setAction(step.getAction());
                     asyncStep.setIntent(step.getIntent());
                     asyncStep.setAsync(true);
+                    asyncStep.setLlmConfig(step.getLlmConfig()); // Preserve llmConfig for async execution
                     
                     // Queue the step for async execution
                     return queuedWorkflowService.queueAsyncStep(request.getQuery().getWorkflowId(),step.getStep(), asyncStep)
@@ -158,42 +159,44 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 // Execute the step
                 return teamIdMono
                     .flatMap(teamId -> {
-                        // Try to get modelType from llmConfig first, then fallback to target-only search
-                        final String modelType = (step.getLlmConfig() != null && step.getLlmConfig().getModel() != null) 
+                        // Try to get modelName from llmConfig first, then fallback to target-only search
+                        final String modelName = (step.getLlmConfig() != null && step.getLlmConfig().getModel() != null) 
                             ? step.getLlmConfig().getModel() : null;
                         
-                        if (modelType != null) {
-                            log.info("🔍 Searching for LLM model configuration: target={}, modelType={}, teamId={}", 
-                                step.getTarget(), modelType, teamId);
-                            return linqLlmModelRepository.findByTargetAndModelTypeAndTeamId(step.getTarget(), modelType, teamId)
-                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
-                                    llmModel.getTarget(), llmModel.getModelType()))
-                                .doOnError(error -> log.error("❌ Error finding LLM model for target {} with modelType {}: {}", 
-                                    step.getTarget(), modelType, error.getMessage()))
+                        if (modelName != null) {
+                            log.info("🔍 Searching for LLM model configuration: modelCategory={}, modelName={}, teamId={}", 
+                                step.getTarget(), modelName, teamId);
+                            return linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(step.getTarget(), modelName, teamId)
+                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}", 
+                                    llmModel.getModelCategory(), llmModel.getModelName()))
+                                .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {} with modelName {}: {}", 
+                                    step.getTarget(), modelName, error.getMessage()))
                                 .switchIfEmpty(Mono.defer(() -> {
-                                    log.warn("⚠️ No LLM model found with modelType {}, falling back to target-only search", modelType);
-                                    return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), teamId)
-                                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration (fallback): target={}, modelType={}", 
-                                            llmModel.getTarget(), llmModel.getModelType()));
+                                    log.warn("⚠️ No LLM model found with modelName {}, falling back to target-only search", modelName);
+                                    return linqLlmModelRepository.findByModelCategoryAndTeamId(step.getTarget(), teamId)
+                                        .next() // Take the first result
+                                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration (fallback): modelCategory={}, modelName={}", 
+                                            llmModel.getModelCategory(), llmModel.getModelName()));
                                 }));
                         } else {
-                            log.info("🔍 Searching for LLM model configuration: target={}, teamId={}", step.getTarget(), teamId);
-                            return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), teamId)
-                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
-                                    llmModel.getTarget(), llmModel.getModelType()))
-                                .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", step.getTarget(), error.getMessage()));
+                            log.info("🔍 Searching for LLM model configuration: modelCategory={}, teamId={}", step.getTarget(), teamId);
+                            return linqLlmModelRepository.findByModelCategoryAndTeamId(step.getTarget(), teamId)
+                                .next() // Take the first result
+                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}", 
+                                    llmModel.getModelCategory(), llmModel.getModelName()))
+                                .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {}: {}", step.getTarget(), error.getMessage()));
                         }
                     })
                     .doOnSuccess(llmModel -> {
                         if (llmModel == null) {
-                            log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", step.getTarget());
+                            log.warn("⚠️ No LLM model configuration found for modelCategory: {}, will try microservice", step.getTarget());
                         }
                     })
                     .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for step {}", step.getStep()))
                     .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest, llmModel))
                     .doOnNext(stepResponse -> log.info("✅ LLM request executed successfully for step {}", step.getStep()))
                     .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                        log.info("📡 No LLM model found, executing microservice request for target: {}", step.getTarget());
+                        log.info("📡 No LLM model found, executing microservice request for modelCategory: {}", step.getTarget());
                         return linqMicroService.execute(stepRequest);
                     }))
                     .flatMap(stepResponse -> {

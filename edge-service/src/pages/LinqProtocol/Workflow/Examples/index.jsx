@@ -55,7 +55,7 @@ const WorkflowExamples = () => {
                 },
                 {
                     "step": 2,
-                    "target": "openai",
+                    "target": "openai-chat",
                     "action": "generate",
                     "intent": "generate",
                     "params": {
@@ -71,7 +71,7 @@ const WorkflowExamples = () => {
                                      "Do not use quotation marks. Only the saying."
                         }
                     ],
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gpt-4o",
                         "settings": {
                             "temperature": 0.9,
@@ -130,7 +130,7 @@ const WorkflowExamples = () => {
                 },
                 {
                     "step": 2,
-                    "target": "gemini",
+                    "target": "gemini-chat",
                     "action": "generate",
                     "intent": "generate",
                     "params": {
@@ -138,7 +138,7 @@ const WorkflowExamples = () => {
                                 "Do not include any other text, explanation, or formatting. " +
                                 "Do not use quotation marks. Only the saying."
                     },
-                    "toolConfig": {
+                    "llmConfig": {
                         "model": "gemini-2.0-flash",
                         "settings": {
                             "temperature": 0.9,
@@ -258,7 +258,7 @@ const WorkflowExamples = () => {
             "workflow": [
                 {
                     "step": 1,
-                    "target": "openai",
+                    "target": "openai-chat",
                     "action": "analyze",
                     "intent": "sentiment",
                     "params": {
@@ -268,7 +268,7 @@ const WorkflowExamples = () => {
                 },
                 {
                     "step": 2,
-                    "target": "gemini",
+                    "target": "gemini-chat",
                     "action": "analyze",
                     "intent": "topics",
                     "params": {

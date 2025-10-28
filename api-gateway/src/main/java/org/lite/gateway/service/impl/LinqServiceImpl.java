@@ -92,44 +92,46 @@ public class LinqServiceImpl implements LinqService {
                     return teamContextService.getTeamFromContext()
                             .doOnNext(team -> log.info("Got team from context: {}", team))
                             .flatMap(team -> {
-                                // Try to get modelType from llmConfig first, then fallback to target-only search
-                                final String modelType = (request.getQuery() != null && request.getQuery().getLlmConfig() != null && request.getQuery().getLlmConfig().getModel() != null) 
+                                // Try to get modelName from llmConfig first, then fallback to target-only search
+                                final String modelName = (request.getQuery() != null && request.getQuery().getLlmConfig() != null && request.getQuery().getLlmConfig().getModel() != null) 
                                     ? request.getQuery().getLlmConfig().getModel() : null;
                                 
-                                if (modelType != null) {
-                                    log.info("🔍 Searching for LLM model configuration: target={}, modelType={}, teamId={}", 
-                                        request.getLink().getTarget(), modelType, team);
-                                    return linqLlmModelRepository.findByTargetAndModelTypeAndTeamId(request.getLink().getTarget(), modelType, team)
-                                            .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
-                                                llmModel.getTarget(), llmModel.getModelType()))
-                                            .doOnError(error -> log.error("❌ Error finding LLM model for target {} with modelType {}: {}", 
-                                                request.getLink().getTarget(), modelType, error.getMessage()))
+                                if (modelName != null) {
+                                    log.info("🔍 Searching for LLM model configuration: modelCategory={}, modelName={}, teamId={}", 
+                                        request.getLink().getTarget(), modelName, team);
+                                    return linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(request.getLink().getTarget(), modelName, team)
+                                            .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}", 
+                                                llmModel.getModelCategory(), llmModel.getModelName()))
+                                            .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {} with modelName {}: {}", 
+                                                request.getLink().getTarget(), modelName, error.getMessage()))
                                             .switchIfEmpty(Mono.defer(() -> {
-                                                log.warn("⚠️ No LLM model found with modelType {}, falling back to target-only search", modelType);
-                                                return linqLlmModelRepository.findByTargetAndTeamId(request.getLink().getTarget(), team)
-                                                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration (fallback): target={}, modelType={}", 
-                                                            llmModel.getTarget(), llmModel.getModelType()));
+                                                log.warn("⚠️ No LLM model found with modelName {}, falling back to target-only search", modelName);
+                                                return linqLlmModelRepository.findByModelCategoryAndTeamId(request.getLink().getTarget(), team)
+                                                        .next() // Take the first result
+                                                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration (fallback): modelCategory={}, modelName={}", 
+                                                            llmModel.getModelCategory(), llmModel.getModelName()));
                                             }));
                                 } else {
-                                    log.info("🔍 Searching for LLM model configuration: target={}, teamId={}", request.getLink().getTarget(), team);
-                                    return linqLlmModelRepository.findByTargetAndTeamId(request.getLink().getTarget(), team)
-                                            .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: target={}, modelType={}", 
-                                                llmModel.getTarget(), llmModel.getModelType()))
-                                            .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", 
+                                    log.info("🔍 Searching for LLM model configuration: modelCategory={}, teamId={}", request.getLink().getTarget(), team);
+                                    return linqLlmModelRepository.findByModelCategoryAndTeamId(request.getLink().getTarget(), team)
+                                            .next() // Take the first result
+                                            .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}", 
+                                                llmModel.getModelCategory(), llmModel.getModelName()))
+                                            .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {}: {}", 
                                                 request.getLink().getTarget(), error.getMessage()));
                                 }
                             })
                             .doOnSuccess(llmModel -> {
                                 if (llmModel == null) {
-                                    log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", 
+                                    log.warn("⚠️ No LLM model configuration found for modelCategory: {}, will try microservice", 
                                         request.getLink().getTarget());
                                 }
                             })
-                            .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for target: {}", request.getLink().getTarget()))
+                            .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for modelCategory: {}", request.getLink().getTarget()))
                             .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(request, llmModel))
                             .doOnNext(response -> log.info("✅ LLM request executed successfully"))
                             .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                                log.info("📡 No LLM model found, executing microservice request for target: {}", request.getLink().getTarget());
+                                log.info("📡 No LLM model found, executing microservice request for modelCategory: {}", request.getLink().getTarget());
                                 return linqMicroService.execute(request);
                             }));
                 }));
@@ -139,7 +141,7 @@ public class LinqServiceImpl implements LinqService {
         String routeIdentifier = request.getLink().getTarget();
 
         // List of AI service targets that should bypass permission checks
-        Set<String> bypassTargets = Set.of("openai", "mistral", "huggingface", "gemini", "workflow", "openai-embed",  "gemini-embed", "api-gateway");
+        Set<String> bypassTargets = Set.of("openai-chat", "mistral-chat", "huggingface-chat", "gemini-chat", "workflow", "openai-embed",  "gemini-embed", "api-gateway");
 
         // If the target is in our bypass list, return immediately
         if (bypassTargets.contains(routeIdentifier)) {

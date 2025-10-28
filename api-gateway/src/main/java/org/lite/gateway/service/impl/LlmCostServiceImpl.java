@@ -210,12 +210,12 @@ public class LlmCostServiceImpl implements LlmCostService {
             }
             
             for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
-                String target = stepMetadata.getTarget();
+                String modelCategory = stepMetadata.getTarget();
                 
                 // Only process LLM provider steps (OpenAI, Gemini, Cohere, Claude)
-                if (!target.equals("openai") && !target.equals("gemini") && !target.equals("openai-embed") 
-                    && !target.equals("cohere") && !target.equals("cohere-embed") 
-                    && !target.equals("gemini-embed") && !target.equals("claude")) {
+                if (!modelCategory.equals("openai-chat") && !modelCategory.equals("gemini-chat") && !modelCategory.equals("openai-embed") 
+                    && !modelCategory.equals("cohere-chat") && !modelCategory.equals("cohere-embed") 
+                    && !modelCategory.equals("gemini-embed") && !modelCategory.equals("claude-chat")) {
                     continue;
                 }
                 
@@ -251,6 +251,7 @@ public class LlmCostServiceImpl implements LlmCostService {
                 LlmUsageStats.ModelUsage modelUsage = modelBreakdown.computeIfAbsent(model, k -> {
                     LlmUsageStats.ModelUsage mu = new LlmUsageStats.ModelUsage();
                     mu.setModelName(model);
+                    mu.setModelCategory(modelCategory);
                     mu.setProvider(detectProviderFromModelName(model));
                     mu.setRequests(0);
                     mu.setPromptTokens(0);
@@ -333,12 +334,12 @@ public class LlmCostServiceImpl implements LlmCostService {
             }
             
             for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
-                String target = stepMetadata.getTarget();
+                String modelCategory = stepMetadata.getTarget();
                 
                 // Only process LLM provider steps
-                if (!target.equals("openai") && !target.equals("gemini") && !target.equals("openai-embed") 
-                    && !target.equals("cohere") && !target.equals("cohere-embed") 
-                    && !target.equals("gemini-embed")) {
+                if (!modelCategory.equals("openai-chat") && !modelCategory.equals("gemini-chat") && !modelCategory.equals("openai-embed") 
+                    && !modelCategory.equals("cohere-chat") && !modelCategory.equals("claude-chat")  && !modelCategory.equals("cohere-embed") 
+                    && !modelCategory.equals("gemini-embed")) {
                     continue;
                 }
                 
@@ -626,10 +627,10 @@ public class LlmCostServiceImpl implements LlmCostService {
                 // Check if any LLM step is missing cost calculation
                 return execution.getResponse().getMetadata().getWorkflowMetadata().stream()
                     .anyMatch(stepMetadata -> {
-                        String target = stepMetadata.getTarget();
-                        boolean isLlmStep = target.equals("openai") || target.equals("gemini") 
-                            || target.equals("cohere") || target.equals("openai-embed") 
-                            || target.equals("gemini-embed") || target.equals("cohere-embed");
+                        String modelCategory = stepMetadata.getTarget();
+                        boolean isLlmStep = modelCategory.equals("openai-chat") || modelCategory.equals("gemini-chat") 
+                            || modelCategory.equals("cohere-chat") || modelCategory.equals("claude-chat") || modelCategory.equals("openai-embed") 
+                            || modelCategory.equals("gemini-embed") || modelCategory.equals("cohere-embed");
                         
                         // Has token usage but missing cost
                         if (isLlmStep && stepMetadata.getTokenUsage() != null) {
@@ -644,11 +645,11 @@ public class LlmCostServiceImpl implements LlmCostService {
                 
                 // Process each workflow step
                 for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
-                    String target = stepMetadata.getTarget();
+                    String modelCategory = stepMetadata.getTarget();
                     
                     // Check if it's an LLM step
-                    if (!target.equals("openai") && !target.equals("gemini") && !target.equals("cohere") 
-                        && !target.equals("openai-embed") && !target.equals("gemini-embed") && !target.equals("cohere-embed")) {
+                    if (!modelCategory.equals("openai-chat") && !modelCategory.equals("gemini-chat") && !modelCategory.equals("cohere-chat") 
+                        && !modelCategory.equals("claude-chat") && !modelCategory.equals("openai-embed") && !modelCategory.equals("gemini-embed") && !modelCategory.equals("cohere-embed")) {
                         continue;
                     }
                     
@@ -685,12 +686,14 @@ public class LlmCostServiceImpl implements LlmCostService {
                     
                     // Set default model if still not found
                     if (model == null) {
-                        if (target.equals("openai") || target.equals("openai-embed")) {
+                        if (modelCategory.equals("openai-chat") || modelCategory.equals("openai-embed")) {
                             model = "gpt-4o-mini"; // Default OpenAI model
-                        } else if (target.equals("gemini") || target.equals("gemini-embed")) {
+                        } else if (modelCategory.equals("gemini-chat") || modelCategory.equals("gemini-embed")) {
                             model = "gemini-2.0-flash"; // Default Gemini model
-                        } else if (target.equals("cohere") || target.equals("cohere-embed")) {
+                        } else if (modelCategory.equals("cohere-chat") || modelCategory.equals("cohere-embed")) {
                             model = "command-r-08-2024"; // Default Cohere model
+                        } else if (modelCategory.equals("claude-chat")) {
+                            model = "claude-sonnet-4-5"; // Default Claude model
                         }
                     }
                     
@@ -703,7 +706,7 @@ public class LlmCostServiceImpl implements LlmCostService {
                         dryRun ? "[DRY RUN]" : "Updating",
                         execution.getId(), 
                         stepMetadata.getStep(), 
-                        target, 
+                        modelCategory, 
                         model, 
                         promptTokens, 
                         completionTokens, 
@@ -771,10 +774,15 @@ public class LlmCostServiceImpl implements LlmCostService {
                 
                 // Process each workflow step
                 for (LinqResponse.WorkflowStepMetadata stepMetadata : execution.getResponse().getMetadata().getWorkflowMetadata()) {
-                    String target = stepMetadata.getTarget();
+                    String modelCategory = stepMetadata.getTarget();
                     
-                    // Check if it's a Cohere step (can be extended for other providers later)
-                    if (!target.equals("cohere") && !target.equals("cohere-embed")) {
+                    // Check if it's an LLM step that needs token usage extraction
+                    boolean isLlmStep = modelCategory.equals("openai-chat") || modelCategory.equals("gemini-chat") 
+                        || modelCategory.equals("cohere-chat") || modelCategory.equals("claude-chat") 
+                        || modelCategory.equals("openai-embed") || modelCategory.equals("gemini-embed") 
+                        || modelCategory.equals("cohere-embed");
+                    
+                    if (!isLlmStep) {
                         continue;
                     }
                     
@@ -796,26 +804,67 @@ public class LlmCostServiceImpl implements LlmCostService {
                     @SuppressWarnings("unchecked")
                     Map<String, Object> resultMap = (Map<String, Object>) resultStep.getResult();
                     
-                    // Extract Cohere token usage from meta.billed_units
-                    if (!resultMap.containsKey("meta")) {
-                        continue;
+                    long promptTokens = 0;
+                    long completionTokens = 0;
+                    long totalTokens = 0;
+                    
+                    // Extract token usage based on provider
+                    if (modelCategory.equals("cohere-chat") || modelCategory.equals("cohere-embed")) {
+                        // Cohere token usage from meta.billed_units
+                        if (resultMap.containsKey("meta")) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> meta = (Map<String, Object>) resultMap.get("meta");
+                            if (meta.containsKey("billed_units")) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> billedUnits = (Map<String, Object>) meta.get("billed_units");
+                                promptTokens = billedUnits.containsKey("input_tokens") 
+                                    ? ((Number) billedUnits.get("input_tokens")).longValue() : 0;
+                                completionTokens = billedUnits.containsKey("output_tokens") 
+                                    ? ((Number) billedUnits.get("output_tokens")).longValue() : 0;
+                                totalTokens = promptTokens + completionTokens;
+                            }
+                        }
+                    } else if (modelCategory.equals("openai-chat") || modelCategory.equals("openai-embed")) {
+                        // OpenAI token usage from usage object
+                        if (resultMap.containsKey("usage")) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> usage = (Map<String, Object>) resultMap.get("usage");
+                            promptTokens = usage.containsKey("prompt_tokens") 
+                                ? ((Number) usage.get("prompt_tokens")).longValue() : 0;
+                            completionTokens = usage.containsKey("completion_tokens") 
+                                ? ((Number) usage.get("completion_tokens")).longValue() : 0;
+                            totalTokens = usage.containsKey("total_tokens") 
+                                ? ((Number) usage.get("total_tokens")).longValue() : 0;
+                        }
+                    } else if (modelCategory.equals("gemini-chat")) {
+                        // Gemini chat token usage from usageMetadata
+                        if (resultMap.containsKey("usageMetadata")) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> usageMetadata = (Map<String, Object>) resultMap.get("usageMetadata");
+                            promptTokens = usageMetadata.containsKey("promptTokenCount") 
+                                ? ((Number) usageMetadata.get("promptTokenCount")).longValue() : 0;
+                            completionTokens = usageMetadata.containsKey("candidatesTokenCount") 
+                                ? ((Number) usageMetadata.get("candidatesTokenCount")).longValue() : 0;
+                            totalTokens = usageMetadata.containsKey("totalTokenCount") 
+                                ? ((Number) usageMetadata.get("totalTokenCount")).longValue() : 0;
+                        }
+                    } else if (modelCategory.equals("claude-chat")) {
+                        // Claude token usage from usage object
+                        if (resultMap.containsKey("usage")) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> usage = (Map<String, Object>) resultMap.get("usage");
+                            promptTokens = usage.containsKey("input_tokens") 
+                                ? ((Number) usage.get("input_tokens")).longValue() : 0;
+                            completionTokens = usage.containsKey("output_tokens") 
+                                ? ((Number) usage.get("output_tokens")).longValue() : 0;
+                            totalTokens = promptTokens + completionTokens;
+                        }
                     }
                     
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> meta = (Map<String, Object>) resultMap.get("meta");
-                    
-                    if (!meta.containsKey("billed_units")) {
+                    // Skip if no tokens found
+                    if (totalTokens == 0) {
                         continue;
                     }
-                    
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> billedUnits = (Map<String, Object>) meta.get("billed_units");
-                    
-                    long promptTokens = billedUnits.containsKey("input_tokens") 
-                        ? ((Number) billedUnits.get("input_tokens")).longValue() : 0;
-                    long completionTokens = billedUnits.containsKey("output_tokens") 
-                        ? ((Number) billedUnits.get("output_tokens")).longValue() : 0;
-                    long totalTokens = promptTokens + completionTokens;
                     
                     // Extract model from request workflow
                     String model = null;
@@ -832,7 +881,15 @@ public class LlmCostServiceImpl implements LlmCostService {
                     
                     // Use default model if not found
                     if (model == null) {
-                        model = "command-r-08-2024"; // Default Cohere model
+                        if (modelCategory.equals("openai-chat") || modelCategory.equals("openai-embed")) {
+                            model = "gpt-4o-mini"; // Default OpenAI model
+                        } else if (modelCategory.equals("gemini-chat") || modelCategory.equals("gemini-embed")) {
+                            model = "gemini-2.0-flash"; // Default Gemini model
+                        } else if (modelCategory.equals("cohere-chat") || modelCategory.equals("cohere-embed")) {
+                            model = "command-r-08-2024"; // Default Cohere model
+                        } else if (modelCategory.equals("claude-chat")) {
+                            model = "claude-sonnet-4-5"; // Default Claude model
+                        }
                     }
                     
                     // Calculate cost
@@ -842,7 +899,7 @@ public class LlmCostServiceImpl implements LlmCostService {
                         dryRun ? "[DRY RUN]" : "Updating",
                         execution.getId(), 
                         stepMetadata.getStep(), 
-                        target, 
+                        modelCategory, 
                         model, 
                         promptTokens, 
                         completionTokens, 

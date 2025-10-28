@@ -9,7 +9,7 @@ import ConfirmationModal from '../../components/common/ConfirmationModal';
 
 const initialFormData = {
     modelCategory: 'claude-chat',
-    provider: 'claude',
+    provider: 'anthropic',
     endpoint: '',
     method: 'POST',
     headers: {
@@ -93,7 +93,7 @@ const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
   const fetchExistingConfigs = async () => {
     try {
       setLoadingConfigs(true);
-      const configs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['claude']);
+      const configs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['claude-chat']);
       setExistingConfigs(configs || []);
     } catch (error) {
       console.error('Error fetching existing configurations:', error);
@@ -135,7 +135,7 @@ const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
     try {
       setLoading(true);
       const config = {
-        provider: 'claude',
+        provider: 'anthropic',
         modelCategory: formData.modelCategory,
         endpoint: formData.endpoint,
         method: 'POST',

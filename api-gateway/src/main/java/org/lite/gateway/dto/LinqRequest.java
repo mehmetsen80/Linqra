@@ -40,7 +40,7 @@ public class LinqRequest {
         @JsonInclude(JsonInclude.Include.ALWAYS)
         private Map<String, Object> params = new HashMap<>();
         private Object payload; // Request body for POST/PUT/PATCH
-        private LlmConfig llmConfig; // For AI tools
+        private LlmConfig llmConfig; // For AI LLM Configuration
         
         @ValidStep
         private List<WorkflowStep> workflow; // For chained steps

@@ -8,6 +8,7 @@ import Metrics from '../pages/Metrics';
 import ServiceStatus from '../pages/ServiceStatus';
 import Alerts from '../pages/Alerts';
 import Teams from '../pages/Teams';
+import ViewTeam from '../pages/Teams/ViewTeam';
 import AdminLayout from '../layouts/AdminLayout/index';
 import ProtectedRoute from '../components/common/ProtectedRoute';
 import Organizations from '../pages/Organizations';
@@ -93,6 +94,14 @@ const AppRoutes = () => {
           element={
             <AdminGuard>
               <Teams />
+            </AdminGuard>
+          } 
+        />
+        <Route 
+          path="/teams/:teamId" 
+          element={
+            <AdminGuard>
+              <ViewTeam />
             </AdminGuard>
           } 
         />

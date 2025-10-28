@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   HiUserGroup, 
   HiPlus, 
@@ -28,6 +29,7 @@ import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Button from '../../components/common/Button';
 
 function Teams() {
+  const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [operationLoading, setOperationLoading] = useState(false);
@@ -418,6 +420,8 @@ function Teams() {
                         <tr 
                           key={team.id} 
                           className={team.status === 'INACTIVE' ? 'table-secondary' : ''}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => navigate(`/teams/${team.id}`)}
                         >
                           <td>{team.name}</td>
                           {/* <td>{team.organization?.name || '-'}</td> */}
@@ -429,7 +433,8 @@ function Teams() {
                           <td>
                             <button 
                               className="btn btn-sm btn-outline-primary action-button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedTeam(team);
                                 setShowDetailsModal(true);
                               }}
@@ -440,7 +445,8 @@ function Teams() {
                           <td>
                             <button 
                               className="btn btn-sm btn-outline-secondary action-button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedTeam(team);
                                 setShowEditModal(true);
                               }}
@@ -452,7 +458,8 @@ function Teams() {
                           <td>
                             <button 
                               className="btn btn-sm btn-outline-secondary action-button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedTeam(team);
                                 setShowMembersModal(true);
                               }}
@@ -463,7 +470,8 @@ function Teams() {
                           <td>
                             <button 
                               className="btn btn-sm btn-outline-info action-button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedTeam(team);
                                 setShowRoutesModal(true);
                               }}
@@ -474,7 +482,8 @@ function Teams() {
                           <td>
                             <button 
                               className="btn btn-sm btn-outline-purple action-button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedTeam(team);
                                 setShowApiKeysModal(true);
                               }}
@@ -487,33 +496,38 @@ function Teams() {
                           <td>
                             <button 
                               className="btn btn-sm btn-outline-info action-button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedTeam(team);
                                 setShowOpenAIModal(true);
                               }}
                               disabled={team.status === 'INACTIVE'}
                             >
                               <SiOpenai className="me-1" size={16} /> 
-                              {team.linqLlmModels?.some(model => model.target === 'openai') ? 'View Configuration' : 'Configure'}
+                              {team.linqLlmModels?.some(model => model.modelCategory === 'openai-chat') ? 'View Configuration' : 'Configure'}
                             </button>
                           </td>
                           <td>
                             <button 
                               className="btn btn-sm btn-outline-info action-button"
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedTeam(team);
                                 setShowGeminiModal(true);
                               }}
                               disabled={team.status === 'INACTIVE'}
                             >
                               <SiGoogle className="me-1" size={14} /> 
-                              {team.linqLlmModels?.some(model => model.target === 'gemini') ? 'View Configuration' : 'Configure'}
+                              {team.linqLlmModels?.some(model => model.modelCategory === 'gemini-chat') ? 'View Configuration' : 'Configure'}
                             </button>
                           </td>
                           <td>
                             <button 
                               className="btn btn-sm btn-outline-warning action-button status-action-button"
-                              onClick={() => confirmToggleStatus(team)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                confirmToggleStatus(team);
+                              }}
                               disabled={operationLoading}
                             >
                               <HiRefresh className="me-1" />
@@ -532,7 +546,10 @@ function Teams() {
                               <span className="d-inline-block">
                                 <button 
                                   className="btn btn-sm btn-outline-danger action-button"
-                                  onClick={() => confirmDelete(team)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    confirmDelete(team);
+                                  }}
                                   disabled={operationLoading || !canDeleteTeam(team)}
                                 >
                                   <HiTrash className="me-1" /> Delete

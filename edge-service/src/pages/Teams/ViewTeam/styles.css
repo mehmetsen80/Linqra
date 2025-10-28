@@ -1,0 +1,88 @@
+.view-team-container {
+  padding: 20px;
+}
+
+.view-team-container .card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.view-team-container .bg-light {
+  background-color: #f8f9fa !important;
+}
+
+.view-team-container h5 {
+  color: #333;
+  font-weight: 600;
+}
+
+.view-team-container .text-muted {
+  color: #6c757d !important;
+}
+
+.view-team-container code {
+  background-color: #ffffff;
+  border: 1px solid #e9ecef;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.view-team-container table {
+  font-size: 0.9em;
+}
+
+.view-team-container table thead th {
+  background-color: #f8f9fa;
+  border-bottom: 2px solid #dee2e6;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  color: #495057;
+  letter-spacing: 0.5px;
+}
+
+.view-team-container .badge {
+  font-weight: 500;
+  padding: 5px 10px;
+}
+
+.view-team-container .btn-outline-purple {
+  color: #6f42c1;
+  border-color: #6f42c1;
+}
+
+.view-team-container .btn-outline-purple:hover {
+  background-color: #6f42c1;
+  border-color: #6f42c1;
+  color: white;
+}
+
+.view-team-container .btn-outline-info {
+  color: #0dcaf0;
+  border-color: #0dcaf0;
+}
+
+.view-team-container .btn-outline-info:hover {
+  background-color: #0dcaf0;
+  border-color: #0dcaf0;
+  color: white;
+}
+
+.view-team-container .text-primary {
+  color: #0d6efd !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .view-team-container {
+    padding: 10px;
+  }
+  
+  .view-team-container .d-flex.gap-2 {
+    flex-direction: column;
+  }
+  
+  .view-team-container .card-body {
+    padding: 1rem;
+  }
+}

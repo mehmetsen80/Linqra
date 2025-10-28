@@ -78,8 +78,8 @@ public class MilvusController {
                 return linqMilvusStoreService.storeRecord(
                                 collectionName,
                                 request.getRecord(),
-                                request.getTarget(),
-                                request.getModelType(),
+                                request.getModelCategory(),
+                                request.getModelName(),
                                 request.getTextField(),
                                 request.getTeamId(),
                                 request.getEmbedding()  // ← Pass embedding
@@ -106,8 +106,8 @@ public class MilvusController {
             String collectionName, 
             MilvusStoreRecordRequest request) {
         Mono<Map<String, String>> storeMono = userService.findByUsername(username)
-            .doOnNext(user -> log.info("Milvus storeRecord requested by user: {} (id={}), teamId={}, collection={}, textField={}, target={}, modelType={}",
-                    user.getUsername(), user.getId(), request.getTeamId(), collectionName, request.getTextField(), request.getTarget(), request.getModelType()))
+            .doOnNext(user -> log.info("Milvus storeRecord requested by user: {} (id={}), teamId={}, collection={}, textField={}, modelCategory={}, modelName={}",
+                    user.getUsername(), user.getId(), request.getTeamId(), collectionName, request.getTextField(), request.getModelCategory(), request.getModelName()))
             .doOnNext(u -> log.info("Milvus storeRecord payload: {}", request.getRecord()))
             .flatMap(user -> 
                 teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
@@ -119,8 +119,8 @@ public class MilvusController {
                         return linqMilvusStoreService.storeRecord(
                                 collectionName,
                                 request.getRecord(),
-                                request.getTarget(),
-                                request.getModelType(),
+                                request.getModelCategory(),
+                                request.getModelName(),
                                 request.getTextField(),
                                 request.getTeamId(),
                                 request.getEmbedding()  // ← Pass embedding
@@ -137,8 +137,8 @@ public class MilvusController {
                             return linqMilvusStoreService.storeRecord(
                                     collectionName,
                                     request.getRecord(),
-                                    request.getTarget(),
-                                    request.getModelType(),
+                                    request.getModelCategory(),
+                                    request.getModelName(),
                                     request.getTextField(),
                                     request.getTeamId(),
                                     request.getEmbedding()  // ← Pass embedding
@@ -242,8 +242,8 @@ public class MilvusController {
                         request.getTextField(), 
                         request.getText(), 
                         request.getTeamId(),
-                        request.getTarget() != null ? request.getTarget() : "openai-embed",
-                        request.getModelType() != null ? request.getModelType() : "text-embedding-3-small"
+                        request.getModelCategory() != null ? request.getModelCategory() : "openai-embed",
+                        request.getModelName() != null ? request.getModelName() : "text-embedding-3-small"
                     ))
             )
             .map(ResponseEntity::ok);
@@ -286,8 +286,8 @@ public class MilvusController {
                         request.getTextField(), 
                         request.getText(), 
                         request.getTeamId(),
-                        request.getTarget() != null ? request.getTarget() : "openai-embed",
-                        request.getModelType() != null ? request.getModelType() : "text-embedding-3-small",
+                        request.getModelCategory() != null ? request.getModelCategory() : "openai-embed",
+                        request.getModelName() != null ? request.getModelName() : "text-embedding-3-small",
                         request.getNResults() != null ? request.getNResults() : 10,
                         request.getMetadataFilters()
                     ))
@@ -302,8 +302,8 @@ public class MilvusController {
                                 request.getTextField(),
                                 request.getText(),
                                 request.getTeamId(),
-                                request.getTarget() != null ? request.getTarget() : "openai-embed",
-                                request.getModelType() != null ? request.getModelType() : "text-embedding-3-small",
+                                request.getModelCategory() != null ? request.getModelCategory() : "openai-embed",
+                                request.getModelName() != null ? request.getModelName() : "text-embedding-3-small",
                                 request.getNResults() != null ? request.getNResults() : 10,
                                 request.getMetadataFilters()
                         ));

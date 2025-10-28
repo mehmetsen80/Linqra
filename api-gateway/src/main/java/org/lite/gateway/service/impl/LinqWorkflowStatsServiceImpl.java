@@ -111,7 +111,8 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                             );
                             
                             // Model stats for AI targets
-                            if (target.equals("openai") || target.equals("gemini") || target.equals("cohere") || target.equals("openai-embed") || target.equals("gemini-embed") || target.equals("cohere-embed")) {
+                            if (target.equals("openai-chat") || target.equals("gemini-chat") || target.equals("cohere-chat") || target.equals("claude-chat") ||
+                             target.equals("openai-embed") || target.equals("gemini-embed") || target.equals("cohere-embed")) {
                                 String model = execution.getRequest().getQuery().getWorkflow().stream()
                                     .filter(step -> step.getStep() == stepMetadata.getStep())
                                     .findFirst()
@@ -125,35 +126,94 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                     stepMetadata.getDurationMs()) / modelStats.getTotalExecutions()
                                 );
                                 
-                                // Token usage for OpenAI
-                                if (target.equals("openai") && execution.getResponse().getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
+                                // Token usage extraction
+                                if (execution.getResponse().getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
                                     List<LinqResponse.WorkflowStep> steps = workflowResult.getSteps();
                                     if (steps != null && steps.size() > stepMetadata.getStep()) {
                                         LinqResponse.WorkflowStep step = steps.get(stepMetadata.getStep());
                                         if (step.getResult() instanceof Map) {
                                             Map<String, Object> result = (Map<String, Object>) step.getResult();
-                                            if (result.containsKey("usage")) {
-                                                Map<String, Object> usage = (Map<String, Object>) result.get("usage");
-                                                
-                                                // Safely get token counts with null checks
-                                                Object promptTokensObj = usage.get("prompt_tokens");
-                                                Object completionTokensObj = usage.get("completion_tokens");
-                                                Object totalTokensObj = usage.get("total_tokens");
-                                                
-                                                if (promptTokensObj instanceof Number) {
-                                                    modelStats.setTotalPromptTokens(modelStats.getTotalPromptTokens() + 
-                                                        ((Number) promptTokensObj).longValue());
+                                            long promptTokens = 0;
+                                            long completionTokens = 0;
+                                            long totalTokens = 0;
+                                            
+                                            // Extract tokens based on provider
+                                            if (target.equals("openai-chat") || target.equals("openai-embed")) {
+                                                // OpenAI token usage from usage object
+                                                if (result.containsKey("usage")) {
+                                                    Map<String, Object> usage = (Map<String, Object>) result.get("usage");
+                                                    Object promptTokensObj = usage.get("prompt_tokens");
+                                                    Object completionTokensObj = usage.get("completion_tokens");
+                                                    Object totalTokensObj = usage.get("total_tokens");
+                                                    
+                                                    if (promptTokensObj instanceof Number) {
+                                                        promptTokens = ((Number) promptTokensObj).longValue();
+                                                    }
+                                                    if (completionTokensObj instanceof Number) {
+                                                        completionTokens = ((Number) completionTokensObj).longValue();
+                                                    }
+                                                    if (totalTokensObj instanceof Number) {
+                                                        totalTokens = ((Number) totalTokensObj).longValue();
+                                                    }
                                                 }
-                                                
-                                                if (completionTokensObj instanceof Number) {
-                                                    modelStats.setTotalCompletionTokens(modelStats.getTotalCompletionTokens() + 
-                                                        ((Number) completionTokensObj).longValue());
+                                            } else if (target.equals("gemini-chat")) {
+                                                // Gemini chat token usage from usageMetadata
+                                                if (result.containsKey("usageMetadata")) {
+                                                    Map<String, Object> usageMetadata = (Map<String, Object>) result.get("usageMetadata");
+                                                    Object promptTokensObj = usageMetadata.get("promptTokenCount");
+                                                    Object completionTokensObj = usageMetadata.get("candidatesTokenCount");
+                                                    Object totalTokensObj = usageMetadata.get("totalTokenCount");
+                                                    
+                                                    if (promptTokensObj instanceof Number) {
+                                                        promptTokens = ((Number) promptTokensObj).longValue();
+                                                    }
+                                                    if (completionTokensObj instanceof Number) {
+                                                        completionTokens = ((Number) completionTokensObj).longValue();
+                                                    }
+                                                    if (totalTokensObj instanceof Number) {
+                                                        totalTokens = ((Number) totalTokensObj).longValue();
+                                                    }
                                                 }
-                                                
-                                                if (totalTokensObj instanceof Number) {
-                                                    modelStats.setTotalTokens(modelStats.getTotalTokens() + 
-                                                        ((Number) totalTokensObj).longValue());
+                                            } else if (target.equals("cohere-chat") || target.equals("cohere-embed")) {
+                                                // Cohere token usage from meta.billed_units
+                                                if (result.containsKey("meta")) {
+                                                    Map<String, Object> meta = (Map<String, Object>) result.get("meta");
+                                                    if (meta.containsKey("billed_units")) {
+                                                        Map<String, Object> billedUnits = (Map<String, Object>) meta.get("billed_units");
+                                                        Object promptTokensObj = billedUnits.get("input_tokens");
+                                                        Object completionTokensObj = billedUnits.get("output_tokens");
+                                                        
+                                                        if (promptTokensObj instanceof Number) {
+                                                            promptTokens = ((Number) promptTokensObj).longValue();
+                                                        }
+                                                        if (completionTokensObj instanceof Number) {
+                                                            completionTokens = ((Number) completionTokensObj).longValue();
+                                                        }
+                                                        totalTokens = promptTokens + completionTokens;
+                                                    }
                                                 }
+                                            } else if (target.equals("claude-chat")) {
+                                                // Claude token usage from usage object
+                                                if (result.containsKey("usage")) {
+                                                    Map<String, Object> usage = (Map<String, Object>) result.get("usage");
+                                                    Object promptTokensObj = usage.get("input_tokens");
+                                                    Object completionTokensObj = usage.get("output_tokens");
+                                                    
+                                                    if (promptTokensObj instanceof Number) {
+                                                        promptTokens = ((Number) promptTokensObj).longValue();
+                                                    }
+                                                    if (completionTokensObj instanceof Number) {
+                                                        completionTokens = ((Number) completionTokensObj).longValue();
+                                                    }
+                                                    totalTokens = promptTokens + completionTokens;
+                                                }
+                                            }
+                                            
+                                            // Update model stats with extracted tokens
+                                            if (totalTokens > 0) {
+                                                modelStats.setTotalPromptTokens(modelStats.getTotalPromptTokens() + promptTokens);
+                                                modelStats.setTotalCompletionTokens(modelStats.getTotalCompletionTokens() + completionTokens);
+                                                modelStats.setTotalTokens(modelStats.getTotalTokens() + totalTokens);
                                             }
                                         }
                                     }

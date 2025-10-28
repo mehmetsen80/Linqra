@@ -228,25 +228,35 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
         
         return Mono.just(teamId)
             .flatMap(id -> {
-                // For async steps, we only have access to target and teamId from LinqResponse.WorkflowStep
-                // We cannot access modelType since LinqResponse.WorkflowStep doesn't have llmConfig
-                log.info("🔍 Searching for LLM model configuration for async step {}: target={}, teamId={}", 
-                    step.getStep(), step.getTarget(), id);
-                return linqLlmModelRepository.findByTargetAndTeamId(step.getTarget(), id)
-                    .doOnNext(llmModel -> log.info("✅ Found LLM model configuration for async step {}: target={}, modelType={}", 
-                        step.getStep(), llmModel.getTarget(), llmModel.getModelType()))
-                    .doOnError(error -> log.error("❌ Error finding LLM model for target {}: {}", step.getTarget(), error.getMessage()));
+                // Try to get modelName from llmConfig
+                final String modelName = (step.getLlmConfig() != null && step.getLlmConfig().getModel() != null) 
+                    ? step.getLlmConfig().getModel() : null;
+                
+                if (modelName != null) {
+                    log.info("🔍 Searching for LLM model configuration for async step {}: modelCategory={}, modelName={}, teamId={}", 
+                        step.getStep(), step.getTarget(), modelName, id);
+                    return linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(step.getTarget(), modelName, id)
+                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration for async step {}: modelCategory={}, modelName={}", 
+                            step.getStep(), llmModel.getModelCategory(), llmModel.getModelName()))
+                        .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {} with modelName {}: {}", 
+                            step.getTarget(), modelName, error.getMessage()));
+                } else {
+                    // If no modelName is specified, we cannot find the correct configuration
+                    // since modelCategory alone can return multiple records (chat vs embed)
+                    log.warn("⚠️ No modelName specified for async step {}, cannot determine LLM model configuration", step.getStep());
+                    return Mono.empty();
+                }
             })
             .doOnSuccess(llmModel -> {
                 if (llmModel == null) {
-                    log.warn("⚠️ No LLM model configuration found for target: {}, will try microservice", step.getTarget());
+                    log.warn("⚠️ No LLM model configuration found for modelCategory: {}, will try microservice", step.getTarget());
                 }
             })
             .doOnNext(llmModel -> log.info("🚀 About to execute async LLM request for step {}", step.getStep()))
             .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest, llmModel))
             .doOnNext(stepResponse -> log.info("✅ Async LLM request executed successfully for step {}", step.getStep()))
             .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                log.info("📡 No LLM model found for async step {}, executing microservice request for target: {}", 
+                log.info("📡 No LLM model found for async step {}, executing microservice request for modelCategory: {}", 
                     step.getStep(), step.getTarget());
                 return linqMicroService.execute(stepRequest);
             }));

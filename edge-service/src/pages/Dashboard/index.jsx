@@ -8,8 +8,6 @@ import ServiceUsagePie from '../../components/dashboard/ServiceUsagePie';
 import TeamRoutes from '../../components/dashboard/TeamRoutes';
 import AgentTasks from '../../components/dashboard/AgentTasks';
 import AgentStats from '../../components/dashboard/AgentStats';
-import Workflows from '../../components/dashboard/Workflows';
-import WorkflowsStats from '../../components/dashboard/WorkflowsStats';
 import LlmCosts from '../../components/dashboard/LlmCosts';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';

@@ -12,14 +12,15 @@ const ConfirmationModal = ({
   confirmLabel = 'Yes',
   cancelLabel = 'No',
   variant = 'primary',
-  disabled = false
+  disabled = false,
+  size = 'md'
 }) => {
   return (
     <Modal
       show={show}
       onHide={onHide}
       centered
-      size="lg"
+      size={size}
       animation={true}
       className="confirmation-modal"
     >

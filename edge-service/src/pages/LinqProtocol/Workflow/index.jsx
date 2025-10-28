@@ -24,7 +24,7 @@ function WorkflowOverview() {
                 },
                 {
                     "step": 2,
-                    "target": "openai",
+                    "target": "openai-chat",
                     "action": "generate",
                     "intent": "generate",
                     "params": {

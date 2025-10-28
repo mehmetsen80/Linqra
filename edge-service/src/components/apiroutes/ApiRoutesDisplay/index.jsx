@@ -3,7 +3,6 @@ import { Card, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
 import { apiRouteService } from '../../../services/apiRouteService';
-import { teamService } from '../../../services/teamService';
 import { useTeam } from '../../../contexts/TeamContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import CreateApiRouteModal from '../CreateApiRouteModal';

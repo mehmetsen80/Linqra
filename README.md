@@ -190,7 +190,7 @@ The system automatically adds several fields when saving the workflow. Here's th
                 "teamId": "67d0aeb17172416c411d419e"
             },
             "payload": null,
-            "toolConfig": null,
+            "llmConfig": null,
             "workflow": [
                 {
                     "step": 1,
@@ -499,8 +499,8 @@ Authorization: Bearer {Token}
                             "description": "{{step1.result.description}}",
                             "category": "{{step1.result.category}}"
                         },
-                        "targetTool": "openai-embed",
-                        "modelType": "text-embedding-3-small",
+                        "modelCategory": "openai-embed",
+                        "modelName": "text-embedding-3-small",
                         "textField": "description",
                         "teamId": "{{params.teamId}}"
                     }
@@ -555,7 +555,7 @@ Authorization: Bearer {Token}
                 "teamId": "67d0aeb17172416c411d419e"
             },
             "payload": null,
-            "toolConfig": null,
+            "llmConfig": null,
             "workflow": [
                 {
                     "step": 1,
@@ -588,8 +588,8 @@ Authorization: Bearer {Token}
                             "description": "{{step1.result.description}}",
                             "category": "{{step1.result.category}}"
                         },
-                        "targetTool": "openai-embed",
-                        "modelType": "text-embedding-3-small",
+                        "target": "openai-embed",
+                        "modelName": "text-embedding-3-small",
                         "textField": "description",
                         "teamId": "{{params.teamId}}"
                     },
@@ -960,8 +960,8 @@ Content-Type: application/json
     "textField": "quotetext",
     "text": "Creativity is intelligence having fun.",
     "teamId": "67d0aeb17172416c411d419e",
-    "targetTool": "openai-embed",
-    "modelType": "text-embedding-3-small"
+    "modelCategory": "openai-embed",
+    "modelName": "text-embedding-3-small"
 }
 ```
 
@@ -1023,8 +1023,8 @@ Authorization: Bearer {Token}
                         "textField": "quotetext",
                         "text": "{{params.topic}}",
                         "teamId": "{{params.teamId}}",
-                        "targetTool": "openai-embed",
-                        "modelType": "text-embedding-3-small"
+                        "modelCategory": "openai-embed",
+                        "modelName": "text-embedding-3-small"
                     }
                 },
                 {
@@ -1089,8 +1089,8 @@ Authorization: Bearer {Token}
                             "teamid": "{{params.teamId}}",
                             "tags": "{{params.topic}},{{step4.result.choices[0].message.content}},generated,inspirational"
                         },
-                        "targetTool": "openai-embed",
-                        "modelType": "text-embedding-3-small",
+                        "modelCategory": "openai-embed",
+                        "modelName": "text-embedding-3-small",
                         "textField": "quotetext",
                         "teamId": "{{params.teamId}}"
                     }
@@ -1124,7 +1124,7 @@ Authorization: Bearer {Token}
                 "userId": "timursen"
             },
             "payload": null,
-            "toolConfig": null,
+            "llmConfig": null,
             "workflow": [
                 {
                     "step": 1,
@@ -1151,8 +1151,8 @@ Authorization: Bearer {Token}
                         "textField": "quotetext",
                         "text": "{{params.topic}}",
                         "teamId": "{{params.teamId}}",
-                        "targetTool": "openai-embed",
-                        "modelType": "text-embedding-3-small"
+                        "modelCategory": "openai-embed",
+                        "modelName": "text-embedding-3-small"
                     },
                     "llmConfig": null,
                     "async": null,
@@ -1227,8 +1227,8 @@ Authorization: Bearer {Token}
                             "teamid": "{{params.teamId}}",
                             "tags": "{{params.topic}},{{step4.result.choices[0].message.content}},generated,inspirational"
                         },
-                        "targetTool": "openai-embed",
-                        "modelType": "text-embedding-3-small",
+                        "target": "openai-embed",
+                        "modelName": "text-embedding-3-small",
                         "textField": "quotetext",
                         "teamId": "{{params.teamId}}"
                     },
@@ -1311,8 +1311,8 @@ Authorization: Bearer {Token}
                         "textField": "quotetext",
                         "text": "{{params.topic}}",
                         "teamId": "{{params.teamId}}",
-                        "targetTool": "openai-embed",
-                        "modelType": "text-embedding-3-small"
+                        "modelCategory": "openai-embed",
+                        "modelName": "text-embedding-3-small"
                     }
                 },
                 {
@@ -1377,8 +1377,8 @@ Authorization: Bearer {Token}
                             "teamid": "{{params.teamId}}",
                             "tags": "{{params.topic}},{{step4.result.choices[0].message.content}},generated,inspirational"
                         },
-                        "targetTool": "openai-embed",
-                        "modelType": "text-embedding-3-small",
+                        "modelCategory": "openai-embed",
+                        "modelName": "text-embedding-3-small",
                         "textField": "quotetext",
                         "teamId": "{{params.teamId}}"
                     }

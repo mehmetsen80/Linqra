@@ -30,6 +30,7 @@ public class LlmUsageStats {
     @Data
     public static class ModelUsage {
         private String modelName;              // Normalized name (e.g., "gpt-4o")
+        private String modelCategory;          // Model category (e.g., "openai-chat", "gemini-chat", etc.)
         private Set<String> versions;          // Actual versions used (e.g., ["gpt-4o-2024-08-06"])
         private String provider;               // "openai", "gemini", etc.
         private long requests;

@@ -31,8 +31,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     @Override
     public Mono<LinqLlmModel> saveLinqLlmModel(LinqLlmModel linqLlmModel) {
         // Validate required fields
-        if (linqLlmModel.getTarget() == null || linqLlmModel.getTarget().isEmpty()) {
-            return Mono.error(new IllegalArgumentException("LinqLlmModel target is required"));
+        if (linqLlmModel.getModelCategory() == null || linqLlmModel.getModelCategory().isEmpty()) {
+            return Mono.error(new IllegalArgumentException("LinqLlmModel modelCategory is required"));
         }
         if (linqLlmModel.getTeamId() == null || linqLlmModel.getTeamId().isEmpty()) {
             return Mono.error(new IllegalArgumentException("LinqLlmModel team ID is required"));
@@ -44,14 +44,15 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
             return Mono.error(new IllegalArgumentException("LinqLlmModel method is required"));
         }
 
-        log.info("Saving LinqLlmModel with target: {}, modelType: {} for team: {}", 
-            linqLlmModel.getTarget(), linqLlmModel.getModelType(), linqLlmModel.getTeamId());
+        log.info("Saving LinqLlmModel with modelCategory: {}, modelName: {} for team: {}", 
+            linqLlmModel.getModelCategory(), linqLlmModel.getModelName(), linqLlmModel.getTeamId());
         
-        return linqLlmModelRepository.findByTargetAndModelTypeAndTeamId(
-                linqLlmModel.getTarget(), linqLlmModel.getModelType(), linqLlmModel.getTeamId())
+        return linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(
+                linqLlmModel.getModelCategory(), linqLlmModel.getModelName(), linqLlmModel.getTeamId())
             .<LinqLlmModel>flatMap(existingLlmModel -> {
                 // Update existing linq llm model
                 existingLlmModel.setEndpoint(linqLlmModel.getEndpoint());
+                existingLlmModel.setProvider(linqLlmModel.getProvider());
                 existingLlmModel.setMethod(linqLlmModel.getMethod());
                 existingLlmModel.setHeaders(linqLlmModel.getHeaders());
                 existingLlmModel.setAuthType(linqLlmModel.getAuthType());
@@ -65,8 +66,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
             })
             .switchIfEmpty(Mono.<LinqLlmModel>defer(() -> {
                 // Create new linq llm model
-                log.info("Creating new LinqLlmModel for target: {}, modelType: {} and team: {}", 
-                    linqLlmModel.getTarget(), linqLlmModel.getModelType(), linqLlmModel.getTeamId());
+                log.info("Creating new LinqLlmModel for modelCategory: {}, modelName: {} and team: {}", 
+                    linqLlmModel.getModelCategory(), linqLlmModel.getModelName(), linqLlmModel.getTeamId());
                 return linqLlmModelRepository.save(linqLlmModel)
                     .doOnSuccess(saved -> log.info("Created new LinqLlmModel with ID: {}", saved.getId()))
                     .doOnError(error -> log.error("Failed to create LinqLlmModel: {}", error.getMessage()));
@@ -74,61 +75,103 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     }
 
     @Override
+    public Mono<Void> deleteLinqLlmModel(String id) {
+        log.info("Deleting LinqLlmModel with ID: {}", id);
+        return linqLlmModelRepository.findById(id)
+            .flatMap(llmModel -> {
+                log.info("Found LinqLlmModel to delete: modelCategory={}, modelName={}", 
+                    llmModel.getModelCategory(), llmModel.getModelName());
+                return linqLlmModelRepository.deleteById(id)
+                    .doOnSuccess(v -> log.info("Deleted LinqLlmModel with ID: {}", id))
+                    .doOnError(error -> log.error("Failed to delete LinqLlmModel with ID {}: {}", id, error.getMessage()));
+            })
+            .switchIfEmpty(Mono.defer(() -> {
+                log.warn("LinqLlmModel not found with ID: {} (may have been already deleted)", id);
+                return Mono.empty();
+            }));
+    }
+
+    @Override
+    public Mono<LinqLlmModel> findById(String id) {
+        log.info("Finding LLM model configuration by ID: {}", id);
+        return linqLlmModelRepository.findById(id)
+                .doOnSuccess(llmModel -> {
+                    if (llmModel != null) {
+                        log.info("✅ Found LLM model configuration: id={}, modelCategory={}, modelName={}", 
+                            id, llmModel.getModelCategory(), llmModel.getModelName());
+                    } else {
+                        log.warn("⚠️ No LLM model configuration found for ID: {}", id);
+                    }
+                })
+                .doOnError(error -> log.error("❌ Error finding LLM model configuration for ID {}: {}", 
+                    id, error.getMessage()));
+    }
+
+    @Override
     public Flux<LinqLlmModel> findByTeamId(String teamId) {
         log.info("Finding LLM model configurations for team: {}", teamId);
         return linqLlmModelRepository.findByTeamId(teamId)
-                .doOnNext(llmModel -> log.info("Found LLM model configuration for team {}: target={}, modelType={}", 
-                    teamId, llmModel.getTarget(), llmModel.getModelType()))
+                .doOnNext(llmModel -> log.info("Found LLM model configuration for team {}: modelCategory={}, modelName={}", 
+                    teamId, llmModel.getModelCategory(), llmModel.getModelName()))
                 .doOnComplete(() -> log.info("Completed fetching {} LLM model configurations for team: {}", teamId))
                 .doOnError(error -> log.error("Error finding LLM model configurations for team {}: {}", teamId, error.getMessage()));
     }
 
+
+
     @Override
-    public Mono<LinqLlmModel> findByTargetAndTeam(String target, String teamId) {
-        log.info("Finding LLM model configuration for target: {} and team: {}", target, teamId);
-        return linqLlmModelRepository.findByTargetAndTeamId(target, teamId)
-                .doOnSuccess(llmModel -> {
-                    if (llmModel != null) {
-                        log.info("✅ Found LLM model configuration: target={}, modelType={}, endpoint={}", 
-                            target, llmModel.getModelType(), llmModel.getEndpoint());
-                    } else {
-                        log.warn("⚠️ No LLM model configuration found for target: {} and team: {}", target, teamId);
-                    }
-                })
-                .doOnError(error -> log.error("❌ Error finding LLM model configuration for target: {} and team: {}: {}", 
-                    target, teamId, error.getMessage()));
+    public Flux<LinqLlmModel> findByModelCategoryAndTeamId(String modelCategory, String teamId) {
+        log.info("Finding LLM model configurations for modelCategory: {} and team: {}", modelCategory, teamId);
+        return linqLlmModelRepository.findByModelCategoryAndTeamId(modelCategory, teamId)
+                .doOnNext(llmModel -> log.info("Found LLM model configuration: modelCategory={}, modelName={}", 
+                modelCategory, llmModel.getModelName()))
+                .doOnComplete(() -> log.info("Completed fetching LLM model configurations for modelCategory: {} and team: {}", modelCategory, teamId))
+                .doOnError(error -> log.error("Error finding LLM model configurations for modelCategory: {} and team: {}: {}", 
+                modelCategory, teamId, error.getMessage()));
     }
 
     @Override
-    public Mono<LinqLlmModel> findByTargetAndModelTypeAndTeamId(String target, String modelType, String teamId) {
-        log.info("Finding LLM model configuration for target: {}, modelType: {} and team: {}", target, modelType, teamId);
-        return linqLlmModelRepository.findByTargetAndModelTypeAndTeamId(target, modelType, teamId)
+    public Flux<LinqLlmModel> findByModelCategoriesAndTeamId(java.util.List<String> modelCategories, String teamId) {
+        log.info("Finding LLM model configurations for modelCategories: {} and team: {}", modelCategories, teamId);
+        return Flux.fromIterable(modelCategories)
+                .flatMap(modelCategory -> linqLlmModelRepository.findByModelCategoryAndTeamId(modelCategory, teamId))
+                .doOnNext(llmModel -> log.info("Found LLM model configuration: modelCategory={}, modelName={}", 
+                    llmModel.getModelCategory(), llmModel.getModelName()))
+                .doOnComplete(() -> log.info("Completed fetching LLM model configurations for modelCategories: {} and team: {}", modelCategories, teamId))
+                .doOnError(error -> log.error("Error finding LLM model configurations for modelCategories: {} and team: {}: {}", 
+                modelCategories, teamId, error.getMessage()));
+    }
+
+    @Override
+    public Mono<LinqLlmModel> findByModelCategoryAndModelNameAndTeamId(String modelCategory, String modelName, String teamId) {
+        log.info("Finding LLM model configuration for modelCategory: {}, modelName: {} and team: {}", modelCategory, modelName, teamId);
+        return linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId)
                 .doOnSuccess(llmModel -> {
                     if (llmModel != null) {
-                        log.info("✅ Found LLM model configuration: target={}, modelType={}, endpoint={}", 
-                            target, modelType, llmModel.getEndpoint());
+                        log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}, endpoint={}", 
+                        modelCategory, modelName, llmModel.getEndpoint());
                     } else {
-                        log.warn("⚠️ No LLM model configuration found for target: {}, modelType: {} and team: {}", 
-                            target, modelType, teamId);
+                        log.warn("⚠️ No LLM model configuration found for modelCategory: {}, modelName: {} and team: {}", 
+                        modelCategory, modelName, teamId);
                     }
                 })
-                .doOnError(error -> log.error("❌ Error finding LLM model configuration for target: {}, modelType: {} and team: {}: {}", 
-                    target, modelType, teamId, error.getMessage()));
+                .doOnError(error -> log.error("❌ Error finding LLM model configuration for modelCategory: {}, modelName: {} and team: {}: {}", 
+                modelCategory, modelName, teamId, error.getMessage()));
     }
 
     @Override
     public Mono<LinqResponse> executeLlmRequest(LinqRequest request, LinqLlmModel llmModel) {
         String intent = request.getQuery().getIntent();
         if (!llmModel.getSupportedIntents().contains(intent)) {
-            return Mono.error(new IllegalArgumentException("Intent '" + intent + "' not supported by " + llmModel.getTarget() + " " + llmModel.getModelType()));
+            return Mono.error(new IllegalArgumentException("Intent '" + intent + "' not supported by " + llmModel.getModelCategory() + " " + llmModel.getModelName()));
         }
 
         AtomicReference<String> url = new AtomicReference<>(buildLlmUrl(llmModel, request));
         String method = llmModel.getMethod();
         Object payload = buildLlmPayload(request, llmModel);
 
-        log.info("🚀 Executing LLM request - target: {}, modelType: {}, URL: {}", 
-            llmModel.getTarget(), llmModel.getModelType(), url.get());
+        log.info("🚀 Executing LLM request - modelCategory: {}, modelName: {}, URL: {}", 
+            llmModel.getModelCategory(), llmModel.getModelName(), url.get());
 
         return Mono.just(llmModel.getApiKey())
                 .flatMap(apiKey -> {
@@ -138,19 +181,19 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     switch (authType) {
                         case "bearer":
                             headers.put("Authorization", "Bearer " + apiKey);
-                            log.debug("Using Bearer token authentication for {}", llmModel.getTarget());
+                            log.debug("Using Bearer token authentication for {}", llmModel.getModelCategory());
                             break;
                         case "api_key":
                             headers.put("x-api-key", apiKey);
-                            log.debug("Using x-api-key header authentication for {}", llmModel.getTarget());
+                            log.debug("Using x-api-key header authentication for {}", llmModel.getModelCategory());
                             break;
                         case "api_key_query":
                             url.set(url.get() + (url.get().contains("?") ? "&" : "?") + "key=" + apiKey);
-                            log.debug("Using API key query parameter authentication for {}", llmModel.getTarget());
+                            log.debug("Using API key query parameter authentication for {}", llmModel.getModelCategory());
                             break;
                         case "none":
                         default:
-                            log.debug("No authentication required for {}", llmModel.getTarget());
+                            log.debug("No authentication required for {}", llmModel.getModelCategory());
                             break;
                     }
 
@@ -165,12 +208,12 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     LinqResponse response = new LinqResponse();
                     response.setResult(result);
                     LinqResponse.Metadata metadata = new LinqResponse.Metadata();
-                    metadata.setSource(llmModel.getTarget());
+                    metadata.setSource(llmModel.getModelCategory());
                     metadata.setStatus("success");
                     metadata.setTeamId(llmModel.getTeamId());
                     metadata.setCacheHit(false);
                     response.setMetadata(metadata);
-                    log.info("✅ LLM request completed successfully for {}/{}", llmModel.getTarget(), llmModel.getModelType());
+                    log.info("✅ LLM request completed successfully for {}/{}", llmModel.getModelCategory(), llmModel.getModelName());
                     return response;
                 });
     }
@@ -188,29 +231,29 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     private Object buildLlmPayload(LinqRequest request, LinqLlmModel llmModel) {
         Map<String, Object> payload = new HashMap<>();
         LinqRequest.Query.LlmConfig llmConfig = request.getQuery().getLlmConfig();
-        String target = llmModel.getTarget();
+        String modelCategory = llmModel.getModelCategory();
 
-        switch (target) {
-            case "openai":
-            case "mistral":
+        switch (modelCategory) {
+            case "openai-chat":
+            case "mistral-chat":
                 payload.put("model", llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "default");
                 payload.put("messages", request.getQuery().getPayload());
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     payload.putAll(llmConfig.getSettings());
                 }
                 break;
-            case "huggingface":
+            case "huggingface-chat":
                 payload.put("inputs", request.getQuery().getParams().getOrDefault("prompt", ""));
                 payload.put("model", llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "sentence-transformers/all-MiniLM-L6-v2");
                 payload.put("parameters", llmConfig != null ? llmConfig.getSettings() : new HashMap<>());
                 break;
-            case "gemini":
+            case "gemini-chat":
                 payload.put("contents", List.of(Map.of("parts", List.of(Map.of("text", request.getQuery().getParams().getOrDefault("prompt", ""))))));
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     payload.put("generationConfig", llmConfig.getSettings());
                 }
                 break;
-            case "claude":
+            case "claude-chat":
                 // Claude API format
                 String claudeModel = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "claude-sonnet-4-5";
                 payload.put("model", claudeModel);
@@ -251,7 +294,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 payload.put("content", Map.of("parts", List.of(Map.of("text", geminiText))));
                 log.info("Building Gemini embedding payload - text: {}, model: {}", geminiText, geminiModel);
                 break;
-            case "cohere":
+            case "cohere-chat":
                 // Cohere Chat API format
                 String cohereModel = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "command-r-08-2024";
                 payload.put("model", cohereModel);
@@ -294,7 +337,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 break;
         }
 
-        log.info("📦 Built {} payload for {}: {}", target, llmModel.getModelType(), payload);
+        log.info("📦 Built {} payload for {}: {}", modelCategory, llmModel.getModelName(), payload);
         return payload;
     }
 

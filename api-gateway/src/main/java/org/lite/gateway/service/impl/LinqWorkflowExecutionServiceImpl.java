@@ -18,7 +18,6 @@ import org.lite.gateway.service.LlmCostService;
 import org.lite.gateway.service.ExecutionMonitoringService;
 import org.lite.gateway.dto.ExecutionProgressUpdate;
 import org.lite.gateway.repository.AgentExecutionRepository;
-import org.lite.gateway.entity.AgentExecution;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -46,7 +45,6 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private final QueuedWorkflowService queuedWorkflowService;
     private final LlmCostService llmCostService;
     private final ExecutionMonitoringService executionMonitoringService;
-    private final AgentExecutionRepository agentExecutionRepository;
 
     @Override
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {

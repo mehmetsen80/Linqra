@@ -607,7 +607,7 @@ function ViewTeam() {
                               model.provider?.toLowerCase() === 'openai' ? 'primary' :
                               model.provider?.toLowerCase() === 'gemini' ? 'warning' :
                               model.provider?.toLowerCase() === 'cohere' ? 'info' :
-                              model.provider?.toLowerCase() === 'claude' ? 'danger' : 'secondary'
+                              model.provider?.toLowerCase() === 'anthropic' ? 'danger' : 'secondary'
                             }>
                               {model.provider}
                             </Badge>

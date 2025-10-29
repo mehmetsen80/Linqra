@@ -366,8 +366,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             
             // Set token usage for AI models
             response.getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
-                if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini") 
-                    || stepMetadata.getTarget().equals("cohere") || stepMetadata.getTarget().equals("claude")
+                if (stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("gemini-chat") 
+                    || stepMetadata.getTarget().equals("cohere-chat") || stepMetadata.getTarget().equals("claude-chat")
                     || stepMetadata.getTarget().equals("openai-embed") || stepMetadata.getTarget().equals("gemini-embed") 
                     || stepMetadata.getTarget().equals("cohere-embed")) {
                     // Get token usage from the step's result if available
@@ -380,7 +380,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                     LinqResponse.WorkflowStepMetadata.TokenUsage tokenUsage = new LinqResponse.WorkflowStepMetadata.TokenUsage();
                                     boolean hasTokenUsage = false;
                                     
-                                    if ((stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("openai-embed")) 
+                                    if ((stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("openai-embed")) 
                                         && resultMap.containsKey("usage")) {
                                         // Handle OpenAI and OpenAI Embed token usage
                                         Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
@@ -404,7 +404,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                             model, promptTokens, completionTokens, String.format("%.6f", cost));
                                         hasTokenUsage = true;
                                             
-                                    } else if (stepMetadata.getTarget().equals("gemini") && resultMap.containsKey("usageMetadata")) {
+                                    } else if (stepMetadata.getTarget().equals("gemini-chat") && resultMap.containsKey("usageMetadata")) {
                                         // Handle Gemini chat token usage (has usageMetadata)
                                         Map<?, ?> usageMetadata = (Map<?, ?>) resultMap.get("usageMetadata");
                                         long promptTokens = ((Number) usageMetadata.get("promptTokenCount")).longValue();
@@ -477,7 +477,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                             estimatedTokens, inputText.length(), String.format("%.6f", cost));
                                         hasTokenUsage = true;
                                             
-                                    } else if ((stepMetadata.getTarget().equals("cohere") || stepMetadata.getTarget().equals("cohere-embed")) 
+                                    } else if ((stepMetadata.getTarget().equals("cohere-chat") || stepMetadata.getTarget().equals("cohere-embed")) 
                                         && resultMap.containsKey("meta")) {
                                         // Handle Cohere and Cohere Embed token usage
                                         Map<?, ?> meta = (Map<?, ?>) resultMap.get("meta");
@@ -514,7 +514,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                 model, promptTokens, completionTokens, String.format("%.6f", cost));
                                             hasTokenUsage = true;
                                         }
-                                    } else if (stepMetadata.getTarget().equals("claude") && resultMap.containsKey("usage")) {
+                                    } else if (stepMetadata.getTarget().equals("claude-chat") && resultMap.containsKey("usage")) {
                                         // Handle Claude token usage
                                         Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
                                         long promptTokens = usage.containsKey("input_tokens") 

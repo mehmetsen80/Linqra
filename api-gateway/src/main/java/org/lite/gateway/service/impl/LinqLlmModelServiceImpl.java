@@ -355,6 +355,13 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
 
         return requestSpec
                 .retrieve()
+                .onStatus(status -> status.isError(), response -> {
+                    return response.bodyToMono(String.class)
+                            .flatMap(body -> {
+                                log.error("❌ Error calling LLM service {}: {} - Response body: {}", url, response.statusCode(), body);
+                                return Mono.error(new RuntimeException("HTTP " + response.statusCode() + ": " + body));
+                            });
+                })
                 .bodyToMono(Object.class)
                 .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
                 .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage()))

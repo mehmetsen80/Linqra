@@ -141,7 +141,7 @@ const GeminiModal = ({ show, onHide, team, onTeamUpdate }) => {
         modelCategory: formData.modelCategory,
         endpoint: formData.endpoint,
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: formData.headers,
         authType: formData.authType,
         apiKey: formData.apiKey,
         modelName: formData.modelName,
@@ -215,6 +215,9 @@ const GeminiModal = ({ show, onHide, team, onTeamUpdate }) => {
     const supportedIntents = isEmbedding 
       ? ['embed']
       : ['generate', 'summarize', 'translate'];
+    const headers = {
+      'Content-Type': 'application/json'
+    };
     
     const existingConfig = existingConfigs.find(config => config.modelName === modelName);
     
@@ -223,6 +226,7 @@ const GeminiModal = ({ show, onHide, team, onTeamUpdate }) => {
       modelName: modelName,
       modelCategory: existingConfig?.modelCategory || modelCategory,
       endpoint: existingConfig?.endpoint || endpoint,
+      headers: existingConfig?.headers || headers,
       supportedIntents: existingConfig?.supportedIntents || supportedIntents,
       apiKey: existingConfig?.apiKey || '',
       authType: existingConfig?.authType || formData.authType
@@ -324,6 +328,19 @@ const GeminiModal = ({ show, onHide, team, onTeamUpdate }) => {
                           </div>
                         </Col>
                       </Row>
+                      <hr />
+                      <Row>
+                        <Col md={12}>
+                          <strong>Headers:</strong>
+                          <div className="mt-2">
+                            {Object.entries(formData.headers || {}).map(([key, value]) => (
+                              <span key={key} className="badge bg-secondary me-2">
+                                {key}: {value}
+                              </span>
+                            ))}
+                          </div>
+                        </Col>
+                      </Row>
                     </Accordion.Body>
                   </Accordion.Item>
                 </Accordion>
@@ -360,6 +377,36 @@ const GeminiModal = ({ show, onHide, team, onTeamUpdate }) => {
                 </div>
                 <Form.Text className="text-muted">
                   Your API key will be securely stored and used for Gemini API requests.
+                </Form.Text>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Headers</Form.Label>
+                <Form.Control
+                  type="text"
+                  value={formData.headers ? Object.entries(formData.headers).map(([key, value]) => `${key}: ${value}`).join('; ') : 'Content-Type: application/json'}
+                  onChange={(e) => {
+                    const headerString = e.target.value;
+                    const headers = {};
+                    if (headerString.trim()) {
+                      headerString.split(';').forEach(pair => {
+                        const [key, value] = pair.split(':').map(s => s.trim());
+                        if (key && value) {
+                          headers[key] = value;
+                        }
+                      });
+                    }
+                    setFormData({
+                      ...formData,
+                      headers: Object.keys(headers).length > 0 ? headers : {
+                        'Content-Type': 'application/json'
+                      }
+                    });
+                  }}
+                  placeholder="Content-Type: application/json"
+                />
+                <Form.Text className="text-muted">
+                  Enter headers in format "key: value; key2: value2".
                 </Form.Text>
               </Form.Group>
             </>

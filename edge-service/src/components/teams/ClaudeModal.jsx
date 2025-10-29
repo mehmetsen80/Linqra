@@ -204,8 +204,7 @@ const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
       return;
     }
     
-    const category = selectedModel.category.toLowerCase();//claude does not have embedding, it's only chat
-    const modelCategory = category;
+    const modelCategory = 'claude-chat';//claude does not have embedding, it's only chat
     const endpoint = selectedModel.endpoint;
     const supportedIntents = ['generate', 'summarize', 'translate'];
     

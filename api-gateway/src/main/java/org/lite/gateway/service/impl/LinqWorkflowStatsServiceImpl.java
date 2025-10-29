@@ -351,7 +351,10 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                         targetStats.getIntentCounts().merge(intent, 1, Integer::sum);
                                         
                                         // Model stats for AI targets
-                                        if (stepMetadata.getTarget().equals("openai") || stepMetadata.getTarget().equals("gemini")) {
+                                        if (stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("gemini-chat") 
+                                        || stepMetadata.getTarget().equals("cohere-chat") || stepMetadata.getTarget().equals("claude-chat")
+                                        || stepMetadata.getTarget().equals("openai-embed") || stepMetadata.getTarget().equals("gemini-embed") 
+                                        || stepMetadata.getTarget().equals("cohere-embed")) {
                                             String model = "unknown";
                                             if (execution.getRequest() != null && 
                                                 execution.getRequest().getQuery() != null && 

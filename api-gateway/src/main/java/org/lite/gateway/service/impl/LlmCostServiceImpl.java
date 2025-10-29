@@ -905,7 +905,10 @@ public class LlmCostServiceImpl implements LlmCostService {
                         completionTokens, 
                         String.format("%.6f", cost));
                     
-                    // Create and set token usage
+                    // Mark as updated (in dry run mode, this just counts what would be updated)
+                    updated = true;
+                    
+                    // Create and set token usage only if not in dry run mode
                     if (!dryRun) {
                         LinqResponse.WorkflowStepMetadata.TokenUsage tokenUsage = new LinqResponse.WorkflowStepMetadata.TokenUsage();
                         tokenUsage.setPromptTokens(promptTokens);
@@ -915,15 +918,17 @@ public class LlmCostServiceImpl implements LlmCostService {
                         
                         stepMetadata.setTokenUsage(tokenUsage);
                         stepMetadata.setModel(model);
-                        updated = true;
                     }
                 }
                 
                 // Save the updated execution if not in dry run mode
                 if (!dryRun && updated) {
                     return executionRepository.save(execution).thenReturn(1);
+                } else if (updated) {
+                    // In dry run mode, count executions that would be updated
+                    return Mono.just(1);
                 } else {
-                    return Mono.just(dryRun && updated ? 1 : 0);
+                    return Mono.just(0);
                 }
             })
             .reduce(0, Integer::sum)

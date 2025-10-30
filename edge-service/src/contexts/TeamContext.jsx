@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { useAuth } from './AuthContext';
 import { teamService } from '../services/teamService';
+import authService from '../services/authService';
 import { isSuperAdmin } from '../utils/roleUtils';
 
 // Create the context
@@ -17,11 +17,24 @@ export const useTeam = () => {
 
 // Export the provider component
 export const TeamProvider = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
+  const [user, setUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [teams, setTeams] = useState([]);
   const [userTeams, setUserTeams] = useState([]);
   const [currentTeam, setCurrentTeam] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Get user info from localStorage
+  useEffect(() => {
+    const authState = JSON.parse(localStorage.getItem('authState') || '{}');
+    if (authState.user && authState.isAuthenticated) {
+      setUser(authState.user);
+      setIsAuthenticated(true);
+    } else {
+      setUser(null);
+      setIsAuthenticated(false);
+    }
+  }, []);
 
   const fetchAllTeams = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -116,25 +129,48 @@ export const TeamProvider = ({ children }) => {
 
   const switchTeam = useCallback(async (teamId) => {
     const team = userTeams.find(t => t.id === teamId);
-    if (team) {
-      // Update the last active timestamp in the backend
+    if (team && user?.username) {
       try {
-        const result = await teamService.updateLastActiveAt(teamId);
-        console.log('updateLastActiveAt result:', result);
-        if (result.success) {
-          console.log('Successfully updated last active timestamp for team:', teamId);
+        console.log('🔄 Switching to team:', teamId, 'team name:', team.name);
+        
+        // Call backend to switch team and get new JWT token
+        const result = await authService.switchTeam(user.username, teamId);
+        
+        if (result.data) {
+          console.log('✅ JWT token updated successfully');
+          
+          // Update local user state with new token data
+          setUser(result.data.user);
+          setIsAuthenticated(true);
+          
+          // Update the last active timestamp in the backend
+          try {
+            const updateResult = await teamService.updateLastActiveAt(teamId);
+            console.log('updateLastActiveAt result:', updateResult);
+            if (updateResult.success) {
+              console.log('Successfully updated last active timestamp for team:', teamId);
+            } else {
+              console.warn('Failed to update last active timestamp:', updateResult.error);
+            }
+          } catch (error) {
+            console.error('Error updating last active timestamp:', error);
+          }
+          
+          // Update local state and storage
+          setCurrentTeam(team);
+          localStorage.setItem('currentTeamId', teamId);
+          
+          console.log('✅ Successfully switched team and updated JWT token');
         } else {
-          console.warn('Failed to update last active timestamp:', result.error);
+          console.error('❌ Failed to switch team:', result.error);
+          throw new Error(result.error || 'Failed to switch team');
         }
       } catch (error) {
-        console.error('Error updating last active timestamp:', error);
+        console.error('❌ Error switching team:', error);
+        throw error;
       }
-      
-      // Update local state and storage
-      setCurrentTeam(team);
-      localStorage.setItem('currentTeamId', teamId);
     }
-  }, [userTeams]);
+  }, [userTeams, user?.username]);
 
   const hasPermission = useCallback((routeId, permission) => {
     if (!currentTeam) return false;

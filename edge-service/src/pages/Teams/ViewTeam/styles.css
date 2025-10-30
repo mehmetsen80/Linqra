@@ -69,7 +69,7 @@
 }
 
 .view-team-container .text-primary {
-  color: #0d6efd !important;
+  color: var(--primary-color, #ed7534) !important;
 }
 
 /* Responsive adjustments */

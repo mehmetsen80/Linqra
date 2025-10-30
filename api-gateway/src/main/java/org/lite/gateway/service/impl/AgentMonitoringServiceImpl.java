@@ -3,9 +3,11 @@ package org.lite.gateway.service.impl;
 import org.lite.gateway.entity.Agent;
 import org.lite.gateway.entity.AgentExecution;
 import org.lite.gateway.entity.AgentTask;
+
 import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentExecutionRepository;
+import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.AgentMonitoringService;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.enums.ExecutionResult;
@@ -32,6 +34,7 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
     private final AgentRepository agentRepository;
     private final AgentTaskRepository agentTaskRepository;
     private final AgentExecutionRepository agentExecutionRepository;
+    private final TeamRepository teamRepository;
     private final LinqWorkflowExecutionService workflowExecutionService;
     
     // ==================== HEALTH MONITORING ====================
@@ -235,7 +238,9 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                 .collectList()
                 .flatMap(agentIds -> {
                     if (agentIds.isEmpty()) {
-                        return Mono.error(new RuntimeException("No agents assigned to team: " + teamId));
+                        return teamRepository.findById(teamId)
+                                .flatMap(team -> Mono.<Map<String, Object>>error(new RuntimeException("No agents assigned to team: " + team.getName())))
+                                .switchIfEmpty(Mono.<Map<String, Object>>error(new RuntimeException("No agents assigned to team: " + teamId)));
                     }
                     
                     // Filter to specific agent if provided
@@ -244,7 +249,9 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
                         : agentIds;
                     
                     if (targetAgentIds.isEmpty()) {
-                        return Mono.error(new RuntimeException("Agent not found in team: " + specificAgentId));
+                        return teamRepository.findById(teamId)
+                                .flatMap(team -> Mono.<Map<String, Object>>error(new RuntimeException("Agent not found in team: " + team.getName())))
+                                .switchIfEmpty(Mono.<Map<String, Object>>error(new RuntimeException("Agent not found in team: " + teamId)));
                     }
                     
                     return Flux.fromIterable(targetAgentIds)

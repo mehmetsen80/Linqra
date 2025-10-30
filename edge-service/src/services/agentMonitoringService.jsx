@@ -114,9 +114,10 @@ const agentMonitoringService = {
             };
         } catch (error) {
             console.error('Error fetching team execution stats:', error);
+            console.log('Error response data:', error.response?.data);
             return {
                 success: false,
-                error: error.response?.data?.message || 'Failed to fetch team execution stats'
+                error: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch team execution stats'
             };
         }
     },

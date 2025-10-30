@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Table, Modal, Form, Alert, Spinner, Badge, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import llmModelService from '../../services/llmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import { useTeam } from '../../contexts/TeamContext';
@@ -8,6 +8,7 @@ import Button from '../../components/common/Button';
 import './styles.css';
 
 const LlmModels = () => {
+  const navigate = useNavigate();
   const { currentTeam } = useTeam();
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -172,7 +173,10 @@ const LlmModels = () => {
               <i className="fas fa-building me-1"></i>
               {currentTeam?.organization?.name || 'Organization'}
             </Breadcrumb.Item>
-            <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/teams' }}>
+            <Breadcrumb.Item 
+              onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
+              style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
+            >
               <i className="fas fa-users me-1"></i>
               {currentTeam?.name || 'Team'}
             </Breadcrumb.Item>

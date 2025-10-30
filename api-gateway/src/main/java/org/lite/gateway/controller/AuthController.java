@@ -121,10 +121,14 @@ public class AuthController {
                         List<String> roles;
                         if (claims.get("realm_access", Map.class) != null) {
                             // Keycloak format
-                            roles = ((Map<String, List<String>>) claims.get("realm_access", Map.class)).get("roles");
+                            @SuppressWarnings("unchecked")
+                            Map<String, List<String>> realmAccess = (Map<String, List<String>>) claims.get("realm_access", Map.class);
+                            roles = realmAccess.get("roles");
                         } else {
                             // Standard format
-                            roles = (List<String>) claims.get("roles");
+                            @SuppressWarnings("unchecked")
+                            List<String> standardRoles = (List<String>) claims.get("roles");
+                            roles = standardRoles;
                         }
                         
                         if (roles == null) {
@@ -152,5 +156,42 @@ public class AuthController {
         log.info("Testing token refresh with token: {}", 
             request.getRefresh_token() != null ? request.getRefresh_token().substring(0, 10) + "..." : "null");
         return refreshToken(request);
+    }
+
+    @PostMapping("/switch-team")
+    public Mono<ResponseEntity<AuthResponse>> switchTeam(@RequestBody SwitchTeamRequest request) {
+        log.info("Switching team for user: {} to team: {}", request.getUsername(), request.getTeamId());
+        
+        return userService.findByUsername(request.getUsername())
+            .switchIfEmpty(Mono.error(new RuntimeException("User not found")))
+            .flatMap(user -> {
+                // Generate new token with team information
+                String newToken = jwtService.generateTokenWithTeam(request.getUsername(), request.getTeamId());
+                String refreshToken = jwtService.generateRefreshToken(request.getUsername());
+                
+                Map<String, Object> userMap = new HashMap<>();
+                userMap.put("username", user.getUsername());
+                userMap.put("email", user.getEmail());
+                userMap.put("roles", user.getRoles());
+                
+                AuthResponse response = AuthResponse.builder()
+                    .token(newToken)
+                    .refreshToken(refreshToken)
+                    .user(userMap)
+                    .success(true)
+                    .message("Team switched successfully")
+                    .build();
+                
+                log.info("Successfully switched team for user: {} to team: {}", request.getUsername(), request.getTeamId());
+                return Mono.just(ResponseEntity.ok(response));
+            })
+            .onErrorResume(e -> {
+                log.error("Error switching team: {}", e.getMessage());
+                return Mono.just(ResponseEntity.badRequest()
+                    .body(AuthResponse.builder()
+                        .success(false)
+                        .message("Failed to switch team: " + e.getMessage())
+                        .build()));
+            });
     }
 } 

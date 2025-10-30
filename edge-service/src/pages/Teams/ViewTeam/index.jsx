@@ -15,6 +15,7 @@ import {
   HiArrowLeft,
   HiPencil, 
   HiUsers, 
+  HiUserGroup,
   HiTemplate, 
   HiDocumentText,
   HiOfficeBuilding,
@@ -39,11 +40,27 @@ import ClaudeModal from '../../../components/teams/ClaudeModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import './styles.css';
 
+const PERMISSION_INFO = {
+  VIEW: {
+    description: "Can view API endpoints and documentation",
+    color: "#0dcaf0" // Info/Cyan
+  },
+  USE: {
+    description: "Can make API calls to these endpoints",
+    color: "#0dcaf0" // Info/Cyan
+  },
+  MANAGE: {
+    description: "Can configure and update these endpoints",
+    color: "#0dcaf0" // Info/Cyan
+  }
+};
+
 function ViewTeam() {
   const { teamId } = useParams();
   const navigate = useNavigate();
   const [team, setTeam] = useState(null);
   const [llmModels, setLlmModels] = useState([]);
+  const [apiKeys, setApiKeys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [operationLoading, setOperationLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -67,6 +84,7 @@ function ViewTeam() {
     if (teamId) {
       fetchTeam();
       fetchLlmModels();
+      fetchApiKeys();
     }
   }, [teamId]);
 
@@ -95,6 +113,17 @@ function ViewTeam() {
     }
   };
 
+  const fetchApiKeys = async () => {
+    try {
+      const { data, error } = await teamService.getTeamApiKeys(teamId);
+      if (error) throw new Error(error);
+      setApiKeys(data || []);
+    } catch (err) {
+      console.error('Error fetching API keys:', err);
+      setApiKeys([]);
+    }
+  };
+
   const formatDate = (dateInput) => {
     if (!dateInput) return 'N/A';
     
@@ -119,6 +148,33 @@ function ViewTeam() {
       minute: '2-digit',
       second: '2-digit'
     });
+  };
+
+  const renderPermissionBadges = (permissions) => {
+    if (!permissions || !Array.isArray(permissions)) return null;
+    
+    return permissions.map((permission, index) => (
+      <OverlayTrigger
+        key={index}
+        placement="top"
+        overlay={
+          <Tooltip id={`permission-${permission}-${index}`}>
+            {PERMISSION_INFO[permission]?.description || permission}
+          </Tooltip>
+        }
+      >
+        <span 
+          className="badge me-1"
+          style={{ 
+            backgroundColor: PERMISSION_INFO[permission]?.color || '#6c757d',
+            color: 'white'
+          }}
+        >
+          <HiLockClosed className="me-1" size={12} />
+          {permission}
+        </span>
+      </OverlayTrigger>
+    ));
   };
 
   const handleAddMember = async (memberData) => {
@@ -227,12 +283,20 @@ function ViewTeam() {
         );
       }
 
+      // Refresh API keys after creation
+      await fetchApiKeys();
       setShowApiKeysModal(false);
     } catch (err) {
       showErrorToast(err.message || 'Failed to create API key');
     } finally {
       setOperationLoading(false);
     }
+  };
+
+  const handleApiKeysModalClose = () => {
+    setShowApiKeysModal(false);
+    // Refresh API keys when modal closes in case changes were made
+    fetchApiKeys();
   };
 
   if (loading) {
@@ -265,7 +329,7 @@ function ViewTeam() {
                 className="p-0"
                 onClick={() => navigate('/teams')}
               >
-                <HiArrowLeft size={24} />
+                <HiArrowLeft className="text-primary" size={24} />
               </BootstrapButton>
               <h4 className="mb-0">{team.name}</h4>
               <Badge 
@@ -287,57 +351,88 @@ function ViewTeam() {
 
       {/* Main Content */}
       <Row className="g-4">
-        {/* Team ID */}
-        <Col md={12}>
-          <Card className="border-0 bg-light">
+
+        {/* Actions */}
+        <Col md={6}>
+          <Card className="border-0 bg-light h-100">
             <Card.Body>
-              <div className="d-flex align-items-center mb-3">
-                <HiDocumentText className="text-primary me-2" size={24} />
-                <h5 className="mb-0">Team ID</h5>
-              </div>
-              <div className="d-flex align-items-center">
-                <code className="bg-white px-2 py-1 rounded me-2">{team.id}</code>
-                <BootstrapButton 
-                  size="sm"
-                  variant="outline-primary"
-                  onClick={() => {
-                    navigator.clipboard.writeText(team.id);
-                    showSuccessToast('Team ID copied to clipboard');
-                  }}
-                >
-                  <HiDocumentText size={16} className="me-1" />
-                  Copy
-                </BootstrapButton>
-              </div>
+                    <div className="d-flex align-items-center g mb-3">
+                      <HiUserGroup className="text-primary me-2" size={24} />
+                      <h5 className="mb-0 fw-semibold">Team</h5>
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <p className="mb-0 text-muted text-start flex-grow-1">{team.name} / {team.organization?.name || 'No organization assigned'}</p>
+                      <code className="bg-transparent px-2 py-1 rounded flex-grow-1 text-muted text-start">{team.id}</code>
+                      <Badge bg={team.status === 'ACTIVE' ? 'success' : 'secondary'}>
+                        {team.status}
+                      </Badge>
+                    </div>
+                    <p className="mb-0 mt-3 text-muted small text-start">{team.description || 'No description provided.'}</p>
+                
             </Card.Body>
           </Card>
         </Col>
 
-        {/* Organization */}
-        <Col md={12}>
-          <Card className="border-0 bg-light">
+        <Col md={6}>
+          <Card className="border-0 bg-light h-100">
             <Card.Body>
-              <div className="d-flex align-items-center mb-3">
-                <HiOfficeBuilding className="text-primary me-2" size={24} />
-                <h5 className="mb-0">Organization</h5>
+          
+            <div className="d-flex align-items-center mb-3">
+                <HiKey className="text-primary me-2" size={24} />
+                <h5 className="mb-0 fw-semibold">API Keys</h5>
               </div>
-              <p className="mb-0">{team.organization?.name || 'No organization assigned'}</p>
+              <div className="d-flex flex-column gap-2">
+                {apiKeys && apiKeys.length > 0 ? (
+                  <>
+                    <div className="d-flex justify-content-between align-items-center">
+                      <span className="text-muted h6 mb-0">API Key</span>
+                      <code className="bg-white px-2 py-1 rounded flex-grow-1 text-truncate text-start" style={{ fontSize: '0.85rem', margin: '0 8px' }}>
+                        {apiKeys[0].key}
+                      </code>
+                      <BootstrapButton
+                        size="sm"
+                        variant="outline-purple"
+                        onClick={() => {
+                          navigator.clipboard.writeText(apiKeys[0].key);
+                          showSuccessToast('API Key copied to clipboard');
+                        }}
+                      >
+                        <HiDocumentText size={14} className="me-1" />
+                        Copy API Key
+                      </BootstrapButton>
+
+                      <BootstrapButton
+                      className="ms-2"
+                      size="sm"
+                      variant="outline-purple"
+                      onClick={() => setShowApiKeysModal(true)}
+                      disabled={team.status === 'INACTIVE' || operationLoading}
+                    >
+                      <HiKey size={14} className="me-1" />
+                      Manage API Key
+                    </BootstrapButton>
+                    </div>
+                  </>
+                ) : (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="text-muted small">No API key configured</span>
+                    <BootstrapButton
+                      size="sm"
+                      variant="outline-purple"
+                      onClick={() => setShowApiKeysModal(true)}
+                      disabled={team.status === 'INACTIVE' || operationLoading}
+                    >
+                      <HiKey size={14} className="me-1" />
+                      Add API Key
+                    </BootstrapButton>
+                  </div>
+                )}
+              </div>
+
             </Card.Body>
           </Card>
         </Col>
 
-        {/* Description */}
-        <Col md={12}>
-          <Card className="border-0 bg-light">
-            <Card.Body>
-              <div className="d-flex align-items-center mb-3">
-                <HiDocumentText className="text-primary me-2" size={24} />
-                <h5 className="mb-0">Description</h5>
-              </div>
-              <p>{team.description || 'No description provided.'}</p>
-            </Card.Body>
-          </Card>
-        </Col>
 
         {/* Statistics */}
         <Col md={6}>
@@ -389,70 +484,28 @@ function ViewTeam() {
           </Card>
         </Col>
 
-        {/* Actions */}
+      
+
+        
+
+        {/* Members Table */}
         <Col md={12}>
           <Card className="border-0 bg-light">
             <Card.Body>
-              <h5 className="mb-3">Team Management</h5>
-              <div className="d-flex flex-wrap gap-2">
-                <BootstrapButton
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div className="d-flex align-items-center">
+                  <HiUsers className="text-primary me-2" size={24} />
+                  <h5 className="mb-0">Team Members</h5>
+                </div>
+                <BootstrapButton 
+                  size="sm" 
                   variant="outline-secondary"
                   onClick={() => setShowMembersModal(true)}
-                  disabled={operationLoading}
                 >
-                  <HiUsers className="me-1" /> Manage Members ({team.members?.length || 0})
-                </BootstrapButton>
-                <BootstrapButton
-                  variant="outline-info"
-                  onClick={() => setShowRoutesModal(true)}
-                  disabled={operationLoading}
-                >
-                  <HiTemplate className="me-1" /> Manage Apps ({team.routes?.length || 0})
-                </BootstrapButton>
-                <BootstrapButton
-                  variant="outline-purple"
-                  onClick={() => setShowApiKeysModal(true)}
-                  disabled={team.status === 'INACTIVE' || operationLoading}
-                >
-                  <HiKey className="me-1" /> API Keys
-                </BootstrapButton>
-                <BootstrapButton
-                  variant="outline-info"
-                  onClick={() => setShowOpenAIModal(true)}
-                  disabled={team.status === 'INACTIVE' || operationLoading}
-                >
-                  <SiOpenai className="me-1" size={16} /> OpenAI Config
-                </BootstrapButton>
-                <BootstrapButton
-                  variant="outline-info"
-                  onClick={() => setShowGeminiModal(true)}
-                  disabled={team.status === 'INACTIVE' || operationLoading}
-                >
-                  <SiGoogle className="me-1" size={14} /> Gemini Config
+                  <HiUsers className="me-1" /> Manage Members
                 </BootstrapButton>
               </div>
-            </Card.Body>
-          </Card>
-        </Col>
-
-        {/* Members Table */}
-        {team.members && team.members.length > 0 && (
-          <Col md={12}>
-            <Card className="border-0 bg-light">
-              <Card.Body>
-                <div className="d-flex align-items-center justify-content-between mb-3">
-                  <div className="d-flex align-items-center">
-                    <HiUsers className="text-primary me-2" size={24} />
-                    <h5 className="mb-0">Team Members</h5>
-                  </div>
-                  <BootstrapButton 
-                    size="sm" 
-                    variant="outline-secondary"
-                    onClick={() => setShowMembersModal(true)}
-                  >
-                    <HiUsers className="me-1" /> Manage
-                  </BootstrapButton>
-                </div>
+              {team.members && team.members.length > 0 ? (
                 <div className="table-responsive">
                   <table className="table table-sm mb-0">
                     <thead>
@@ -481,29 +534,31 @@ function ViewTeam() {
                     </tbody>
                   </table>
                 </div>
-              </Card.Body>
-            </Card>
-          </Col>
-        )}
+              ) : (
+                <p className="text-muted mb-0">No members yet. Click "Manage Members" to add members.</p>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
 
         {/* Routes Table */}
-        {team.routes && team.routes.length > 0 && (
-          <Col md={12}>
-            <Card className="border-0 bg-light">
-              <Card.Body>
-                <div className="d-flex align-items-center justify-content-between mb-3">
-                  <div className="d-flex align-items-center">
-                    <HiTemplate className="text-primary me-2" size={24} />
-                    <h5 className="mb-0">Apps</h5>
-                  </div>
-                  <BootstrapButton 
-                    size="sm" 
-                    variant="outline-info"
-                    onClick={() => setShowRoutesModal(true)}
-                  >
-                    <HiTemplate className="me-1" /> Manage
-                  </BootstrapButton>
+        <Col md={12}>
+          <Card className="border-0 bg-light">
+            <Card.Body>
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div className="d-flex align-items-center">
+                  <HiTemplate className="text-primary me-2" size={24} />
+                  <h5 className="mb-0">Apps</h5>
                 </div>
+                <BootstrapButton 
+                  size="sm" 
+                  variant="outline-info"
+                  onClick={() => setShowRoutesModal(true)}
+                >
+                  <HiTemplate className="me-1" /> Manage Apps
+                </BootstrapButton>
+              </div>
+              {team.routes && team.routes.length > 0 ? (
                 <div className="table-responsive">
                   <table className="table table-sm mb-0">
                     <thead>
@@ -521,72 +576,67 @@ function ViewTeam() {
                           <td>{route.path}</td>
                           <td>v{route.version}</td>
                           <td>
-                            {route.permissions?.map(permission => (
-                              <Badge 
-                                key={permission} 
-                                bg="info" 
-                                className="me-1"
-                              >
-                                <HiLockClosed className="me-1" size={12} />
-                                {permission}
-                              </Badge>
-                            ))}
+                            <div className="d-flex align-items-center gap-1">
+                              {renderPermissionBadges(route.permissions)}
+                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </Card.Body>
-            </Card>
-          </Col>
-        )}
+              ) : (
+                <p className="text-muted mb-0">No apps yet. Click "Manage Apps" to add apps.</p>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
 
         {/* LLM Models Table */}
-        {llmModels && llmModels.length > 0 && (
-          <Col md={12}>
-            <Card className="border-0 bg-light">
-              <Card.Body>
-                <div className="d-flex align-items-center justify-content-between mb-3">
-                  <div className="d-flex align-items-center">
-                    <HiSparkles className="text-primary me-2" size={24} />
-                    <h5 className="mb-0">LLM Models</h5>
-                  </div>
-                  <div className="d-flex gap-2">
-                    <BootstrapButton 
-                      size="sm" 
-                      variant="outline-info"
-                      onClick={() => setShowOpenAIModal(true)}
-                      disabled={team.status === 'INACTIVE' || operationLoading}
-                    >
-                      <SiOpenai className="me-1" size={16} /> OpenAI
-                    </BootstrapButton>
-                    <BootstrapButton 
-                      size="sm" 
-                      variant="outline-info"
-                      onClick={() => setShowGeminiModal(true)}
-                      disabled={team.status === 'INACTIVE' || operationLoading}
-                    >
-                      <SiGoogle className="me-1" size={14} /> Gemini
-                    </BootstrapButton>
-                    <BootstrapButton 
-                      size="sm" 
-                      variant="outline-info"
-                      onClick={() => setShowCohereModal(true)}
-                      disabled={team.status === 'INACTIVE' || operationLoading}
-                    >
-                      <FaCloud className="me-1" size={16} /> Cohere
-                    </BootstrapButton>
-                    <BootstrapButton 
-                      size="sm" 
-                      variant="outline-info"
-                      onClick={() => setShowClaudeModal(true)}
-                      disabled={team.status === 'INACTIVE' || operationLoading}
-                    >
-                      <SiAnthropic className="me-1" size={16} /> Claude
-                    </BootstrapButton>
-                  </div>
+        <Col md={12}>
+          <Card className="border-0 bg-light">
+            <Card.Body>
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div className="d-flex align-items-center">
+                  <HiSparkles className="text-primary me-2" size={24} />
+                  <h5 className="mb-0">LLM Models</h5>
                 </div>
+                <div className="d-flex gap-2">
+                  <BootstrapButton 
+                    size="sm" 
+                    variant="outline-info"
+                    onClick={() => setShowOpenAIModal(true)}
+                    disabled={team.status === 'INACTIVE' || operationLoading}
+                  >
+                    <SiOpenai className="me-1" size={16} /> OpenAI
+                  </BootstrapButton>
+                  <BootstrapButton 
+                    size="sm" 
+                    variant="outline-info"
+                    onClick={() => setShowGeminiModal(true)}
+                    disabled={team.status === 'INACTIVE' || operationLoading}
+                  >
+                    <SiGoogle className="me-1" size={14} /> Gemini
+                  </BootstrapButton>
+                  <BootstrapButton 
+                    size="sm" 
+                    variant="outline-info"
+                    onClick={() => setShowCohereModal(true)}
+                    disabled={team.status === 'INACTIVE' || operationLoading}
+                  >
+                    <FaCloud className="me-1" size={16} /> Cohere
+                  </BootstrapButton>
+                  <BootstrapButton 
+                    size="sm" 
+                    variant="outline-info"
+                    onClick={() => setShowClaudeModal(true)}
+                    disabled={team.status === 'INACTIVE' || operationLoading}
+                  >
+                    <SiAnthropic className="me-1" size={16} /> Claude
+                  </BootstrapButton>
+                </div>
+              </div>
+              {llmModels && llmModels.length > 0 ? (
                 <div className="table-responsive">
                   <table className="table table-sm mb-0">
                     <thead>
@@ -645,10 +695,12 @@ function ViewTeam() {
                     </tbody>
                   </table>
                 </div>
-              </Card.Body>
-            </Card>
-          </Col>
-        )}
+              ) : (
+                <p className="text-muted mb-0">No LLM models configured yet. Click the provider buttons above to configure.</p>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
       </Row>
 
       {/* Modals */}
@@ -684,7 +736,7 @@ function ViewTeam() {
 
       <TeamApiKeysModal
         show={showApiKeysModal}
-        onHide={() => setShowApiKeysModal(false)}
+        onHide={handleApiKeysModalClose}
         team={team}
         onCreateApiKey={handleCreateApiKey}
         loading={operationLoading}

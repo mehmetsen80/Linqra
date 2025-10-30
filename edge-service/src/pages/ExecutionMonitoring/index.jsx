@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { executionMonitoringWebSocket } from '../../services/executionMonitoringService';
-import { Alert, Box, Grid2, Card, CardContent, Typography, Chip, LinearProgress, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { Alert, Box, Grid2, Card as MuiCard, CardContent, Typography, Chip, LinearProgress, Button, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
 import { PlayArrow, Stop, Refresh, Memory, Timer, CheckCircle, Error, Cancel, Replay, Close, Visibility } from '@mui/icons-material';
+import { Breadcrumb, Card, Container } from 'react-bootstrap';
 import agentTaskService from '../../services/agentTaskService';
 import executionQueueService from '../../services/executionQueueService';
 import workflowService from '../../services/workflowService';
@@ -403,7 +404,37 @@ const ExecutionMonitoring = () => {
     };
 
     return (
-        <div className="execution-monitoring">
+        <Container fluid className="execution-monitoring-container" style={{ padding: 0 }}>
+            {/* Breadcrumb */}
+            <Card className="breadcrumb-card mb-5">
+                <Card.Body className="p-2">
+                    <Breadcrumb className="bg-light mb-0">
+                        <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/' }}>
+                            <i className="fas fa-home me-1"></i>
+                            Home
+                        </Breadcrumb.Item>
+                        <Breadcrumb.Item 
+                          linkAs={Link} 
+                          linkProps={{ to: '/organizations' }}
+                        >
+                            <i className="fas fa-building me-1"></i>
+                            {currentTeam?.organization?.name || 'Organization'}
+                        </Breadcrumb.Item>
+                        <Breadcrumb.Item 
+                          onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
+                          style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
+                        >
+                            <i className="fas fa-users me-1"></i>
+                            {currentTeam?.name || 'Team'}
+                        </Breadcrumb.Item>
+                        <Breadcrumb.Item active>
+                            <i className="fas fa-play-circle me-1"></i>
+                            Execution Monitoring
+                        </Breadcrumb.Item>
+                    </Breadcrumb>
+                </Card.Body>
+            </Card>
+
             <Box sx={{ mb: 3 }}>
                 <Typography variant="h5" component="h1" gutterBottom sx={{ textAlign: 'left' }}>
                     Execution Monitoring
@@ -445,7 +476,7 @@ const ExecutionMonitoring = () => {
                         const timer = executionTimers.get(execution.executionId) || 0;
                         return (
                     <Grid2 xs={12} key={execution.executionId} sx={{ width: '100%' }}>
-                        <Card className="execution-card" sx={{ width: '100%' }}>
+                        <MuiCard className="execution-card" sx={{ width: '100%' }}>
                             <CardContent>
                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -601,7 +632,7 @@ const ExecutionMonitoring = () => {
                                     Last updated: {new Date(execution.lastUpdated).toLocaleString()}
                                 </Typography>
                             </CardContent>
-                        </Card>
+                        </MuiCard>
                     </Grid2>
                         );
                     })}
@@ -971,9 +1002,9 @@ const ExecutionMonitoring = () => {
                         execution={selectedExecution}
                         formatDate={formatDate}
                     />
-                </div>
-            );
-        };
+        </Container>
+    );
+};
 
         export default ExecutionMonitoring;
 

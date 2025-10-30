@@ -55,7 +55,10 @@ public class TeamServiceImpl implements TeamService {
             .findByTeamId(team.getId())
             .flatMap(member -> userService.findById(member.getUserId())
                 .map(user -> convertToMemberDTO(member, user)))
-            .collectList();
+            .collectList()
+            .map(members -> members.stream()
+                .sorted((a, b) -> a.getUsername().compareToIgnoreCase(b.getUsername()))
+                .collect(java.util.stream.Collectors.toList()));
         
         Mono<OrganizationDTO> orgMono = organizationRepository.findById(team.getOrganizationId())
             .map(this::convertToOrganizationDTO);
@@ -113,7 +116,15 @@ public class TeamServiceImpl implements TeamService {
                         })
                     ))
             )
-            .collectList();
+            .collectList()
+            .map(routes -> routes.stream()
+                .sorted((a, b) -> {
+                    // First sort by routeIdentifier, then by version
+                    int nameCompare = a.getRouteIdentifier().compareToIgnoreCase(b.getRouteIdentifier());
+                    if (nameCompare != 0) return nameCompare;
+                    return Integer.compare(a.getVersion(), b.getVersion());
+                })
+                .collect(java.util.stream.Collectors.toList()));
 
         Mono<ApiKeyDTO> apiKeyMono = apiKeyRepository
             .findByTeamId(team.getId())

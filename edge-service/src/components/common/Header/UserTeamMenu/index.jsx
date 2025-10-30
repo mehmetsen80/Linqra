@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Dropdown, Badge } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { useTeam } from '../../../../contexts/TeamContext';
 import { HiOutlineTemplate, HiOutlineChartBar, HiOutlineStatusOnline, HiOutlineLogout } from 'react-icons/hi';
@@ -11,6 +12,7 @@ import ConfirmationModal from '../../ConfirmationModal';
 import { RoleBadge, AuthBadge } from '../../../../utils/roleUtils';
 
 const UserTeamMenu = () => {
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { currentTeam, userTeams, switchTeam } = useTeam();
   const [isOpen, setIsOpen] = useState(false);
@@ -57,7 +59,18 @@ const UserTeamMenu = () => {
           {currentTeam ? (
             <>
               <div className="current-team-info">
-                <span className="team-name">{currentTeam.name}</span>
+                <span 
+                  className="team-name" 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/teams/${currentTeam.id}`);
+                  }}
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                  onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                >
+                  {currentTeam.name}
+                </span>
                 <span className="current-org-name">{currentTeam.organization?.name}</span>
               </div>
               {currentTeam.roles?.map((role, index) => (

@@ -203,13 +203,19 @@ export const ApiRoutesDisplay = () => {
               <Breadcrumb className="bg-light mb-0">
                 <Breadcrumb.Item 
                   linkAs={Link} 
+                  linkProps={{ to: '/' }}
+                >
+                  Home
+                </Breadcrumb.Item>
+                <Breadcrumb.Item 
+                  linkAs={Link} 
                   linkProps={{ to: '/organizations' }}
                 >
                   {currentTeam?.organization?.name || 'Organization'}
                 </Breadcrumb.Item>
                 <Breadcrumb.Item 
-                  linkAs={Link} 
-                  linkProps={{ to: '/teams' }}
+                  onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
+                  style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
                 >
                   {currentTeam?.name || 'All Teams'}
                 </Breadcrumb.Item>

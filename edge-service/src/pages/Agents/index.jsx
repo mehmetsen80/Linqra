@@ -157,7 +157,10 @@ function Agents() {
                         >
                             {currentTeam?.organization?.name || 'Organization'}
                         </Breadcrumb.Item>
-                        <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/teams' }}>
+                        <Breadcrumb.Item 
+                            onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
+                            style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
+                        >
                             {currentTeam?.name || 'Team'}
                         </Breadcrumb.Item>
                         <Breadcrumb.Item active>Agents</Breadcrumb.Item>

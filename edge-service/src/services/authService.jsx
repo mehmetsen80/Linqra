@@ -86,6 +86,43 @@ const authService = {
     }
   },
 
+  switchTeam: async (username, teamId) => {
+    try {
+      console.log('🔄 authService.switchTeam: Switching to team:', teamId, 'for user:', username);
+      
+      const response = await axiosInstance.post('/api/auth/switch-team', {
+        username,
+        teamId
+      });
+      
+      const data = response.data;
+      console.log('📥 authService.switchTeam: Response received:', data);
+      
+      if (data.token) {
+        const authState = {
+          user: data.user,
+          token: data.token,
+          refreshToken: data.refreshToken,
+          isAuthenticated: true
+        };
+
+        // Store auth state as single source of truth
+        localStorage.setItem('authState', JSON.stringify(authState));
+        console.log('💾 authService.switchTeam: JWT token stored in localStorage');
+
+        return { data: authState };
+      }
+      console.error('❌ authService.switchTeam: No token in response');
+      return { error: 'Invalid response from server' };
+    } catch (error) {
+      console.error('❌ authService.switchTeam: Error:', error);
+      if (error.response) {
+        return { error: error.response.data.message || 'Team switch failed' };
+      }
+      return { error: error.message };
+    }
+  },
+
   logout: () => {
     // Get the current auth state before clearing it
     const authState = JSON.parse(localStorage.getItem('authState') || '{}');

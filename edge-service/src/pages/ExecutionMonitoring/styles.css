@@ -4,6 +4,37 @@
     margin: 0 auto;
 }
 
+.execution-monitoring-container {
+    padding: 1.5rem 1rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Breadcrumb */
+.breadcrumb-card {
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.breadcrumb-card .breadcrumb {
+    margin-bottom: 0;
+    background-color: transparent;
+}
+
+.execution-monitoring-container .breadcrumb-item {
+    padding: 0.5rem 0;
+}
+
+.execution-monitoring-container .breadcrumb-item + .breadcrumb-item::before {
+    padding-right: 1rem;
+    padding-left: 1rem;
+}
+
+.execution-monitoring-container .breadcrumb-item a {
+    color: var(--primary-color, #ed7534);
+    text-decoration: none;
+}
+
 .execution-card {
     height: 100%;
     transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;

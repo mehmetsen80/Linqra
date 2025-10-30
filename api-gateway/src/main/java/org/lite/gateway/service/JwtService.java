@@ -45,4 +45,12 @@ public interface JwtService {
      * @return Mono containing the claims
      */
     Mono<Claims> extractClaims(String token);
+
+    /**
+     * Generates a JWT token for the given username with team information
+     * @param username the username to generate token for
+     * @param teamId the team ID to include in the token
+     * @return the generated JWT token with team info
+     */
+    String generateTokenWithTeam(String username, String teamId);
 } 

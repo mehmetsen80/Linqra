@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Table, Form, Button, Alert, Spinner, Breadcrumb } from 'react-bootstrap';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { format, subDays } from 'date-fns';
 import { Line, Bar } from 'react-chartjs-2';
 import {
@@ -30,6 +30,7 @@ ChartJS.register(
 );
 
 const LlmUsage = () => {
+  const navigate = useNavigate();
   const { currentTeam } = useTeam();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -132,7 +133,10 @@ const LlmUsage = () => {
               <i className="fas fa-building me-1"></i>
               {currentTeam?.organization?.name || 'Organization'}
             </Breadcrumb.Item>
-            <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/teams' }}>
+            <Breadcrumb.Item 
+              onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
+              style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
+            >
               <i className="fas fa-users me-1"></i>
               {currentTeam?.name || 'Team'}
             </Breadcrumb.Item>

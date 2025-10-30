@@ -42,7 +42,11 @@ public class AgentMonitoringController {
         
         return agentMonitoringService.getTeamAgentsHealth(teamId)
                 .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.badRequest().build());
+                .onErrorResume(throwable -> {
+                    log.error("Error getting team agents health for team {}: {}", teamId, throwable.getMessage());
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(Map.of("error", throwable.getMessage())));
+                });
     }
     
     @GetMapping("/team/{teamId}/errors")
@@ -70,7 +74,11 @@ public class AgentMonitoringController {
             
             return agentMonitoringService.getAgentPerformance(agentId, fromDate, toDate)
                     .map(ResponseEntity::ok)
-                    .onErrorReturn(ResponseEntity.badRequest().build());
+                    .onErrorResume(throwable -> {
+                        log.error("Error getting agent performance for agent {}: {}", agentId, throwable.getMessage());
+                        return Mono.just(ResponseEntity.badRequest()
+                                .body(Map.of("error", throwable.getMessage())));
+                    });
         } catch (Exception e) {
             log.error("Error parsing date parameters: {}", e.getMessage());
             return Mono.just(ResponseEntity.badRequest()
@@ -94,7 +102,11 @@ public class AgentMonitoringController {
             
             return agentMonitoringService.getTeamExecutionStats(teamId, fromDate, toDate, agentId)
                     .map(ResponseEntity::ok)
-                    .onErrorReturn(ResponseEntity.badRequest().build());
+                    .onErrorResume(throwable -> {
+                        log.error("Error getting team execution stats for team {}: {}", teamId, throwable.getMessage());
+                        return Mono.just(ResponseEntity.badRequest()
+                                .body(Map.of("error", throwable.getMessage())));
+                    });
         } catch (Exception e) {
             log.error("Error parsing date parameters: {}", e.getMessage());
             return Mono.just(ResponseEntity.badRequest()
@@ -110,7 +122,11 @@ public class AgentMonitoringController {
         
         return agentMonitoringService.getTeamResourceUsage(teamId)
                 .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.badRequest().build());
+                .onErrorResume(throwable -> {
+                    log.error("Error getting team resource usage for team {}: {}", teamId, throwable.getMessage());
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(Map.of("error", throwable.getMessage())));
+                });
     }
     
     @GetMapping("/team/{teamId}/capabilities")
@@ -119,7 +135,11 @@ public class AgentMonitoringController {
         
         return agentMonitoringService.getAgentCapabilitiesSummary(teamId)
                 .map(ResponseEntity::ok)
-                .onErrorReturn(ResponseEntity.badRequest().build());
+                .onErrorResume(throwable -> {
+                    log.error("Error getting agent capabilities summary for team {}: {}", teamId, throwable.getMessage());
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(Map.of("error", throwable.getMessage())));
+                });
     }
     
     // ==================== EXECUTION MONITORING ====================

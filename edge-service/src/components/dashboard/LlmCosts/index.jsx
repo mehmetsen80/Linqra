@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Card, Spinner, Row, Col, Button } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import { Doughnut, Bar } from 'react-chartjs-2';
@@ -12,7 +12,7 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
-import dashboardService from '../../../services/dashboardService';
+import llmCostService from '../../../services/llmCostService';
 import { useTeam } from '../../../contexts/TeamContext';
 import './styles.css';
 
@@ -56,17 +56,21 @@ const LlmCosts = () => {
     return `${formatDate(thirtyDaysAgo)} to ${formatDate(today)}`;
   };
 
-  useEffect(() => {
-    if (currentTeam?.id) {
-      loadLlmUsage();
-    }
-  }, [currentTeam]);
-
-  const loadLlmUsage = async () => {
+  const loadLlmUsage = useCallback(async () => {
+    if (!currentTeam?.id) return;
+    
     try {
       setLoading(true);
       setError(null);
-      const data = await dashboardService.getLlmUsage();
+      // Get last 30 days data
+      const today = new Date();
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(today.getDate() - 30);
+      
+      const fromDate = thirtyDaysAgo.toISOString().split('T')[0];
+      const toDate = today.toISOString().split('T')[0];
+      
+      const data = await llmCostService.getTeamLlmUsage(currentTeam.id, fromDate, toDate);
       setStats(data);
     } catch (err) {
       console.error('Error loading LLM usage:', err);
@@ -74,7 +78,11 @@ const LlmCosts = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentTeam?.id]);
+
+  useEffect(() => {
+    loadLlmUsage();
+  }, [loadLlmUsage]);
 
   if (loading) {
     return (

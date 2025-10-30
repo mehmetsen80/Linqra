@@ -68,6 +68,8 @@ const AgentStats = ({ agentId = null }) => {
     const fetchStats = async () => {
         try {
             setLoading(true);
+            setError(null);
+            console.log('🔍 AgentStats: Fetching stats for team:', currentTeam.id, 'agentId:', agentId);
             // Always use getTeamExecutionStats, but pass agentId if provided
             const result = await agentMonitoringService.getTeamExecutionStats(currentTeam.id, null, null, agentId);
             
@@ -76,11 +78,20 @@ const AgentStats = ({ agentId = null }) => {
                 console.log('Hourly executions data:', result.data.hourlyExecutions);
                 setStats(result.data);
             } else {
-                setError(result.error);
+                // Show the actual error message from the backend
+                setError(result.error || 'Failed to fetch agent statistics');
             }
         } catch (err) {
-            setError('Failed to fetch agent statistics');
             console.error('Error fetching agent stats:', err);
+            console.log('Error response data:', err.response?.data);
+            if (err.response?.status === 400) {
+                // Show the actual error message from the backend
+                const errorMessage = err.response?.data?.error || 'No agents found in this team. Please add agents to view statistics.';
+                console.log('Setting error message:', errorMessage);
+                setError(errorMessage);
+            } else {
+                setError('Failed to fetch agent statistics');
+            }
         } finally {
             setLoading(false);
         }

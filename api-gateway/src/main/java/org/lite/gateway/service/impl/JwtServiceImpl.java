@@ -60,6 +60,24 @@ public class JwtServiceImpl implements JwtService {
             .block();
     }
 
+    @Override
+    public String generateTokenWithTeam(String username, String teamId) {
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("teamId", teamId);
+        claims.put("teams", List.of(teamId)); // For backward compatibility
+        
+        // Get user roles from repository
+        return userRepository.findByUsername(username)
+            .map(user -> {
+                claims.put("roles", user.getRoles());
+                claims.put("username", username);
+                claims.put("email", user.getEmail());
+                return generateToken(claims, username, false);
+            })
+            .switchIfEmpty(Mono.just(generateToken(claims, username, false)))
+            .block();
+    }
+
     private String generateToken(Map<String, Object> extraClaims, String username, boolean isRefresh) {
         long expirationTime = isRefresh ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000; // 7 days for refresh, 24h for access
 

@@ -24,11 +24,11 @@ const PERMISSION_INFO = {
 };
 
 const TeamRoutes = () => {
+  const navigate = useNavigate();
   const [routes, setRoutes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { currentTeam } = useTeam();
-  const navigate = useNavigate();
 
   // Move the helper functions outside useEffect
   const getMethodBadges = useCallback((methods) => {
@@ -119,8 +119,8 @@ const TeamRoutes = () => {
             {currentTeam?.organization?.name || 'Organization'}
           </Breadcrumb.Item>
           <Breadcrumb.Item 
-            linkAs={Link} 
-            linkProps={{ to: '/teams' }}
+            onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
+            style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
           >
             <i className="fas fa-users me-2"></i>
             {currentTeam?.name || 'Team'}

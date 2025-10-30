@@ -306,6 +306,11 @@
   color: #c2410c;
 }
 
+.provider-badge.anthropic {
+  background-color: #fce7f3;
+  color: #be185d;
+}
+
 .cost-value {
   color: #10b981;
   font-weight: 600;

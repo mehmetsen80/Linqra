@@ -71,7 +71,7 @@ function ViewCollection() {
       setUploading(true);
       
       // Initiate upload
-      const initiateResponse = await axiosInstance.post('/api/v1/documents/upload/initiate', {
+      const initiateResponse = await axiosInstance.post('/api/documents/upload/initiate', {
         fileName: file.name,
         collectionId: collectionId,
         fileSize: file.size,
@@ -102,7 +102,7 @@ function ViewCollection() {
       }
 
       // Complete upload
-      await axiosInstance.post(`/api/v1/documents/upload/${documentId}/complete`, {
+      await axiosInstance.post(`/api/documents/upload/${documentId}/complete`, {
         s3Key: s3Key
       });
 

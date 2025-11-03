@@ -17,7 +17,7 @@ import reactor.core.publisher.Mono;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/knowledge/collections")
+@RequestMapping("/api/knowledge/collections")
 @RequiredArgsConstructor
 @Slf4j
 public class KnowledgeCollectionController {

@@ -8,7 +8,7 @@ export const documentService = {
       if (params.collectionId) queryParams.append('collectionId', params.collectionId);
       if (params.status) queryParams.append('status', params.status);
       
-      const url = `/api/v1/documents${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      const url = `/api/documents${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
       const response = await axiosInstance.get(url);
       return {
         success: true,
@@ -26,7 +26,7 @@ export const documentService = {
   // Get document by ID
   getDocumentById: async (documentId) => {
     try {
-      const response = await axiosInstance.get(`/api/v1/documents/view/${documentId}`);
+      const response = await axiosInstance.get(`/api/documents/view/${documentId}`);
       return {
         success: true,
         data: response.data
@@ -43,7 +43,7 @@ export const documentService = {
   // Initiate document upload
   initiateUpload: async (fileData) => {
     try {
-      const response = await axiosInstance.post('/api/v1/documents/upload/initiate', fileData);
+      const response = await axiosInstance.post('/api/documents/upload/initiate', fileData);
       return {
         success: true,
         data: response.data
@@ -60,7 +60,7 @@ export const documentService = {
   // Complete document upload
   completeUpload: async (documentId, s3Key) => {
     try {
-      const response = await axiosInstance.post(`/api/v1/documents/upload/${documentId}/complete`, { s3Key });
+      const response = await axiosInstance.post(`/api/documents/upload/${documentId}/complete`, { s3Key });
       return {
         success: true,
         data: response.data
@@ -77,7 +77,7 @@ export const documentService = {
   // Get document status
   getDocumentStatus: async (documentId) => {
     try {
-      const response = await axiosInstance.get(`/api/v1/documents/${documentId}/status`);
+      const response = await axiosInstance.get(`/api/documents/${documentId}/status`);
       return {
         success: true,
         data: response.data
@@ -94,7 +94,7 @@ export const documentService = {
   // Generate download URL
   generateDownloadUrl: async (documentId) => {
     try {
-      const response = await axiosInstance.get(`/api/v1/documents/view/${documentId}/download`);
+      const response = await axiosInstance.get(`/api/documents/view/${documentId}/download`);
       return {
         success: true,
         data: response.data
@@ -111,7 +111,7 @@ export const documentService = {
   // Delete document
   deleteDocument: async (documentId) => {
     try {
-      await axiosInstance.delete(`/api/v1/documents/${documentId}`);
+      await axiosInstance.delete(`/api/documents/${documentId}`);
       return {
         success: true
       };

@@ -15,7 +15,7 @@ import reactor.core.publisher.Mono;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/documents")
+@RequestMapping("/api/documents")
 @RequiredArgsConstructor
 @Slf4j
 public class DocumentViewController {

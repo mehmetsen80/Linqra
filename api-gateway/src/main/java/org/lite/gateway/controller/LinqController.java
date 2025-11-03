@@ -11,6 +11,7 @@ import org.lite.gateway.dto.ConvertToLinqProtocolRequest;
 import org.lite.gateway.service.LinqProtocolService;
 import org.lite.gateway.service.LinqService;
 import org.lite.gateway.service.ApiEndpointService;
+import org.lite.gateway.service.TeamContextService;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -32,9 +33,12 @@ public class LinqController {
     private final LinqService linqService;
     private final LinqProtocolService linqProtocolService;
     private final ApiEndpointService apiEndpointService;
+    private final TeamContextService teamContextService;
 
     @PostMapping
-    public Mono<LinqResponse> handleLinqRequest(@RequestBody LinqRequest request) {
+    public Mono<LinqResponse> handleLinqRequest(
+            @RequestBody LinqRequest request,
+            org.springframework.web.server.ServerWebExchange exchange) {
         log.info("Received /linq request: {}", request);
         log.info("Request link: {}", request.getLink());
         log.info("Request query: {}", request.getQuery());
@@ -44,7 +48,20 @@ public class LinqController {
                 log.info("Step 2 llmConfig: {}", request.getQuery().getWorkflow().get(1).getLlmConfig());
             }
         }
-        return linqService.processLinqRequest(request);
+        return teamContextService.getTeamFromContext(exchange)
+                .flatMap(teamId -> {
+                    // Ensure params map exists
+                    if (request.getQuery() == null) {
+                        request.setQuery(new LinqRequest.Query());
+                    }
+                    if (request.getQuery().getParams() == null) {
+                        request.getQuery().setParams(new HashMap<>());
+                    }
+                    // Add teamId to params if not already present
+                    request.getQuery().getParams().putIfAbsent("teamId", teamId);
+                    log.info("Setting teamId to: {}", teamId);
+                    return linqService.processLinqRequest(request);
+                });
     }
 
     @PostMapping("/convert")

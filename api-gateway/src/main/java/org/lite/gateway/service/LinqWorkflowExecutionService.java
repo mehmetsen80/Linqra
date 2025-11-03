@@ -40,10 +40,11 @@ public interface LinqWorkflowExecutionService {
     Flux<LinqWorkflowExecution> getWorkflowExecutions(String workflowId);
 
     /**
-     * Get all executions for the current team
+     * Get all executions for a specific team
+     * @param teamId The team ID
      * @return Flux of workflow executions
      */
-    Flux<LinqWorkflowExecution> getTeamExecutions();
+    Flux<LinqWorkflowExecution> getTeamExecutions(String teamId);
 
     /**
      * Get a specific execution by ID
@@ -60,9 +61,10 @@ public interface LinqWorkflowExecutionService {
     Mono<LinqWorkflowExecution> getExecutionByAgentExecutionId(String agentExecutionId);
 
     /**
-     * Delete a specific execution by ID
+     * Delete a specific execution by ID for a specific team
      * @param executionId The execution ID
+     * @param teamId The team ID
      * @return Mono<Void> indicating the deletion
      */
-    Mono<Void> deleteExecution(String executionId);
+    Mono<Void> deleteExecution(String executionId, String teamId);
 } 

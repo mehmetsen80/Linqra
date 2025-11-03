@@ -24,7 +24,7 @@ public class ExecutionQueueController {
      */
     @GetMapping
     public Flux<ExecutionQueue> getQueue(ServerWebExchange exchange) {
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
             .flatMapMany(teamId -> {
                 log.info("📋 Getting execution queue for team: {}", teamId);
                 return executionQueueService.getQueueForTeam(teamId);
@@ -36,7 +36,7 @@ public class ExecutionQueueController {
      */
     @PostMapping
     public Mono<ExecutionQueue> addToQueue(@RequestBody AddToQueueRequest request, ServerWebExchange exchange) {
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
             .flatMap(teamId -> {
                 log.info("📋 Adding execution to queue: {} for team: {}", request.getExecutionId(), teamId);
                 return executionQueueService.addToQueue(
@@ -56,7 +56,7 @@ public class ExecutionQueueController {
      */
     @DeleteMapping("/{executionId}")
     public Mono<Void> removeFromQueue(@PathVariable String executionId, ServerWebExchange exchange) {
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
             .flatMap(teamId -> {
                 log.info("📋 Removing execution from queue: {} for team: {}", executionId, teamId);
                 return executionQueueService.removeFromQueue(executionId);
@@ -68,7 +68,7 @@ public class ExecutionQueueController {
      */
     @GetMapping("/next")
     public Mono<ExecutionQueue> getNextExecution(ServerWebExchange exchange) {
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
             .flatMap(teamId -> {
                 log.info("📋 Getting next execution for team: {}", teamId);
                 return executionQueueService.getNextExecution(teamId);

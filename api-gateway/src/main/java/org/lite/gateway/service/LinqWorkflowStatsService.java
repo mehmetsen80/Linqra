@@ -20,8 +20,9 @@ public interface LinqWorkflowStatsService {
     Mono<LinqWorkflowStats> getAgentTaskWorkflowStats(String agentTaskId);
 
     /**
-     * Get team-wide workflow statistics
+     * Get team-wide workflow statistics for a specific team
+     * @param teamId The team ID
      * @return Mono containing team statistics
      */
-    Mono<TeamWorkflowStats> getTeamStats();
+    Mono<TeamWorkflowStats> getTeamStats(String teamId);
 } 

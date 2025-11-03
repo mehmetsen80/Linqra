@@ -333,7 +333,7 @@ public class AgentTaskController {
             @RequestParam(defaultValue = "100") int limit,
             ServerWebExchange exchange) {
         
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
                 .flatMap(teamId -> 
                     agentAuthContextService.checkTeamAuthorization(teamId, exchange)
                             .flatMap(authContext -> 
@@ -370,7 +370,7 @@ public class AgentTaskController {
                     }
                     
                     // Get current team context from JWT token
-                    return teamContextService.getTeamFromContext()
+                    return teamContextService.getTeamFromContext(exchange)
                         .flatMap(teamId -> {
                             log.info("Using current team {} for ad-hoc execution", teamId);
                             return agentExecutionService.executeAdhocTask(agentTask, teamId, username);

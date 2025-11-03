@@ -8,6 +8,8 @@ import org.lite.gateway.service.LlmCostService;
 import org.lite.gateway.service.TeamContextService;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ServerWebExchange;
+
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -29,9 +31,10 @@ public class LlmPricingController {
      */
     @GetMapping("/{yearMonth}")
     public Flux<LlmPricingSnapshot> getPricingForMonth(
-        @PathVariable @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth
+        @PathVariable @DateTimeFormat(pattern = "yyyy-MM") YearMonth yearMonth,
+        ServerWebExchange exchange
     ) {
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
             .doOnNext(teamId -> log.info("Fetching pricing snapshots for team {} in {}", teamId, yearMonth))
             .flatMapMany(teamId -> llmCostService.getPricingSnapshotsForMonth(teamId, yearMonth));
     }
@@ -50,8 +53,8 @@ public class LlmPricingController {
      * Useful for manual refresh or when prices are updated
      */
     @PostMapping("/initialize-current-month")
-    public Mono<Map<String, String>> initializeCurrentMonthPricing() {
-        return teamContextService.getTeamFromContext()
+    public Mono<Map<String, String>> initializeCurrentMonthPricing(ServerWebExchange exchange) {
+        return teamContextService.getTeamFromContext(exchange)
             .doOnNext(teamId -> log.info("Manually initializing current month pricing snapshots for team {}", teamId))
             .flatMap(teamId -> llmCostService.initializeCurrentMonthPricing(teamId)
                 .thenReturn(Map.of(
@@ -74,12 +77,13 @@ public class LlmPricingController {
     @PostMapping("/backfill")
     public Mono<Map<String, Object>> backfillHistoricalPricing(
         @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth fromMonth,
-        @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth toMonth
+        @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth toMonth,
+        ServerWebExchange exchange
     ) {
         // Calculate number of months
         long monthCount = java.time.temporal.ChronoUnit.MONTHS.between(fromMonth, toMonth) + 1;
         
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
             .doOnNext(teamId -> log.info("Starting backfill of pricing snapshots for team {} from {} to {}", 
                 teamId, fromMonth, toMonth))
             .flatMap(teamId -> llmCostService.backfillHistoricalPricing(teamId, fromMonth, toMonth)

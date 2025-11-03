@@ -48,7 +48,7 @@ public class DashboardController {
         @RequestParam(required = false) String fromDate,
         @RequestParam(required = false) String toDate
     ) {
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
             .doOnNext(teamId -> log.info("Fetching LLM usage for team: {}", teamId))
             .flatMap(teamId -> llmCostService.getTeamLlmUsage(teamId, fromDate, toDate))
             .doOnSuccess(stats -> log.info("Successfully fetched LLM usage stats"))

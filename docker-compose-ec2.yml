@@ -353,6 +353,9 @@ services:
       MILVUS_PORT: 19530
       MILVUS_USERNAME: milvus_admin
       MILVUS_PASSWORD: Linqra2024!
+      # AWS S3 Configuration - uses EC2 IAM role, no credentials needed
+      AWS_REGION: ${AWS_REGION:-us-west-2}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-linqra-knowledge-hub}
       # Docker networking optimizations
       JAVA_OPTS: "-Djava.net.preferIPv4Stack=true -Dsun.net.client.defaultConnectTimeout=5000 -Dsun.net.client.defaultReadTimeout=30000"
       DOCKER_CONTAINER: "true"

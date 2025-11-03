@@ -257,8 +257,9 @@
 }
 
 /* Style the LLM dropdown */
-.nav-link-dropdown {
+.app-header .nav-link-dropdown {
   color: var(--text-muted) !important;
+  opacity: 0.85 !important;
   text-decoration: none !important;
   padding: 0.5rem 0.75rem !important;
   border-radius: 10px;
@@ -268,12 +269,13 @@
   border: none !important;
 }
 
-.nav-link-dropdown:hover {
+.app-header .nav-link-dropdown:hover {
   background-color: rgba(255, 255, 255, 0.1) !important;
   color: var(--text-light) !important;
+  opacity: 1 !important;
 }
 
-.nav-link-dropdown:focus {
+.app-header .nav-link-dropdown:focus {
   box-shadow: none !important;
   background-color: rgba(255, 255, 255, 0.1) !important;
 }

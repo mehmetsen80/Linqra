@@ -11,6 +11,7 @@ import {
     Title,
     Tooltip,
     Legend,
+    Filler,
 } from 'chart.js';
 import { useTeam } from '../../../contexts/TeamContext';
 import agentMonitoringService from '../../../services/agentMonitoringService';
@@ -27,7 +28,8 @@ ChartJS.register(
     PointElement,
     Title,
     Tooltip,
-    Legend
+    Legend,
+    Filler
 );
 
 const AgentStats = ({ agentId = null }) => {

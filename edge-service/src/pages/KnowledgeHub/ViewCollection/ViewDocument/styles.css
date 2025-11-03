@@ -1,0 +1,66 @@
+.view-document-container {
+  padding: 20px;
+}
+
+.view-document-container .card {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.view-document-container .bg-light {
+  background-color: #f8f9fa !important;
+}
+
+.view-document-container h5 {
+  color: #333;
+  font-weight: 600;
+}
+
+.view-document-container .text-muted {
+  color: #6c757d !important;
+}
+
+.view-document-container code {
+  background-color: #ffffff;
+  border: 1px solid #e9ecef;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.view-document-container table {
+  font-size: 0.9em;
+}
+
+.view-document-container table thead th {
+  background-color: #f8f9fa;
+  border-bottom: 2px solid #dee2e6;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85em;
+  color: #495057;
+  letter-spacing: 0.5px;
+}
+
+.view-document-container .badge {
+  font-weight: 500;
+  padding: 5px 10px;
+}
+
+.view-document-container .text-primary {
+  color: var(--primary-color, #ed7534) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .view-document-container {
+    padding: 10px;
+  }
+  
+  .view-document-container .d-flex.gap-2 {
+    flex-direction: column;
+  }
+  
+  .view-document-container .card-body {
+    padding: 1rem;
+  }
+}

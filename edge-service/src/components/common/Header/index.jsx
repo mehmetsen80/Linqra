@@ -69,6 +69,8 @@ const Header = () => {
             </Dropdown>
             <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/execution-monitoring">Executions</Nav.Link>
+            <span className="nav-separator"> | </span>
+            <Nav.Link as={NavLink} to="/knowledge-hub">Knowledge Hub</Nav.Link>
           </Nav>
           {user ? (
             <div className="d-flex align-items-center gap-3">

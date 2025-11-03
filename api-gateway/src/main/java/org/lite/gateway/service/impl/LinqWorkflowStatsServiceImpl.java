@@ -11,7 +11,6 @@ import org.lite.gateway.entity.LinqWorkflowExecution;
 import org.lite.gateway.repository.LinqWorkflowRepository;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.lite.gateway.service.LinqWorkflowStatsService;
-import org.lite.gateway.service.TeamContextService;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -26,7 +25,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
     private final LinqWorkflowRepository workflowRepository;
-    private final TeamContextService teamContextService;
     private final LinqWorkflowExecutionRepository executionRepository;
 
     @Override
@@ -227,9 +225,8 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
     }
 
     @Override
-    public Mono<TeamWorkflowStats> getTeamStats() {
-        return teamContextService.getTeamFromContext()
-            .flatMap(teamId -> executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
+    public Mono<TeamWorkflowStats> getTeamStats(String teamId) {
+        return executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
                 .collectList()
                 .flatMap(executions -> {
                     TeamWorkflowStats stats = new TeamWorkflowStats();
@@ -387,6 +384,6 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                             
                             return stats;
                         });
-                }));
+                });
     }
 } 

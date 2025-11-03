@@ -4,7 +4,7 @@ export const knowledgeCollectionService = {
   // Get all knowledge collections for current team
   getAllCollections: async () => {
     try {
-      const response = await axiosInstance.get('/api/v1/knowledge/collections');
+      const response = await axiosInstance.get('/api/knowledge/collections');
       return {
         success: true,
         data: response.data
@@ -21,7 +21,7 @@ export const knowledgeCollectionService = {
   // Get a specific knowledge collection by ID
   getCollectionById: async (collectionId) => {
     try {
-      const response = await axiosInstance.get(`/api/v1/knowledge/collections/${collectionId}`);
+      const response = await axiosInstance.get(`/api/knowledge/collections/${collectionId}`);
       return {
         success: true,
         data: response.data
@@ -38,7 +38,7 @@ export const knowledgeCollectionService = {
   // Create a new knowledge collection
   createCollection: async (collectionData) => {
     try {
-      const response = await axiosInstance.post('/api/v1/knowledge/collections', collectionData);
+      const response = await axiosInstance.post('/api/knowledge/collections', collectionData);
       return {
         success: true,
         data: response.data
@@ -55,7 +55,7 @@ export const knowledgeCollectionService = {
   // Update an existing knowledge collection
   updateCollection: async (collectionId, collectionData) => {
     try {
-      const response = await axiosInstance.put(`/api/v1/knowledge/collections/${collectionId}`, collectionData);
+      const response = await axiosInstance.put(`/api/knowledge/collections/${collectionId}`, collectionData);
       return {
         success: true,
         data: response.data
@@ -72,7 +72,7 @@ export const knowledgeCollectionService = {
   // Delete a knowledge collection
   deleteCollection: async (collectionId) => {
     try {
-      await axiosInstance.delete(`/api/v1/knowledge/collections/${collectionId}`);
+      await axiosInstance.delete(`/api/knowledge/collections/${collectionId}`);
       return { success: true };
     } catch (error) {
       console.error('Error deleting knowledge collection:', error);
@@ -86,7 +86,7 @@ export const knowledgeCollectionService = {
   // Get collection count for current team
   getCollectionCount: async () => {
     try {
-      const response = await axiosInstance.get('/api/v1/knowledge/collections/count');
+      const response = await axiosInstance.get('/api/knowledge/collections/count');
       return {
         success: true,
         data: response.data

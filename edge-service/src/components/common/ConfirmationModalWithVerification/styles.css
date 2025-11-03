@@ -1,0 +1,42 @@
+.confirmation-modal-with-verification .verification-section {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  background-color: #f8f9fa;
+}
+
+.confirmation-modal-with-verification .verification-code {
+  display: inline-block;
+  padding: 12px 24px;
+  background-color: #ffffff;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: #495057;
+  font-family: 'Courier New', monospace;
+}
+
+.confirmation-modal-with-verification .form-control {
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: 2px;
+  font-family: 'Courier New', monospace;
+}
+
+.confirmation-modal-with-verification .form-control:focus {
+  border-color: var(--primary-color, #ed7534);
+  box-shadow: 0 0 0 0.2rem rgba(237, 117, 52, 0.25);
+}
+
+.confirmation-modal-with-verification .form-label {
+  color: #495057;
+  font-size: 0.95rem;
+}
+
+.confirmation-modal-with-verification .invalid-feedback {
+  text-align: center;
+  font-weight: 600;
+}
+

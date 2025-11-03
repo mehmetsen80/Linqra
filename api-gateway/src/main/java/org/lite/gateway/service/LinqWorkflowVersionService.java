@@ -23,17 +23,28 @@ public interface LinqWorkflowVersionService {
     Mono<LinqWorkflow> rollbackToVersion(String workflowId, String versionId);
 
     /**
-     * Get the version history of a workflow
+     * Rollback a workflow to a specific version for a specific team
      * @param workflowId The ID of the workflow
-     * @return Flux containing all versions of the workflow
+     * @param versionId The ID of the version to rollback to
+     * @param teamId The team ID
+     * @return Mono containing the rolled back workflow
      */
-    Flux<LinqWorkflowVersion> getVersionHistory(String workflowId);
+    Mono<LinqWorkflow> rollbackToVersion(String workflowId, String versionId, String teamId);
 
     /**
-     * Get a specific version of a workflow
+     * Get the version history of a workflow for a specific team
+     * @param workflowId The ID of the workflow
+     * @param teamId The team ID
+     * @return Flux containing all versions of the workflow
+     */
+    Flux<LinqWorkflowVersion> getVersionHistory(String workflowId, String teamId);
+
+    /**
+     * Get a specific version of a workflow for a specific team
      * @param workflowId The ID of the workflow
      * @param versionId The ID of the version to retrieve
+     * @param teamId The team ID
      * @return Mono containing the requested workflow version
      */
-    Mono<LinqWorkflowVersion> getVersion(String workflowId, String versionId);
+    Mono<LinqWorkflowVersion> getVersion(String workflowId, String versionId, String teamId);
 } 

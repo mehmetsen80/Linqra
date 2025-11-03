@@ -9,7 +9,6 @@ import org.lite.gateway.model.ExecutionStatus;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
-import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.QueuedWorkflowService;
@@ -17,7 +16,7 @@ import org.lite.gateway.service.WorkflowExecutionContext;
 import org.lite.gateway.service.LlmCostService;
 import org.lite.gateway.service.ExecutionMonitoringService;
 import org.lite.gateway.dto.ExecutionProgressUpdate;
-import org.lite.gateway.repository.AgentExecutionRepository;
+
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -38,7 +37,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionService {
     private final LinqWorkflowExecutionRepository executionRepository;
-    private final TeamContextService teamContextService;
     private final LinqLlmModelRepository linqLlmModelRepository;
     private final LinqLlmModelService linqLlmModelService;
     private final LinqMicroService linqMicroService;
@@ -54,21 +52,23 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         Map<String, Object> globalParams = request.getQuery().getParams();
         WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
 
-        // Prefer teamId from params if present; otherwise fallback to auth context
-        Mono<String> teamIdMono = Mono.defer(() -> {
-            String teamFromParams = null;
-            if (request.getQuery() != null && request.getQuery().getParams() != null) {
-                Object val = request.getQuery().getParams().get("teamId");
-                if (val != null) teamFromParams = String.valueOf(val);
-            }
-            if (teamFromParams != null && !teamFromParams.isBlank()) {
-                return Mono.just(teamFromParams);
-            }
-            return teamContextService.getTeamFromContext()
-                .switchIfEmpty(Mono.error(new ResponseStatusException(
+        // Extract teamId from params (must be present from controller/executor)
+        String teamId;
+        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            Object val = request.getQuery().getParams().get("teamId");
+            if (val != null) {
+                teamId = String.valueOf(val);
+            } else {
+                return Mono.error(new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
-                    "Team context not found. Please ensure you are authenticated with a valid team.")));
-        });
+                    "Team ID must be provided in params"));
+            }
+        } else {
+            return Mono.error(new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED,
+                "Team ID must be provided in params"));
+        }
+        String finalTeamId = teamId; // Make effectively final for use in lambdas
 
         // Execute steps synchronously or asynchronously based on configuration
         Mono<LinqResponse> workflowMono = Mono.just(new LinqResponse());
@@ -93,7 +93,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     asyncStep.setLlmConfig(step.getLlmConfig()); // Preserve llmConfig for async execution
                     
                     // Queue the step for async execution
-                    return queuedWorkflowService.queueAsyncStep(request.getQuery().getWorkflowId(),step.getStep(), asyncStep)
+                    return queuedWorkflowService.queueAsyncStep(request.getQuery().getWorkflowId(), step.getStep(), asyncStep, finalTeamId)
                             .doOnSuccess(v -> log.info("Async step queued successfully for workflow {} step {}", 
                                 request.getQuery().getWorkflowId(), step.getStep()))
                             .doOnError(e -> {
@@ -155,36 +155,36 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 stepRequest.setExecutedBy(request.getExecutedBy());
 
                 // Execute the step
-                return teamIdMono
-                    .flatMap(teamId -> {
-                        // Try to get modelName from llmConfig first, then fallback to target-only search
-                        final String modelName = (step.getLlmConfig() != null && step.getLlmConfig().getModel() != null) 
-                            ? step.getLlmConfig().getModel() : null;
-                        
-                        if (modelName != null) {
-                            log.info("🔍 Searching for LLM model configuration: modelCategory={}, modelName={}, teamId={}", 
-                                step.getTarget(), modelName, teamId);
-                            return linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(step.getTarget(), modelName, teamId)
-                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}", 
-                                    llmModel.getModelCategory(), llmModel.getModelName()))
-                                .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {} with modelName {}: {}", 
-                                    step.getTarget(), modelName, error.getMessage()))
-                                .switchIfEmpty(Mono.defer(() -> {
-                                    log.warn("⚠️ No LLM model found with modelName {}, falling back to target-only search", modelName);
-                                    return linqLlmModelRepository.findByModelCategoryAndTeamId(step.getTarget(), teamId)
-                                        .next() // Take the first result
-                                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration (fallback): modelCategory={}, modelName={}", 
-                                            llmModel.getModelCategory(), llmModel.getModelName()));
-                                }));
-                        } else {
-                            log.info("🔍 Searching for LLM model configuration: modelCategory={}, teamId={}", step.getTarget(), teamId);
-                            return linqLlmModelRepository.findByModelCategoryAndTeamId(step.getTarget(), teamId)
+                // Try to get modelName from llmConfig first, then fallback to target-only search
+                final String modelName = (step.getLlmConfig() != null && step.getLlmConfig().getModel() != null) 
+                    ? step.getLlmConfig().getModel() : null;
+                
+                Mono<org.lite.gateway.entity.LinqLlmModel> llmModelMono;
+                if (modelName != null) {
+                    log.info("🔍 Searching for LLM model configuration: modelCategory={}, modelName={}, teamId={}", 
+                        step.getTarget(), modelName, finalTeamId);
+                    llmModelMono = linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(step.getTarget(), modelName, finalTeamId)
+                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}", 
+                            llmModel.getModelCategory(), llmModel.getModelName()))
+                        .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {} with modelName {}: {}", 
+                            step.getTarget(), modelName, error.getMessage()))
+                        .switchIfEmpty(Mono.defer(() -> {
+                            log.warn("⚠️ No LLM model found with modelName {}, falling back to target-only search", modelName);
+                            return linqLlmModelRepository.findByModelCategoryAndTeamId(step.getTarget(), finalTeamId)
                                 .next() // Take the first result
-                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}", 
-                                    llmModel.getModelCategory(), llmModel.getModelName()))
-                                .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {}: {}", step.getTarget(), error.getMessage()));
-                        }
-                    })
+                                .doOnNext(llmModel -> log.info("✅ Found LLM model configuration (fallback): modelCategory={}, modelName={}", 
+                                    llmModel.getModelCategory(), llmModel.getModelName()));
+                        }));
+                } else {
+                    log.info("🔍 Searching for LLM model configuration: modelCategory={}, teamId={}", step.getTarget(), finalTeamId);
+                    llmModelMono = linqLlmModelRepository.findByModelCategoryAndTeamId(step.getTarget(), finalTeamId)
+                        .next() // Take the first result
+                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}", 
+                            llmModel.getModelCategory(), llmModel.getModelName()))
+                        .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {}: {}", step.getTarget(), error.getMessage()));
+                }
+                
+                return llmModelMono
                     .doOnSuccess(llmModel -> {
                         if (llmModel == null) {
                             log.warn("⚠️ No LLM model configuration found for modelCategory: {}, will try microservice", step.getTarget());
@@ -235,12 +235,11 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                             String.format("Workflow step %d failed: %s", step.getStep(), error.getMessage())
                         ));
                     });
-                    }));
+                }));
             });
         }
 
-        return workflowMono.flatMap(response -> 
-            teamIdMono.map(teamId -> {
+        return workflowMono.map(response -> {
                 // Build WorkflowResult
                 LinqResponse.WorkflowResult workflowResult = new LinqResponse.WorkflowResult();
                 List<LinqResponse.WorkflowStep> stepResultList = steps.stream()
@@ -267,25 +266,26 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     .anyMatch(meta -> "error".equals(meta.getStatus()) || "failed".equals(meta.getStatus()));
                 metadata.setStatus(hasFailedStep ? "error" : "success");
                 
-                metadata.setTeamId(teamId);
+                metadata.setTeamId(finalTeamId);
                 metadata.setCacheHit(false);
                 metadata.setWorkflowMetadata(stepMetadata);
                 response.setMetadata(metadata);
                 return response;
             })
-        ).doFinally(signalType -> {
-            // Clean up memory-intensive data structures after workflow completion
-            // Note: stepResults and globalParams are copied to response, so they can be safely cleared
-            // stepMetadata is directly referenced in response, so we don't clear it
-            stepResults.clear();
-            if (globalParams != null) {
-                globalParams.clear();
-            }
-            // Force garbage collection hint for memory cleanup
-            log.info("🧹 Starting post-execution cleanup for workflow");
-            System.gc();
-            log.info("🧹 Completed post-execution cleanup for workflow");
-        }).onErrorResume(error -> {
+            .doFinally(signalType -> {
+                // Clean up memory-intensive data structures after workflow completion
+                // Note: stepResults and globalParams are copied to response, so they can be safely cleared
+                // stepMetadata is directly referenced in response, so we don't clear it
+                stepResults.clear();
+                if (globalParams != null) {
+                    globalParams.clear();
+                }
+                // Force garbage collection hint for memory cleanup
+                log.info("🧹 Starting post-execution cleanup for workflow");
+                System.gc();
+                log.info("🧹 Completed post-execution cleanup for workflow");
+            })
+            .onErrorResume(error -> {
             // Create error response
             LinqResponse errorResponse = new LinqResponse();
             LinqResponse.Metadata metadata = new LinqResponse.Metadata();
@@ -586,9 +586,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     @Override
-    public Flux<LinqWorkflowExecution> getTeamExecutions() {
-        return teamContextService.getTeamFromContext()
-            .flatMapMany(teamId -> executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt")))
+    public Flux<LinqWorkflowExecution> getTeamExecutions(String teamId) {
+        return executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
             .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
     }
 
@@ -614,16 +613,15 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     @Override
-    public Mono<Void> deleteExecution(String executionId) {
-        return teamContextService.getTeamFromContext()
-            .flatMap(teamId -> executionRepository.findById(executionId)
-                .filter(execution -> execution.getTeamId().equals(teamId))
-                .switchIfEmpty(Mono.error(new ResponseStatusException(
-                    HttpStatus.NOT_FOUND, 
-                    "Execution not found or access denied")))
-                .flatMap(execution -> executionRepository.delete(execution)
-                    .doOnSuccess(v -> log.info("Deleted execution: {}", executionId))
-                    .doOnError(error -> log.error("Error deleting execution: {}", error.getMessage()))));
+    public Mono<Void> deleteExecution(String executionId, String teamId) {
+        return executionRepository.findById(executionId)
+            .filter(execution -> execution.getTeamId().equals(teamId))
+            .switchIfEmpty(Mono.error(new ResponseStatusException(
+                HttpStatus.NOT_FOUND, 
+                "Execution not found or access denied")))
+            .flatMap(execution -> executionRepository.delete(execution)
+                .doOnSuccess(v -> log.info("Deleted execution: {}", executionId))
+                .doOnError(error -> log.error("Error deleting execution: {}", error.getMessage())));
     }
 
     private Map<String, Object> resolvePlaceholdersForMap(Map<String, Object> input, WorkflowExecutionContext context) {

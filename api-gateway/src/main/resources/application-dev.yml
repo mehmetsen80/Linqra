@@ -189,3 +189,20 @@ milvus:
   port: ${MILVUS_PORT:19530}
   username: ${MILVUS_USERNAME}
   password: ${MILVUS_PASSWORD}
+
+# Knowledge Hub S3 Configuration
+aws:
+  region: ${AWS_REGION:us-west-2}
+  s3:
+    bucket: ${AWS_S3_BUCKET:linqra-knowledge-hub-dev}
+
+linqra:
+  knowledgehub:
+    s3:
+      bucket-name: ${AWS_S3_BUCKET:linqra-knowledge-hub-dev}
+      raw-prefix: raw
+      processed-prefix: processed
+      presigned-url-expiration: PT15M  # 15 minutes
+      max-file-size: 52428800  # 50MB in bytes
+    redis:
+      document-processing-channel: document-processing-queue

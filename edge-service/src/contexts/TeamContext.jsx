@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { useAuth } from './AuthContext';
 import { teamService } from '../services/teamService';
 import authService from '../services/authService';
 import { isSuperAdmin } from '../utils/roleUtils';
@@ -17,24 +18,11 @@ export const useTeam = () => {
 
 // Export the provider component
 export const TeamProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, isAuthenticated } = useAuth();
   const [teams, setTeams] = useState([]);
   const [userTeams, setUserTeams] = useState([]);
   const [currentTeam, setCurrentTeam] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // Get user info from localStorage
-  useEffect(() => {
-    const authState = JSON.parse(localStorage.getItem('authState') || '{}');
-    if (authState.user && authState.isAuthenticated) {
-      setUser(authState.user);
-      setIsAuthenticated(true);
-    } else {
-      setUser(null);
-      setIsAuthenticated(false);
-    }
-  }, []);
 
   const fetchAllTeams = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -109,6 +97,9 @@ export const TeamProvider = ({ children }) => {
     console.log('Auth state changed:', isAuthenticated); // Debug log
     if (isAuthenticated) {
       fetchUserTeams();
+    } else {
+      // If not authenticated, set loading to false immediately
+      setLoading(false);
     }
   }, [isAuthenticated, fetchUserTeams]);
 
@@ -138,10 +129,6 @@ export const TeamProvider = ({ children }) => {
         
         if (result.data) {
           console.log('✅ JWT token updated successfully');
-          
-          // Update local user state with new token data
-          setUser(result.data.user);
-          setIsAuthenticated(true);
           
           // Update the last active timestamp in the backend
           try {
@@ -194,4 +181,4 @@ export const TeamProvider = ({ children }) => {
       {children}
     </TeamContext.Provider>
   );
-}; 
+};

@@ -8,7 +8,6 @@ import org.lite.gateway.dto.LinqResponse.QueuedWorkflowStep;
 import org.lite.gateway.service.QueuedWorkflowService;
 import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
-import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.springframework.stereotype.Service;
@@ -41,128 +40,115 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     private final LinqLlmModelRepository linqLlmModelRepository;
     private final LinqLlmModelService linqLlmModelService;
     private final LinqMicroService linqMicroService;
-    private final TeamContextService teamContextService;
     private final LinqWorkflowExecutionRepository executionRepository;
 
     @Override
-    public Mono<Void> queueAsyncStep(String workflowId, int stepNumber, LinqResponse.WorkflowStep step) {
-        return teamContextService.getTeamFromContext()
-                .flatMap(teamId -> {
-                    try {
-                        // Generate a unique execution ID for this step
-                        String executionId = UUID.randomUUID().toString();
-                        
-                        // Set the execution ID in the step object
-                        step.setExecutionId(executionId);
-                        
-                        // Create the step execution with the unique ID
-                        QueuedWorkflowStep stepExecution = new QueuedWorkflowStep();
-                        stepExecution.setWorkflowId(workflowId);  // Set the workflowId
-                        stepExecution.setStepId(String.valueOf(stepNumber)); // Use step number as stepId
-                        stepExecution.setStatus("queued");
-                        stepExecution.setQueuedAt(LocalDateTime.now());
-                        stepExecution.setExecutionId(executionId);  // Add the execution ID
-                        
-                        // Use workflowId:stepNumber:executionId as the Redis key
-                        String redisKey = String.format("%s:%d:%s", workflowId, stepNumber, executionId);
-                        
-                        // Create the task to be queued
-                        AsyncStepTask task = new AsyncStepTask(
-                            workflowId,
-                            String.valueOf(stepNumber), // Use step number as stepId
-                            step,
-                            step.getParams(),
-                            step.getAction(),
-                            step.getIntent(),
-                            teamId
-                        );
-                        
-                        // First store the status
-                        return asyncStepStatusRedisTemplate.opsForValue()
-                                .set(redisKey, stepExecution, Duration.ofHours(24))
-                                .doOnSuccess(v -> log.info("Queued async step for workflow {} step {} with execution ID {}", 
-                                    workflowId, stepNumber, executionId))
-                                .doOnError(e -> log.error("Failed to queue async step for workflow {} step {}: {}", 
-                                    workflowId, stepNumber, e.getMessage(), e))
-                                // Then add the task to the queue
-                                .then(asyncStepQueueRedisTemplate.opsForList()
-                                    .rightPush(QUEUE_KEY, objectMapper.writeValueAsString(task))
-                                    .doOnSuccess(v -> log.info("Added task to queue for workflow {} step {} with execution ID {}", 
-                                        workflowId, stepNumber, executionId))
-                                    .doOnError(e -> log.error("Failed to add task to queue for workflow {} step {}: {}", 
-                                        workflowId, stepNumber, e.getMessage(), e)))
-                                .then();
-                    } catch (Exception e) {
-                        log.error("Failed to queue async step: {}", e.getMessage(), e);
-                        return Mono.error(e);
-                    }
-                });
+    public Mono<Void> queueAsyncStep(String workflowId, int stepNumber, LinqResponse.WorkflowStep step, String teamId) {
+        try {
+            // Generate a unique execution ID for this step
+            String executionId = UUID.randomUUID().toString();
+            
+            // Set the execution ID in the step object
+            step.setExecutionId(executionId);
+            
+            // Create the step execution with the unique ID
+            QueuedWorkflowStep stepExecution = new QueuedWorkflowStep();
+            stepExecution.setWorkflowId(workflowId);  // Set the workflowId
+            stepExecution.setStepId(String.valueOf(stepNumber)); // Use step number as stepId
+            stepExecution.setStatus("queued");
+            stepExecution.setQueuedAt(LocalDateTime.now());
+            stepExecution.setExecutionId(executionId);  // Add the execution ID
+            
+            // Use workflowId:stepNumber:executionId as the Redis key
+            String redisKey = String.format("%s:%d:%s", workflowId, stepNumber, executionId);
+            
+            // Create the task to be queued
+            AsyncStepTask task = new AsyncStepTask(
+                workflowId,
+                String.valueOf(stepNumber), // Use step number as stepId
+                step,
+                step.getParams(),
+                step.getAction(),
+                step.getIntent(),
+                teamId
+            );
+            
+            // First store the status
+            return asyncStepStatusRedisTemplate.opsForValue()
+                    .set(redisKey, stepExecution, Duration.ofHours(24))
+                    .doOnSuccess(v -> log.info("Queued async step for workflow {} step {} with execution ID {}", 
+                        workflowId, stepNumber, executionId))
+                    .doOnError(e -> log.error("Failed to queue async step for workflow {} step {}: {}", 
+                        workflowId, stepNumber, e.getMessage(), e))
+                    // Then add the task to the queue
+                    .then(asyncStepQueueRedisTemplate.opsForList()
+                        .rightPush(QUEUE_KEY, objectMapper.writeValueAsString(task))
+                        .doOnSuccess(v -> log.info("Added task to queue for workflow {} step {} with execution ID {}", 
+                            workflowId, stepNumber, executionId))
+                        .doOnError(e -> log.error("Failed to add task to queue for workflow {} step {}: {}", 
+                            workflowId, stepNumber, e.getMessage(), e)))
+                    .then();
+        } catch (Exception e) {
+            log.error("Failed to queue async step: {}", e.getMessage(), e);
+            return Mono.error(e);
+        }
     }
 
     @Override
     public Mono<QueuedWorkflowStep> getAsyncStepStatus(String workflowId, int stepNumber) {
-        return teamContextService.getTeamFromContext()
-                .flatMap(teamId -> {
-                    // Get all keys matching the pattern workflowId:stepNumber:*
-                    String pattern = String.format("%s:%d:*", workflowId, stepNumber);
-                    return asyncStepStatusRedisTemplate.keys(pattern)
-                            .collectList()
-                            .flatMap(keys -> {
-                                if (keys.isEmpty()) {
-                                    return Mono.empty();
-                                }
-                                // Get the most recent execution (last key in the list)
-                                String latestKey = keys.get(keys.size() - 1);
-                                return asyncStepStatusRedisTemplate.opsForValue().get(latestKey);
-                            });
+        // Get all keys matching the pattern workflowId:stepNumber:*
+        String pattern = String.format("%s:%d:*", workflowId, stepNumber);
+        return asyncStepStatusRedisTemplate.keys(pattern)
+                .collectList()
+                .flatMap(keys -> {
+                    if (keys.isEmpty()) {
+                        return Mono.empty();
+                    }
+                    // Get the most recent execution (last key in the list)
+                    String latestKey = keys.get(keys.size() - 1);
+                    return asyncStepStatusRedisTemplate.opsForValue().get(latestKey);
                 });
     }
 
     @Override
     public Mono<Void> cancelAsyncStep(String workflowId, int stepNumber) {
-        return teamContextService.getTeamFromContext()
-                .flatMap(teamId -> {
-                    // Get all keys matching the pattern workflowId:stepNumber:*
-                    String pattern = String.format("%s:%d:*", workflowId, stepNumber);
-                    return asyncStepStatusRedisTemplate.keys(pattern)
-                            .collectList()
-                            .flatMap(keys -> {
-                                if (keys.isEmpty()) {
-                                    return Mono.error(new RuntimeException("No queued step found for workflow " + workflowId + " step " + stepNumber));
-                                }
-                                // Get the most recent execution (last key in the list)
-                                String latestKey = keys.get(keys.size() - 1);
-                                return asyncStepStatusRedisTemplate.opsForValue().get(latestKey)
-                                        .flatMap(stepExecution -> {
-                                            stepExecution.setStatus("cancelled");
-                                            stepExecution.setCancelledAt(LocalDateTime.now());
-                                            return asyncStepStatusRedisTemplate.opsForValue()
-                                                    .set(latestKey, stepExecution, Duration.ofHours(24))
-                                                    .then();
-                                        });
+        // Get all keys matching the pattern workflowId:stepNumber:*
+        String pattern = String.format("%s:%d:*", workflowId, stepNumber);
+        return asyncStepStatusRedisTemplate.keys(pattern)
+                .collectList()
+                .flatMap(keys -> {
+                    if (keys.isEmpty()) {
+                        return Mono.error(new RuntimeException("No queued step found for workflow " + workflowId + " step " + stepNumber));
+                    }
+                    // Get the most recent execution (last key in the list)
+                    String latestKey = keys.get(keys.size() - 1);
+                    return asyncStepStatusRedisTemplate.opsForValue().get(latestKey)
+                            .flatMap(stepExecution -> {
+                                stepExecution.setStatus("cancelled");
+                                stepExecution.setCancelledAt(LocalDateTime.now());
+                                return asyncStepStatusRedisTemplate.opsForValue()
+                                        .set(latestKey, stepExecution, Duration.ofHours(24))
+                                        .then();
                             });
                 });
     }
 
     @Override
     public Mono<Map<String, QueuedWorkflowStep>> getAllAsyncSteps(String workflowId) {
-        return teamContextService.getTeamFromContext()
-                .flatMap(teamId -> {
-                    String pattern = String.format("%s:*", workflowId);
-                    return asyncStepStatusRedisTemplate.keys(pattern)
-                            .collectList()
-                            .flatMap(keys -> {
-                                if (keys.isEmpty()) {
-                                    return Mono.empty();
-                                }
-                                return asyncStepStatusRedisTemplate.opsForValue().multiGet(keys)
-                                        .map(steps -> steps.stream()
-                                            .collect(Collectors.toMap(
-                                                QueuedWorkflowStep::getStepId,
-                                                step -> step
-                                            ))
-                                        );
-                            });
+        String pattern = String.format("%s:*", workflowId);
+        return asyncStepStatusRedisTemplate.keys(pattern)
+                .collectList()
+                .flatMap(keys -> {
+                    if (keys.isEmpty()) {
+                        return Mono.empty();
+                    }
+                    return asyncStepStatusRedisTemplate.opsForValue().multiGet(keys)
+                            .map(steps -> steps.stream()
+                                .collect(Collectors.toMap(
+                                    QueuedWorkflowStep::getStepId,
+                                    step -> step
+                                ))
+                            );
                 });
     }
 

@@ -2,14 +2,14 @@ import React from 'react';
 import classNames from 'classnames';
 import './styles.css';
 
-const Button = ({ 
+const Button = React.forwardRef(({ 
   children, 
   variant = 'primary', // 'primary' or 'secondary'
   className, 
   fullWidth,
   loading,
   ...props 
-}) => {
+}, ref) => {
   const buttonClasses = classNames(
     'custom-button',
     `custom-button-${variant}`,
@@ -19,6 +19,7 @@ const Button = ({
 
   return (
     <button 
+      ref={ref}
       className={buttonClasses}
       disabled={loading}
       {...props}
@@ -31,6 +32,8 @@ const Button = ({
       ) : children}
     </button>
   );
-};
+});
+
+Button.displayName = 'Button';
 
 export default Button; 

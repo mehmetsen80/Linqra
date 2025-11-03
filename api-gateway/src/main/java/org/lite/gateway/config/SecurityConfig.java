@@ -1,10 +1,12 @@
 package org.lite.gateway.config;
 
 import io.jsonwebtoken.security.Keys;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.filter.ApiKeyAuthenticationFilter;
 import org.lite.gateway.service.DynamicRouteService;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +36,7 @@ import org.springframework.security.web.server.authorization.AuthorizationContex
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
+import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
 import reactor.core.publisher.Mono;
 
@@ -53,9 +56,8 @@ import org.lite.gateway.service.TeamContextService;
 @Configuration
 @EnableWebFluxSecurity
 @EnableReactiveMethodSecurity
-@RequiredArgsConstructor
 @Slf4j
-public class SecurityConfig {
+public class SecurityConfig implements BeanFactoryAware {
 
     @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}")
     private String jwkSetUri;
@@ -85,7 +87,33 @@ public class SecurityConfig {
     private final RedisTemplate<String, String> redisTemplate;
     private final ApiRouteRepository apiRouteRepository;
     private final TeamRouteRepository teamRouteRepository;
-    private final TeamContextService teamContextService;
+    
+    private BeanFactory beanFactory;
+
+    public SecurityConfig(DynamicRouteService dynamicRouteService,
+                         ReactiveClientRegistrationRepository customClientRegistrationRepository,
+                         ReactiveOAuth2AuthorizedClientService customAuthorizedClientService,
+                         ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
+                         RedisTemplate<String, String> redisTemplate,
+                         ApiRouteRepository apiRouteRepository,
+                         TeamRouteRepository teamRouteRepository) {
+        this.dynamicRouteService = dynamicRouteService;
+        this.customClientRegistrationRepository = customClientRegistrationRepository;
+        this.customAuthorizedClientService = customAuthorizedClientService;
+        this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
+        this.redisTemplate = redisTemplate;
+        this.apiRouteRepository = apiRouteRepository;
+        this.teamRouteRepository = teamRouteRepository;
+    }
+
+    @Override
+    public void setBeanFactory(BeanFactory beanFactory) throws BeansException {
+        this.beanFactory = beanFactory;
+    }
+
+    private TeamContextService getTeamContextService() {
+        return beanFactory.getBean(TeamContextService.class);
+    }
 
     // List of public endpoints (Ant-style patterns allowed)
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
@@ -323,7 +351,7 @@ public class SecurityConfig {
             // For /r/ paths, check route permissions first
             if (path.startsWith("/r/") && !path.contains("/whatsapp/webhook")) {
                 // log.info("Checking route permissions for path: {}", path);
-                return checkRoutePermission(path)
+                return checkRoutePermission(path, authorizationContext.getExchange())
                         .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path, hasPermission))
                         .flatMap(hasPermission -> {
                             if (!hasPermission) {
@@ -419,7 +447,7 @@ public class SecurityConfig {
                     .defaultIfEmpty(new AuthorizationDecision(false)); // Default to unauthorized if no valid authentication
     }
 
-    private Mono<Boolean> checkRoutePermission(String path) {
+    private Mono<Boolean> checkRoutePermission(String path, ServerWebExchange exchange) {
         Pattern routePattern = Pattern.compile("/r/([^/]+)/");
         Matcher routeMatcher = routePattern.matcher(path);
 
@@ -431,7 +459,7 @@ public class SecurityConfig {
         String routeIdentifier = routeMatcher.group(1);
         // log.info("Route identifier found: {}", routeIdentifier);
 
-        return teamContextService.getTeamFromContext()
+        return getTeamContextService().getTeamFromContext(exchange)
                 .doOnNext(teamId -> log.info("Checking team {} permission for route: {}", teamId, routeIdentifier))
                 .flatMap(teamId -> {
                     String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);

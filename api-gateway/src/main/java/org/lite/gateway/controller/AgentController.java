@@ -38,7 +38,7 @@ public class AgentController {
         
         log.info("Creating agent '{}'", agent.getName());
         
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
                 .flatMap(teamId -> {
                     log.info("Creating agent '{}' for team {}", agent.getName(), teamId);
                     agent.setTeamId(teamId); // Set teamId from context
@@ -93,7 +93,7 @@ public class AgentController {
         
         log.info("Deleting agent {}", agentId);
         
-        return teamContextService.getTeamFromContext()
+        return teamContextService.getTeamFromContext(exchange)
                 .flatMap(teamId -> {
                     log.info("Deleting agent {} for team {}", agentId, teamId);
                     

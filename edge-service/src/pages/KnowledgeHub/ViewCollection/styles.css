@@ -1,0 +1,99 @@
+.view-collection-container {
+  padding: 0;
+}
+
+.breadcrumb-card {
+  background-color: #f8f9fa;
+  border: none;
+}
+
+.view-collection-container .breadcrumb-item a {
+  color: var(--primary-color, #ed7534);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.view-collection-container .breadcrumb-item a:hover {
+  color: var(--primary-dark, #d35f28);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.view-collection-container .breadcrumb-item.active {
+  color: #6c757d;
+}
+
+.page-icon {
+  font-size: 1.5rem;
+  color: var(--primary-color, #ed7534);
+}
+
+.empty-state-icon {
+  font-size: 4rem;
+  color: #d1d5db;
+  margin-bottom: 1rem;
+}
+
+.document-icon {
+  font-size: 1.5rem;
+  color: var(--primary-color, #ed7534);
+}
+
+.document-name {
+  font-weight: 500;
+  color: #1f2937;
+}
+
+.table thead th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  padding: 0.75rem 1rem;
+}
+
+.table tbody td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Drag and Drop Upload */
+.upload-area {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 3rem;
+  text-align: center;
+  background-color: #f8fafc;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.upload-area:hover {
+  border-color: var(--primary-color, #ed7534);
+  background-color: #f1f5f9;
+}
+
+.upload-area.dragover {
+  border-color: var(--primary-color, #ed7534);
+  background-color: #ffe4d4;
+}
+
+.upload-icon {
+  font-size: 3rem;
+  color: var(--primary-color, #ed7534);
+  margin-bottom: 1rem;
+}
+
+.upload-text {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.upload-subtext {
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+

@@ -22,9 +22,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
-import org.lite.gateway.exception.ResourceNotFoundException;
-import org.lite.gateway.dto.ErrorCode;
-
 /**
  * Task executor for WORKFLOW_TRIGGER tasks
  * Triggers workflows by ID (reference-based workflows)
@@ -160,19 +157,26 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                         });
                     }
 
-                    // Merge additional parameters if provided (copy-on-write to avoid side-effects)
-                    if (!parameters.isEmpty()) {
-                        if (request.getQuery() == null) {
-                            request.setQuery(new LinqRequest.Query());
-                        }
-                        Map<String, Object> existingParams = request.getQuery().getParams();
-                        java.util.Map<String, Object> mergedParams = new java.util.HashMap<>();
-                        if (existingParams != null) {
-                            mergedParams.putAll(existingParams);
-                        }
-                        mergedParams.putAll(parameters);
-                        request.getQuery().setParams(mergedParams);
+                    // Ensure params map exists
+                    if (request.getQuery() == null) {
+                        request.setQuery(new LinqRequest.Query());
                     }
+                    if (request.getQuery().getParams() == null) {
+                        request.getQuery().setParams(new java.util.HashMap<>());
+                    }
+                    
+                    // Merge additional parameters if provided (copy-on-write to avoid side-effects)
+                    Map<String, Object> existingParams = request.getQuery().getParams();
+                    java.util.Map<String, Object> mergedParams = new java.util.HashMap<>();
+                    if (existingParams != null) {
+                        mergedParams.putAll(existingParams);
+                    }
+                    if (!parameters.isEmpty()) {
+                        mergedParams.putAll(parameters);
+                    }
+                    // Add teamId if not already present
+                    mergedParams.putIfAbsent("teamId", teamId);
+                    request.getQuery().setParams(mergedParams);
 
                     // Set executedBy from the actual user who initiated the agent task  
                     request.setExecutedBy(execution.getExecutedBy());

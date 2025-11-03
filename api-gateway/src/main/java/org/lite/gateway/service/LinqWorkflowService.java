@@ -13,7 +13,7 @@ public interface LinqWorkflowService {
     Mono<LinqWorkflow> createWorkflow(LinqWorkflow workflow);
 
     /**
-     * Get a workflow by ID (uses team from context)
+     * Get a workflow by ID
      * @param workflowId The ID of the workflow to retrieve
      * @return Mono containing the workflow if found
      */
@@ -43,10 +43,20 @@ public interface LinqWorkflowService {
     Mono<Void> deleteWorkflow(String workflowId);
 
     /**
-     * Get all workflows for the current team
+     * Delete a workflow for a specific team
+     * @param workflowId The ID of the workflow to delete
+     * @param teamId The team ID
+     * @return Mono<Void> indicating completion
+     */
+    Mono<Void> deleteWorkflow(String workflowId, String teamId);
+
+
+    /**
+     * Get all workflows for a specific team
+     * @param teamId The team ID
      * @return Flux of workflows
      */
-    Flux<LinqWorkflow> getAllWorkflows();
+    Flux<LinqWorkflow> getAllWorkflows(String teamId);
 
     /**
      * Search workflows by name or description

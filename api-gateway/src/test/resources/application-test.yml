@@ -1,0 +1,130 @@
+spring:
+  application:
+    name: api-gateway
+  main:
+    allow-bean-definition-overriding: true
+    allow-circular-references: true
+    web-application-type: reactive
+  redis:
+    host: localhost
+    port: 6379
+    database: 0
+    timeout: 60000
+    connect-timeout: 60000
+  session:
+    store-type: none
+  security:
+    oauth2:
+      client:
+        registration:
+          linqra-gateway-client:
+            client-id: test-client
+            client-secret: test-secret
+            authorization-grant-type: authorization_code
+            scope: gateway.read
+            redirect-uri: http://localhost:3000/callback
+            provider: keycloak
+        provider:
+          keycloak:
+            token-uri: http://localhost:8281/test/token
+            authorization-uri: http://localhost:8281/test/auth
+            jwk-set-uri: http://localhost:8281/test/certs
+            issuer-uri: http://localhost:8281/test
+      resourceserver:
+        opaquetoken:
+          introspection-uri: http://localhost:8281/test/token/introspect
+          client-id: test-client
+          client-secret: test-secret
+        jwt:
+          issuer-uri: http://localhost:8281/test
+          jwk-set-uri: http://localhost:8281/test/certs
+  data:
+    mongodb:
+      uri: ${MONGO_GATEWAY_URL:mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}
+      database: Linqra
+      auto-index-creation: true  # Explicitly enable auto-index creation (default is true)
+  cloud:
+    circuitbreaker:
+      resilience4j:
+        enabled: true
+    loadbalancer:
+      enabled: true
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,loggers,threaddump, metrics
+
+eureka:
+  client:
+    enabled: true
+    service-url:
+      defaultZone: http://localhost:8761/eureka/eureka/
+    register-with-eureka: false
+    fetch-registry: false
+    eureka-server-connect-timeout-seconds: 60
+    eureka-server-read-timeout-seconds: 60
+
+server:
+  host: localhost
+  port: 7777
+  http2:
+    enabled: false
+  ssl:
+    enabled: false
+
+logging:
+  level:
+    root: INFO
+    org.lite.gateway: INFO
+
+notifications:
+  email:
+    host: test-host
+    port: 587
+    username: test-username
+    password: test-password
+    to: test@example.com
+    enabled: false
+  slack:
+    webhook-url: https://test-webhook-url
+    enabled: false
+
+cors:
+  allowed-origins: http://localhost:3000,https://localhost:3000,https://localhost:8080,https://your-prod-domain.com
+  allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD
+  allowed-headers: Origin,Content-Type,Accept,Authorization,X-Requested-With,X-User-Token
+  max-age: 3600
+
+jwt:
+  secret: 3a98d4c7b6e5f2a1d8c9b4a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1
+  expiration: 86400000 # 24 hours in milliseconds
+
+milvus:
+  host: localhost
+  port: 19530
+  username: test-user
+  password: test-pass
+
+# Knowledge Hub S3 Configuration
+aws:
+  region: us-west-2
+  s3:
+    bucket: linqra-knowledge-hub-test
+
+linqra:
+  knowledgehub:
+    s3:
+      bucket-name: linqra-knowledge-hub-test
+      raw-prefix: raw
+      processed-prefix: processed
+      presigned-url-expiration: PT15M  # 15 minutes
+      max-file-size: 52428800  # 50MB in bytes
+    redis:
+      document-processing-channel: document-processing-queue

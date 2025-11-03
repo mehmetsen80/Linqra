@@ -330,6 +330,11 @@ services:
   #     OAUTH2_REDIRECT_URI: https://localhost:3000/callback
   #     MILVUS_HOST: milvus-service
   #     MILVUS_PORT: 19530
+  #     # AWS S3 Configuration for Knowledge Hub (local development)
+  #     AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+  #     AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+  #     AWS_REGION: ${AWS_REGION:-us-west-2}
+  #     AWS_S3_BUCKET: ${AWS_S3_BUCKET:-linqra-knowledge-hub}
   #   volumes:
   #     - ./api-gateway:/app/api-gateway
   #     - ./keys:/app/keys

@@ -8,7 +8,9 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.entity.TeamMemberStatus;
 import org.lite.gateway.entity.User;
+import org.lite.gateway.repository.TeamMemberRepository;
 import org.lite.gateway.repository.UserRepository;
 import org.lite.gateway.service.JwtService;
 import org.lite.gateway.service.UserContextService;
@@ -32,6 +34,7 @@ public class JwtServiceImpl implements JwtService {
 
     private final ObjectMapper objectMapper;
     private final UserRepository userRepository;
+    private final TeamMemberRepository teamMemberRepository;
     private final UserContextService userContextService;
 
     private Key getSigningKey() {
@@ -64,15 +67,26 @@ public class JwtServiceImpl implements JwtService {
     public String generateTokenWithTeam(String username, String teamId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("teamId", teamId);
-        claims.put("teams", List.of(teamId)); // For backward compatibility
+        claims.put("teams", List.of(teamId)); // For backward compatibility - will be replaced
         
-        // Get user roles from repository
+        // Get user roles and teams from repository
         return userRepository.findByUsername(username)
-            .map(user -> {
+            .flatMap(user -> {
                 claims.put("roles", user.getRoles());
                 claims.put("username", username);
                 claims.put("email", user.getEmail());
-                return generateToken(claims, username, false);
+                
+                // Get all teams for the user
+                return teamMemberRepository.findByUserIdAndStatus(user.getId(), TeamMemberStatus.ACTIVE)
+                    .map(member -> member.getTeamId())
+                    .collectList()
+                    .map(teamIds -> {
+                        if (teamIds.isEmpty()) {
+                            teamIds = List.of(teamId);
+                        }
+                        claims.put("teams", teamIds);
+                        return generateToken(claims, username, false);
+                    });
             })
             .switchIfEmpty(Mono.just(generateToken(claims, username, false)))
             .block();

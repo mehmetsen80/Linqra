@@ -1,14 +1,31 @@
 export const formatDateTime = (timestamp) => {
     if (!timestamp) return '-';
-    const date = new Date(timestamp);
-    return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
+    
+    try {
+        let date;
+        
+        // Handle array format from LocalDateTime serialization [year, month, day, hour, minute, second, nano]
+        if (Array.isArray(timestamp)) {
+            const [year, month, day, hour, minute, second, nano] = timestamp;
+            date = new Date(year, month - 1, day, hour, minute, second, Math.floor(nano / 1000000));
+        } else {
+            date = new Date(timestamp);
+        }
+        
+        if (isNaN(date.getTime())) return 'Invalid Date';
+        
+        return date.toLocaleString('en-US', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    } catch (error) {
+        console.error('Date formatting error:', error);
+        return 'Invalid Date';
+    }
 };
 
 export const getDefaultDateRange = () => {

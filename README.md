@@ -1,4 +1,4 @@
-![Build Status](https://github.com/mehmetsen80/Linqra/actions/workflows/ci.yml/badge.svg) ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Version](https://img.shields.io/badge/version-0.6-brightgreen)
+![Build Status](https://github.com/mehmetsen80/Linqra/actions/workflows/ci.yml/badge.svg) ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Version](https://img.shields.io/badge/version-0.7-brightgreen)
 
 # What is Linqra?
 
@@ -44,6 +44,124 @@ Our unified protocol simplifies how your applications communicate with AI servic
   }
 }
 ```
+
+## AWS Configuration for Local Development
+
+Linqra uses AWS S3 for the Knowledge Hub feature. To run the application locally, you need to configure AWS credentials.
+
+### Running Without Docker
+
+If you're running the API Gateway locally (not in Docker), configure AWS credentials in your `~/.aws/credentials` file:
+
+```bash
+vi ~/.aws/credentials
+```
+
+Add or update your AWS credentials:
+
+```ini
+[default]
+aws_access_key_id = YOUR_AWS_ACCESS_KEY_ID
+aws_secret_access_key = YOUR_AWS_SECRET_ACCESS_KEY
+```
+
+The application will automatically read credentials from this location using the AWS SDK's default credential provider chain.
+
+### Running With Docker
+
+If you're running the API Gateway in Docker locally, you have three options:
+
+1. **IntelliJ IDEA**: If running docker-compose from IntelliJ IDEA, configure environment variables in the run configuration:
+   - Right-click `docker-compose-dev.yml` → "Modify Run Configuration"
+   - Under "Environment variables", add:
+     ```
+     AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID;AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY;AWS_REGION=us-west-2;AWS_S3_BUCKET=linqra-knowledge-hub
+     ```
+
+2. **Command Line**: Set environment variables in your terminal before running docker-compose:
+   ```bash
+   export AWS_ACCESS_KEY_ID="YOUR_AWS_ACCESS_KEY_ID"
+   export AWS_SECRET_ACCESS_KEY="YOUR_AWS_SECRET_ACCESS_KEY"
+   export AWS_REGION="us-west-2"
+   export AWS_S3_BUCKET="linqra-knowledge-hub"
+   docker-compose -f docker-compose-dev.yml up
+   ```
+
+3. **Docker Compose Configuration**: Edit `docker-compose-dev.yml` and uncomment the `api-gateway-service` section, adding AWS credentials to the environment variables.
+
+### Production (EC2)
+
+In production on EC2, the application uses IAM roles for secure credential management. No manual credential configuration is needed - the EC2 instance's IAM role will be automatically used via the AWS SDK.
+
+### S3 Bucket CORS Configuration
+
+For the Knowledge Hub to work properly, you need to configure CORS on your S3 bucket. This allows the frontend to upload files directly to S3 using presigned URLs.
+
+**Configure S3 CORS via AWS Console:**
+
+1. Open the S3 bucket in AWS Console
+2. Go to the "Permissions" tab
+3. Scroll down to "Cross-origin resource sharing (CORS)"
+4. Click "Edit"
+5. Add the following CORS configuration:
+
+```json
+[
+    {
+        "AllowedHeaders": [
+            "*"
+        ],
+        "AllowedMethods": [
+            "GET",
+            "PUT",
+            "POST",
+            "DELETE",
+            "HEAD"
+        ],
+        "AllowedOrigins": [
+            "http://localhost:3000",
+            "https://localhost:3000",
+            "https://your-production-domain.com"
+        ],
+        "ExposeHeaders": [
+            "ETag"
+        ],
+        "MaxAgeSeconds": 3000
+    }
+]
+```
+
+**Configure S3 CORS via AWS CLI:**
+
+```bash
+aws s3api put-bucket-cors --bucket linqra-knowledge-hub --cors-configuration file://cors-config.json
+```
+
+Where `cors-config.json` contains:
+
+```json
+{
+    "CORSRules": [
+        {
+            "AllowedHeaders": ["*"],
+            "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+            "AllowedOrigins": [
+                "http://localhost:3000",
+                "https://localhost:3000",
+                "https://your-production-domain.com"
+            ],
+            "ExposeHeaders": ["ETag"],
+            "MaxAgeSeconds": 3000
+        }
+    ]
+}
+```
+
+**Important Notes:**
+- Replace `your-production-domain.com` with your actual production domain
+- Add all environments (dev, staging, prod) to the `AllowedOrigins` list
+- The `AllowedHeaders` includes `*` to allow all custom headers that presigned URLs might require
+- `MaxAgeSeconds` of 3000 means browsers will cache preflight responses for 50 minutes, reducing CORS overhead
 
 ## Deployment Options
 

@@ -9,7 +9,6 @@ import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.ApiKey;
 import org.lite.gateway.service.LinqMicroService;
-import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.ApiKeyContextService;
 import org.lite.gateway.service.ApiKeyService;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,9 +28,6 @@ public class LinqMicroServiceImpl implements LinqMicroService {
 
     @NonNull
     private final WebClient.Builder webClientBuilder;
-
-    @NonNull
-    private final TeamContextService teamContextService;
 
     @NonNull
     private final RedisTemplate<String, String> redisTemplate;
@@ -146,7 +142,7 @@ public class LinqMicroServiceImpl implements LinqMicroService {
             default -> throw new IllegalArgumentException("Unsupported action: " + action);
         };
 
-        // Prefer teamId from params; fallback to context
+        // Extract teamId from params (must be present from controller)
         Mono<String> teamIdMono = Mono.defer(() -> {
             if (request.getQuery() != null && request.getQuery().getParams() != null) {
                 Object teamObj = request.getQuery().getParams().get("teamId");
@@ -154,7 +150,7 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                     return Mono.just(String.valueOf(teamObj));
                 }
             }
-            return teamContextService.getTeamFromContext();
+            return Mono.error(new RuntimeException("Team ID must be provided in params"));
         });
 
         return invokeService(method, url, request)

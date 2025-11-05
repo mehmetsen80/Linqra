@@ -94,9 +94,61 @@ import_if_not_exists() {
         -noprompt
 }
 
+# Function to import AWS root CA certificate into a truststore if not present
+import_aws_root_ca_if_not_exists() {
+    local truststore=$1
+    local truststore_name=$(basename "$truststore")
+    local alias="amazon-root-ca"
+    local aws_cert_file="../keys/AmazonRootCA1.pem"
+    
+    # Check if AWS root CA already exists in truststore
+    if keytool -list -alias "$alias" -keystore "$truststore" -storepass 123456 >/dev/null 2>&1; then
+        echo "AWS Root CA already exists in ${truststore_name}, skipping..."
+        return 0
+    fi
+    
+    # Download AWS root CA certificate if it doesn't exist
+    if [ ! -f "$aws_cert_file" ]; then
+        echo "Downloading AWS Root CA certificate..."
+        cd ../keys
+        curl -O https://www.amazontrust.com/repository/AmazonRootCA1.pem
+        if [ $? -ne 0 ]; then
+            echo "Warning: Failed to download AWS Root CA certificate. SSL connections to AWS S3 may fail."
+            cd - > /dev/null
+            return 1
+        fi
+        cd - > /dev/null
+    fi
+    
+    # Import AWS root CA into truststore
+    echo "Importing AWS Root CA into ${truststore_name}..."
+    keytool -importcert \
+        -file "$aws_cert_file" \
+        -alias "$alias" \
+        -keystore "$truststore" \
+        -storepass 123456 \
+        -noprompt
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Successfully imported AWS Root CA into ${truststore_name}"
+    else
+        echo "Warning: Failed to import AWS Root CA into ${truststore_name}"
+        return 1
+    fi
+}
+
 # Import into truststores if not already present
 import_if_not_exists "../keys/gateway-truststore.jks"
 import_if_not_exists "../keys/client-truststore.jks"
 import_if_not_exists "../keys/eureka-truststore.jks"
 
+# Import AWS root CA certificates into truststores
+# This is required for SSL connections to AWS S3
+echo ""
+echo "=== Importing AWS Root CA Certificates ==="
+import_aws_root_ca_if_not_exists "../keys/gateway-truststore.jks"
+import_aws_root_ca_if_not_exists "../keys/client-truststore.jks"
+import_aws_root_ca_if_not_exists "../keys/eureka-truststore.jks"
+
+echo ""
 echo "Certificate generation and import completed successfully for ${SERVICE_NAME}"

@@ -163,6 +163,59 @@ Where `cors-config.json` contains:
 - The `AllowedHeaders` includes `*` to allow all custom headers that presigned URLs might require
 - `MaxAgeSeconds` of 3000 means browsers will cache preflight responses for 50 minutes, reducing CORS overhead
 
+### SSL Certificates and AWS Root CA
+
+When using a custom truststore for SSL/TLS connections (configured via `-Djavax.net.ssl.trustStore`), you must ensure that AWS root certificates are included. Without these certificates, SSL handshake failures will occur when connecting to AWS S3.
+
+**Automatic Import (Recommended):**
+
+The `generate-service-certs.sh` script automatically downloads and imports AWS root certificates into all truststores:
+
+```bash
+cd scripts
+./generate-service-certs.sh <service-name>
+```
+
+This script will:
+1. Generate service certificates as usual
+2. Automatically download `AmazonRootCA1.pem` from Amazon Trust Services
+3. Import the AWS root CA certificate into all truststores (`gateway-truststore.jks`, `client-truststore.jks`, `eureka-truststore.jks`) with alias `amazon-root-ca`
+
+**Manual Import:**
+
+If you need to manually import AWS root certificates:
+
+```bash
+# Download AWS root CA certificate
+cd keys
+curl -O https://www.amazontrust.com/repository/AmazonRootCA1.pem
+
+# Import into gateway truststore
+keytool -import -alias amazon-root-ca -file AmazonRootCA1.pem \
+  -keystore gateway-truststore.jks \
+  -storepass 123456 -noprompt
+
+# Import into client truststore
+keytool -import -alias amazon-root-ca -file AmazonRootCA1.pem \
+  -keystore client-truststore.jks \
+  -storepass 123456 -noprompt
+
+# Import into eureka truststore
+keytool -import -alias amazon-root-ca -file AmazonRootCA1.pem \
+  -keystore eureka-truststore.jks \
+  -storepass 123456 -noprompt
+```
+
+**Verification:**
+
+To verify that the AWS root CA certificate is present in a truststore:
+
+```bash
+keytool -list -alias amazon-root-ca -keystore keys/gateway-truststore.jks -storepass 123456
+```
+
+**Note:** The AWS root CA certificate is required for all services that connect to AWS S3, including the API Gateway when processing Knowledge Hub documents.
+
 ## Deployment Options
 
 - **Enterprise On-Premise**: Full control over data and security

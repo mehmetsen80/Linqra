@@ -11,11 +11,17 @@ import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.lite.gateway.repository.LlmModelRepository;
 import org.lite.gateway.repository.LlmPricingSnapshotRepository;
 import org.lite.gateway.service.LlmCostService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
@@ -26,33 +32,56 @@ import java.util.*;
 @Slf4j
 public class LlmCostServiceImpl implements LlmCostService {
     
+    private static final String REDIS_PRICING_CACHE_KEY = "llm_model_pricing:cache";
+    private static final Duration CACHE_EXPIRATION = Duration.ofHours(24); // Cache expires in 24 hours, refreshed on startup
+    
     private final LinqWorkflowExecutionRepository executionRepository;
     private final LlmPricingSnapshotRepository pricingSnapshotRepository;
     private final LlmModelRepository llmModelRepository;
+    private final RedisTemplate<String, String> redisTemplate;
+    private final ObjectMapper objectMapper;
     
-    // Pricing per 1M tokens (as of October 2024 - update as needed)
-    private static final Map<String, ModelPricing> MODEL_PRICING = new HashMap<>();
-    
-    static {
-        // OpenAI GPT-4 models
-        MODEL_PRICING.put("gpt-4o", new ModelPricing(2.50, 10.00)); // $2.50 input, $10.00 output per 1M tokens
-        MODEL_PRICING.put("gpt-4o-mini", new ModelPricing(0.150, 0.600)); // $0.15 input, $0.60 output per 1M tokens
-        MODEL_PRICING.put("gpt-4-turbo", new ModelPricing(10.00, 30.00));
-        MODEL_PRICING.put("gpt-4", new ModelPricing(30.00, 60.00));
-        MODEL_PRICING.put("gpt-3.5-turbo", new ModelPricing(0.50, 1.50));
+    /**
+     * Initialize pricing cache from database on application startup
+     * This ensures we always use the latest model pricing from the database
+     * Pricing is cached in Redis for fast access
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void initializePricingCache() {
+        log.info("Initializing LLM pricing cache from database to Redis...");
         
-        // OpenAI Embeddings
-        MODEL_PRICING.put("text-embedding-3-small", new ModelPricing(0.020, 0.0));
-        MODEL_PRICING.put("text-embedding-3-large", new ModelPricing(0.130, 0.0));
-        MODEL_PRICING.put("text-embedding-ada-002", new ModelPricing(0.100, 0.0));
-        
-        // Google Gemini models
-        MODEL_PRICING.put("gemini-2.0-flash", new ModelPricing(0.075, 0.30)); // $0.075 input, $0.30 output per 1M tokens
-        MODEL_PRICING.put("gemini-1.5-pro", new ModelPricing(1.25, 5.00));
-        MODEL_PRICING.put("gemini-1.5-flash", new ModelPricing(0.075, 0.30));
-        
-        // Default pricing for unknown models
-        MODEL_PRICING.put("default", new ModelPricing(1.0, 2.0));
+        llmModelRepository.findAll()
+            .collectList()
+            .doOnNext(models -> {
+                if (models == null || models.isEmpty()) {
+                    log.error("❌ CRITICAL: No models found in database! LLM cost calculation will fail.");
+                    log.error("   Please ensure LlmModelServiceImpl has initialized default models.");
+                    return;
+                }
+                
+                try {
+                    Map<String, Map<String, Double>> cacheMap = new HashMap<>();
+                    for (LlmModel model : models) {
+                        Map<String, Double> pricing = new HashMap<>();
+                        pricing.put("inputPricePer1M", model.getInputPricePer1M());
+                        pricing.put("outputPricePer1M", model.getOutputPricePer1M());
+                        cacheMap.put(model.getModelName(), pricing);
+                    }
+                    
+                    // Store in Redis as JSON
+                    String cacheJson = objectMapper.writeValueAsString(cacheMap);
+                    redisTemplate.opsForValue().set(REDIS_PRICING_CACHE_KEY, cacheJson, CACHE_EXPIRATION);
+                    
+                    log.info("✅ Loaded {} models into Redis pricing cache", models.size());
+                } catch (Exception e) {
+                    log.error("❌ Failed to cache models in Redis: {}", e.getMessage(), e);
+                }
+            })
+            .doOnError(error -> {
+                log.error("❌ CRITICAL: Failed to load models from database: {}", error.getMessage(), error);
+                log.error("   LLM cost calculation may fail. Please check database connectivity.");
+            })
+            .subscribe();
     }
     
     @Override
@@ -77,9 +106,9 @@ public class LlmCostServiceImpl implements LlmCostService {
         // Normalize model name (e.g., "gpt-4o-2024-08-06" -> "gpt-4o")
         String normalizedModel = normalizeModelName(model);
         
-        // Use static pricing to avoid blocking in reactive context
-        // Database pricing is used for pricing snapshots
-        return calculateCostFromStaticPricing(normalizedModel, promptTokens, completionTokens);
+        // Use cached pricing from database (loaded on startup)
+        // Falls back to default if cache is not initialized yet
+        return calculateCostFromCache(normalizedModel, promptTokens, completionTokens);
     }
     
     /**
@@ -176,11 +205,77 @@ public class LlmCostServiceImpl implements LlmCostService {
         return model;
     }
     
-    private double calculateCostFromStaticPricing(String model, long promptTokens, long completionTokens) {
-        ModelPricing pricing = MODEL_PRICING.getOrDefault(model, MODEL_PRICING.get("default"));
-        double promptCost = (promptTokens / 1_000_000.0) * pricing.inputPricePer1M;
-        double completionCost = (completionTokens / 1_000_000.0) * pricing.outputPricePer1M;
-        return promptCost + completionCost;
+    private double calculateCostFromCache(String model, long promptTokens, long completionTokens) {
+        try {
+            // Get pricing from Redis cache (loaded from database on startup)
+            String cacheJson = redisTemplate.opsForValue().get(REDIS_PRICING_CACHE_KEY);
+            
+            if (cacheJson == null || cacheJson.isEmpty()) {
+                // Cache is empty - try to reload from database synchronously
+                log.warn("Redis pricing cache is empty, attempting to reload from database for model: {}", model);
+                reloadCacheFromDatabase();
+                cacheJson = redisTemplate.opsForValue().get(REDIS_PRICING_CACHE_KEY);
+                
+                if (cacheJson == null || cacheJson.isEmpty()) {
+                    throw new IllegalStateException(
+                        "LLM model pricing cache is empty. Database may not have been initialized with models. " +
+                        "Please ensure LlmModelServiceImpl has initialized default models."
+                    );
+                }
+            }
+            
+            // Parse cache JSON
+            Map<String, Map<String, Double>> cacheMap = objectMapper.readValue(
+                cacheJson, 
+                new TypeReference<Map<String, Map<String, Double>>>() {}
+            );
+            
+            // Get pricing for this model
+            Map<String, Double> pricing = cacheMap.get(model);
+            if (pricing == null) {
+                log.warn("Model {} not found in pricing cache, using $1.0/$2.0 per 1M tokens as fallback", model);
+                // Last resort fallback for unknown models
+                pricing = Map.of("inputPricePer1M", 1.0, "outputPricePer1M", 2.0);
+            }
+            
+            double promptCost = (promptTokens / 1_000_000.0) * pricing.get("inputPricePer1M");
+            double completionCost = (completionTokens / 1_000_000.0) * pricing.get("outputPricePer1M");
+            return promptCost + completionCost;
+            
+        } catch (Exception e) {
+            log.error("Error calculating cost for model {}: {}", model, e.getMessage());
+            // Throw exception - we cannot calculate cost without database models
+            throw new RuntimeException("Failed to calculate LLM cost: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Synchronously reload cache from database (used as fallback if cache is empty)
+     */
+    private void reloadCacheFromDatabase() {
+        try {
+            List<LlmModel> models = llmModelRepository.findAll().collectList().block();
+            
+            if (models == null || models.isEmpty()) {
+                log.error("❌ Cannot reload cache: No models found in database");
+                return;
+            }
+            
+            Map<String, Map<String, Double>> cacheMap = new HashMap<>();
+            for (LlmModel model : models) {
+                Map<String, Double> pricing = new HashMap<>();
+                pricing.put("inputPricePer1M", model.getInputPricePer1M());
+                pricing.put("outputPricePer1M", model.getOutputPricePer1M());
+                cacheMap.put(model.getModelName(), pricing);
+            }
+            
+            String cacheJson = objectMapper.writeValueAsString(cacheMap);
+            redisTemplate.opsForValue().set(REDIS_PRICING_CACHE_KEY, cacheJson, CACHE_EXPIRATION);
+            log.info("✅ Reloaded {} models into Redis pricing cache", models.size());
+            
+        } catch (Exception e) {
+            log.error("❌ Failed to reload cache from database: {}", e.getMessage(), e);
+        }
     }
     
     private LlmUsageStats calculateUsageStats(String teamId, java.util.List<LinqWorkflowExecution> executions, 
@@ -548,22 +643,11 @@ public class LlmCostServiceImpl implements LlmCostService {
      * Internal method to actually initialize pricing for a month
      */
     private Mono<Void> initializePricingForMonthInternal(String teamId, YearMonth yearMonth) {
+        // Always use models from database - never fall back to defaults
         return llmModelRepository.findByActive(true)
-            .switchIfEmpty(Flux.fromIterable(MODEL_PRICING.entrySet())
-                .filter(entry -> !entry.getKey().equals("default"))
-                .map(entry -> {
-                    String modelName = entry.getKey();
-                    ModelPricing pricing = entry.getValue();
-                    String provider = detectProviderFromModelName(modelName);
-                    
-                    LlmModel model = new LlmModel();
-                    model.setModelName(modelName);
-                    model.setProvider(provider);
-                    model.setInputPricePer1M(pricing.inputPricePer1M);
-                    model.setOutputPricePer1M(pricing.outputPricePer1M);
-                    return model;
-                })
-            )
+            .switchIfEmpty(Mono.error(new IllegalStateException(
+                "No active LLM models found in database. Please ensure LlmModelServiceImpl has initialized default models."
+            )))
             .concatMap(model -> {
                 LlmPricingSnapshot snapshot = new LlmPricingSnapshot();
                 snapshot.setTeamId(teamId); // ← SET TEAM ID HERE

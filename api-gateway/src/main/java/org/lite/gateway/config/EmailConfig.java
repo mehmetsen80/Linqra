@@ -1,5 +1,6 @@
 package org.lite.gateway.config;
 
+import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,22 +34,22 @@ public class EmailConfig {
             // Create a dummy JavaMailSender that does nothing when email is disabled
             return new JavaMailSenderImpl() {
                 @Override
-                public void send(SimpleMailMessage simpleMessage) {
+                public void send(@NotNull SimpleMailMessage simpleMessage) {
                     // Do nothing - email is disabled
                 }
                 
                 @Override
-                public void send(SimpleMailMessage... simpleMessages) {
+                public void send(@NotNull SimpleMailMessage... simpleMessages) {
                     // Do nothing - email is disabled
                 }
                 
                 @Override
-                public void send(MimeMessagePreparator mimeMessagePreparator) {
+                public void send(@NotNull MimeMessagePreparator mimeMessagePreparator) {
                     // Do nothing - email is disabled
                 }
                 
                 @Override
-                public void send(MimeMessagePreparator... mimeMessagePreparators) {
+                public void send(@NotNull MimeMessagePreparator... mimeMessagePreparators) {
                     // Do nothing - email is disabled
                 }
             };

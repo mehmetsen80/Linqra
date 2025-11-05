@@ -36,7 +36,7 @@ public class KnowledgeHubDocument {
     private String s3Key; // S3 key for the raw document
     
     @Indexed
-    private String status; // PENDING_UPLOAD, UPLOADED, PARSING, PARSED, EMBEDDING, READY, FAILED
+    private String status; // PENDING_UPLOAD, UPLOADED, PARSING, PROCESSED, EMBEDDING, AI_READY, FAILED
     
     @CreatedDate
     private LocalDateTime createdAt;

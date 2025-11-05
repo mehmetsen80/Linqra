@@ -7,6 +7,7 @@ import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.event.DocumentProcessingEvent;
 import org.lite.gateway.repository.DocumentRepository;
+import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.DocumentService;
 import org.lite.gateway.service.S3Service;
@@ -27,6 +28,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final ApplicationEventPublisher eventPublisher;
     private final S3Service s3Service;
     private final S3Properties s3Properties;
+    private final KnowledgeHubChunkRepository chunkRepository;
     
     @Override
     public Mono<DocumentInitiationResult> initiateDocumentUpload(UploadInitiateRequest request, String teamId) {
@@ -158,17 +160,90 @@ public class DocumentServiceImpl implements DocumentService {
                                                 "Cannot delete document with an active S3 file. Please delete the file from the document page first."));
                                     } else {
                                         log.info("File does not exist in S3 for document: {}", documentId);
-                                        // File doesn't exist, safe to delete the record
-                                        return documentRepository.deleteById(document.getId())
-                                                .doOnSuccess(success -> log.info("Successfully deleted document: {}", documentId));
+                                        // File doesn't exist, safe to delete chunks and then the record
+                                        return deleteDocumentAndChunks(document, documentId);
                                     }
                                 });
                     } else {
                         log.info("No S3 key for document: {}, safe to delete", documentId);
-                        // No S3 key, safe to delete the record
-                        return documentRepository.deleteById(document.getId())
-                                .doOnSuccess(success -> log.info("Successfully deleted document: {}", documentId));
+                        // No S3 key, safe to delete chunks and then the record
+                        return deleteDocumentAndChunks(document, documentId);
                     }
+                });
+    }
+    
+    /**
+     * Delete all chunks associated with the document and then delete the document record
+     */
+    private Mono<Void> deleteDocumentAndChunks(KnowledgeHubDocument document, String documentId) {
+        // First, delete all chunks associated with this document
+        return chunkRepository.deleteAllByDocumentId(documentId)
+                .doOnSuccess(v -> log.info("Deleted all chunks for document: {}", documentId))
+                .doOnError(error -> log.warn("Error deleting chunks for document {}: {}", documentId, error.getMessage()))
+                .onErrorResume(error -> {
+                    // Log warning but continue with document deletion even if chunk deletion fails
+                    log.warn("Failed to delete chunks for document {}, continuing with document deletion: {}", 
+                            documentId, error.getMessage());
+                    return Mono.empty();
+                })
+                .then(documentRepository.deleteById(document.getId()))
+                .doOnSuccess(success -> log.info("Successfully deleted document: {}", documentId));
+    }
+    
+    @Override
+    public Mono<Void> hardDeleteDocument(String documentId, String teamId) {
+        log.info("Hard deleting document (including S3 files): {}", documentId);
+        
+        return getDocumentById(documentId, teamId)
+                .flatMap(document -> {
+                    // Delete all chunks first
+                    Mono<Void> deleteChunks = chunkRepository.deleteAllByDocumentId(documentId)
+                            .doOnSuccess(v -> log.info("Deleted all chunks for document: {}", documentId))
+                            .doOnError(error -> log.warn("Error deleting chunks for document {}: {}", 
+                                    documentId, error.getMessage()))
+                            .onErrorResume(error -> {
+                                // Log warning but continue even if chunk deletion fails
+                                log.warn("Failed to delete chunks for document {}, continuing: {}", 
+                                        documentId, error.getMessage());
+                                return Mono.empty();
+                            });
+                    
+                    // Delete raw S3 file if it exists
+                    Mono<Void> deleteRawFile = Mono.empty();
+                    if (document.getS3Key() != null && !document.getS3Key().isEmpty()) {
+                        deleteRawFile = s3Service.deleteFile(document.getS3Key())
+                                .doOnSuccess(v -> log.info("Deleted raw S3 file for document: {} - {}", 
+                                        documentId, document.getS3Key()))
+                                .doOnError(error -> log.warn("Error deleting raw S3 file for document {}: {}", 
+                                        documentId, error.getMessage()))
+                                .onErrorResume(error -> {
+                                    // Log warning but continue even if S3 deletion fails
+                                    log.warn("Failed to delete raw S3 file for document {}, continuing: {}", 
+                                            documentId, error.getMessage());
+                                    return Mono.empty();
+                                });
+                    }
+                    
+                    // Delete processed S3 file if it exists
+                    Mono<Void> deleteProcessedFile = Mono.empty();
+                    if (document.getProcessedS3Key() != null && !document.getProcessedS3Key().isEmpty()) {
+                        deleteProcessedFile = s3Service.deleteFile(document.getProcessedS3Key())
+                                .doOnSuccess(v -> log.info("Deleted processed S3 file for document: {} - {}", 
+                                        documentId, document.getProcessedS3Key()))
+                                .doOnError(error -> log.warn("Error deleting processed S3 file for document {}: {}", 
+                                        documentId, error.getMessage()))
+                                .onErrorResume(error -> {
+                                    // Log warning but continue even if S3 deletion fails
+                                    log.warn("Failed to delete processed S3 file for document {}, continuing: {}", 
+                                            documentId, error.getMessage());
+                                    return Mono.empty();
+                                });
+                    }
+                    
+                    // Execute all deletions in parallel, then delete the document record
+                    return Mono.when(deleteChunks, deleteRawFile, deleteProcessedFile)
+                            .then(documentRepository.deleteById(document.getId()))
+                            .doOnSuccess(success -> log.info("Successfully hard deleted document: {}", documentId));
                 });
     }
 }

@@ -39,8 +39,15 @@ public interface DocumentService {
     
     /**
      * Delete document by ID with team access control
+     * Note: This will only delete if S3 file doesn't exist (soft delete)
      */
     Mono<Void> deleteDocument(String documentId, String teamId);
+    
+    /**
+     * Hard delete document by ID with team access control
+     * This will delete everything: chunks, S3 files (raw and processed), and document record
+     */
+    Mono<Void> hardDeleteDocument(String documentId, String teamId);
     
     /**
      * Result of document initiation including document and presigned URL

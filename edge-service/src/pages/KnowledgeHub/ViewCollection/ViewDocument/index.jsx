@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Spinner, Alert, Badge, Row, Col, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { HiArrowLeft, HiDocument, HiDownload, HiTrash, HiCalendar, HiCube } from 'react-icons/hi';
+import { HiArrowLeft, HiDocument, HiDownload, HiTrash, HiCalendar, HiCube, HiChartBar, HiCheckCircle } from 'react-icons/hi';
 import { useTeam } from '../../../../contexts/TeamContext';
 import { documentService } from '../../../../services/documentService';
 import { knowledgeCollectionService } from '../../../../services/knowledgeCollectionService';
+import { documentProcessingWebSocket } from '../../../../services/documentProcessingService';
 import Button from '../../../../components/common/Button';
 import { showSuccessToast, showErrorToast } from '../../../../utils/toastConfig';
 import { formatDateTime } from '../../../../utils/dateUtils';
@@ -20,13 +21,57 @@ function ViewDocument() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingProcessedJson, setDownloadingProcessedJson] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [fileExists, setFileExists] = useState(null);
+  const [chunkStats, setChunkStats] = useState(null);
+  const [loadingChunkStats, setLoadingChunkStats] = useState(false);
 
   useEffect(() => {
     if (currentTeam?.id && documentId) {
       fetchDocument();
     }
+    
+    // Connect to WebSocket for document processing
+    documentProcessingWebSocket.connect();
+    
+    // Subscribe to document status updates
+    const unsubscribe = documentProcessingWebSocket.subscribe((statusUpdate) => {
+      // Only process updates for the current document
+      if (statusUpdate.documentId === documentId) {
+        console.log('Received document status update:', statusUpdate);
+        
+        // Update document state with the new status
+        setDocument(prevDoc => {
+          if (!prevDoc) return prevDoc;
+          
+          return {
+            ...prevDoc,
+            status: statusUpdate.status,
+            processedAt: statusUpdate.processedAt,
+            totalChunks: statusUpdate.totalChunks,
+            totalTokens: statusUpdate.totalTokens,
+            processedS3Key: statusUpdate.processedS3Key,
+            errorMessage: statusUpdate.errorMessage
+          };
+        });
+        
+        // Update fileExists based on status (file exists if status is not PENDING_UPLOAD)
+        // FAILED status could still have the file if upload succeeded but processing failed
+        setFileExists(statusUpdate.status !== 'PENDING_UPLOAD');
+        
+        // Fetch chunk statistics if document is now processed
+        if (statusUpdate.status === 'PROCESSED' && statusUpdate.processedS3Key) {
+          fetchChunkStatistics(statusUpdate.processedS3Key);
+        }
+      }
+    });
+    
+    return () => {
+      // Unsubscribe and disconnect on unmount
+      unsubscribe();
+      documentProcessingWebSocket.disconnect();
+    };
   }, [currentTeam?.id, documentId]);
 
   const fetchDocument = async () => {
@@ -36,8 +81,9 @@ function ViewDocument() {
       if (error) throw new Error(error);
       setDocument(data);
       
-      // Default fileExists based on status
-      setFileExists(data.status === 'UPLOADED' || data.status === 'READY');
+      // Default fileExists based on status - file exists if status is not PENDING_UPLOAD
+      // (FAILED status could still have the file if upload succeeded but processing failed)
+      setFileExists(data.status !== 'PENDING_UPLOAD');
       
       // Fetch collection details
       if (data.collectionId) {
@@ -45,6 +91,11 @@ function ViewDocument() {
         if (collectionResult.data) {
           setCollection(collectionResult.data);
         }
+      }
+      
+      // Fetch chunk statistics if document is processed
+      if (data.status === 'PROCESSED' && data.processedS3Key) {
+        fetchChunkStatistics(data.processedS3Key);
       }
     } catch (err) {
       console.error('Error fetching document:', err);
@@ -74,6 +125,52 @@ function ViewDocument() {
     }
   };
 
+  const fetchChunkStatistics = async (processedS3Key) => {
+    if (!processedS3Key) return;
+    
+    try {
+      setLoadingChunkStats(true);
+      const { data, error } = await documentService.generateProcessedJsonDownloadUrl(documentId);
+      if (error) throw new Error(error);
+      
+      // Download and parse the processed JSON to get statistics
+      const response = await fetch(data.downloadUrl);
+      if (!response.ok) throw new Error('Failed to download processed JSON');
+      
+      const processedJson = await response.json();
+      if (processedJson.statistics) {
+        setChunkStats({
+          avgQualityScore: processedJson.statistics.avgQualityScore,
+          // We already have totalChunks and totalTokens from document
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching chunk statistics:', err);
+      // Don't show error toast - just silently fail, stats are optional
+    } finally {
+      setLoadingChunkStats(false);
+    }
+  };
+
+  const handleDownloadProcessedJson = async () => {
+    try {
+      setDownloadingProcessedJson(true);
+      const { data, error } = await documentService.generateProcessedJsonDownloadUrl(documentId);
+      if (error) throw new Error(error);
+      
+      // Open the presigned URL in a new window to download
+      if (data.downloadUrl) {
+        window.open(data.downloadUrl, '_blank');
+        showSuccessToast('Processed JSON download initiated');
+      }
+    } catch (err) {
+      console.error('Error downloading processed JSON:', err);
+      showErrorToast(err.response?.data?.error || err.message || 'Failed to download processed JSON');
+    } finally {
+      setDownloadingProcessedJson(false);
+    }
+  };
+
   const handleHardDelete = async () => {
     try {
       const { error } = await documentService.deleteDocument(documentId);
@@ -90,6 +187,7 @@ function ViewDocument() {
   const getStatusBadgeVariant = (status) => {
     switch (status) {
       case 'READY':
+      case 'PROCESSED':
         return 'success';
       case 'UPLOADED':
       case 'PARSING':
@@ -103,6 +201,102 @@ function ViewDocument() {
       default:
         return 'secondary';
     }
+  };
+
+  // Check if status is in a processing state (should glow)
+  const isProcessingStatus = (status) => {
+    const processingStates = ['UPLOADED', 'PARSING', 'PARSED', 'PROCESSED', 'EMBEDDING'];
+    return processingStates.includes(status);
+  };
+
+  const getStatusFlowSteps = () => {
+    const steps = [
+      { key: 'PENDING_UPLOAD', label: 'Pending Upload' },
+      { key: 'UPLOADED', label: 'Uploaded' },
+      { key: 'PARSING', label: 'Parsing' },
+      { key: 'PROCESSED', label: 'Processed' },
+      { key: 'EMBEDDING', label: 'Embedding' },
+      { key: 'AI_READY', label: 'AI Ready' }
+    ];
+
+    const statusOrder = ['PENDING_UPLOAD', 'UPLOADED', 'PARSING', 'PROCESSED', 'EMBEDDING', 'AI_READY'];
+    const currentStatusIndex = statusOrder.indexOf(document.status);
+
+    // If status is FAILED, determine the last successful step and allow clicking next step
+    if (document.status === 'FAILED') {
+      let lastSuccessfulIndex = -1;
+      
+      // Determine last successful status based on document state
+      if (document.processedAt) {
+        // Got processed, so at least PROCESSED was reached
+        lastSuccessfulIndex = statusOrder.indexOf('PROCESSED');
+      } else if (document.uploadedAt && !document.processedAt) {
+        // Got uploaded but not processed
+        lastSuccessfulIndex = statusOrder.indexOf('UPLOADED');
+      } else {
+        // Only created, not uploaded
+        lastSuccessfulIndex = statusOrder.indexOf('PENDING_UPLOAD');
+      }
+      
+      return steps.map((step, index) => {
+        const stepIndex = statusOrder.indexOf(step.key);
+        const isCompleted = index <= lastSuccessfulIndex;
+        const isCurrent = step.key === document.status;
+        // Allow clicking the next step after the last successful one (not last step)
+        const isClickable = !isCompleted && index < steps.length - 1 && 
+                           stepIndex === lastSuccessfulIndex + 1;
+        
+        return {
+          ...step,
+          completed: isCompleted,
+          current: isCurrent,
+          failed: true,
+          clickable: isClickable
+        };
+      });
+    }
+
+    // For non-failed statuses, mark steps as completed if we've reached or passed them
+    // PROCESSED status means processing is complete, so it should show as completed
+    return steps.map((step, index) => {
+      const stepIndex = statusOrder.indexOf(step.key);
+      // If current status index is >= step index, it's completed (including the current status itself)
+      const isCompleted = currentStatusIndex >= stepIndex;
+      // Check if this step is the current status
+      const isCurrent = step.key === document.status;
+      // A step is clickable if it's the next step after the current one (not completed, not current, not last)
+      const isClickable = !isCompleted && !isCurrent && index < steps.length - 1 && 
+                         (currentStatusIndex < 0 || stepIndex === currentStatusIndex + 1);
+      
+      return {
+        ...step,
+        completed: isCompleted,
+        current: isCurrent,
+        failed: false,
+        clickable: isClickable
+      };
+    });
+  };
+  
+  const handleNodeClick = (step) => {
+    if (!step.clickable || !document || !currentTeam?.id) {
+      return;
+    }
+    
+    // Send WebSocket command to trigger document processing
+    documentProcessingWebSocket.sendDocumentProcessingCommand(
+      document.documentId,
+      step.key,
+      currentTeam.id
+    );
+    
+    // Show feedback
+    showSuccessToast(`Triggering ${step.label}...`);
+    
+    // Refresh document after a short delay to show status change
+    setTimeout(() => {
+      fetchDocument();
+    }, 1000);
   };
 
   const calculateUploadDuration = () => {
@@ -178,12 +372,17 @@ function ViewDocument() {
                 <HiArrowLeft className="text-primary" size={24} />
               </Button>
               <h4 className="mb-0">{document.fileName}</h4>
-              <Badge bg={getStatusBadgeVariant(document.status)}>
+              <Badge 
+                bg={getStatusBadgeVariant(document.status)}
+                className={isProcessingStatus(document.status) ? 'status-processing' : ''}
+              >
                 {document.status}
               </Badge>
             </div>
             <div className="d-flex gap-2">
-              {document.status === 'UPLOADED' || document.status === 'READY' ? (
+              {/* Show Download button for documents that have been uploaded (UPLOADED and beyond) */}
+              {/* Note: FAILED status might still have the file if upload succeeded but processing failed */}
+              {document.status !== 'PENDING_UPLOAD' ? (
                 <OverlayTrigger
                   placement="bottom"
                   overlay={<Tooltip id="download-tooltip">The file could not be uploaded</Tooltip>}
@@ -207,6 +406,136 @@ function ViewDocument() {
                 <HiTrash /> Hard Delete
               </Button>
             </div>
+          </div>
+        </Card.Body>
+      </Card>
+
+      {/* Status Flow Bar */}
+      <Card className="mb-4 border-0">
+        <Card.Body style={{ padding: '20px' }}>
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            {getStatusFlowSteps().map((step, index, array) => {
+              const isLast = index === array.length - 1;
+              const nextStepCompleted = index < array.length - 1 && array[index + 1]?.completed;
+              const connectorCompleted = step.completed;
+              
+              return (
+                <React.Fragment key={step.key}>
+                  <div 
+                    className={step.current && isProcessingStatus(document.status) ? 'status-step-processing' : ''}
+                    style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      flex: 1,
+                      minWidth: '100px',
+                      position: 'relative',
+                      zIndex: 2,
+                      cursor: step.clickable ? 'pointer' : 'default',
+                      padding: step.current && isProcessingStatus(document.status) ? '8px' : '0',
+                      margin: step.current && isProcessingStatus(document.status) ? '-8px' : '0'
+                    }}
+                    onClick={() => handleNodeClick(step)}
+                  >
+                    {/* Step Icon */}
+                    <div style={{ 
+                      position: 'relative',
+                      marginBottom: '8px',
+                      zIndex: 3,
+                      opacity: step.clickable ? 1 : (step.completed ? 1 : 0.6),
+                      transition: 'opacity 0.2s'
+                    }}>
+                      {step.completed ? (
+                        <HiCheckCircle 
+                          className="text-success" 
+                          size={36} 
+                          style={{ 
+                            backgroundColor: 'white', 
+                            borderRadius: '50%',
+                            padding: '2px'
+                          }} 
+                        />
+                      ) : step.failed ? (
+                        <div 
+                          className="rounded-circle bg-danger d-flex align-items-center justify-content-center text-white"
+                          style={{ 
+                            width: '36px', 
+                            height: '36px', 
+                            fontSize: '22px', 
+                            fontWeight: 'bold',
+                            lineHeight: '36px'
+                          }}
+                        >
+                          ✕
+                        </div>
+                      ) : (
+                        <div 
+                          className={`rounded-circle border d-flex align-items-center justify-content-center`}
+                          style={{ 
+                            width: '36px', 
+                            height: '36px', 
+                            fontSize: '14px',
+                            borderWidth: '2px',
+                            borderColor: '#dee2e6',
+                            color: '#6c757d',
+                            backgroundColor: 'white',
+                            fontWeight: '500'
+                          }}
+                        >
+                          {index + 1}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Step Label */}
+                    <div style={{ textAlign: 'center' }}>
+                      <span 
+                        className={`${
+                          step.completed 
+                            ? 'text-success fw-semibold' 
+                            : step.clickable 
+                              ? 'text-primary fw-semibold' 
+                              : step.failed && step.current
+                                ? 'text-danger fw-semibold' 
+                                : 'text-muted'
+                        }`}
+                        style={{ fontSize: '12px', display: 'block', lineHeight: '1.4' }}
+                      >
+                        {step.label}
+                      </span>
+                      {step.current && (
+                        <span className="badge bg-secondary mt-1" style={{ fontSize: '9px', padding: '2px 6px' }}>
+                          Current
+                        </span>
+                      )}
+                      {step.clickable && (
+                        <span className="badge bg-primary mt-1" style={{ fontSize: '9px', padding: '2px 6px' }}>
+                          Click to start
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Connector Line */}
+                  {!isLast && (
+                    <div 
+                      style={{
+                        flex: 1,
+                        height: '3px',
+                        backgroundColor: connectorCompleted ? '#28a745' : step.failed ? '#dc3545' : '#dee2e6',
+                        marginLeft: '10px',
+                        marginRight: '10px',
+                        position: 'relative',
+                        zIndex: 1,
+                        opacity: connectorCompleted ? 1 : 0.4,
+                        alignSelf: 'flex-start',
+                        marginTop: '18px'
+                      }}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         </Card.Body>
       </Card>
@@ -240,7 +569,10 @@ function ViewDocument() {
               </div>
               <div className="d-flex justify-content-between align-items-center">
                 <span className="text-muted h6">Status</span>
-                <Badge bg={getStatusBadgeVariant(document.status)}>
+                <Badge 
+                  bg={getStatusBadgeVariant(document.status)}
+                  className={isProcessingStatus(document.status) ? 'status-processing' : ''}
+                >
                   {document.status}
                 </Badge>
               </div>
@@ -339,6 +671,60 @@ function ViewDocument() {
             </Card.Body>
           </Card>
         </Col>
+
+        {/* Processed Chunks Information */}
+        {document.status === 'PROCESSED' && (
+          <Col md={6}>
+            <Card className="border-0 bg-light h-100">
+              <Card.Body>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div className="d-flex align-items-center">
+                    <HiChartBar className="text-primary me-2" size={24} />
+                    <h5 className="mb-0 fw-semibold">Processed Chunks</h5>
+                  </div>
+                  {document.processedS3Key && (
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={handleDownloadProcessedJson}
+                      disabled={downloadingProcessedJson}
+                    >
+                      <HiDownload /> {downloadingProcessedJson ? 'Downloading...' : 'Download JSON'}
+                    </Button>
+                  )}
+                </div>
+                {document.totalChunks !== null && document.totalChunks !== undefined && (
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <span className="text-muted h6">Total Chunks</span>
+                    <span className="text-secondary">{document.totalChunks.toLocaleString()}</span>
+                  </div>
+                )}
+                {document.totalTokens !== null && document.totalTokens !== undefined && (
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <span className="text-muted h6">Total Tokens</span>
+                    <span className="text-secondary">{document.totalTokens.toLocaleString()}</span>
+                  </div>
+                )}
+                {loadingChunkStats ? (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="text-muted h6">Avg Quality Score</span>
+                    <Spinner animation="border" size="sm" />
+                  </div>
+                ) : chunkStats?.avgQualityScore !== null && chunkStats?.avgQualityScore !== undefined ? (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="text-muted h6">Avg Quality Score</span>
+                    <span className="text-secondary">{(chunkStats.avgQualityScore * 100).toFixed(1)}%</span>
+                  </div>
+                ) : (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="text-muted h6">Avg Quality Score</span>
+                    <span className="text-secondary">N/A</span>
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
+        )}
       </Row>
 
       <ConfirmationModalWithVerification

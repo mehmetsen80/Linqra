@@ -2,9 +2,9 @@ package org.lite.gateway.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.lang.NonNull;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -17,6 +17,7 @@ import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 import org.springframework.web.reactive.socket.server.support.WebSocketHandlerAdapter;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 import reactor.util.retry.Retry;
 
@@ -37,6 +38,13 @@ public class WebSocketConfig {
         .multicast()
         .onBackpressureBuffer(1024, false);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    @Autowired(required = false)
+    private org.lite.gateway.service.DocumentProcessingService documentProcessingService;
+    
+    @Autowired(required = false)
+    private org.lite.gateway.service.DocumentService documentService;
 
     @Bean("healthMessageChannel")
     public MessageChannel messageChannel(ObjectMapper objectMapper) {
@@ -202,12 +210,15 @@ public class WebSocketConfig {
     private String createStompFrame(String message, String destination) {
         log.debug("Creating STOMP frame for message: {} to destination: {}", message, destination);
         return String.format(
-            "MESSAGE\n" +
-            "destination:%s\n" +
-            "content-type:application/json\n" +
-            "subscription:sub-0\n" +
-            "message-id:%s\n\n" +
-            "%s\n\u0000",
+                """
+                        MESSAGE
+                        destination:%s
+                        content-type:application/json
+                        subscription:sub-0
+                        message-id:%s
+                        
+                        %s
+                        \u0000""",
             destination,
             UUID.randomUUID().toString(),
             message
@@ -222,31 +233,50 @@ public class WebSocketConfig {
             if (payload.startsWith("CONNECT")) {
                 log.debug("Handling CONNECT frame for session: {}", session.getId());
                 return session.textMessage(
-                    "CONNECTED\n" +
-                    "version:1.2\n" +
-                    "heart-beat:0,0\n\n" +
-                    "\u0000"
+                        """
+                                CONNECTED
+                                version:1.2
+                                heart-beat:0,0
+                                
+                                \u0000"""
                 );
             } else if (payload.startsWith("SUBSCRIBE")) {
                 log.debug("Handling SUBSCRIBE frame for session: {}", session.getId());
                 return session.textMessage(
-                    "RECEIPT\n" +
-                    "receipt-id:sub-0\n\n" +
-                    "\u0000"
+                        """
+                                RECEIPT
+                                receipt-id:sub-0
+                                
+                                \u0000"""
+                );
+            } else if (payload.startsWith("SEND")) {
+                // Handle SEND command for document processing
+                log.debug("Handling SEND frame for session: {}", session.getId());
+                handleSendCommand(session, payload);
+                return session.textMessage(
+                        """
+                                RECEIPT
+                                receipt-id:send-0
+                                
+                                \u0000"""
                 );
             } else if (payload.startsWith("DISCONNECT")) {
                 sessions.remove(session.getId());
                 return session.textMessage(
-                    "RECEIPT\n" +
-                    "receipt-id:disconnect-0\n\n" +
-                    "\u0000"
+                        """
+                                RECEIPT
+                                receipt-id:disconnect-0
+                                
+                                \u0000"""
                 );
             }
 
             return session.textMessage(
-                "ERROR\n" +
-                "message:Unknown command\n\n" +
-                "\u0000"
+                    """
+                            ERROR
+                            message:Unknown command
+                            
+                            \u0000"""
             );
         } catch (Exception e) {
             log.error("Error processing message: {}", e.getMessage());
@@ -255,6 +285,85 @@ public class WebSocketConfig {
                 "message:" + e.getMessage() + "\n\n" +
                 "\u0000"
             );
+        }
+    }
+    
+    private void handleSendCommand(WebSocketSession session, String payload) {
+        try {
+            // Parse STOMP SEND frame
+            Map<String, String> headers = new HashMap<>();
+            String body = "";
+            
+            String[] lines = payload.split("\n");
+            int i = 1;
+            
+            // Parse headers
+            while (i < lines.length && !lines[i].isEmpty()) {
+                int colonIndex = lines[i].indexOf(':');
+                if (colonIndex > 0) {
+                    String key = lines[i].substring(0, colonIndex).trim();
+                    String value = lines[i].substring(colonIndex + 1).trim();
+                    headers.put(key, value);
+                }
+                i++;
+            }
+            
+            // Skip empty line and get body
+            i++;
+            if (i < lines.length) {
+                body = lines[i].replace("\u0000", "").trim();
+            }
+            
+            String destination = headers.get("destination");
+            
+            if (destination != null && destination.startsWith("/app/document-processing")) {
+                // Handle document processing command asynchronously
+                log.info("Received document processing command: {}", body);
+                processDocumentProcessingCommand(body).subscribe(
+                    null,
+                    error -> log.error("Error processing document command: {}", error.getMessage(), error)
+                );
+            }
+        } catch (Exception e) {
+            log.error("Error processing SEND command: {}", e.getMessage(), e);
+        }
+    }
+    
+    private Mono<Void> processDocumentProcessingCommand(String body) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, String> command = objectMapper.readValue(body, Map.class);
+            String documentId = command.get("documentId");
+            String status = command.get("status");
+            String teamId = command.get("teamId");
+            
+            if (documentId == null || status == null) {
+                log.warn("Invalid document processing command: missing documentId or status");
+                return Mono.empty();
+            }
+            
+            log.info("Processing document command - documentId: {}, status: {}, teamId: {}", 
+                    documentId, status, teamId);
+            
+            if (documentProcessingService == null || documentService == null) {
+                log.warn("Document processing services not available");
+                return Mono.empty();
+            }
+            
+            if (teamId != null) {
+                // Update document status first, then trigger processing
+                return documentService.updateStatus(documentId, status, null)
+                    .then(documentProcessingService.processDocument(documentId, teamId))
+                    .doOnSuccess(v -> log.info("Document processing triggered via WebSocket for document: {}", documentId))
+                    .doOnError(error -> log.error("Error processing document via WebSocket: {}", documentId, error))
+                    .onErrorResume(error -> Mono.empty())
+                    .then();
+            }
+            
+            return Mono.empty();
+        } catch (Exception e) {
+            log.error("Error processing document processing command: {}", e.getMessage(), e);
+            return Mono.empty();
         }
     }
 

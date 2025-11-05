@@ -6,6 +6,7 @@ import org.lite.gateway.config.S3Properties;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.DocumentRepository;
+import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.impl.DocumentServiceImpl;
 import org.lite.gateway.service.impl.S3ServiceImpl;
@@ -53,6 +54,9 @@ class DocumentServiceImplIntegrationTest {
     @Autowired
     private ApplicationEventPublisher eventPublisher;
     
+    @Autowired
+    private KnowledgeHubChunkRepository chunkRepository;
+    
     private DocumentServiceImpl documentService;
     private S3ServiceImpl s3Service;
     private S3Properties s3Properties;
@@ -76,7 +80,8 @@ class DocumentServiceImplIntegrationTest {
                 teamRepository,
                 eventPublisher,
                 s3Service,
-                s3Properties
+                s3Properties,
+                chunkRepository
         );
     }
     

@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
+import software.amazon.awssdk.core.async.AsyncResponseTransformer;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.model.*;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -119,6 +120,45 @@ public class S3ServiceImpl implements S3Service {
         // Placeholder implementation - use generatePresignedDownloadUrl for actual downloads
         log.info("Download requested for S3 key: {} - Use generatePresignedDownloadUrl instead", s3Key);
         return Mono.empty();
+    }
+    
+    @Override
+    public Mono<byte[]> downloadFileContent(String s3Key) {
+        return Mono.fromCallable(() -> {
+                    log.info("Downloading file content from S3: {}", s3Key);
+                    log.info("  - Bucket: {}", s3Properties.getBucketName());
+                    log.info("  - S3 Key: {}", s3Key);
+                    String bucketName = s3Properties.getBucketName();
+                    
+                    GetObjectRequest getObjectRequest = GetObjectRequest.builder()
+                            .bucket(bucketName)
+                            .key(s3Key)
+                            .build();
+                    
+                    log.info("  - GetObjectRequest created, calling getObject...");
+                    // Use AsyncResponseTransformer.toBytes() to get the entire file as bytes
+                    return s3AsyncClient.getObject(getObjectRequest, 
+                            AsyncResponseTransformer.toBytes());
+                })
+                .flatMap(completableFuture -> {
+                    log.info("  - Waiting for CompletableFuture to complete...");
+                    return Mono.fromFuture(completableFuture);
+                })
+                .map(response -> {
+                    byte[] bytes = response.asByteArray();
+                    log.info("✅ Successfully downloaded {} bytes from S3 key: {}", bytes.length, s3Key);
+                    return bytes;
+                })
+                .doOnError(error -> {
+                    log.error("❌ Failed to download file from S3: {}", s3Key);
+                    log.error("  - Error type: {}", error.getClass().getName());
+                    log.error("  - Error message: {}", error.getMessage());
+                    if (error.getCause() != null) {
+                        log.error("  - Cause: {}", error.getCause().getClass().getName());
+                        log.error("  - Cause message: {}", error.getCause().getMessage());
+                    }
+                    log.error("  - Full stack trace:", error);
+                });
     }
     
     @Override

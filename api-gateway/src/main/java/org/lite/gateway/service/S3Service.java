@@ -28,6 +28,11 @@ public interface S3Service {
     Mono<Void> downloadFile(String s3Key);
     
     /**
+     * Download file content as byte array
+     */
+    Mono<byte[]> downloadFileContent(String s3Key);
+    
+    /**
      * Check if file exists
      */
     Mono<Boolean> fileExists(String s3Key);

@@ -108,6 +108,23 @@ export const documentService = {
     }
   },
 
+  // Generate download URL for processed JSON
+  generateProcessedJsonDownloadUrl: async (documentId) => {
+    try {
+      const response = await axiosInstance.get(`/api/documents/view/${documentId}/processed/download`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error generating processed JSON download URL:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to generate processed JSON download URL'
+      };
+    }
+  },
+
   // Delete document
   deleteDocument: async (documentId) => {
     try {

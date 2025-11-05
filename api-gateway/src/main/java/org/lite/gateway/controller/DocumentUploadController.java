@@ -267,7 +267,7 @@ public class DocumentUploadController {
     }
     
     /**
-     * Delete document
+     * Delete document (soft delete - only if S3 file doesn't exist)
      */
     @DeleteMapping("/{documentId}")
     public Mono<ResponseEntity<Object>> deleteDocument(@PathVariable String documentId, ServerWebExchange exchange) {
@@ -295,6 +295,38 @@ public class DocumentUploadController {
             log.error("Error deleting document: {}", documentId, error);
             return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to delete document: " + error.getMessage()));
+        });
+    }
+    
+    /**
+     * Hard delete document (deletes everything including S3 files)
+     */
+    @DeleteMapping("/{documentId}/hard")
+    public Mono<ResponseEntity<Object>> hardDeleteDocument(@PathVariable String documentId, ServerWebExchange exchange) {
+        log.info("Hard deleting document (including S3 files): {}", documentId);
+        
+        return Mono.zip(
+                teamContextService.getTeamFromContext(exchange),
+                userContextService.getCurrentUsername(exchange)
+        )
+        .flatMap(tuple -> {
+            String teamId = tuple.getT1();
+            String username = tuple.getT2();
+            
+            return userService.findByUsername(username)
+                    .flatMap(user ->
+                            teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                                    .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                            "Admin access required for team " + teamId)))
+                                    .then(documentService.hardDeleteDocument(documentId, teamId))
+                    )
+                    .then(Mono.just(ResponseEntity.ok().build()));
+        })
+        .onErrorResume(error -> {
+            log.error("Error hard deleting document: {}", documentId, error);
+            return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to hard delete document: " + error.getMessage()));
         });
     }
 }

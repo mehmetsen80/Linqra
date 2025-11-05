@@ -10,6 +10,7 @@ import axiosInstance from '../../../services/axiosInstance';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { formatDateTime } from '../../../utils/dateUtils';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
+import { documentProcessingWebSocket } from '../../../services/documentProcessingService';
 import './styles.css';
 
 function ViewCollection() {
@@ -32,6 +33,58 @@ function ViewCollection() {
       fetchDocuments();
     }
   }, [currentTeam?.id, collectionId]);
+
+  // Subscribe to WebSocket updates for document status changes
+  useEffect(() => {
+    if (!collectionId) return;
+
+    // Connect to WebSocket if not already connected
+    documentProcessingWebSocket.connect();
+
+    // Subscribe to document status updates
+    const unsubscribe = documentProcessingWebSocket.subscribe((statusUpdate) => {
+      // Only process updates for documents in this collection
+      if (statusUpdate.collectionId === collectionId) {
+        console.log('Received document status update for collection:', statusUpdate);
+
+        // Update the document in the list if it exists
+        setDocuments(prevDocuments => {
+          const documentIndex = prevDocuments.findIndex(
+            doc => doc.documentId === statusUpdate.documentId
+          );
+
+          if (documentIndex >= 0) {
+            // Document exists in list, update it
+            const updatedDocuments = [...prevDocuments];
+            updatedDocuments[documentIndex] = {
+              ...updatedDocuments[documentIndex],
+              status: statusUpdate.status,
+              processedAt: statusUpdate.processedAt,
+              totalChunks: statusUpdate.totalChunks,
+              totalTokens: statusUpdate.totalTokens,
+              processedS3Key: statusUpdate.processedS3Key,
+              errorMessage: statusUpdate.errorMessage
+            };
+            return updatedDocuments;
+          } else {
+            // Document doesn't exist yet (might have been uploaded but not yet in list)
+            // Don't add it here - let fetchDocuments() handle it after upload completes
+            // But if it's a new status update for an existing document that was just uploaded,
+            // we might want to fetch the list again to ensure we have all documents
+            console.log('Document not found in list, might need to refresh:', statusUpdate.documentId);
+            return prevDocuments;
+          }
+        });
+      }
+    });
+
+    return () => {
+      // Unsubscribe on unmount
+      unsubscribe();
+      // Note: We don't disconnect the WebSocket here because other components might be using it
+      // The WebSocket will be managed globally
+    };
+  }, [collectionId]);
 
   const fetchCollection = async () => {
     try {

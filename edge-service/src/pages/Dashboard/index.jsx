@@ -16,14 +16,16 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import './styles.css';
 
 function Dashboard() {
-  const { currentTeam, loading } = useTeam();
-  const { user } = useAuth();
+  const { currentTeam, loading: teamLoading } = useTeam();
+  const { user, loading: authLoading } = useAuth();
 
-  if (loading) {
+  // Wait for both auth and team data to load before making decisions
+  if (authLoading || teamLoading) {
     return <LoadingSpinner />;
   }
 
-  if (!currentTeam && !isSuperAdmin(user)) {
+  // Only show "No Team Access" when we're certain loading is complete and there's no team
+  if (!currentTeam && user && !isSuperAdmin(user)) {
     return (
       <div className="dashboard-container">
         <Alert variant="info" className="no-team-alert">

@@ -48,7 +48,7 @@ public interface DocumentService {
      * This will delete everything: chunks, S3 files (raw and processed), and document record
      */
     Mono<Void> hardDeleteDocument(String documentId, String teamId);
-    
+
     /**
      * Result of document initiation including document and presigned URL
      */

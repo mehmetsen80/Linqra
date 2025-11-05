@@ -56,7 +56,7 @@ class DocumentServiceImplIntegrationTest {
     
     @Autowired
     private KnowledgeHubChunkRepository chunkRepository;
-    
+
     private DocumentServiceImpl documentService;
     private S3ServiceImpl s3Service;
     private S3Properties s3Properties;

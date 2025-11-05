@@ -184,14 +184,20 @@
 }
 
 .view-apps-btn {
-  border-color: var(--primary-color, #ed7534) !important;
+  border: none !important;
+  border-color: transparent !important;
   color: var(--primary-color, #ed7534) !important;
   font-size: 0.875rem;
   font-weight: 500;
+  padding: 0;
+  box-shadow: none !important;
+  text-decoration: none !important;
 }
 
 .view-apps-btn:hover {
-  background-color: var(--primary-color, #e2baa5) !important;
-  border-color: var(--primary-color, #e2baa5) !important;
-  color: white !important;
+  background-color: transparent !important;
+  border: none !important;
+  border-color: transparent !important;
+  color: var(--primary-color, #ed7534) !important;
+  text-decoration: none !important;
 } 

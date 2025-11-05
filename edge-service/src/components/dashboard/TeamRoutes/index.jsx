@@ -133,11 +133,11 @@ const TeamRoutes = () => {
         <BootstrapButton 
           as={Link} 
           to="/api-routes" 
-          variant="outline-primary" 
+          variant="link" 
           size="sm"
           className="view-apps-btn"
         >
-          <i className="fas fa-th-large me-1"></i>
+          <i className="fas fa-route me-2"></i>
           View Apps
         </BootstrapButton>
       </Card.Header>

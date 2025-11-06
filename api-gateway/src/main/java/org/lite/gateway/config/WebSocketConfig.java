@@ -2,6 +2,10 @@ package org.lite.gateway.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+
+import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
+import org.lite.gateway.service.KnowledgeHubDocumentProcessingService;
+import org.lite.gateway.service.KnowledgeHubDocumentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -41,10 +45,13 @@ public class WebSocketConfig {
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     @Autowired(required = false)
-    private org.lite.gateway.service.DocumentProcessingService documentProcessingService;
+    private KnowledgeHubDocumentProcessingService documentProcessingService;
     
     @Autowired(required = false)
-    private org.lite.gateway.service.DocumentService documentService;
+    private KnowledgeHubDocumentService documentService;
+    
+    @Autowired(required = false)
+    private KnowledgeHubDocumentMetaDataService metadataService;
 
     @Bean("healthMessageChannel")
     public MessageChannel messageChannel(ObjectMapper objectMapper) {
@@ -323,6 +330,13 @@ public class WebSocketConfig {
                     null,
                     error -> log.error("Error processing document command: {}", error.getMessage(), error)
                 );
+            } else if (destination != null && destination.startsWith("/app/metadata-extraction")) {
+                // Handle metadata extraction command asynchronously
+                log.info("Received metadata extraction command: {}", body);
+                processMetadataExtractionCommand(body).subscribe(
+                    null,
+                    error -> log.error("Error processing metadata extraction command: {}", error.getMessage(), error)
+                );
             }
         } catch (Exception e) {
             log.error("Error processing SEND command: {}", e.getMessage(), e);
@@ -363,6 +377,44 @@ public class WebSocketConfig {
             return Mono.empty();
         } catch (Exception e) {
             log.error("Error processing document processing command: {}", e.getMessage(), e);
+            return Mono.empty();
+        }
+    }
+    
+    private Mono<Void> processMetadataExtractionCommand(String body) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, String> command = objectMapper.readValue(body, Map.class);
+            String documentId = command.get("documentId");
+            String status = command.get("status");
+            String teamId = command.get("teamId");
+            
+            if (documentId == null || status == null) {
+                log.warn("Invalid metadata extraction command: missing documentId or status");
+                return Mono.empty();
+            }
+            
+            log.info("Processing metadata extraction command - documentId: {}, status: {}, teamId: {}", 
+                    documentId, status, teamId);
+            
+            if (metadataService == null || documentService == null) {
+                log.warn("Metadata or document service not available");
+                return Mono.empty();
+            }
+            
+            if (teamId != null) {
+                // Update document status first, then trigger metadata extraction
+                return documentService.updateStatus(documentId, status, null)
+                    .then(metadataService.extractMetadata(documentId, teamId))
+                    .doOnSuccess(metadata -> log.info("Metadata extraction completed via WebSocket for document: {}", documentId))
+                    .doOnError(error -> log.error("Error extracting metadata via WebSocket: {}", documentId, error))
+                    .onErrorResume(error -> Mono.empty())
+                    .then();
+            }
+            
+            return Mono.empty();
+        } catch (Exception e) {
+            log.error("Error processing metadata extraction command: {}", e.getMessage(), e);
             return Mono.empty();
         }
     }

@@ -5,11 +5,11 @@ import org.junit.jupiter.api.Test;
 import org.lite.gateway.config.S3Properties;
 import org.lite.gateway.entity.KnowledgeHubChunk;
 import org.lite.gateway.entity.KnowledgeHubDocument;
-import org.lite.gateway.repository.DocumentRepository;
+import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.service.ChunkingService;
 import org.lite.gateway.service.TikaDocumentParser;
-import org.lite.gateway.service.impl.DocumentProcessingServiceImpl;
+import org.lite.gateway.service.impl.KnowledgeHubDocumentProcessingServiceImpl;
 import org.lite.gateway.service.impl.S3ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -35,7 +35,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration tests for DocumentProcessingService using real MongoDB and S3
+ * Integration tests for KnowledgeHubDocumentProcessingService using real MongoDB and S3
  * 
  * WARNING: This test uses real AWS credentials and will upload to real S3 bucket!
  * Make sure to delete credentials after testing!
@@ -61,12 +61,12 @@ class DocumentProcessingServiceImplIntegrationTest {
     private static final boolean CLEANUP_AFTER_TEST = false;
     
     @Autowired
-    private DocumentRepository documentRepository;
+    private KnowledgeHubDocumentRepository documentRepository;
     
     @Autowired
     private KnowledgeHubChunkRepository chunkRepository;
     
-    private DocumentProcessingServiceImpl documentProcessingService;
+    private KnowledgeHubDocumentProcessingServiceImpl documentProcessingService;
     private S3ServiceImpl s3Service;
     private S3Properties s3Properties;
 
@@ -102,14 +102,21 @@ class DocumentProcessingServiceImplIntegrationTest {
             }
         };
         
-        // Create DocumentProcessingServiceImpl
-        this.documentProcessingService = new DocumentProcessingServiceImpl(
+        // Create a no-op ApplicationEventPublisher for testing (events not needed in integration tests)
+        org.springframework.context.ApplicationEventPublisher mockEventPublisher = event -> {
+            // No-op: just log that event would be published
+            // log.debug("Event published: {}", event.getClass().getSimpleName());
+        };
+        
+        // Create KnowledgeHubDocumentProcessingServiceImpl
+        this.documentProcessingService = new KnowledgeHubDocumentProcessingServiceImpl(
                 documentRepository,
                 chunkRepository,
                 s3Service,
                 tikaDocumentParser,
                 chunkingService,
                 s3Properties,
+                mockEventPublisher,
                 mockExecutionMessageChannel
         );
     }
@@ -302,13 +309,20 @@ class DocumentProcessingServiceImplIntegrationTest {
             }
         };
         
-        DocumentProcessingServiceImpl devDocumentProcessingService = new DocumentProcessingServiceImpl(
+        // Create a no-op ApplicationEventPublisher for testing (events not needed in integration tests)
+        org.springframework.context.ApplicationEventPublisher mockEventPublisher = event -> {
+            // No-op: just log that event would be published
+            // log.debug("Event published: {}", event.getClass().getSimpleName());
+        };
+        
+        KnowledgeHubDocumentProcessingServiceImpl devDocumentProcessingService = new KnowledgeHubDocumentProcessingServiceImpl(
                 documentRepository,
                 chunkRepository,
                 devS3Service,
                 tikaDocumentParser,
                 chunkingService,
                 devS3Properties,
+                mockEventPublisher,
                 mockExecutionMessageChannel
         );
         

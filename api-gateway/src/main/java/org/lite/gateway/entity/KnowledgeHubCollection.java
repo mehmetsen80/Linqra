@@ -16,7 +16,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Document(collection = "knowledge_collection")
+@Document(collection = "knowledge_hub_collection")
 @Data
 @Builder
 @NoArgsConstructor
@@ -25,7 +25,7 @@ import java.util.List;
     // Unique constraint: name within team
     @CompoundIndex(name = "team_name_unique_idx", def = "{'teamId': 1, 'name': 1}", unique = true)
 })
-public class KnowledgeCollection {
+public class KnowledgeHubCollection {
     
     @Id
     private String id;

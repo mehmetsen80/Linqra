@@ -8,7 +8,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Repository
-public interface DocumentRepository extends ReactiveMongoRepository<KnowledgeHubDocument, String> {
+public interface KnowledgeHubDocumentRepository extends ReactiveMongoRepository<KnowledgeHubDocument, String> {
     
     Mono<KnowledgeHubDocument> findByDocumentId(String documentId);
     

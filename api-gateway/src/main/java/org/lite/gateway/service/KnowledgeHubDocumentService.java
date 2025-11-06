@@ -5,7 +5,7 @@ import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import reactor.core.publisher.Mono;
 
-public interface DocumentService {
+public interface KnowledgeHubDocumentService {
     
     /**
      * Initiate document upload: generate presigned URL and create document record
@@ -54,3 +54,4 @@ public interface DocumentService {
      */
     record DocumentInitiationResult(KnowledgeHubDocument document, PresignedUploadUrl presignedUrl) {}
 }
+

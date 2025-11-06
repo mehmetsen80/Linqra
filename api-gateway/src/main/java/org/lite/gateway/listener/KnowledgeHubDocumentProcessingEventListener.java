@@ -2,26 +2,26 @@ package org.lite.gateway.listener;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.event.DocumentProcessingEvent;
-import org.lite.gateway.service.DocumentProcessingService;
+import org.lite.gateway.event.KnowledgeHubDocumentProcessingEvent;
+import org.lite.gateway.service.KnowledgeHubDocumentProcessingService;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 /**
- * Listener for DocumentProcessingEvent
+ * Listener for KnowledgeHubDocumentProcessingEvent
  * Processes documents asynchronously when they are uploaded
  */
 @Component
 @Slf4j
 @RequiredArgsConstructor
-public class DocumentProcessingEventListener {
+public class KnowledgeHubDocumentProcessingEventListener {
     
-    private final DocumentProcessingService documentProcessingService;
+    private final KnowledgeHubDocumentProcessingService documentProcessingService;
     
     @Async
     @EventListener
-    public void handleDocumentProcessingEvent(DocumentProcessingEvent event) {
+    public void handleDocumentProcessingEvent(KnowledgeHubDocumentProcessingEvent event) {
         log.info("Received document processing event for document: {}, team: {}", 
                 event.getDocumentId(), event.getTeamId());
         

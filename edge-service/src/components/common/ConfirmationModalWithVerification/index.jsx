@@ -12,7 +12,8 @@ const ConfirmationModalWithVerification = ({
   confirmLabel = 'Yes',
   cancelLabel = 'No',
   variant = 'danger',
-  size = 'md'
+  size = 'md',
+  loading = false
 }) => {
   const [code, setCode] = useState('');
   const [expectedCode, setExpectedCode] = useState('');
@@ -46,11 +47,12 @@ const ConfirmationModalWithVerification = ({
   return (
     <Modal
       show={show}
-      onHide={onHide}
+      onHide={loading ? undefined : onHide}
       centered
       size={size}
       animation={true}
       className="confirmation-modal-with-verification"
+      backdrop={loading ? 'static' : true}
     >
       <Modal.Header closeButton className="border-0 p-3">
         <Modal.Title className="d-flex align-items-center gap-0">
@@ -83,6 +85,7 @@ const ConfirmationModalWithVerification = ({
               isInvalid={codeError}
               className="text-center text-uppercase"
               autoFocus
+              disabled={loading}
             />
             {codeError && (
               <Form.Control.Feedback type="invalid">
@@ -98,6 +101,7 @@ const ConfirmationModalWithVerification = ({
             variant="light" 
             onClick={onHide}
             className="px-4"
+            disabled={loading}
           >
             {cancelLabel}
           </Button>
@@ -105,9 +109,16 @@ const ConfirmationModalWithVerification = ({
             variant={variant} 
             onClick={handleConfirm}
             className="px-4"
-            disabled={!code || code.toUpperCase() !== expectedCode}
+            disabled={!code || code.toUpperCase() !== expectedCode || loading}
           >
-            {confirmLabel}
+            {loading ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Processing...
+              </>
+            ) : (
+              confirmLabel
+            )}
           </Button>
         </div>
       </Modal.Footer>

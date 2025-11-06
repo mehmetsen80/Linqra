@@ -4,9 +4,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.*;
-import org.lite.gateway.entity.KnowledgeCollection;
-import org.lite.gateway.repository.DocumentRepository;
-import org.lite.gateway.service.KnowledgeCollectionService;
+import org.lite.gateway.entity.KnowledgeHubCollection;
+import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
+import org.lite.gateway.service.KnowledgeHubCollectionService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.UserContextService;
 import org.springframework.http.HttpStatus;
@@ -20,12 +20,12 @@ import java.util.List;
 @RequestMapping("/api/knowledge/collections")
 @RequiredArgsConstructor
 @Slf4j
-public class KnowledgeCollectionController {
+public class KnowledgeHubCollectionController {
     
-    private final KnowledgeCollectionService collectionService;
+    private final KnowledgeHubCollectionService collectionService;
     private final TeamContextService teamContextService;
     private final UserContextService userContextService;
-    private final DocumentRepository documentRepository;
+    private final KnowledgeHubDocumentRepository documentRepository;
     
     /**
      * Create a new knowledge collection
@@ -178,7 +178,7 @@ public class KnowledgeCollectionController {
                         .map(count -> ResponseEntity.ok(count)));
     }
     
-    private KnowledgeCollectionResponse toResponse(KnowledgeCollection collection, Long documentCount) {
+    private KnowledgeCollectionResponse toResponse(KnowledgeHubCollection collection, Long documentCount) {
         return KnowledgeCollectionResponse.builder()
                 .id(collection.getId())
                 .name(collection.getName())

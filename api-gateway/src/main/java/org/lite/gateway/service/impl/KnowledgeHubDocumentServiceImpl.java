@@ -5,11 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.config.S3Properties;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
-import org.lite.gateway.event.DocumentProcessingEvent;
-import org.lite.gateway.repository.DocumentRepository;
+import org.lite.gateway.event.KnowledgeHubDocumentProcessingEvent;
+import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
+import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.TeamRepository;
-import org.lite.gateway.service.DocumentService;
+import org.lite.gateway.service.KnowledgeHubDocumentService;
 import org.lite.gateway.service.S3Service;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -21,14 +22,15 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class DocumentServiceImpl implements DocumentService {
+public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentService {
     
-    private final DocumentRepository documentRepository;
+    private final KnowledgeHubDocumentRepository documentRepository;
     private final TeamRepository teamRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final S3Service s3Service;
     private final S3Properties s3Properties;
     private final KnowledgeHubChunkRepository chunkRepository;
+    private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
     
     @Override
     public Mono<DocumentInitiationResult> initiateDocumentUpload(UploadInitiateRequest request, String teamId) {
@@ -97,7 +99,7 @@ public class DocumentServiceImpl implements DocumentService {
                                 log.info("Document upload completed: {}", documentId);
                                 
                                 // Publish processing event
-                                DocumentProcessingEvent event = DocumentProcessingEvent.builder()
+                                KnowledgeHubDocumentProcessingEvent event = KnowledgeHubDocumentProcessingEvent.builder()
                                         .documentId(doc.getDocumentId())
                                         .teamId(doc.getTeamId())
                                         .collectionId(doc.getCollectionId())
@@ -208,6 +210,18 @@ public class DocumentServiceImpl implements DocumentService {
                                 return Mono.empty();
                             });
                     
+                    // Delete metadata record
+                    Mono<Void> deleteMetadata = metadataRepository.deleteByDocumentId(documentId)
+                            .doOnSuccess(v -> log.info("Deleted metadata for document: {}", documentId))
+                            .doOnError(error -> log.warn("Error deleting metadata for document {}: {}", 
+                                    documentId, error.getMessage()))
+                            .onErrorResume(error -> {
+                                // Log warning but continue even if metadata deletion fails
+                                log.warn("Failed to delete metadata for document {}, continuing: {}", 
+                                        documentId, error.getMessage());
+                                return Mono.empty();
+                            });
+                    
                     // Delete raw S3 file if it exists
                     Mono<Void> deleteRawFile = Mono.empty();
                     if (document.getS3Key() != null && !document.getS3Key().isEmpty()) {
@@ -241,7 +255,7 @@ public class DocumentServiceImpl implements DocumentService {
                     }
                     
                     // Execute all deletions in parallel, then delete the document record
-                    return Mono.when(deleteChunks, deleteRawFile, deleteProcessedFile)
+                    return Mono.when(deleteChunks, deleteMetadata, deleteRawFile, deleteProcessedFile)
                             .then(documentRepository.deleteById(document.getId()))
                             .doOnSuccess(success -> log.info("Successfully hard deleted document: {}", documentId));
                 });

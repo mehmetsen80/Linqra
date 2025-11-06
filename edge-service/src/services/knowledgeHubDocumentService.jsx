@@ -1,6 +1,6 @@
 import axiosInstance from './axiosInstance';
 
-export const documentService = {
+export const knowledgeHubDocumentService = {
   // Get all documents, optionally filtered by collection or status
   getAllDocuments: async (params = {}) => {
     try {
@@ -125,7 +125,7 @@ export const documentService = {
     }
   },
 
-  // Delete document
+  // Delete document (soft delete - only if S3 file doesn't exist)
   deleteDocument: async (documentId) => {
     try {
       await axiosInstance.delete(`/api/documents/${documentId}`);
@@ -136,7 +136,58 @@ export const documentService = {
       console.error('Error deleting document:', error);
       return {
         success: false,
-        error: error.response?.data?.message || 'Failed to delete document'
+        error: error.response?.data?.message || error.response?.data || 'Failed to delete document'
+      };
+    }
+  },
+
+  // Hard delete document (deletes everything including S3 files)
+  hardDeleteDocument: async (documentId) => {
+    try {
+      await axiosInstance.delete(`/api/documents/${documentId}/hard`);
+      return {
+        success: true
+      };
+    } catch (error) {
+      console.error('Error hard deleting document:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.response?.data || 'Failed to hard delete document'
+      };
+    }
+  },
+
+  // Get document metadata
+  getMetadata: async (documentId) => {
+    try {
+      const response = await axiosInstance.get(`/api/documents/metadata/${documentId}`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error fetching metadata:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch metadata',
+        statusCode: error.response?.status // Include status code for retry logic
+      };
+    }
+  },
+
+  // Extract metadata from a processed document
+  extractMetadata: async (documentId) => {
+    try {
+      const response = await axiosInstance.post(`/api/documents/metadata/extract/${documentId}`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error extracting metadata:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to extract metadata'
       };
     }
   }

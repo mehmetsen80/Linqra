@@ -3,14 +3,14 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Container, Card, Table, Breadcrumb, Spinner, Alert, Badge } from 'react-bootstrap';
 import { HiDocument, HiArrowLeft, HiBookOpen, HiCloudUpload, HiTrash, HiEye } from 'react-icons/hi';
 import { useTeam } from '../../../contexts/TeamContext';
-import { knowledgeCollectionService } from '../../../services/knowledgeCollectionService';
-import { documentService } from '../../../services/documentService';
+import { knowledgeHubCollectionService } from '../../../services/knowledgeHubCollectionService';
+import { knowledgeHubDocumentService } from '../../../services/knowledgeHubDocumentService';
 import Button from '../../../components/common/Button';
 import axiosInstance from '../../../services/axiosInstance';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { formatDateTime } from '../../../utils/dateUtils';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
-import { documentProcessingWebSocket } from '../../../services/documentProcessingService';
+import { knowledgeHubWebSocketService } from '../../../services/knowledgeHubWebSocketService';
 import './styles.css';
 
 function ViewCollection() {
@@ -39,10 +39,10 @@ function ViewCollection() {
     if (!collectionId) return;
 
     // Connect to WebSocket if not already connected
-    documentProcessingWebSocket.connect();
+    knowledgeHubWebSocketService.connect();
 
     // Subscribe to document status updates
-    const unsubscribe = documentProcessingWebSocket.subscribe((statusUpdate) => {
+    const unsubscribe = knowledgeHubWebSocketService.subscribe((statusUpdate) => {
       // Only process updates for documents in this collection
       if (statusUpdate.collectionId === collectionId) {
         console.log('Received document status update for collection:', statusUpdate);
@@ -88,7 +88,7 @@ function ViewCollection() {
 
   const fetchCollection = async () => {
     try {
-      const { data, error } = await knowledgeCollectionService.getCollectionById(collectionId);
+      const { data, error } = await knowledgeHubCollectionService.getCollectionById(collectionId);
       if (error) throw new Error(error);
       setCollection(data);
     } catch (err) {
@@ -100,7 +100,7 @@ function ViewCollection() {
   const fetchDocuments = async () => {
     try {
       setLoading(true);
-      const result = await documentService.getAllDocuments({ collectionId });
+      const result = await knowledgeHubDocumentService.getAllDocuments({ collectionId });
       if (result.error) throw new Error(result.error);
       setDocuments(result.data || []);
       setLoading(false);
@@ -195,7 +195,7 @@ function ViewCollection() {
     if (!documentToDelete) return;
 
     try {
-      const result = await documentService.deleteDocument(documentToDelete.documentId);
+      const result = await knowledgeHubDocumentService.deleteDocument(documentToDelete.documentId);
       if (result.error) throw new Error(result.error);
       
       showSuccessToast('Document deleted successfully');
@@ -211,10 +211,13 @@ function ViewCollection() {
   const getStatusBadgeVariant = (status) => {
     switch (status) {
       case 'READY':
+      case 'PROCESSED':
+      case 'AI_READY':
         return 'success';
       case 'UPLOADED':
       case 'PARSING':
       case 'PARSED':
+      case 'METADATA_EXTRACTION':
       case 'EMBEDDING':
         return 'info';
       case 'PENDING_UPLOAD':

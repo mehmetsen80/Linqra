@@ -1,4 +1,4 @@
-class DocumentProcessingWebSocket {
+class KnowledgeHubWebSocketService {
     constructor() {
         this.ws = null;
         this.connected = false;
@@ -14,7 +14,7 @@ class DocumentProcessingWebSocket {
         }
 
         try {
-            console.log(`Connecting to WebSocket for document processing: ${this.wsUrl}`);
+            console.log(`Connecting to WebSocket for knowledge hub: ${this.wsUrl}`);
             this.connectionStatus = 'connecting';
             this.ws = new WebSocket(this.wsUrl);
             this.setupWebSocket();
@@ -26,7 +26,7 @@ class DocumentProcessingWebSocket {
 
     setupWebSocket() {
         this.ws.onopen = () => {
-            console.log('Document Processing WebSocket Connected');
+            console.log('Knowledge Hub WebSocket Connected');
             this.connectionStatus = 'connected';
             
             // Send STOMP CONNECT frame
@@ -45,7 +45,7 @@ class DocumentProcessingWebSocket {
             const frame = this.parseStompFrame(event.data);
             
             if (frame.command === 'CONNECTED') {
-                console.log('Document Processing STOMP Connected');
+                console.log('Knowledge Hub STOMP Connected');
                 this.connected = true;
                 
                 // Subscribe to document status updates via /topic/execution
@@ -68,7 +68,7 @@ class DocumentProcessingWebSocket {
                     console.error('Error parsing document status message:', error);
                 }
             } else if (frame.command === 'RECEIPT') {
-                console.log('Document processing command acknowledged');
+                console.log('Knowledge hub command acknowledged');
             } else if (frame.command === 'ERROR') {
                 console.error('WebSocket error:', frame.body);
             }
@@ -81,7 +81,7 @@ class DocumentProcessingWebSocket {
         };
 
         this.ws.onclose = () => {
-            console.log('Document Processing WebSocket Closed');
+            console.log('Knowledge Hub WebSocket Closed');
             this.connected = false;
             this.connectionStatus = 'disconnected';
         };
@@ -159,6 +159,38 @@ class DocumentProcessingWebSocket {
         }
     }
 
+    sendMetadataExtractionCommand(documentId, status, teamId) {
+        if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.warn('WebSocket not connected, attempting to connect...');
+            this.connect();
+            // Wait a bit for connection
+            setTimeout(() => {
+                this.sendMetadataExtractionCommand(documentId, status, teamId);
+            }, 500);
+            return;
+        }
+
+        try {
+            const command = JSON.stringify({
+                documentId,
+                status,
+                teamId
+            });
+
+            const sendFrame = 'SEND\n' +
+                'destination:/app/metadata-extraction\n' +
+                'content-type:application/json\n' +
+                '\n' +
+                command +
+                '\0';
+
+            this.ws.send(sendFrame);
+            console.log('Sent metadata extraction command:', { documentId, status, teamId });
+        } catch (error) {
+            console.error('Error sending metadata extraction command:', error);
+        }
+    }
+
     disconnect() {
         if (this.ws) {
             if (this.connected) {
@@ -173,4 +205,5 @@ class DocumentProcessingWebSocket {
     }
 }
 
-export const documentProcessingWebSocket = new DocumentProcessingWebSocket();
+export const knowledgeHubWebSocketService = new KnowledgeHubWebSocketService();
+

@@ -2,12 +2,12 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.entity.KnowledgeCollection;
+import org.lite.gateway.entity.KnowledgeHubCollection;
 import org.lite.gateway.enums.KnowledgeCategory;
-import org.lite.gateway.repository.DocumentRepository;
-import org.lite.gateway.repository.KnowledgeCollectionRepository;
+import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
+import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.lite.gateway.repository.TeamRepository;
-import org.lite.gateway.service.KnowledgeCollectionService;
+import org.lite.gateway.service.KnowledgeHubCollectionService;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -19,14 +19,14 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class KnowledgeCollectionServiceImpl implements KnowledgeCollectionService {
+public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollectionService {
     
-    private final KnowledgeCollectionRepository collectionRepository;
+    private final KnowledgeHubCollectionRepository collectionRepository;
     private final TeamRepository teamRepository;
-    private final DocumentRepository documentRepository;
+    private final KnowledgeHubDocumentRepository documentRepository;
     
     @Override
-    public Mono<KnowledgeCollection> createCollection(String name, String description, List<KnowledgeCategory> categories, String teamId, String createdBy) {
+    public Mono<KnowledgeHubCollection> createCollection(String name, String description, List<KnowledgeCategory> categories, String teamId, String createdBy) {
         log.info("Creating knowledge collection: {} for team: {} by user: {}", name, teamId, createdBy);
         
         // Validate team exists
@@ -45,7 +45,7 @@ public class KnowledgeCollectionServiceImpl implements KnowledgeCollectionServic
                                 }
                                 
                                 // Create new collection
-                                KnowledgeCollection collection = KnowledgeCollection.builder()
+                                KnowledgeHubCollection collection = KnowledgeHubCollection.builder()
                                         .name(name)
                                         .description(description)
                                         .categories(categories)
@@ -63,7 +63,7 @@ public class KnowledgeCollectionServiceImpl implements KnowledgeCollectionServic
     }
     
     @Override
-    public Mono<KnowledgeCollection> updateCollection(String id, String name, String description, List<KnowledgeCategory> categories, String teamId, String updatedBy) {
+    public Mono<KnowledgeHubCollection> updateCollection(String id, String name, String description, List<KnowledgeCategory> categories, String teamId, String updatedBy) {
         log.info("Updating knowledge collection: {} for team: {} by user: {}", id, teamId, updatedBy);
         
         return collectionRepository.findById(id)
@@ -126,7 +126,7 @@ public class KnowledgeCollectionServiceImpl implements KnowledgeCollectionServic
     }
     
     @Override
-    public Flux<KnowledgeCollection> getCollectionsByTeam(String teamId) {
+    public Flux<KnowledgeHubCollection> getCollectionsByTeam(String teamId) {
         log.info("Getting knowledge collections for team: {}", teamId);
         
         return collectionRepository.findByTeamId(Sort.by(Sort.Direction.ASC, "name"), teamId)
@@ -134,7 +134,7 @@ public class KnowledgeCollectionServiceImpl implements KnowledgeCollectionServic
     }
     
     @Override
-    public Mono<KnowledgeCollection> getCollectionById(String id, String teamId) {
+    public Mono<KnowledgeHubCollection> getCollectionById(String id, String teamId) {
         log.info("Getting knowledge collection: {} for team: {}", id, teamId);
         
         return collectionRepository.findByIdAndTeamId(id, teamId)

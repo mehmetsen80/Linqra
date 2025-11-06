@@ -12,7 +12,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DocumentProcessingEvent {
+public class KnowledgeHubDocumentProcessingEvent {
     private String documentId;
     private String teamId;
     private String collectionId;

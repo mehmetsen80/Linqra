@@ -5,7 +5,7 @@ import reactor.core.publisher.Mono;
 /**
  * Service for processing uploaded documents
  */
-public interface DocumentProcessingService {
+public interface KnowledgeHubDocumentProcessingService {
     
     /**
      * Process a document: download, parse, chunk, and store

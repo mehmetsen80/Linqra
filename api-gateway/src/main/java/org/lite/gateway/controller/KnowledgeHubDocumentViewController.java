@@ -3,7 +3,7 @@ package org.lite.gateway.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.KnowledgeHubDocument;
-import org.lite.gateway.service.DocumentService;
+import org.lite.gateway.service.KnowledgeHubDocumentService;
 import org.lite.gateway.service.S3Service;
 import org.lite.gateway.service.TeamContextService;
 import org.springframework.http.HttpStatus;
@@ -18,9 +18,9 @@ import java.util.Map;
 @RequestMapping("/api/documents")
 @RequiredArgsConstructor
 @Slf4j
-public class DocumentViewController {
+public class KnowledgeHubDocumentViewController {
     
-    private final DocumentService documentService;
+    private final KnowledgeHubDocumentService documentService;
     private final S3Service s3Service;
     private final TeamContextService teamContextService;
     

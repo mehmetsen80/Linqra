@@ -1,6 +1,6 @@
 import axiosInstance from './axiosInstance';
 
-export const knowledgeCollectionService = {
+export const knowledgeHubCollectionService = {
   // Get all knowledge collections for current team
   getAllCollections: async () => {
     try {

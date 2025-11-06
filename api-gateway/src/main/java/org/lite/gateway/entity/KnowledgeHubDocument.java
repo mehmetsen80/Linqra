@@ -6,6 +6,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
+import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -16,6 +18,14 @@ import java.time.LocalDateTime;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@CompoundIndexes({
+    // Compound index for querying documents by team and collection (most common query)
+    @CompoundIndex(name = "team_collection_idx", def = "{'teamId': 1, 'collectionId': 1}"),
+    // Compound index for querying documents by team and status
+    @CompoundIndex(name = "team_status_idx", def = "{'teamId': 1, 'status': 1}"),
+    // Compound index for querying documents by collection and status
+    @CompoundIndex(name = "collection_status_idx", def = "{'collectionId': 1, 'status': 1}")
+})
 public class KnowledgeHubDocument {
     
     @Id
@@ -36,7 +46,7 @@ public class KnowledgeHubDocument {
     private String s3Key; // S3 key for the raw document
     
     @Indexed
-    private String status; // PENDING_UPLOAD, UPLOADED, PARSING, PROCESSED, EMBEDDING, AI_READY, FAILED
+    private String status; // PENDING_UPLOAD, UPLOADED, PARSING, PROCESSED, METADATA_EXTRACTION, EMBEDDING, AI_READY, FAILED
     
     @CreatedDate
     private LocalDateTime createdAt;

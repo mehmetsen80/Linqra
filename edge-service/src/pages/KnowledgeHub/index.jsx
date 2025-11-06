@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Container, Card, Table, Spinner, Breadcrumb, OverlayTrigger, Tooltip, Badge } from 'react-bootstrap';
 import { HiFolder, HiPlus, HiEye, HiPencil, HiTrash, HiBookOpen } from 'react-icons/hi';
 import { useTeam } from '../../contexts/TeamContext';
-import { knowledgeCollectionService } from '../../services/knowledgeCollectionService';
+import { knowledgeHubCollectionService } from '../../services/knowledgeHubCollectionService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Button from '../../components/common/Button';
@@ -42,7 +42,7 @@ function KnowledgeHub() {
 
     try {
       setLoading(true);
-      const { data, error } = await knowledgeCollectionService.getAllCollections();
+      const { data, error } = await knowledgeHubCollectionService.getAllCollections();
       if (error) throw new Error(error);
 
       console.log('data', data);
@@ -58,7 +58,7 @@ function KnowledgeHub() {
   const handleCreateCollection = async (collectionData) => {
     try {
       setOperationLoading(true);
-      const { data, error } = await knowledgeCollectionService.createCollection(collectionData);
+      const { data, error } = await knowledgeHubCollectionService.createCollection(collectionData);
       if (error) throw new Error(error);
       
       await fetchCollections();
@@ -74,7 +74,7 @@ function KnowledgeHub() {
   const handleEditCollection = async (collectionData) => {
     try {
       setOperationLoading(true);
-      const { data, error } = await knowledgeCollectionService.updateCollection(
+      const { data, error } = await knowledgeHubCollectionService.updateCollection(
         selectedCollection.id,
         collectionData
       );
@@ -94,7 +94,7 @@ function KnowledgeHub() {
     const collection = collections.find(c => c.id === collectionId);
     try {
       setOperationLoading(true);
-      const { error } = await knowledgeCollectionService.deleteCollection(collectionId);
+      const { error } = await knowledgeHubCollectionService.deleteCollection(collectionId);
       if (error) throw new Error(error);
       
       setConfirmModal(prev => ({ ...prev, show: false }));

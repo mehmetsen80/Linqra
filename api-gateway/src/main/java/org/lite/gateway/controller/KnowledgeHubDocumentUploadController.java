@@ -6,8 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.config.S3Properties;
 import org.lite.gateway.dto.*;
 import org.lite.gateway.entity.KnowledgeHubDocument;
-import org.lite.gateway.repository.DocumentRepository;
-import org.lite.gateway.service.DocumentService;
+import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
+import org.lite.gateway.service.KnowledgeHubDocumentService;
 import org.lite.gateway.service.S3Service;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.TeamService;
@@ -29,13 +29,13 @@ import java.util.List;
 @RequestMapping("/api/documents")
 @RequiredArgsConstructor
 @Slf4j
-public class DocumentUploadController {
+public class KnowledgeHubDocumentUploadController {
     
     private final S3Service s3Service;
     private final S3Properties s3Properties;
-    private final DocumentService documentService;
+    private final KnowledgeHubDocumentService documentService;
     private final TeamContextService teamContextService;
-    private final DocumentRepository documentRepository;
+    private final KnowledgeHubDocumentRepository documentRepository;
     private final UserContextService userContextService;
     private final UserService userService;
     private final TeamService teamService;
@@ -267,6 +267,39 @@ public class DocumentUploadController {
     }
     
     /**
+     * Hard delete document (deletes everything including S3 files)
+     * Note: This must come before the regular delete endpoint to ensure proper route matching
+     */
+    @DeleteMapping("/{documentId}/hard")
+    public Mono<ResponseEntity<Object>> hardDeleteDocument(@PathVariable String documentId, ServerWebExchange exchange) {
+        log.info("Hard deleting document (including S3 files): {}", documentId);
+        
+        return Mono.zip(
+                teamContextService.getTeamFromContext(exchange),
+                userContextService.getCurrentUsername(exchange)
+        )
+        .flatMap(tuple -> {
+            String teamId = tuple.getT1();
+            String username = tuple.getT2();
+            
+            return userService.findByUsername(username)
+                    .flatMap(user ->
+                            teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                                    .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                            "Admin access required for team " + teamId)))
+                                    .then(documentService.hardDeleteDocument(documentId, teamId))
+                    )
+                    .then(Mono.just(ResponseEntity.ok().build()));
+        })
+        .onErrorResume(error -> {
+            log.error("Error hard deleting document: {}", documentId, error);
+            return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to hard delete document: " + error.getMessage()));
+        });
+    }
+    
+    /**
      * Delete document (soft delete - only if S3 file doesn't exist)
      */
     @DeleteMapping("/{documentId}")
@@ -295,38 +328,6 @@ public class DocumentUploadController {
             log.error("Error deleting document: {}", documentId, error);
             return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Failed to delete document: " + error.getMessage()));
-        });
-    }
-    
-    /**
-     * Hard delete document (deletes everything including S3 files)
-     */
-    @DeleteMapping("/{documentId}/hard")
-    public Mono<ResponseEntity<Object>> hardDeleteDocument(@PathVariable String documentId, ServerWebExchange exchange) {
-        log.info("Hard deleting document (including S3 files): {}", documentId);
-        
-        return Mono.zip(
-                teamContextService.getTeamFromContext(exchange),
-                userContextService.getCurrentUsername(exchange)
-        )
-        .flatMap(tuple -> {
-            String teamId = tuple.getT1();
-            String username = tuple.getT2();
-            
-            return userService.findByUsername(username)
-                    .flatMap(user ->
-                            teamService.hasRole(teamId, user.getId(), "ADMIN")
-                                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
-                                    .switchIfEmpty(Mono.error(new AccessDeniedException(
-                                            "Admin access required for team " + teamId)))
-                                    .then(documentService.hardDeleteDocument(documentId, teamId))
-                    )
-                    .then(Mono.just(ResponseEntity.ok().build()));
-        })
-        .onErrorResume(error -> {
-            log.error("Error hard deleting document: {}", documentId, error);
-            return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Failed to hard delete document: " + error.getMessage()));
         });
     }
 }

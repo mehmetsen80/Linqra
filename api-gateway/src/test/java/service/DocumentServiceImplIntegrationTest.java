@@ -5,10 +5,11 @@ import org.junit.jupiter.api.Test;
 import org.lite.gateway.config.S3Properties;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
-import org.lite.gateway.repository.DocumentRepository;
+import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
+import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.TeamRepository;
-import org.lite.gateway.service.impl.DocumentServiceImpl;
+import org.lite.gateway.service.impl.KnowledgeHubDocumentServiceImpl;
 import org.lite.gateway.service.impl.S3ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -46,7 +47,7 @@ class DocumentServiceImplIntegrationTest {
     private static final String TEST_TEAM_ID = "67d0aeb17172416c411d419e";
     
     @Autowired
-    private DocumentRepository documentRepository;
+    private KnowledgeHubDocumentRepository documentRepository;
     
     @Autowired
     private TeamRepository teamRepository;
@@ -56,8 +57,11 @@ class DocumentServiceImplIntegrationTest {
     
     @Autowired
     private KnowledgeHubChunkRepository chunkRepository;
+    
+    @Autowired
+    private KnowledgeHubDocumentMetaDataRepository metadataRepository;
 
-    private DocumentServiceImpl documentService;
+    private KnowledgeHubDocumentServiceImpl documentService;
     private S3ServiceImpl s3Service;
     private S3Properties s3Properties;
     
@@ -74,14 +78,15 @@ class DocumentServiceImplIntegrationTest {
         // Setup real S3 service
         setupRealS3Service();
         
-        // Create DocumentServiceImpl
-        this.documentService = new DocumentServiceImpl(
+        // Create KnowledgeHubDocumentServiceImpl
+        this.documentService = new KnowledgeHubDocumentServiceImpl(
                 documentRepository,
                 teamRepository,
                 eventPublisher,
                 s3Service,
                 s3Properties,
-                chunkRepository
+                chunkRepository,
+                metadataRepository
         );
     }
     
@@ -203,7 +208,7 @@ class DocumentServiceImplIntegrationTest {
                 .verifyComplete();
         
         System.out.println("✅ Upload completed successfully!");
-        System.out.println("✅ DocumentProcessingEvent published (verified via logs)!");
+        System.out.println("✅ KnowledgeHubDocumentProcessingEvent published (verified via logs)!");
         
         // Cleanup: Delete file from S3
         System.out.println("🧹 Cleaning up S3 file...");

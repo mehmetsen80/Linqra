@@ -68,6 +68,15 @@ public class ProcessedDocumentDto {
         private String language;
         private Integer pageCount;
         private List<String> detectedEntities;
+        // Tika metadata fields
+        private String title;
+        private String author;
+        private String subject;
+        private String keywords;
+        private String creator;
+        private String producer;
+        private String creationDate;
+        private String modificationDate;
     }
     
     @Data
@@ -112,6 +121,11 @@ public class ProcessedDocumentDto {
         private Double avgQualityScore;
         private Integer chunksWithLessThan50Tokens;
         private Integer chunksWithTables;
+        // Text statistics
+        private Integer pageCount;
+        private Integer wordCount;
+        private Integer characterCount;
+        private String language;
     }
     
     @Data

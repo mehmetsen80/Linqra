@@ -5,10 +5,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.config.S3Properties;
 import org.lite.gateway.dto.ProcessedDocumentDto;
 import org.lite.gateway.entity.KnowledgeHubDocument;
-import org.lite.gateway.repository.DocumentRepository;
+import org.lite.gateway.event.KnowledgeHubDocumentMetaDataEvent;
+import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.service.*;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.messaging.MessageChannel;
@@ -30,26 +32,28 @@ import java.util.UUID;
  */
 @Service
 @Slf4j
-public class DocumentProcessingServiceImpl implements DocumentProcessingService {
+public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDocumentProcessingService {
     
-    private final DocumentRepository documentRepository;
+    private final KnowledgeHubDocumentRepository documentRepository;
     private final KnowledgeHubChunkRepository chunkRepository;
     private final S3Service s3Service;
     private final TikaDocumentParser tikaDocumentParser;
     private final ChunkingService chunkingService;
     private final S3Properties s3Properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ApplicationEventPublisher eventPublisher;
     
     private final MessageChannel executionMessageChannel;
     
     // Constructor with @Qualifier for MessageChannel
-    public DocumentProcessingServiceImpl(
-            DocumentRepository documentRepository,
+    public KnowledgeHubDocumentProcessingServiceImpl(
+            KnowledgeHubDocumentRepository documentRepository,
             KnowledgeHubChunkRepository chunkRepository,
             S3Service s3Service,
             TikaDocumentParser tikaDocumentParser,
             ChunkingService chunkingService,
             S3Properties s3Properties,
+            ApplicationEventPublisher eventPublisher,
             @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel) {
         this.documentRepository = documentRepository;
         this.chunkRepository = chunkRepository;
@@ -57,6 +61,7 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
         this.tikaDocumentParser = tikaDocumentParser;
         this.chunkingService = chunkingService;
         this.s3Properties = s3Properties;
+        this.eventPublisher = eventPublisher;
         this.executionMessageChannel = executionMessageChannel;
     }
     
@@ -266,10 +271,7 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
                         .contentType(document.getContentType())
                         .uploadedAt(document.getUploadedAt().toString())
                         .build())
-                .extractedMetadata(ProcessedDocumentDto.ExtractedMetadata.builder()
-                        .pageCount(parseResult.getPageCount())
-                        .language("en") // TODO: Detect language
-                        .build())
+                .extractedMetadata(buildExtractedMetadata(parseResult))
                 .chunkingStrategy(ProcessedDocumentDto.ChunkingStrategy.builder()
                         .method(document.getChunkStrategy())
                         .maxTokens(document.getChunkSize())
@@ -288,23 +290,121 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
                         .language("en")
                         .qualityScore(calculateQualityScore(chunk))
                         .build()).toList())
-                .statistics(ProcessedDocumentDto.Statistics.builder()
-                        .totalChunks(chunks.size())
-                        .totalTokens(chunks.stream().mapToInt(ChunkingService.ChunkResult::getTokenCount).sum())
-                        .avgTokensPerChunk(chunks.isEmpty() ? 0 : 
-                                chunks.stream().mapToInt(ChunkingService.ChunkResult::getTokenCount).sum() / chunks.size())
-                        .avgQualityScore(chunks.isEmpty() ? 0.0 : 
-                                chunks.stream().mapToDouble(chunk -> calculateQualityScore(chunk)).average().orElse(0.0))
-                        .chunksWithLessThan50Tokens((int) chunks.stream()
-                                .filter(chunk -> chunk.getTokenCount() < 50)
-                                .count())
-                        .chunksWithTables(0) // TODO: Detect tables
-                        .build())
+                .statistics(buildStatistics(parseResult, chunks))
                 .qualityChecks(ProcessedDocumentDto.QualityChecks.builder()
                         .allChunksValid(true)
                         .warnings(new ArrayList<>())
                         .errors(new ArrayList<>())
                         .build())
+                .build();
+    }
+    
+    /**
+     * Build extracted metadata from Tika parse result
+     */
+    private ProcessedDocumentDto.ExtractedMetadata buildExtractedMetadata(TikaDocumentParser.ParseResult parseResult) {
+        org.apache.tika.metadata.Metadata tikaMetadata = parseResult.getMetadata();
+        
+        ProcessedDocumentDto.ExtractedMetadata.ExtractedMetadataBuilder builder = ProcessedDocumentDto.ExtractedMetadata.builder()
+                .pageCount(parseResult.getPageCount());
+        
+        // Extract Tika metadata fields (check multiple possible keys for each field)
+        // PDFs may use different metadata keys depending on how they were created
+        if (tikaMetadata != null) {
+            // Title: check multiple possible keys (PDFs may use different metadata keys)
+            String title = getFirstAvailable(tikaMetadata, 
+                    "title", "dc:title", "xmp:Title", "Title");
+            builder.title(title);
+            
+            // Author: check multiple possible keys
+            String author = getFirstAvailable(tikaMetadata,
+                    "Author", "author", "dc:creator", "creator", "xmp:Creator");
+            builder.author(author);
+            
+            // Subject: check multiple possible keys
+            String subject = getFirstAvailable(tikaMetadata,
+                    "subject", "Subject", "dc:subject", "xmp:Subject");
+            builder.subject(subject);
+            
+            // Keywords: check multiple possible keys
+            String keywords = getFirstAvailable(tikaMetadata,
+                    "Keywords", "keywords", "xmp:Keywords", "meta:keyword");
+            builder.keywords(keywords);
+            
+            // Creator and Producer (PDF-specific metadata)
+            builder.creator(getFirstAvailable(tikaMetadata, "creator", "Creator", "xmp:CreatorTool"))
+                    .producer(getFirstAvailable(tikaMetadata, "producer", "Producer", "xmp:Producer"))
+                    .creationDate(getFirstAvailable(tikaMetadata, "Creation-Date", "creation-date", "xmp:CreateDate", "dcterms:created"))
+                    .modificationDate(getFirstAvailable(tikaMetadata, "Last-Modified", "last-modified", "xmp:ModifyDate", "dcterms:modified"));
+            
+            // Detect language from metadata or default to "en"
+            String language = tikaMetadata.get("language");
+            if (language == null || language.isEmpty()) {
+                language = "en"; // Default to English
+            }
+            builder.language(language);
+            
+            // Log what metadata was found (for debugging)
+            if (log.isDebugEnabled()) {
+                log.debug("Extracted metadata - Title: {}, Author: {}, Subject: {}, Keywords: {}", 
+                        title, author, subject, keywords);
+            }
+        } else {
+            builder.language("en"); // Default if metadata is null
+        }
+        
+        return builder.build();
+    }
+    
+    /**
+     * Helper method to get the first available value from metadata using multiple possible keys
+     */
+    private String getFirstAvailable(org.apache.tika.metadata.Metadata metadata, String... keys) {
+        for (String key : keys) {
+            String value = metadata.get(key);
+            if (value != null && !value.trim().isEmpty()) {
+                return value;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Build statistics from parse result and chunks
+     */
+    private ProcessedDocumentDto.Statistics buildStatistics(
+            TikaDocumentParser.ParseResult parseResult, 
+            List<ChunkingService.ChunkResult> chunks) {
+        
+        String text = parseResult.getText();
+        int wordCount = text != null && !text.isEmpty() 
+                ? text.trim().split("\\s+").length 
+                : 0;
+        int characterCount = text != null ? text.length() : 0;
+        
+        org.apache.tika.metadata.Metadata tikaMetadata = parseResult.getMetadata();
+        String language = tikaMetadata != null 
+                ? tikaMetadata.get("language") 
+                : null;
+        if (language == null || language.isEmpty()) {
+            language = "en"; // Default to English
+        }
+        
+        return ProcessedDocumentDto.Statistics.builder()
+                .totalChunks(chunks.size())
+                .totalTokens(chunks.stream().mapToInt(ChunkingService.ChunkResult::getTokenCount).sum())
+                .avgTokensPerChunk(chunks.isEmpty() ? 0 : 
+                        chunks.stream().mapToInt(ChunkingService.ChunkResult::getTokenCount).sum() / chunks.size())
+                .avgQualityScore(chunks.isEmpty() ? 0.0 : 
+                        chunks.stream().mapToDouble(chunk -> calculateQualityScore(chunk)).average().orElse(0.0))
+                .chunksWithLessThan50Tokens((int) chunks.stream()
+                        .filter(chunk -> chunk.getTokenCount() < 50)
+                        .count())
+                .chunksWithTables(0) // TODO: Detect tables
+                .pageCount(parseResult.getPageCount())
+                .wordCount(wordCount)
+                .characterCount(characterCount)
+                .language(language)
                 .build();
     }
     
@@ -385,7 +485,7 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
     
     /**
      * Update document status to PROCESSED
-     * Status flow: PENDING_UPLOAD -> UPLOADED -> PARSING -> PROCESSED -> (future) EMBEDDING -> AI_READY
+     * Status flow: PENDING_UPLOAD -> UPLOADED -> PARSING -> PROCESSED -> METADATA_EXTRACTION -> EMBEDDING -> AI_READY
      */
     private Mono<KnowledgeHubDocument> updateDocumentStatus(
             KnowledgeHubDocument document, String processedS3Key, int chunkCount, int totalTokens) {
@@ -396,7 +496,22 @@ public class DocumentProcessingServiceImpl implements DocumentProcessingService 
         document.setTotalTokens(totalTokens > 0 ? (long) totalTokens : null);
         
         return documentRepository.save(document)
-                .doOnSuccess(savedDoc -> publishDocumentStatusUpdate(savedDoc));
+                .doOnSuccess(savedDoc -> {
+                    publishDocumentStatusUpdate(savedDoc);
+                    
+                    // Publish metadata extraction event after document processing is complete
+                    KnowledgeHubDocumentMetaDataEvent event = KnowledgeHubDocumentMetaDataEvent.builder()
+                            .documentId(savedDoc.getDocumentId())
+                            .teamId(savedDoc.getTeamId())
+                            .collectionId(savedDoc.getCollectionId())
+                            .processedS3Key(savedDoc.getProcessedS3Key())
+                            .fileName(savedDoc.getFileName())
+                            .contentType(savedDoc.getContentType())
+                            .build();
+                    
+                    eventPublisher.publishEvent(event);
+                    log.info("Published document metadata extraction event for: {}", savedDoc.getDocumentId());
+                });
     }
     
     /**

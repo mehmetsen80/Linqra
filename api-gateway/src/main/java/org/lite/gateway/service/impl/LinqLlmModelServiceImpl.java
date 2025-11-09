@@ -7,10 +7,12 @@ import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.LinqLlmModel;
 import org.lite.gateway.repository.LinqLlmModelRepository;
+import org.lite.gateway.repository.LlmModelRepository;
 import org.lite.gateway.service.LinqLlmModelService;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -26,7 +28,29 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     private final LinqLlmModelRepository linqLlmModelRepository;
 
     @NonNull
+    private final LlmModelRepository llmModelRepository;
+
+    @NonNull
     private final WebClient.Builder webClientBuilder;
+
+    private Mono<LinqLlmModel> enrichWithModelMetadata(LinqLlmModel linqLlmModel) {
+        if (linqLlmModel == null) {
+            return Mono.empty();
+        }
+        if (!StringUtils.hasText(linqLlmModel.getModelName())) {
+            return Mono.just(linqLlmModel);
+        }
+
+        return llmModelRepository.findByModelName(linqLlmModel.getModelName())
+                .map(llmModel -> {
+                    linqLlmModel.setEmbeddingDimension(llmModel.getDimensions());
+                    linqLlmModel.setInputPricePer1M(llmModel.getInputPricePer1M());
+                    linqLlmModel.setOutputPricePer1M(llmModel.getOutputPricePer1M());
+                    linqLlmModel.setContextWindowTokens(llmModel.getContextWindowTokens());
+                    return linqLlmModel;
+                })
+                .defaultIfEmpty(linqLlmModel);
+    }
 
     @Override
     public Mono<LinqLlmModel> saveLinqLlmModel(LinqLlmModel linqLlmModel) {
@@ -95,6 +119,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     public Mono<LinqLlmModel> findById(String id) {
         log.info("Finding LLM model configuration by ID: {}", id);
         return linqLlmModelRepository.findById(id)
+                .flatMap(this::enrichWithModelMetadata)
                 .doOnSuccess(llmModel -> {
                     if (llmModel != null) {
                         log.info("✅ Found LLM model configuration: id={}, modelCategory={}, modelName={}", 
@@ -111,6 +136,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     public Flux<LinqLlmModel> findByTeamId(String teamId) {
         log.info("Finding LLM model configurations for team: {}", teamId);
         return linqLlmModelRepository.findByTeamId(teamId)
+                .flatMap(this::enrichWithModelMetadata)
                 .doOnNext(llmModel -> log.info("Found LLM model configuration for team {}: modelCategory={}, modelName={}", 
                     teamId, llmModel.getModelCategory(), llmModel.getModelName()))
                 .doOnComplete(() -> log.info("Completed fetching {} LLM model configurations for team: {}", teamId))
@@ -123,6 +149,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     public Flux<LinqLlmModel> findByModelCategoryAndTeamId(String modelCategory, String teamId) {
         log.info("Finding LLM model configurations for modelCategory: {} and team: {}", modelCategory, teamId);
         return linqLlmModelRepository.findByModelCategoryAndTeamId(modelCategory, teamId)
+                .flatMap(this::enrichWithModelMetadata)
                 .doOnNext(llmModel -> log.info("Found LLM model configuration: modelCategory={}, modelName={}", 
                 modelCategory, llmModel.getModelName()))
                 .doOnComplete(() -> log.info("Completed fetching LLM model configurations for modelCategory: {} and team: {}", modelCategory, teamId))
@@ -135,6 +162,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
         log.info("Finding LLM model configurations for modelCategories: {} and team: {}", modelCategories, teamId);
         return Flux.fromIterable(modelCategories)
                 .flatMap(modelCategory -> linqLlmModelRepository.findByModelCategoryAndTeamId(modelCategory, teamId))
+                .flatMap(this::enrichWithModelMetadata)
                 .doOnNext(llmModel -> log.info("Found LLM model configuration: modelCategory={}, modelName={}", 
                     llmModel.getModelCategory(), llmModel.getModelName()))
                 .doOnComplete(() -> log.info("Completed fetching LLM model configurations for modelCategories: {} and team: {}", modelCategories, teamId))
@@ -146,6 +174,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     public Mono<LinqLlmModel> findByModelCategoryAndModelNameAndTeamId(String modelCategory, String modelName, String teamId) {
         log.info("Finding LLM model configuration for modelCategory: {}, modelName: {} and team: {}", modelCategory, modelName, teamId);
         return linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId)
+                .flatMap(this::enrichWithModelMetadata)
                 .doOnSuccess(llmModel -> {
                     if (llmModel != null) {
                         log.info("✅ Found LLM model configuration: modelCategory={}, modelName={}, endpoint={}", 

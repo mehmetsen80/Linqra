@@ -8,6 +8,7 @@ const Button = React.forwardRef(({
   className, 
   fullWidth,
   loading,
+  disabled,
   ...props 
 }, ref) => {
   const buttonClasses = classNames(
@@ -21,7 +22,7 @@ const Button = React.forwardRef(({
     <button 
       ref={ref}
       className={buttonClasses}
-      disabled={loading}
+      disabled={disabled || loading}
       {...props}
     >
       {loading ? (

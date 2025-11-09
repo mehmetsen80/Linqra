@@ -8,6 +8,7 @@ import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentMetaDataServiceImpl;
+import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.impl.S3ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,6 +17,7 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.AbstractMessageChannel;
 import org.springframework.test.context.ActiveProfiles;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -106,12 +108,15 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
         };
         
         // Create KnowledgeHubDocumentMetaDataServiceImpl
+        KnowledgeHubDocumentEmbeddingService noopEmbeddingService = (docId, teamId) -> Mono.empty();
+
         this.metadataService = new KnowledgeHubDocumentMetaDataServiceImpl(
                 metadataRepository,
                 documentRepository,
                 s3Service,
                 objectMapper,
-                mockExecutionMessageChannel
+                mockExecutionMessageChannel,
+                noopEmbeddingService
         );
     }
     

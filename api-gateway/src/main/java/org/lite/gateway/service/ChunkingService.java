@@ -25,6 +25,7 @@ public class ChunkingService {
     
     private static final Object MODEL_LOCK = new Object();
     private static SentenceModel sentenceModel;
+    private static volatile boolean sentenceModelLoaded = false;
     
     /**
      * Get OpenNLP sentence detector model (loaded lazily)
@@ -38,6 +39,7 @@ public class ChunkingService {
                                 .getResourceAsStream("models/en-sent.bin");
                         if (modelStream != null) {
                             sentenceModel = new SentenceModel(modelStream);
+                            sentenceModelLoaded = true;
                             log.info("Loaded OpenNLP sentence detection model");
                         } else {
                             log.warn("OpenNLP sentence model not found, using simple regex fallback");
@@ -259,6 +261,13 @@ public class ChunkingService {
         return sentences;
     }
     
+    /**
+     * Returns a short description of the sentence tokenizer currently in use.
+     */
+    public String getSentenceTokenizerDescription() {
+        return sentenceModelLoaded ? "opennlp/en-sent.bin" : "regex-sentence-split";
+    }
+    
     @Data
     @lombok.Builder
     @lombok.NoArgsConstructor
@@ -270,5 +279,6 @@ public class ChunkingService {
         private Integer endPosition;
         private Integer chunkIndex;
         private java.util.List<Integer> pageNumbers;
+        private Boolean metadataOnly;
     }
 }

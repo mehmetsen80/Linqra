@@ -3,6 +3,7 @@ package org.lite.gateway.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
+import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
 import org.lite.gateway.service.KnowledgeHubDocumentProcessingService;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
@@ -30,6 +31,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.util.StringUtils;
 
 @Configuration
 @Slf4j
@@ -52,6 +54,9 @@ public class WebSocketConfig {
     
     @Autowired(required = false)
     private KnowledgeHubDocumentMetaDataService metadataService;
+
+    @Autowired(required = false)
+    private KnowledgeHubDocumentEmbeddingService documentEmbeddingService;
 
     @Bean("healthMessageChannel")
     public MessageChannel messageChannel(ObjectMapper objectMapper) {
@@ -337,6 +342,12 @@ public class WebSocketConfig {
                     null,
                     error -> log.error("Error processing metadata extraction command: {}", error.getMessage(), error)
                 );
+            } else if (destination != null && destination.startsWith("/app/document-embedding")) {
+                log.info("Received document embedding command: {}", body);
+                processDocumentEmbeddingCommand(body).subscribe(
+                        null,
+                        error -> log.error("Error processing document embedding command: {}", error.getMessage(), error)
+                );
             }
         } catch (Exception e) {
             log.error("Error processing SEND command: {}", e.getMessage(), e);
@@ -415,6 +426,45 @@ public class WebSocketConfig {
             return Mono.empty();
         } catch (Exception e) {
             log.error("Error processing metadata extraction command: {}", e.getMessage(), e);
+            return Mono.empty();
+        }
+    }
+
+    private Mono<Void> processDocumentEmbeddingCommand(String body) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, String> command = objectMapper.readValue(body, Map.class);
+            String documentId = command.get("documentId");
+            String status = command.get("status");
+            String teamId = command.get("teamId");
+
+            if (documentId == null || teamId == null) {
+                log.warn("Invalid document embedding command: missing documentId or teamId");
+                return Mono.empty();
+            }
+
+            if (documentEmbeddingService == null || documentService == null) {
+                log.warn("Document embedding service is not available");
+                return Mono.empty();
+            }
+
+            Mono<?> statusUpdate = Mono.empty();
+            if (StringUtils.hasText(status)) {
+                statusUpdate = documentService.updateStatus(documentId, status, null)
+                        .doOnSuccess(doc -> log.debug("Updated document {} status to {} via WebSocket", documentId, status))
+                        .onErrorResume(error -> {
+                            log.error("Failed to update status before embedding for document {}: {}", documentId, error.getMessage());
+                            return Mono.empty();
+                        });
+            }
+
+            return statusUpdate.then(documentEmbeddingService.embedDocument(documentId, teamId))
+                    .doOnSuccess(v -> log.info("Document embedding triggered via WebSocket for document: {}", documentId))
+                    .doOnError(error -> log.error("Error triggering document embedding via WebSocket: {}", error.getMessage(), error))
+                    .onErrorResume(error -> Mono.empty())
+                    .then();
+        } catch (Exception e) {
+            log.error("Error processing document embedding command: {}", e.getMessage(), e);
             return Mono.empty();
         }
     }

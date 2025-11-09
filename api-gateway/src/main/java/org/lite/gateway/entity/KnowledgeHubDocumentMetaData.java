@@ -23,9 +23,10 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 @CompoundIndexes({
-    // Compound index for querying metadata by document ID and team (access control)
-    @CompoundIndex(name = "document_team_idx", def = "{'documentId': 1, 'teamId': 1}"),
-    // Compound index for querying metadata by team and collection
+    // Ensure uniqueness per document/team/collection combination
+    @CompoundIndex(name = "document_team_collection_unique_idx",
+            def = "{'documentId': 1, 'teamId': 1, 'collectionId': 1}", unique = true),
+    // Support queries by team and collection
     @CompoundIndex(name = "team_collection_idx", def = "{'teamId': 1, 'collectionId': 1}")
 })
 public class KnowledgeHubDocumentMetaData {
@@ -33,7 +34,7 @@ public class KnowledgeHubDocumentMetaData {
     @Id
     private String id;
     
-    @Indexed(unique = true)
+    @Indexed
     private String documentId; // Reference to KnowledgeHubDocument
     
     @Indexed

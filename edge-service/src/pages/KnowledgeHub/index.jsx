@@ -1,15 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Container, Card, Table, Spinner, Breadcrumb, OverlayTrigger, Tooltip, Badge } from 'react-bootstrap';
-import { HiFolder, HiPlus, HiEye, HiPencil, HiTrash, HiBookOpen } from 'react-icons/hi';
+import { HiFolder, HiPlus, HiEye, HiPencil, HiTrash, HiBookOpen, HiLink, HiXCircle, HiCollection } from 'react-icons/hi';
 import { useTeam } from '../../contexts/TeamContext';
 import { knowledgeHubCollectionService } from '../../services/knowledgeHubCollectionService';
+import { milvusService } from '../../services/milvusService';
+import { llmModelService } from '../../services/llmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Button from '../../components/common/Button';
 import CreateCollectionModal from '../../components/knowledgeHub/CreateCollectionModal';
 import EditCollectionModal from '../../components/knowledgeHub/EditCollectionModal';
+import MilvusAssignmentModal from '../../components/knowledgeHub/MilvusAssignmentModal';
 import './styles.css';
+
+const PROVIDER_LABELS = {
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+  cohere: 'Cohere'
+};
 
 function KnowledgeHub() {
   const navigate = useNavigate();
@@ -21,6 +30,12 @@ function KnowledgeHub() {
   const [selectedCollection, setSelectedCollection] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showMilvusModal, setShowMilvusModal] = useState(false);
+  const [selectedCollectionForMilvus, setSelectedCollectionForMilvus] = useState(null);
+  const [milvusCollections, setMilvusCollections] = useState([]);
+  const [loadingMilvusCollections, setLoadingMilvusCollections] = useState(false);
+  const [embeddingOptions, setEmbeddingOptions] = useState([]);
+  const [loadingEmbeddingOptions, setLoadingEmbeddingOptions] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
     show: false,
     title: '',
@@ -32,6 +47,8 @@ function KnowledgeHub() {
   useEffect(() => {
     if (currentTeam?.id) {
       fetchCollections();
+      loadMilvusCollections();
+      loadEmbeddingOptions();
     }
   }, [currentTeam?.id]);
 
@@ -119,6 +136,130 @@ function KnowledgeHub() {
     });
   };
 
+  const transformEmbeddingOptions = (models = []) => {
+    const grouped = models.reduce((acc, model) => {
+      if (!model) {
+        return acc;
+      }
+
+      const providerKey = model.provider || (model.modelCategory ? model.modelCategory.split('-')[0] : 'unknown');
+      if (!acc[providerKey]) {
+        acc[providerKey] = {
+          provider: providerKey,
+          label: PROVIDER_LABELS[providerKey] || providerKey,
+          models: []
+        };
+      }
+
+      const rawDimension = model.embeddingDimension ?? model.dimension ?? model.dimensions;
+      const dimensionValue = typeof rawDimension === 'number'
+        ? rawDimension
+        : rawDimension
+          ? parseInt(rawDimension, 10)
+          : undefined;
+
+      acc[providerKey].models.push({
+        modelName: model.modelName,
+        modelCategory: model.modelCategory,
+        dimension: dimensionValue,
+        embeddingDimension: dimensionValue,
+        supportsLateChunking: model.supportsLateChunking,
+        inputPricePer1M: typeof model.inputPricePer1M === 'number' ? model.inputPricePer1M : undefined,
+        outputPricePer1M: typeof model.outputPricePer1M === 'number' ? model.outputPricePer1M : undefined
+      });
+      return acc;
+    }, {});
+
+    return Object.values(grouped).map(option => ({
+      ...option,
+      models: option.models.sort((a, b) => a.modelName.localeCompare(b.modelName))
+    }));
+  };
+
+  const loadMilvusCollections = async () => {
+    if (!currentTeam?.id) return;
+
+    try {
+      setLoadingMilvusCollections(true);
+      const { data, error } = await milvusService.getCollectionsForTeam(currentTeam.id, { collectionType: 'KNOWLEDGE_HUB' });
+      if (error) throw new Error(error);
+      setMilvusCollections(data || []);
+    } catch (err) {
+      console.error('Error loading RAG collections:', err);
+      showErrorToast(err.message || 'Failed to load RAG collections');
+    } finally {
+      setLoadingMilvusCollections(false);
+    }
+  };
+
+  const handleAssignMilvus = (collection) => {
+    if (!currentTeam?.id) {
+      showErrorToast('Select a team to manage RAG collections');
+      return;
+    }
+
+    setSelectedCollectionForMilvus(collection);
+    setShowMilvusModal(true);
+    loadMilvusCollections();
+    loadEmbeddingOptions();
+  };
+
+  const loadEmbeddingOptions = async () => {
+    if (!currentTeam?.id) return;
+
+    try {
+      setLoadingEmbeddingOptions(true);
+      const { data, error } = await llmModelService.getEmbeddingModels(currentTeam.id);
+      if (error) throw new Error(error);
+      setEmbeddingOptions(transformEmbeddingOptions(data || []));
+    } catch (err) {
+      console.error('Error loading embedding models:', err);
+      showErrorToast(err.message || 'Failed to load embedding models');
+    } finally {
+      setLoadingEmbeddingOptions(false);
+    }
+  };
+
+  const handleMilvusAssignmentSave = async (payload) => {
+    if (!selectedCollectionForMilvus) return;
+
+    try {
+      setOperationLoading(true);
+      const { error } = await knowledgeHubCollectionService.assignMilvusCollection(selectedCollectionForMilvus.id, payload);
+      if (error) throw new Error(error);
+      showSuccessToast('RAG collection assigned successfully');
+      setShowMilvusModal(false);
+      setSelectedCollectionForMilvus(null);
+      fetchCollections();
+    } catch (err) {
+      console.error('Error assigning RAG collection:', err);
+      showErrorToast(err.message || 'Failed to assign RAG collection');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  const handleMilvusAssignmentRemove = async (collection) => {
+    try {
+      setOperationLoading(true);
+      const { error } = await knowledgeHubCollectionService.removeMilvusCollection(collection.id);
+      if (error) throw new Error(error);
+      showSuccessToast('RAG assignment removed');
+      fetchCollections();
+    } catch (err) {
+      console.error('Error removing RAG assignment:', err);
+      showErrorToast(err.message || 'Failed to remove RAG assignment');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  const resolveProviderLabel = (modelCategory) => {
+    if (!modelCategory) return 'N/A';
+    const providerKey = modelCategory.split('-')[0];
+    return PROVIDER_LABELS[providerKey] || providerKey;
+  };
+
   const formatDate = (dateInput) => {
     if (!dateInput) return 'N/A';
     
@@ -186,7 +327,14 @@ function KnowledgeHub() {
               <HiBookOpen className="page-icon" />
               <h4 className="mb-0">Knowledge Hub</h4>
             </div>
-            <div className="ms-auto">
+            <div className="ms-auto d-flex align-items-center gap-2">
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => navigate('/rag')}
+              >
+                <HiCollection className="me-1" /> Manage RAG
+              </Button>
               <Button 
                 onClick={() => setShowCreateModal(true)}
                 disabled={operationLoading}
@@ -235,6 +383,7 @@ function KnowledgeHub() {
                   <th>Description</th>
                   <th>Categories</th>
                   <th>Files</th>
+            <th>RAG Collection</th>
                   <th>Created By</th>
                   <th>Created At</th>
                   <th className="text-end">Actions</th>
@@ -271,6 +420,37 @@ function KnowledgeHub() {
                         {collection.documentCount || 0}
                       </Badge>
                     </td>
+                    <td className="milvus-collection-cell">
+                      {collection.milvusCollectionName ? (
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={(
+                            <Tooltip id={`milvus-collection-tooltip-${collection.id || collection._id || collection.milvusCollectionName}`}>
+                              <div className="text-start">
+                                <div><strong>Collection:</strong> {collection.milvusCollectionName}</div>
+                                <div><strong>Provider:</strong> {resolveProviderLabel(collection.embeddingModel)}</div>
+                                <div><strong>Model:</strong> {collection.embeddingModelName || 'N/A'}</div>
+                                <div><strong>Dimension:</strong> {collection.embeddingDimension || 'N/A'}</div>
+                                <div><strong>Late chunking:</strong> {collection.lateChunkingEnabled ? 'Enabled' : 'Disabled'}</div>
+                              </div>
+                            </Tooltip>
+                          )}
+                        >
+                          <div className="milvus-collection-cell-content">
+                            <span className="milvus-name text-truncate">{collection.milvusCollectionName}</span>
+                            <small className="milvus-details text-muted">
+                              <span className="milvus-details-text text-truncate d-inline-block">
+                                {resolveProviderLabel(collection.embeddingModel)} · {collection.embeddingModelName || 'N/A'}
+                                {collection.embeddingDimension ? ` (${collection.embeddingDimension} dims)` : ''}
+                              </span>
+                              {collection.lateChunkingEnabled && <Badge bg="info">Late Chunking</Badge>}
+                            </small>
+                          </div>
+                        </OverlayTrigger>
+                      ) : (
+                        <span className="text-muted">Not assigned</span>
+                      )}
+                    </td>
                     <td>
                       <span className="created-by">{collection.createdBy || 'N/A'}</span>
                     </td>
@@ -306,6 +486,35 @@ function KnowledgeHub() {
                             <HiPencil />
                           </Button>
                         </OverlayTrigger>
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={<Tooltip>{collection.milvusCollectionName ? 'Modify RAG Assignment' : 'Assign RAG Collection'}</Tooltip>}
+                        >
+                          <Button
+                            variant="outline-success"
+                            size="sm"
+                            onClick={() => handleAssignMilvus(collection)}
+                          >
+                            <HiLink /> {collection.milvusCollectionName ? 'RAG' : 'Assign'}
+                          </Button>
+                        </OverlayTrigger>
+                        {collection.milvusCollectionName && (
+                          <OverlayTrigger
+                            placement="top"
+                          overlay={<Tooltip>Remove RAG Assignment</Tooltip>}
+                          >
+                            <span>
+                              <Button
+                                variant="outline-warning"
+                                size="sm"
+                                onClick={() => handleMilvusAssignmentRemove(collection)}
+                                disabled={operationLoading}
+                              >
+                                <HiXCircle /> Clear
+                              </Button>
+                            </span>
+                          </OverlayTrigger>
+                        )}
                         <OverlayTrigger
                           placement="top"
                           overlay={
@@ -352,6 +561,19 @@ function KnowledgeHub() {
         onSave={handleEditCollection}
         collection={selectedCollection}
         loading={operationLoading}
+      />
+
+      <MilvusAssignmentModal
+        show={showMilvusModal}
+        onHide={() => {
+          setShowMilvusModal(false);
+          setSelectedCollectionForMilvus(null);
+        }}
+        milvusCollections={milvusCollections}
+        embeddingOptions={embeddingOptions}
+        collection={selectedCollectionForMilvus}
+        loading={operationLoading || loadingMilvusCollections || loadingEmbeddingOptions}
+        onSave={handleMilvusAssignmentSave}
       />
 
       <ConfirmationModal

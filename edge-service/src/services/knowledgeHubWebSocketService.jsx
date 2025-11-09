@@ -161,9 +161,8 @@ class KnowledgeHubWebSocketService {
 
     sendMetadataExtractionCommand(documentId, status, teamId) {
         if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            console.warn('WebSocket not connected, attempting to connect...');
+            console.warn('Knowledge Hub WebSocket not connected, attempting to connect...');
             this.connect();
-            // Wait a bit for connection
             setTimeout(() => {
                 this.sendMetadataExtractionCommand(documentId, status, teamId);
             }, 500);
@@ -188,6 +187,37 @@ class KnowledgeHubWebSocketService {
             console.log('Sent metadata extraction command:', { documentId, status, teamId });
         } catch (error) {
             console.error('Error sending metadata extraction command:', error);
+        }
+    }
+
+    sendDocumentEmbeddingCommand(documentId, status, teamId) {
+        if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.warn('Knowledge Hub WebSocket not connected, attempting to connect...');
+            this.connect();
+            setTimeout(() => {
+                this.sendDocumentEmbeddingCommand(documentId, status, teamId);
+            }, 500);
+            return;
+        }
+
+        try {
+            const command = JSON.stringify({
+                documentId,
+                status,
+                teamId
+            });
+
+            const sendFrame = 'SEND\n' +
+                'destination:/app/document-embedding\n' +
+                'content-type:application/json\n' +
+                '\n' +
+                command +
+                '\0';
+
+            this.ws.send(sendFrame);
+            console.log('Sent document embedding command:', { documentId, status, teamId });
+        } catch (error) {
+            console.error('Error sending document embedding command:', error);
         }
     }
 

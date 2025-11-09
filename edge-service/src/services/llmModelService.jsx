@@ -1,11 +1,27 @@
 import axiosInstance from './axiosInstance';
 
+const EMBEDDING_MODEL_CATEGORIES = ['openai-embed', 'gemini-embed', 'cohere-embed'];
+
 const llmModelService = {
-  /**
-   * Get all LLM models
-   * @param {boolean} activeOnly - If true, only return active models
-   * @returns {Promise} Promise with list of LLM models
-   */
+  async getEmbeddingModels(teamId, categories = EMBEDDING_MODEL_CATEGORIES) {
+    try {
+      const response = await axiosInstance.post(
+        `/api/linq-llm-models/team/${teamId}/modelCategories`,
+        categories
+      );
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error fetching embedding models:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to fetch embedding models'
+      };
+    }
+  },
+
   async getAllModels(activeOnly = false) {
     try {
       const params = activeOnly ? '?active=true' : '';
@@ -16,11 +32,6 @@ const llmModelService = {
     }
   },
 
-  /**
-   * Get model by ID
-   * @param {string} id - Model ID
-   * @returns {Promise} Promise with model data
-   */
   async getModelById(id) {
     try {
       const response = await axiosInstance.get(`/api/llm-models/${id}`);
@@ -30,11 +41,6 @@ const llmModelService = {
     }
   },
 
-  /**
-   * Get models by provider
-   * @param {string} provider - Provider name (openai, gemini, anthropic)
-   * @returns {Promise} Promise with list of models
-   */
   async getModelsByProvider(provider) {
     try {
       const response = await axiosInstance.get(`/api/llm-models/provider/${provider}`);
@@ -44,11 +50,6 @@ const llmModelService = {
     }
   },
 
-  /**
-   * Create a new LLM model
-   * @param {object} model - Model data
-   * @returns {Promise} Promise with created model
-   */
   async createModel(model) {
     try {
       const response = await axiosInstance.post('/api/llm-models', model);
@@ -58,12 +59,6 @@ const llmModelService = {
     }
   },
 
-  /**
-   * Update an existing LLM model
-   * @param {string} id - Model ID
-   * @param {object} model - Updated model data
-   * @returns {Promise} Promise with updated model
-   */
   async updateModel(id, model) {
     try {
       const response = await axiosInstance.put(`/api/llm-models/${id}`, model);
@@ -73,11 +68,6 @@ const llmModelService = {
     }
   },
 
-  /**
-   * Delete an LLM model
-   * @param {string} id - Model ID
-   * @returns {Promise} Promise indicating completion
-   */
   async deleteModel(id) {
     try {
       const response = await axiosInstance.delete(`/api/llm-models/${id}`);
@@ -87,10 +77,6 @@ const llmModelService = {
     }
   },
 
-  /**
-   * Initialize default models
-   * @returns {Promise} Promise indicating completion
-   */
   async initializeDefaultModels() {
     try {
       const response = await axiosInstance.post('/api/llm-models/initialize-defaults');
@@ -101,5 +87,6 @@ const llmModelService = {
   }
 };
 
+export { llmModelService, EMBEDDING_MODEL_CATEGORIES };
 export default llmModelService;
 

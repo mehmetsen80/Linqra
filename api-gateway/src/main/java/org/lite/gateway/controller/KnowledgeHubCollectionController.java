@@ -3,7 +3,11 @@ package org.lite.gateway.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.dto.*;
+import org.lite.gateway.dto.AssignMilvusCollectionRequest;
+import org.lite.gateway.dto.CreateKnowledgeCollectionRequest;
+import org.lite.gateway.dto.KnowledgeCollectionResponse;
+import org.lite.gateway.dto.KnowledgeCollectionSearchRequest;
+import org.lite.gateway.dto.UpdateKnowledgeCollectionRequest;
 import org.lite.gateway.entity.KnowledgeHubCollection;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.KnowledgeHubCollectionService;
@@ -15,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/knowledge/collections")
@@ -175,7 +180,91 @@ public class KnowledgeHubCollectionController {
             org.springframework.web.server.ServerWebExchange exchange) {
         return teamContextService.getTeamFromContext(exchange)
                 .flatMap(teamId -> collectionService.getCollectionCountByTeam(teamId)
-                        .map(count -> ResponseEntity.ok(count)));
+                        .map(ResponseEntity::ok));
+    }
+    
+    /**
+     * Assign a Milvus collection and embedding configuration to a Knowledge Hub collection
+     */
+    @PutMapping("/{id}/milvus")
+    public Mono<ResponseEntity<KnowledgeCollectionResponse>> assignMilvusCollection(
+            @PathVariable String id,
+            @Valid @RequestBody AssignMilvusCollectionRequest request,
+            org.springframework.web.server.ServerWebExchange exchange) {
+        log.info("Assigning Milvus collection {} to Knowledge Hub collection {}", request.getMilvusCollectionName(), id);
+
+        return Mono.zip(
+                    teamContextService.getTeamFromContext(exchange),
+                    userContextService.getCurrentUsername(exchange)
+                )
+                .flatMap(tuple -> collectionService.assignMilvusCollection(
+                        id,
+                        tuple.getT1(),
+                        tuple.getT2(),
+                        request
+                ))
+                .flatMap(collection -> documentRepository.findByCollectionId(collection.getId())
+                        .count()
+                        .map(documentCount -> toResponse(collection, documentCount)))
+                .map(ResponseEntity::ok)
+                .onErrorResume(error -> {
+                    log.error("Error assigning Milvus collection", error);
+                    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(KnowledgeCollectionResponse.builder().build()));
+                });
+    }
+
+    /**
+     * Remove Milvus collection assignment from a Knowledge Hub collection
+     */
+    @DeleteMapping("/{id}/milvus")
+    public Mono<ResponseEntity<KnowledgeCollectionResponse>> removeMilvusCollection(
+            @PathVariable String id,
+            org.springframework.web.server.ServerWebExchange exchange) {
+        log.info("Removing Milvus collection assignment for Knowledge Hub collection {}", id);
+
+        return Mono.zip(
+                    teamContextService.getTeamFromContext(exchange),
+                    userContextService.getCurrentUsername(exchange)
+                )
+                .flatMap(tuple -> collectionService.removeMilvusCollection(
+                        id,
+                        tuple.getT1(),
+                        tuple.getT2()
+                ))
+                .flatMap(collection -> documentRepository.findByCollectionId(collection.getId())
+                        .count()
+                        .map(documentCount -> toResponse(collection, documentCount)))
+                .map(ResponseEntity::ok)
+                .onErrorResume(error -> {
+                    log.error("Error removing Milvus assignment", error);
+                    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(KnowledgeCollectionResponse.builder().build()));
+                });
+    }
+
+    @PostMapping("/{id}/search")
+    public Mono<ResponseEntity<Map<String, Object>>> searchCollection(
+            @PathVariable String id,
+            @Valid @RequestBody KnowledgeCollectionSearchRequest request,
+            org.springframework.web.server.ServerWebExchange exchange) {
+        log.info("Performing semantic search for collection {}", id);
+
+        return teamContextService.getTeamFromContext(exchange)
+                .flatMap(teamId -> collectionService.searchCollection(
+                        id,
+                        teamId,
+                        request.getQuery(),
+                        request.getTopK(),
+                        request.getMetadataFilters()))
+                .map(ResponseEntity::ok)
+                .onErrorResume(error -> {
+                    log.error("Error searching collection {}: {}", id, error.getMessage());
+                    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(Map.of(
+                                    "error", error.getMessage() != null ? error.getMessage() : "Failed to search collection"
+                            )));
+                });
     }
     
     private KnowledgeCollectionResponse toResponse(KnowledgeHubCollection collection, Long documentCount) {
@@ -187,6 +276,11 @@ public class KnowledgeHubCollectionController {
                 .createdBy(collection.getCreatedBy())
                 .updatedBy(collection.getUpdatedBy())
                 .categories(collection.getCategories())
+                .milvusCollectionName(collection.getMilvusCollectionName())
+                .embeddingModel(collection.getEmbeddingModel())
+                .embeddingModelName(collection.getEmbeddingModelName())
+                .embeddingDimension(collection.getEmbeddingDimension())
+                .lateChunkingEnabled(collection.isLateChunkingEnabled())
                 .createdAt(collection.getCreatedAt())
                 .updatedAt(collection.getUpdatedAt())
                 .documentCount(documentCount)

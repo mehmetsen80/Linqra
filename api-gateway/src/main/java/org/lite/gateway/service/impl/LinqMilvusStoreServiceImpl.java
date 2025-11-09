@@ -4,10 +4,17 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.MilvusCollectionInfo;
+import org.lite.gateway.dto.MilvusCollectionSchemaInfo;
+import org.lite.gateway.dto.MilvusCollectionVerificationResponse;
+import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.service.LinqLlmModelService;
+import org.lite.gateway.validation.validator.MilvusSchemaValidator;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import io.milvus.client.MilvusServiceClient;
 import io.milvus.common.clientenum.ConsistencyLevelEnum;
 import io.milvus.grpc.DataType;
@@ -30,13 +37,23 @@ import io.milvus.param.collection.ShowCollectionsParam;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
 import io.milvus.grpc.DescribeCollectionResponse;
 import io.milvus.param.collection.DescribeCollectionParam;
 import io.milvus.grpc.KeyValuePair;
-import io.milvus.param.collection.AlterCollectionParam;
 import io.milvus.grpc.FieldData;
+import io.milvus.grpc.FieldSchema;
+import io.milvus.param.collection.AlterCollectionParam;
 import io.milvus.param.collection.GetCollectionStatisticsParam;
 import io.milvus.grpc.GetCollectionStatisticsResponse;
+import io.milvus.param.dml.DeleteParam;
+import io.milvus.grpc.MutationResult;
+import io.milvus.response.MutationResultWrapper;
+import io.milvus.param.dml.QueryParam;
+import io.milvus.grpc.QueryResults;
+import io.milvus.response.QueryResultsWrapper;
+import org.springframework.util.StringUtils;
 
 @Slf4j
 @Service
@@ -45,6 +62,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     private final LinqLlmModelService linqLlmModelService;
     private final MilvusServiceClient milvusClient;
+    private final AgentTaskRepository agentTaskRepository;
+    private final ConcurrentHashMap<String, MilvusCollectionSchemaInfo> collectionSchemaCache = new ConcurrentHashMap<>();
 
     private static final String EMBEDDING_FIELD = "embedding";
     private static final IndexType INDEX_TYPE = IndexType.HNSW;
@@ -74,8 +93,36 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         Map.entry("SPARSE_FLOAT_VECTOR", DataType.SparseFloatVector)
     );
 
+    private static final List<String> KNOWLEDGE_HUB_DEFAULT_OUT_FIELDS = List.of(
+            "documentId",
+            "collectionId",
+            "chunkId",
+            "chunkIndex",
+            "fileName",
+            "pageNumbers",
+            "title",
+            "author",
+            "subject",
+            "language",
+            "teamId",
+            "tokenCount",
+            "qualityScore",
+            "startPosition",
+            "endPosition",
+            "createdAt",
+            "metadataOnly",
+            "documentType",
+            "mimeType",
+            "collectionType"
+    );
+
     @Override
-    public Mono<Map<String, String>> createCollection(String collectionName, List<Map<String, Object>> schemaFields, String description, String teamId) {
+    public Mono<Map<String, String>> createCollection(String collectionName,
+                                                      List<Map<String, Object>> schemaFields,
+                                                      String description,
+                                                      String teamId,
+                                                      String collectionType,
+                                                      Map<String, String> properties) {
         log.info("Creating Milvus collection {} for team {}", collectionName, teamId);
         try {
             R<Boolean> hasCollection = milvusClient.hasCollection(HasCollectionParam.newBuilder()
@@ -130,19 +177,108 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             log.info("Loaded Milvus collection: {}", collectionName);
 
             // Set teamId as a collection property
-            AlterCollectionParam alterParam = AlterCollectionParam.newBuilder()
-                .withCollectionName(collectionName)
-                .withDatabaseName("default")
-                .withProperty("teamId", teamId)
-                .build();
-            milvusClient.alterCollection(alterParam);
-            log.info("Set teamId {} as collection property for {}", teamId, collectionName);
+            Map<String, String> collectionProperties = new HashMap<>();
+            collectionProperties.put("teamId", teamId);
+            if (collectionType != null && !collectionType.isBlank()) {
+                collectionProperties.put("collectionType", collectionType);
+            }
+            if (properties != null) {
+                properties.forEach((key, value) -> {
+                    if (key != null && value != null) {
+                        collectionProperties.put(key, value);
+                    }
+                });
+            }
+
+            AlterCollectionParam.Builder alterBuilder = AlterCollectionParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withDatabaseName("default");
+            collectionProperties.forEach(alterBuilder::withProperty);
+            milvusClient.alterCollection(alterBuilder.build());
+            log.info("Set collection properties {} for {}", collectionProperties, collectionName);
 
             return Mono.just(Map.of("message", "Collection " + collectionName + " created successfully"));
         } catch (Exception e) {
             log.error("Failed to create collection {}: {}", collectionName, e.getMessage());
             return Mono.error(e);
         }
+    }
+
+    @Override
+    public Mono<MilvusCollectionSchemaInfo> getCollectionSchema(String collectionName) {
+        return Mono.fromCallable(() -> {
+                    MilvusCollectionSchemaInfo cached = collectionSchemaCache.get(collectionName);
+                    if (cached != null) {
+                        return cached;
+                    }
+
+                    R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
+                            DescribeCollectionParam.newBuilder()
+                                    .withCollectionName(collectionName)
+                                    .withDatabaseName("default")
+                                    .build()
+                    );
+
+                    if (describeResponse.getStatus() != 0) {
+                        throw new IllegalStateException("Failed to describe collection " + collectionName + ": " + describeResponse.getMessage());
+                    }
+
+                    DescribeCollectionResponse data = describeResponse.getData();
+                    if (data == null || data.getSchema() == null) {
+                        throw new IllegalStateException("Describe collection returned no schema for " + collectionName);
+                    }
+
+                    Set<String> fieldNames = data.getSchema().getFieldsList().stream()
+                            .map(FieldSchema::getName)
+                            .collect(Collectors.toCollection(LinkedHashSet::new));
+
+                    String vectorFieldName = data.getSchema().getFieldsList().stream()
+                            .filter(field -> field.getDataType() == DataType.FloatVector
+                                    || field.getDataType() == DataType.BinaryVector
+                                    || field.getDataType() == DataType.Float16Vector
+                                    || field.getDataType() == DataType.BFloat16Vector
+                                    || field.getDataType() == DataType.SparseFloatVector)
+                            .map(FieldSchema::getName)
+                            .findFirst()
+                            .orElse("embedding");
+
+                    FieldSchema textFieldSchema = data.getSchema().getFieldsList().stream()
+                            .filter(field -> "text".equals(field.getName()))
+                            .findFirst()
+                            .orElse(null);
+
+                    String textFieldName = textFieldSchema != null ? textFieldSchema.getName() : "text";
+                    Integer textFieldMaxLength = null;
+                    if (textFieldSchema != null) {
+                        for (KeyValuePair param : textFieldSchema.getTypeParamsList()) {
+                            if ("max_length".equalsIgnoreCase(param.getKey()) || "maxLength".equalsIgnoreCase(param.getKey())) {
+                                try {
+                                    textFieldMaxLength = Integer.parseInt(param.getValue());
+                                } catch (NumberFormatException ignored) {
+                                }
+                            }
+                        }
+                    }
+
+                    String collectionType = data.getPropertiesList().stream()
+                            .filter(property -> "collectionType".equals(property.getKey()))
+                            .map(KeyValuePair::getValue)
+                            .findFirst()
+                            .orElse(null);
+
+                    MilvusCollectionSchemaInfo schemaInfo = MilvusCollectionSchemaInfo.builder()
+                            .collectionName(collectionName)
+                            .collectionType(collectionType)
+                            .fieldNames(Collections.unmodifiableSet(fieldNames))
+                            .vectorFieldName(vectorFieldName)
+                            .textFieldName(textFieldName)
+                            .textFieldMaxLength(textFieldMaxLength)
+                            .build();
+
+                    collectionSchemaCache.put(collectionName, schemaInfo);
+                    return schemaInfo;
+                })
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private FieldType mapToFieldType(Map<String, Object> field) {
@@ -173,6 +309,91 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         }
 
         return builder.build();
+    }
+
+    private MilvusCollectionInfo buildCollectionInfo(String collectionName, String teamId, DescribeCollectionResponse describeResponse) {
+        Integer vectorDimension = null;
+        String vectorFieldName = null;
+        String description = null;
+        String collectionType = null;
+        Map<String, String> properties = new HashMap<>();
+
+        if (describeResponse != null && describeResponse.hasSchema()) {
+            try {
+                description = describeResponse.getSchema().getDescription();
+            } catch (Exception ignored) {
+                // ignore description extraction failures
+            }
+
+            for (FieldSchema fieldSchema : describeResponse.getSchema().getFieldsList()) {
+                DataType dataType = fieldSchema.getDataType();
+                if (dataType == DataType.FloatVector || dataType == DataType.Float16Vector
+                        || dataType == DataType.BFloat16Vector || dataType == DataType.SparseFloatVector
+                        || dataType == DataType.BinaryVector) {
+                    vectorFieldName = fieldSchema.getName();
+                    for (KeyValuePair param : fieldSchema.getTypeParamsList()) {
+                        if ("dim".equalsIgnoreCase(param.getKey())) {
+                            try {
+                                vectorDimension = Integer.parseInt(param.getValue());
+                            } catch (NumberFormatException ex) {
+                                log.warn("Unable to parse vector dimension '{}' for collection {}", param.getValue(), collectionName);
+                            }
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (describeResponse != null) {
+            for (KeyValuePair property : describeResponse.getPropertiesList()) {
+                properties.put(property.getKey(), property.getValue());
+                if ("teamId".equals(property.getKey())) {
+                    teamId = property.getValue();
+                }
+                if ("collectionType".equals(property.getKey())) {
+                    collectionType = property.getValue();
+                }
+            }
+        }
+
+        boolean nameLocked = isCollectionNameLocked(collectionName);
+        if (nameLocked) {
+            properties.put("collectionNameLocked", "true");
+        } else {
+            properties.putIfAbsent("collectionNameLocked", "false");
+        }
+
+        if (collectionType == null && describeResponse != null && describeResponse.hasSchema()) {
+            Set<String> fieldNames = describeResponse.getSchema().getFieldsList().stream()
+                    .map(FieldSchema::getName)
+                    .collect(Collectors.toSet());
+            if (fieldNames.containsAll(Set.of("embedding", "text", "documentId", "collectionId", "chunkId"))) {
+                collectionType = "KNOWLEDGE_HUB";
+            }
+        }
+
+        return MilvusCollectionInfo.builder()
+                .name(collectionName)
+                .teamId(teamId)
+                .vectorDimension(vectorDimension)
+                .vectorFieldName(vectorFieldName)
+                .description(description)
+                .collectionType(collectionType)
+                .properties(properties)
+                .nameLocked(nameLocked)
+                .build();
+    }
+
+    private boolean isCollectionNameLocked(String collectionName) {
+        try {
+            String regex = "^/api/milvus/collections/" + Pattern.quote(collectionName) + "(/.*)?$";
+            return Boolean.TRUE.equals(agentTaskRepository.existsByWorkflowIntentMatching(regex).block());
+        } catch (Exception e) {
+            log.warn("Unable to determine usage for collection {}: {}", collectionName, e.getMessage());
+            return false;
+        }
     }
 
     @Override
@@ -221,12 +442,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             
             List<InsertParam.Field> fields = new ArrayList<>();
             
-            // Add ID field with timestamp-based unique ID
-            long uniqueId = System.currentTimeMillis();
+            // Add ID field with unique identifier per record
+            long uniqueId = Math.abs(UUID.randomUUID().getMostSignificantBits());
             fields.add(new InsertParam.Field("id", Collections.singletonList(uniqueId)));
             
-            // Add created_at field with the same timestamp
-            fields.add(new InsertParam.Field("created_at", Collections.singletonList(uniqueId)));
+            // Add created_at field with current timestamp
+            fields.add(new InsertParam.Field("created_at", Collections.singletonList(System.currentTimeMillis())));
             
             // Add embedding field
             fields.add(new InsertParam.Field("embedding", Collections.singletonList(embedding)));
@@ -346,12 +567,17 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withFields(fields)
                     .build();
             
-            log.info("Inserting record with fields: {}", fields.stream()
-                    .map(f -> f.getName() + ": " + f.getValues().getFirst())
-                    .collect(Collectors.joining(", ")));
+            // log.info("Inserting record with fields: {}", fields.stream()
+            //         .map(f -> f.getName() + ": " + f.getValues().getFirst())
+            //         .collect(Collectors.joining(", ")));
             
-            milvusClient.insert(insertParam);
-            log.info("Stored record in collection {}", collectionName);
+            R<io.milvus.grpc.MutationResult> insertResponse = milvusClient.insert(insertParam);
+            if (insertResponse.getStatus() != 0) {
+                log.error("Milvus insert returned non-zero status {} for collection {}", insertResponse.getStatus(), collectionName);
+            }
+            MutationResultWrapper insertResultWrapper = new MutationResultWrapper(insertResponse.getData());
+            long insertCount = insertResultWrapper.getInsertCount();
+            log.info("Stored record in collection {} (inserted {} vectors)", collectionName, insertCount);
             return Mono.just(Map.of("message", "Record stored successfully in collection " + collectionName));
         } catch (Exception e) {
             log.error("Failed to store record in collection {}: {}", collectionName, e.getMessage(), e);
@@ -361,7 +587,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     @Override
     public Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId) {
-        log.info("Getting embedding for text: {} with modelCategory: {} and model name: {} for team: {}", text, modelCategory, modelName, teamId);
+        log.debug("Getting embedding for text: {} with modelCategory: {} and model name: {} for team: {}", text, modelCategory, modelName, teamId);
         LinqRequest request = new LinqRequest();
         LinqRequest.Link link = new LinqRequest.Link();
         link.setTarget(modelCategory);
@@ -442,7 +668,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             SearchParam searchParam = SearchParam.newBuilder()
                     .withCollectionName(collectionName)
                     .withFloatVectors(List.of(embedding))
-                    .withTopK(nResults)
+                    .withLimit((long) nResults)
                     .withMetricType(METRIC_TYPE)
                     .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
                     .withVectorFieldName(EMBEDDING_FIELD)
@@ -562,8 +788,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     }
 
     @Override
-    public Mono<List<MilvusCollectionInfo>> listCollections(String teamId) {
-        log.info("Listing collections for team {}", teamId);
+    public Mono<List<MilvusCollectionInfo>> listCollections(String teamId, String collectionType) {
+        log.info("Listing collections for team {} with type filter: {}", teamId, collectionType);
         try {
             R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
                     .withDatabaseName("default")
@@ -585,8 +811,16 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         // Check if collection has teamId property matching the requested teamId
                         for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
                             if ("teamId".equals(property.getKey()) && teamId.equals(property.getValue())) {
+                                MilvusCollectionInfo info = buildCollectionInfo(collectionName, teamId, describeResponse.getData());
+                                if (collectionType != null && !collectionType.isBlank()) {
+                                    String normalizedFilter = collectionType.trim().toLowerCase();
+                                    String infoType = info.getCollectionType() != null ? info.getCollectionType().toLowerCase() : "";
+                                    if (!normalizedFilter.equals(infoType)) {
+                                        return null;
+                                    }
+                                }
                                 log.info("Found collection {} for team {}", collectionName, teamId);
-                                return new MilvusCollectionInfo(collectionName, teamId);
+                                return info;
                             }
                         }
                         return null;
@@ -615,6 +849,92 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     }
 
     @Override
+    public Mono<Map<String, String>> updateCollectionMetadata(String collectionName,
+                                                              String teamId,
+                                                              Map<String, String> metadata) {
+        log.info("Updating metadata for collection {} (team {})", collectionName, teamId);
+        if (metadata == null || metadata.isEmpty()) {
+            return Mono.just(Map.of("message", "No metadata provided"));
+        }
+
+        try {
+            Map<String, String> sanitizedMetadata = new HashMap<>();
+            metadata.forEach((key, value) -> {
+                if (key != null && !key.isBlank()) {
+                    sanitizedMetadata.put(key.trim(), value != null ? value.trim() : "");
+                }
+            });
+
+            if (sanitizedMetadata.isEmpty()) {
+                return Mono.just(Map.of("message", "No metadata provided"));
+            }
+
+            R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
+                    DescribeCollectionParam.newBuilder()
+                            .withCollectionName(collectionName)
+                            .withDatabaseName("default")
+                            .build()
+            );
+
+            if (describeResponse.getStatus() != 0 || describeResponse.getData() == null) {
+                return Mono.error(new RuntimeException("Collection not found: " + collectionName));
+            }
+
+            boolean teamMatch = describeResponse.getData().getPropertiesList().stream()
+                    .anyMatch(property -> "teamId".equals(property.getKey()) && teamId.equals(property.getValue()));
+
+            if (!teamMatch) {
+                return Mono.error(new RuntimeException("Collection " + collectionName + " does not belong to team " + teamId));
+            }
+
+            String currentAlias = describeResponse.getData().getPropertiesList().stream()
+                    .filter(property -> "collectionAlias".equals(property.getKey()))
+                    .map(KeyValuePair::getValue)
+                    .findFirst()
+                    .orElse("");
+
+            String requestedAlias = sanitizedMetadata.getOrDefault("collectionAlias", currentAlias);
+
+            boolean aliasChange = sanitizedMetadata.containsKey("collectionAlias")
+                    && !Objects.equals(normalizeAlias(currentAlias), normalizeAlias(requestedAlias));
+
+            if (aliasChange && isCollectionNameLocked(collectionName)) {
+                return Mono.error(new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "Collection " + collectionName + " is referenced by existing agent workflows and its name cannot be changed."));
+            }
+
+            if (sanitizedMetadata.containsKey("collectionAlias")) {
+                sanitizedMetadata.put("collectionAlias", normalizeAlias(requestedAlias));
+            }
+
+            AlterCollectionParam.Builder alterBuilder = AlterCollectionParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withDatabaseName("default");
+
+            sanitizedMetadata.forEach((key, value) -> {
+                if (key != null && !key.isBlank() && value != null) {
+                    alterBuilder.withProperty(key.trim(), value);
+                }
+            });
+
+            milvusClient.alterCollection(alterBuilder.build());
+            log.info("Updated metadata for collection {}: {}", collectionName, sanitizedMetadata);
+            return Mono.just(Map.of("message", "Collection metadata updated"));
+        } catch (Exception e) {
+            log.error("Failed to update collection metadata for {}: {}", collectionName, e.getMessage());
+            return Mono.error(e);
+        }
+    }
+
+    private String normalizeAlias(String alias) {
+        if (alias == null) {
+            return "";
+        }
+        return alias.trim();
+    }
+
+    @Override
     public Mono<List<MilvusCollectionInfo>> listAllCollections() {
         log.info("Listing all collections");
         try {
@@ -640,15 +960,19 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             if ("teamId".equals(property.getKey())) {
                                 String teamId = property.getValue();
                                 log.info("Found teamId {} for collection {}", teamId, collectionName);
-                                return new MilvusCollectionInfo(collectionName, teamId);
+                                return buildCollectionInfo(collectionName, teamId, describeResponse.getData());
                             }
                         }
-                        
+
                         log.info("No teamId found for collection {}", collectionName);
-                        return new MilvusCollectionInfo(collectionName, "unknown");
+                        return buildCollectionInfo(collectionName, "unknown", describeResponse.getData());
                     } catch (Exception e) {
                         log.warn("Failed to get properties for collection {}: {}", collectionName, e.getMessage());
-                        return new MilvusCollectionInfo(collectionName, "unknown");
+                        return MilvusCollectionInfo.builder()
+                                .name(collectionName)
+                                .teamId("unknown")
+                                .nameLocked(isCollectionNameLocked(collectionName))
+                                .build();
                     }
                 }))
                 .toList();
@@ -769,13 +1093,23 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         String filterExpression = buildFilterExpression(teamId, metadataFilters, textField);
                         
                         // Build dynamic out fields
-                        List<String> outFields = buildOutFields(textField, metadataFilters);
+                        List<String> availableFields = describeResponse.getData().getSchema().getFieldsList().stream()
+                                .map(io.milvus.grpc.FieldSchema::getName)
+                                .collect(Collectors.toList());
+
+                        String collectionType = describeResponse.getData().getPropertiesList().stream()
+                                .filter(property -> "collectionType".equals(property.getKey()))
+                                .map(KeyValuePair::getValue)
+                                .findFirst()
+                                .orElse(null);
+
+                        List<String> outFields = buildOutFields(textField, metadataFilters, availableFields, collectionType);
                         
                         // Use vector search to find similar records
                         SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
                             .withCollectionName(collectionName)
                             .withFloatVectors(List.of(searchEmbedding))
-                            .withTopK(5)
+                            .withLimit(5L)
                             .withMetricType(METRIC_TYPE)
                             .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
                             .withVectorFieldName(EMBEDDING_FIELD)
@@ -1004,12 +1338,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 Object value = filter.getValue();
                 
                 if (value != null) {
-                    if (value instanceof String) {
-                        conditions.add(fieldName + " == \"" + value + "\"");
-                    } else if (value instanceof Number) {
-                        conditions.add(fieldName + " == " + value);
-                    } else if (value instanceof Boolean) {
-                        conditions.add(fieldName + " == " + value);
+                    switch (value) {
+                        case String s -> conditions.add(fieldName + " == \"" + value + "\"");
+                        case Number number -> conditions.add(fieldName + " == " + value);
+                        case Boolean b -> conditions.add(fieldName + " == " + value);
+                        default -> {
+                        }
                     }
                 }
             }
@@ -1021,17 +1355,39 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     /**
      * Build dynamic out fields list
      */
-    private List<String> buildOutFields(String textField, Map<String, Object> metadataFilters) {
-        List<String> outFields = new ArrayList<>();
-        outFields.add("id");
-        outFields.add(textField);
-        
-        // Add metadata fields to the output
-        if (metadataFilters != null) {
-            outFields.addAll(metadataFilters.keySet());
+    private List<String> buildOutFields(String textField,
+                                       Map<String, Object> metadataFilters,
+                                       Collection<String> availableFields,
+                                       String collectionType) {
+        LinkedHashSet<String> requested = new LinkedHashSet<>();
+        requested.add("id");
+        if (StringUtils.hasText(textField)) {
+            requested.add(textField);
         }
-        
-        return outFields;
+
+        boolean isKnowledgeHub = StringUtils.hasText(collectionType) && "KNOWLEDGE_HUB".equalsIgnoreCase(collectionType);
+        if (isKnowledgeHub) {
+            KNOWLEDGE_HUB_DEFAULT_OUT_FIELDS.forEach(requested::add);
+        }
+
+        if (metadataFilters != null) {
+            requested.addAll(metadataFilters.keySet());
+        }
+
+        if (availableFields != null && !availableFields.isEmpty()) {
+            Set<String> allowed = availableFields instanceof Set ? (Set<String>) availableFields : new HashSet<>(availableFields);
+            requested.retainAll(allowed);
+            if (!isKnowledgeHub) {
+                // For custom collections, include all schema fields (minus embedding/vector field) to surface custom metadata.
+                for (String fieldName : allowed) {
+                    if (!EMBEDDING_FIELD.equals(fieldName)) {
+                        requested.add(fieldName);
+                    }
+                }
+            }
+        }
+
+        return new ArrayList<>(requested);
     }
 
     /**
@@ -1127,13 +1483,23 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         String filterExpression = buildFilterExpression(teamId, metadataFilters);
                         
                         // Build dynamic out fields
-                        List<String> outFields = buildOutFields(textField, metadataFilters);
+                        List<String> availableFields = describeResponse.getData().getSchema().getFieldsList().stream()
+                                .map(io.milvus.grpc.FieldSchema::getName)
+                                .collect(Collectors.toList());
+
+                        String collectionType = describeResponse.getData().getPropertiesList().stream()
+                                .filter(property -> "collectionType".equals(property.getKey()))
+                                .map(KeyValuePair::getValue)
+                                .findFirst()
+                                .orElse(null);
+
+                        List<String> outFields = buildOutFields(textField, metadataFilters, availableFields, collectionType);
                         
                         // Use vector search to find similar records
                         SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
                             .withCollectionName(collectionName)
                             .withFloatVectors(List.of(searchEmbedding))
-                            .withTopK(nResults)
+                            .withLimit((long) nResults)
                             .withMetricType(METRIC_TYPE)
                             .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
                             .withVectorFieldName(EMBEDDING_FIELD)
@@ -1167,73 +1533,76 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         SearchResultData resultData = results.getResults();
                         List<Map<String, Object>> searchResults = new ArrayList<>();
 
-                        // Extract results using the correct field access method
-                        for (int i = 0; i < resultData.getNumQueries(); i++) {
-                            Map<String, Object> record = new HashMap<>();
-                            
-                            // Get ID field
-                            var idFieldData = resultData.getFieldsDataList().stream()
-                                .filter(f -> f.getFieldName().equals("id"))
-                                .findFirst()
-                                .orElse(null);
-                            if (idFieldData != null && idFieldData.getScalars().hasLongData() && idFieldData.getScalars().getLongData().getDataCount() > i) {
-                                record.put("id", idFieldData.getScalars().getLongData().getData(i));
-                            }
-                            
-                            // Get text field
-                            var textFieldData = resultData.getFieldsDataList().stream()
-                                .filter(f -> f.getFieldName().equals(textField))
-                                .findFirst()
-                                .orElse(null);
-                            if (textFieldData != null && textFieldData.getScalars().hasStringData() && textFieldData.getScalars().getStringData().getDataCount() > i) {
-                                record.put(textField, textFieldData.getScalars().getStringData().getData(i));
-                            }
-                            
-                            // Get distance field
-                            var distanceField = resultData.getFieldsDataList().stream()
-                                .filter(f -> f.getFieldName().equals("distance"))
-                                .findFirst()
-                                .orElse(null);
-                            
-                            if (distanceField != null) {
-                                if (distanceField.getScalars().hasFloatData() && distanceField.getScalars().getFloatData().getDataCount() > i) {
-                                    record.put("distance", distanceField.getScalars().getFloatData().getData(i));
-                                } else if (distanceField.getScalars().hasDoubleData() && distanceField.getScalars().getDoubleData().getDataCount() > i) {
-                                    record.put("distance", (float) distanceField.getScalars().getDoubleData().getData(i));
-                                } else {
-                                    record.put("distance", 0.0f); // Default distance
+                        List<Long> topKs = resultData.getTopksList();
+                        int offset = 0;
+
+                        for (int queryIndex = 0; queryIndex < topKs.size(); queryIndex++) {
+                            int resultsForQuery = Math.toIntExact(topKs.get(queryIndex));
+
+                            for (int rank = 0; rank < resultsForQuery; rank++) {
+                                int index = offset + rank;
+                                Map<String, Object> record = new HashMap<>();
+
+                                // Add query/rank context (useful for debugging/UI)
+                                record.put("query_index", queryIndex);
+                                record.put("rank", rank + 1);
+
+                                // Primary key / ID field
+                                if (resultData.getIds().hasIntId() && resultData.getIds().getIntId().getDataCount() > index) {
+                                    record.put("id", resultData.getIds().getIntId().getData(index));
+                                } else if (resultData.getIds().hasStrId() && resultData.getIds().getStrId().getDataCount() > index) {
+                                    record.put("id", resultData.getIds().getStrId().getData(index));
                                 }
-                            } else {
-                                record.put("distance", 0.0f); // Default distance
-                            }
-                            
-                            // Determine match type based on similarity
-                            float distance = (Float) record.get("distance");
-                            if (distance < 0.1f) {
-                                record.put("match_type", "exact");
-                            } else if (distance < 0.3f) {
-                                record.put("match_type", "high_similarity");
-                            } else if (distance < 0.5f) {
-                                record.put("match_type", "medium_similarity");
-                            } else {
-                                record.put("match_type", "low_similarity");
-                            }
-                            
-                            // Extract metadata fields
-                            for (String fieldName : outFields) {
-                                if (!fieldName.equals("id") && !fieldName.equals(textField)) {
-                                    var fieldData = resultData.getFieldsDataList().stream()
-                                        .filter(f -> f.getFieldName().equals(fieldName))
+
+                                // Chunk text field
+                                var textFieldData = resultData.getFieldsDataList().stream()
+                                        .filter(f -> f.getFieldName().equals(textField))
                                         .findFirst()
                                         .orElse(null);
-                                    if (fieldData != null) {
-                                        Object value = extractFieldValue(fieldData, i);
-                                        record.put(fieldName, value);
+                                if (textFieldData != null) {
+                                    Object value = extractFieldValue(textFieldData, index);
+                                    if (value != null) {
+                                        record.put(textField, value);
                                     }
                                 }
+
+                                // Distance (similarity score)
+                                float distance = 0.0f;
+                                if (resultData.getScoresCount() > index) {
+                                    distance = resultData.getScores(index);
+                                }
+                                record.put("distance", distance);
+
+                                if (distance < 0.1f) {
+                                    record.put("match_type", "exact");
+                                } else if (distance < 0.3f) {
+                                    record.put("match_type", "high_similarity");
+                                } else if (distance < 0.5f) {
+                                    record.put("match_type", "medium_similarity");
+                                } else {
+                                    record.put("match_type", "low_similarity");
+                                }
+
+                                // Additional metadata fields
+                                for (String fieldName : outFields) {
+                                    if (!fieldName.equals("id") && !fieldName.equals(textField)) {
+                                        var fieldData = resultData.getFieldsDataList().stream()
+                                                .filter(f -> f.getFieldName().equals(fieldName))
+                                                .findFirst()
+                                                .orElse(null);
+                                        if (fieldData != null) {
+                                            Object value = extractFieldValue(fieldData, index);
+                                            if (value != null) {
+                                                record.put(fieldName, value);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                searchResults.add(record);
                             }
-                            
-                            searchResults.add(record);
+
+                            offset += resultsForQuery;
                         }
 
                         // Build the final response
@@ -1398,6 +1767,186 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             return Mono.just(result);
         } catch (Exception e) {
             log.error("Failed to get collection details: {}", e.getMessage());
+            return Mono.error(e);
+        }
+    }
+
+    @Override
+    public Mono<MilvusCollectionVerificationResponse> verifyCollection(String collectionName, String teamId) {
+        log.info("Verifying Milvus collection {} for team {}", collectionName, teamId);
+        try {
+            DescribeCollectionParam describeParam = DescribeCollectionParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withDatabaseName("default")
+                    .build();
+
+            R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(describeParam);
+            if (describeResponse.getStatus() != 0 || describeResponse.getData() == null) {
+                String message = describeResponse.getMessage() != null ? describeResponse.getMessage() : "Unknown error";
+                log.error("Failed to describe collection {}: {}", collectionName, message);
+                return Mono.error(new RuntimeException("Failed to describe Milvus collection: " + message));
+            }
+
+            DescribeCollectionResponse data = describeResponse.getData();
+
+            String collectionTeamId = null;
+            for (KeyValuePair property : data.getPropertiesList()) {
+                if ("teamId".equals(property.getKey())) {
+                    collectionTeamId = property.getValue();
+                    break;
+                }
+            }
+
+            if (collectionTeamId != null && !Objects.equals(collectionTeamId, teamId)) {
+                return Mono.error(new RuntimeException("Milvus collection '" + collectionName + "' does not belong to team " + teamId));
+            }
+
+            List<Map<String, Object>> schemaFields = new ArrayList<>();
+            for (FieldSchema field : data.getSchema().getFieldsList()) {
+                Map<String, Object> fieldInfo = new HashMap<>();
+                fieldInfo.put("name", field.getName());
+                fieldInfo.put("dataType", field.getDataType().name());
+                fieldInfo.put("isPrimary", field.getIsPrimaryKey());
+
+                if (field.getTypeParamsCount() > 0) {
+                    Map<String, String> typeParams = new HashMap<>();
+                    for (KeyValuePair param : field.getTypeParamsList()) {
+                        typeParams.put(param.getKey(), param.getValue());
+                    }
+                    fieldInfo.put("typeParams", typeParams);
+                }
+
+                schemaFields.add(fieldInfo);
+            }
+
+            long rowCount = 0L;
+            try {
+                GetCollectionStatisticsParam statsParam = GetCollectionStatisticsParam.newBuilder()
+                        .withCollectionName(collectionName)
+                        .withDatabaseName("default")
+                        .build();
+                R<GetCollectionStatisticsResponse> statsResponse = milvusClient.getCollectionStatistics(statsParam);
+                if (statsResponse.getData() != null) {
+                    for (KeyValuePair stat : statsResponse.getData().getStatsList()) {
+                        if ("row_count".equals(stat.getKey())) {
+                            rowCount = Long.parseLong(stat.getValue());
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to fetch row count for collection {}: {}", collectionName, e.getMessage());
+            }
+
+            MilvusSchemaValidator.ValidationResult validationResult = MilvusSchemaValidator.validate(schemaFields, null);
+
+            List<MilvusCollectionVerificationResponse.FieldInfo> fieldInfos = schemaFields.stream()
+                    .map(field -> {
+                        Map<String, String> typeParams = null;
+                        Object paramsObj = field.get("typeParams");
+                        if (paramsObj instanceof Map<?, ?> map) {
+                            typeParams = map.entrySet().stream()
+                                    .collect(Collectors.toMap(
+                                            entry -> String.valueOf(entry.getKey()),
+                                            entry -> String.valueOf(entry.getValue())
+                                    ));
+                        }
+
+                        Integer maxLength = null;
+                        if (typeParams != null && typeParams.containsKey("max_length")) {
+                            try {
+                                maxLength = Integer.parseInt(typeParams.get("max_length"));
+                            } catch (NumberFormatException ignored) {
+                                // ignore invalid value
+                            }
+                        }
+
+                        return MilvusCollectionVerificationResponse.FieldInfo.builder()
+                                .name(String.valueOf(field.get("name")))
+                                .dataType(String.valueOf(field.get("dataType")))
+                                .primary(Boolean.TRUE.equals(field.get("isPrimary")))
+                                .typeParams(typeParams)
+                                .maxLength(maxLength)
+                                .build();
+                    })
+                    .collect(Collectors.toList());
+
+            MilvusCollectionVerificationResponse response = MilvusCollectionVerificationResponse.builder()
+                    .name(collectionName)
+                    .teamId(collectionTeamId != null ? collectionTeamId : teamId)
+                    .vectorDimension(validationResult.getVectorDimension())
+                    .vectorFieldName(validationResult.getVectorFieldName())
+                    .rowCount(rowCount)
+                    .description(data.getSchema() != null ? data.getSchema().getDescription() : null)
+                    .valid(validationResult.isValid())
+                    .issues(validationResult.getIssues())
+                    .schema(fieldInfos)
+                    .build();
+
+            return Mono.just(response);
+        } catch (Exception e) {
+            log.error("Failed to verify Milvus collection {}: {}", collectionName, e.getMessage());
+            return Mono.error(e);
+        }
+    }
+
+    @Override
+    public Mono<Long> deleteDocumentEmbeddings(String collectionName, String documentId, String teamId) {
+        log.info("Deleting embeddings for document {} in collection {} (team {})", documentId, collectionName, teamId);
+
+        try {
+            String expr = String.format("documentId == \"%s\" && teamId == \"%s\"", documentId, teamId);
+
+            DeleteParam deleteParam = DeleteParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withDatabaseName("default")
+                    .withExpr(expr)
+                    .build();
+
+            R<MutationResult> response = milvusClient.delete(deleteParam);
+
+            if (response.getStatus() != 0) {
+                String message = response.getMessage() != null ? response.getMessage() : "Unknown error";
+                log.error("Milvus delete operation failed for collection {}: {}", collectionName, message);
+                return Mono.error(new RuntimeException("Failed to delete embeddings from Milvus: " + message));
+            }
+
+            MutationResultWrapper wrapper = new MutationResultWrapper(response.getData());
+            long deletedCount = wrapper.getDeleteCount();
+            log.info("Deleted {} embeddings for document {} in collection {}", deletedCount, documentId, collectionName);
+            return Mono.just(deletedCount);
+        } catch (Exception e) {
+            log.error("Failed to delete embeddings for document {} in collection {}: {}", documentId, collectionName, e.getMessage());
+            return Mono.error(e);
+        }
+    }
+
+    @Override
+    public Mono<Long> countDocumentEmbeddings(String collectionName, String documentId, String teamId) {
+        log.info("Counting embeddings for document {} in collection {} (team {})", documentId, collectionName, teamId);
+        try {
+            String expr = String.format("documentId == \"%s\" && teamId == \"%s\"", documentId, teamId);
+
+            QueryParam.Builder queryBuilder = QueryParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withDatabaseName("default")
+                    .withExpr(expr);
+            queryBuilder.withOutFields(Collections.singletonList("documentId"));
+            QueryParam queryParam = queryBuilder.build();
+
+            R<QueryResults> response = milvusClient.query(queryParam);
+            if (response.getStatus() != 0) {
+                String message = response.getMessage() != null ? response.getMessage() : "Unknown error";
+                log.error("Milvus query operation failed for collection {}: {}", collectionName, message);
+                return Mono.error(new RuntimeException("Failed to query embeddings from Milvus: " + message));
+            }
+
+            QueryResultsWrapper wrapper = new QueryResultsWrapper(response.getData());
+            long count = wrapper.getRowCount();
+            log.info("Counted {} embeddings for document {} in collection {}", count, documentId, collectionName);
+            return Mono.just(count);
+        } catch (Exception e) {
+            log.error("Failed to count embeddings for document {} in collection {}: {}", documentId, collectionName, e.getMessage());
             return Mono.error(e);
         }
     }

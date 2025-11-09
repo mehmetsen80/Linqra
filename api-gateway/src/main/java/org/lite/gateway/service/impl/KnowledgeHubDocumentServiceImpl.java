@@ -12,6 +12,8 @@ import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
 import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.LinqMilvusStoreService;
+import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
@@ -31,6 +33,8 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
     private final S3Properties s3Properties;
     private final KnowledgeHubChunkRepository chunkRepository;
     private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
+    private final KnowledgeHubCollectionRepository collectionRepository;
+    private final LinqMilvusStoreService milvusStoreService;
     
     @Override
     public Mono<DocumentInitiationResult> initiateDocumentUpload(UploadInitiateRequest request, String teamId) {
@@ -253,9 +257,27 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                     return Mono.empty();
                                 });
                     }
-                    
+
+                    Mono<Void> deleteMilvusEmbeddings = Mono.empty();
+                    if (document.getCollectionId() != null && !document.getCollectionId().isEmpty()) {
+                        deleteMilvusEmbeddings = collectionRepository.findById(document.getCollectionId())
+                                .flatMap(collection -> {
+                                    String milvusCollectionName = collection.getMilvusCollectionName();
+                                    if (milvusCollectionName == null || milvusCollectionName.isBlank()) {
+                                        log.info("Collection {} has no assigned RAG collection; skipping embedding deletion for document {}", collection.getId(), documentId);
+                                        return Mono.empty();
+                                    }
+                                    return milvusStoreService.deleteDocumentEmbeddings(milvusCollectionName, documentId, document.getTeamId())
+                                            .doOnSuccess(deleted -> log.info("Deleted {} embeddings from RAG collection {} for document {}", deleted, milvusCollectionName, documentId))
+                                            .doOnError(error -> log.warn("Error deleting embeddings for document {} from RAG collection {}: {}", documentId, milvusCollectionName, error.getMessage()))
+                                            .onErrorResume(error -> Mono.empty())
+                                            .then();
+                                })
+                                .switchIfEmpty(Mono.fromRunnable(() -> log.warn("KnowledgeHub collection {} not found while hard deleting document {}", document.getCollectionId(), documentId)));
+                    }
+
                     // Execute all deletions in parallel, then delete the document record
-                    return Mono.when(deleteChunks, deleteMetadata, deleteRawFile, deleteProcessedFile)
+                    return Mono.when(deleteChunks, deleteMetadata, deleteRawFile, deleteProcessedFile, deleteMilvusEmbeddings)
                             .then(documentRepository.deleteById(document.getId()))
                             .doOnSuccess(success -> log.info("Successfully hard deleted document: {}", documentId));
                 });

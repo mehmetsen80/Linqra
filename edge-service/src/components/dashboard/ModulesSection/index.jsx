@@ -139,18 +139,17 @@ function ModulesSection() {
           </Link>
         </div>
 
-        <div className="dashboard-card disabled">
-          <Link to="/settings" className="card-icon-link">
+        <div className="dashboard-card">
+          <Link to="/rag" className="card-icon-link">
             <div className="card-icon">
               <i className="fas fa-cog"></i>
             </div>
           </Link>
           <h3>RAG</h3>
           <p>Configure Retrieval Augmented Generation preferences</p>
-          <span className="coming-soon-badge">Coming Soon</span>
-          <button className="card-link" disabled>
-            Open RAG <i className="fas fa-arrow-right"></i>
-          </button>
+          <Link to="/rag" className="card-link">
+            RAG Management <i className="fas fa-arrow-right"></i>
+          </Link>
         </div>
 
         <div className="dashboard-card ">

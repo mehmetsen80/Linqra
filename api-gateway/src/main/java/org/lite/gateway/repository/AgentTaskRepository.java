@@ -156,4 +156,7 @@ public interface AgentTaskRepository extends ReactiveMongoRepository<AgentTask, 
     // Find CRON tasks to schedule at startup
     @Query("{'enabled': true, 'cronExpression': {$exists: true, $ne: null, $ne: ''}, 'executionTrigger': 'CRON', 'scheduleOnStartup': true}")
     Flux<AgentTask> findCronTasksToScheduleOnStartup();
+
+    @Query(value = "{'linq_config.workflow.intent': {$regex: ?0, $options: 'i'}}", exists = true)
+    Mono<Boolean> existsByWorkflowIntentMatching(String regex);
 } 

@@ -8,6 +8,7 @@ import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
+import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.S3Service;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.MessageChannel;
@@ -18,6 +19,7 @@ import reactor.core.publisher.Mono;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 @Slf4j
@@ -32,18 +34,21 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
     private final S3Service s3Service;
     private final ObjectMapper objectMapper;
     private final MessageChannel executionMessageChannel;
+    private final KnowledgeHubDocumentEmbeddingService embeddingService;
     
     public KnowledgeHubDocumentMetaDataServiceImpl(
             KnowledgeHubDocumentMetaDataRepository metadataRepository,
             KnowledgeHubDocumentRepository documentRepository,
             S3Service s3Service,
             ObjectMapper objectMapper,
-            @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel) {
+            @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel,
+            KnowledgeHubDocumentEmbeddingService embeddingService) {
         this.metadataRepository = metadataRepository;
         this.documentRepository = documentRepository;
         this.s3Service = s3Service;
         this.objectMapper = objectMapper;
         this.executionMessageChannel = executionMessageChannel;
+        this.embeddingService = embeddingService;
     }
     
     @Override
@@ -66,7 +71,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
                             })
                             .flatMap(savedDoc -> {
                                 // Check if metadata already exists
-                                return metadataRepository.findByDocumentId(documentId)
+                            return metadataRepository.findByDocumentIdAndTeamId(documentId, teamId)
                                         .flatMap(existing -> {
                                             log.info("Metadata already exists for document: {}, updating...", documentId);
                                             return updateMetadataFromProcessedJson(existing, savedDoc);
@@ -75,12 +80,13 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
                                                 // Create new metadata extract
                                                 createMetadataFromProcessedJson(savedDoc)
                                         )
-                                        .flatMap(metadata -> {
-                                            // After successful extraction, publish status update again
-                                            // (status remains METADATA_EXTRACTION, but metadata is now available)
-                                            publishDocumentStatusUpdate(savedDoc);
-                                            return Mono.just(metadata);
-                                        });
+                                        .flatMap(metadata -> triggerEmbedding(savedDoc)
+                                                .onErrorResume(error -> {
+                                                    log.error("Failed to trigger embedding after metadata extraction for document {}: {}",
+                                                            documentId, error.getMessage());
+                                                    return Mono.empty();
+                                                })
+                                                .thenReturn(metadata));
                             });
                 })
                 .doOnSuccess(metadata -> log.info("Successfully extracted metadata for document: {}", documentId))
@@ -92,14 +98,38 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
                                 document.setStatus("FAILED");
                                 document.setErrorMessage("Metadata extraction failed: " + error.getMessage());
                                 return documentRepository.save(document)
-                                        .doOnSuccess(savedDoc -> publishDocumentStatusUpdate(savedDoc));
+                                        .doOnSuccess(this::publishDocumentStatusUpdate);
                             })
                             .subscribe();
                 });
     }
     
+    private Mono<Void> triggerEmbedding(KnowledgeHubDocument document) {
+        if (embeddingService == null) {
+            log.warn("Embedding service not available; cannot trigger embedding for document {}", document.getDocumentId());
+            return Mono.empty();
+        }
+        
+        return documentRepository.findByDocumentId(document.getDocumentId())
+                .defaultIfEmpty(document)
+                .flatMap(doc -> {
+                    if ("AI_READY".equalsIgnoreCase(doc.getStatus())) {
+                        log.info("Document {} already AI_READY; skipping embedding trigger.", doc.getDocumentId());
+                        return Mono.empty();
+                    }
+                    
+                    doc.setStatus("EMBEDDING");
+                    doc.setErrorMessage(null);
+                    return documentRepository.save(doc)
+                            .doOnSuccess(this::publishDocumentStatusUpdate)
+                            .flatMap(saved -> embeddingService.embedDocument(saved.getDocumentId(), saved.getTeamId()))
+                            .then();
+                });
+    }
+    
     private Mono<KnowledgeHubDocumentMetaData> createMetadataFromProcessedJson(KnowledgeHubDocument document) {
-        return s3Service.downloadFileContent(document.getProcessedS3Key())
+        return metadataRepository.deleteByDocumentIdAndTeamIdAndCollectionId(document.getDocumentId(), document.getTeamId(), document.getCollectionId())
+                .then(s3Service.downloadFileContent(document.getProcessedS3Key()))
                 .flatMap(jsonBytes -> {
                     try {
                         String jsonString = new String(jsonBytes);
@@ -149,10 +179,6 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
     
     private void extractMetadataFromJson(KnowledgeHubDocumentMetaData metadata, JsonNode processedJson, KnowledgeHubDocument document) {
         // Extract document-level metadata
-        if (processedJson.has("documentId")) {
-            // Already set from document
-        }
-        
         // Log the structure of processed JSON for debugging
         java.util.Iterator<String> topLevelKeys = processedJson.fieldNames();
         java.util.List<String> topLevelKeyList = new java.util.ArrayList<>();
@@ -347,8 +373,21 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
     
     @Override
     public Mono<KnowledgeHubDocumentMetaData> getMetadataExtract(String documentId, String teamId) {
-        return metadataRepository.findByDocumentIdAndTeamId(documentId, teamId)
-                .switchIfEmpty(Mono.error(new RuntimeException("Metadata extract not found for document: " + documentId)));
+        return metadataRepository.findTopByDocumentIdAndTeamIdOrderByExtractedAtDesc(documentId, teamId)
+                .switchIfEmpty(documentRepository.findByDocumentId(documentId)
+                        .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)))
+                        .filter(doc -> Objects.equals(doc.getTeamId(), teamId))
+                        .switchIfEmpty(Mono.error(new RuntimeException("Document access denied")))
+                        .flatMap(doc -> {
+                            log.info("Metadata not found for document {} — triggering extraction on demand.", documentId);
+                            return extractMetadata(documentId, teamId)
+                                    .flatMap(meta -> metadataRepository.findTopByDocumentIdAndTeamIdAndCollectionIdOrderByExtractedAtDesc(documentId, teamId, doc.getCollectionId()))
+                                    .switchIfEmpty(Mono.error(new RuntimeException("Metadata extract not found for document: " + documentId)))
+                                    .onErrorResume(err -> {
+                                        log.error("On-demand metadata extraction failed for document {}: {}", documentId, err.getMessage());
+                                        return Mono.error(new RuntimeException("Metadata extract not found for document: " + documentId));
+                                    });
+                        }));
     }
     
     @Override

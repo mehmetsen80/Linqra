@@ -42,6 +42,7 @@ import ExecutionMonitoring from '../pages/ExecutionMonitoring';
 import KnowledgeHub from '../pages/KnowledgeHub';
 import ViewCollection from '../pages/KnowledgeHub/ViewCollection';
 import ViewDocument from '../pages/KnowledgeHub/ViewCollection/ViewDocument';
+import Rag from '../pages/Rag';
 
 const AppRoutes = () => {
   return (
@@ -94,6 +95,7 @@ const AppRoutes = () => {
         <Route path="/knowledge-hub" element={<KnowledgeHub />} />
         <Route path="/knowledge-hub/collection/:collectionId" element={<ViewCollection />} />
         <Route path="/knowledge-hub/document/:documentId" element={<ViewDocument />} />
+        <Route path="/rag" element={<Rag />} />
         
         <Route 
           path="/teams" 

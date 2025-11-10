@@ -17,10 +17,22 @@ public interface KnowledgeHubDocumentMetaDataRepository extends ReactiveMongoRep
      * Find metadata extract by document ID and team ID (with access control)
      */
     Mono<KnowledgeHubDocumentMetaData> findByDocumentIdAndTeamId(String documentId, String teamId);
+
+    /**
+     * Find the most recent metadata extract for a document/team/collection combination
+     */
+    Mono<KnowledgeHubDocumentMetaData> findTopByDocumentIdAndTeamIdOrderByExtractedAtDesc(String documentId, String teamId);
+
+    Mono<KnowledgeHubDocumentMetaData> findTopByDocumentIdAndTeamIdAndCollectionIdOrderByExtractedAtDesc(String documentId, String teamId, String collectionId);
     
     /**
      * Delete metadata extract by document ID
      */
     Mono<Void> deleteByDocumentId(String documentId);
+
+    /**
+     * Delete metadata entries by document, team, and collection.
+     */
+    Mono<Void> deleteByDocumentIdAndTeamIdAndCollectionId(String documentId, String teamId, String collectionId);
 }
 

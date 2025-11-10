@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Container, Card, Table, Breadcrumb, Spinner, Alert, Badge } from 'react-bootstrap';
-import { HiDocument, HiArrowLeft, HiBookOpen, HiCloudUpload, HiTrash, HiEye } from 'react-icons/hi';
+import { Container, Card, Table, Breadcrumb, Spinner, Alert, Badge, Form, Row, Col, ListGroup } from 'react-bootstrap';
+import { HiDocument, HiArrowLeft, HiBookOpen, HiCloudUpload, HiTrash, HiEye, HiSearch } from 'react-icons/hi';
 import { useTeam } from '../../../contexts/TeamContext';
 import { knowledgeHubCollectionService } from '../../../services/knowledgeHubCollectionService';
 import { knowledgeHubDocumentService } from '../../../services/knowledgeHubDocumentService';
@@ -12,6 +12,8 @@ import { formatDateTime } from '../../../utils/dateUtils';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import { knowledgeHubWebSocketService } from '../../../services/knowledgeHubWebSocketService';
 import './styles.css';
+
+const MAX_SNIPPET_LENGTH = 600;
 
 function ViewCollection() {
   const { collectionId } = useParams();
@@ -25,6 +27,13 @@ function ViewCollection() {
   const [dragover, setDragover] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [documentToDelete, setDocumentToDelete] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [topK, setTopK] = useState(5);
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchPerformed, setSearchPerformed] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [expandedResults, setExpandedResults] = useState({});
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -233,6 +242,104 @@ function ViewCollection() {
     return status === 'FAILED' || status === 'PENDING_UPLOAD';
   };
 
+  const matchBadgeVariant = (matchType) => {
+    switch (matchType) {
+      case 'exact':
+        return 'success';
+      case 'high_similarity':
+        return 'primary';
+      case 'medium_similarity':
+        return 'info';
+      case 'low_similarity':
+      default:
+        return 'secondary';
+    }
+  };
+
+  const truncateText = (text, maxLength = MAX_SNIPPET_LENGTH) => {
+    if (!text) {
+      return '';
+    }
+    if (text.length <= maxLength) {
+      return text;
+    }
+    return `${text.slice(0, maxLength).trimEnd()}…`;
+  };
+
+  const toggleResultExpansion = (resultKey) => {
+    setExpandedResults((prev) => ({
+      ...prev,
+      [resultKey]: !prev[resultKey],
+    }));
+  };
+
+  const extractPageInfo = (result) => {
+    return (
+      result?.pageNumbers ??
+      result?.pageNumber ??
+      result?.page_numbers ??
+      result?.page ??
+      null
+    );
+  };
+
+  const extractChunkIndex = (result) => {
+    const value =
+      result?.chunkIndex ??
+      result?.chunk_index ??
+      result?.chunk_number ??
+      null;
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : value;
+  };
+
+  const handleSemanticSearch = async (event) => {
+    event.preventDefault();
+
+    if (!searchQuery.trim()) {
+      setSearchError('Enter a sentence or question to search');
+      setSearchPerformed(false);
+      setSearchResults([]);
+      return;
+    }
+
+    if (!collection?.milvusCollectionName) {
+      setSearchError('This collection is not yet connected to RAG. Assign an embedding collection first.');
+      setSearchPerformed(false);
+      setSearchResults([]);
+      return;
+    }
+
+    setSearching(true);
+    setSearchError(null);
+
+    try {
+      const response = await knowledgeHubCollectionService.searchCollection(collectionId, {
+        query: searchQuery.trim(),
+        topK,
+      });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Search failed');
+      }
+
+      const payload = response.data || {};
+      setSearchResults(payload.results || []);
+      setExpandedResults({});
+      setSearchPerformed(true);
+    } catch (err) {
+      console.error('Error running semantic search:', err);
+      setSearchError(err.message || 'Failed to run search');
+      setSearchResults([]);
+      setSearchPerformed(true);
+    } finally {
+      setSearching(false);
+    }
+  };
+
   return (
     <Container fluid className="view-collection-container">
       {/* Breadcrumb */}
@@ -282,6 +389,173 @@ function ViewCollection() {
         <Card.Body>
           {error && (
             <Alert variant="danger">{error}</Alert>
+          )}
+
+          {collection?.milvusCollectionName ? (
+            <Card className="search-preview-card mb-4">
+              <Card.Body>
+                <div className="d-flex flex-column flex-lg-row align-items-lg-center mb-3 gap-2">
+                  <div className="flex-grow-1 text-start">
+                    <h5 className="mb-1">Semantic Search Preview</h5>
+                    <p className="text-muted small mb-0">
+                      Run a quick vector search against <strong>{collection.milvusCollectionName}</strong> to confirm embeddings are active.
+                    </p>
+                  </div>
+                  <div className="text-muted small text-lg-end">
+                    <div>Embedding model: {collection.embeddingModelName || 'Not configured'}</div>
+                    <div>Late chunking: {collection.lateChunkingEnabled ? 'Enabled' : 'Disabled'}</div>
+                  </div>
+                </div>
+
+                <Form onSubmit={handleSemanticSearch} className="mb-3">
+                  <Row className="g-2 align-items-center">
+                    <Col lg={8} xs={12}>
+                      <Form.Control
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Ask a question or paste a sentence to search your processed chunks..."
+                        disabled={searching}
+                      />
+                    </Col>
+                    <Col lg={2} xs={6}>
+                      <Form.Select
+                        value={topK}
+                        onChange={(e) => setTopK(Number(e.target.value))}
+                        disabled={searching}
+                      >
+                        <option value={3}>Top 3</option>
+                        <option value={5}>Top 5</option>
+                        <option value={10}>Top 10</option>
+                      </Form.Select>
+                    </Col>
+                    <Col lg={2} xs={6} className="d-grid">
+                      <Button type="submit" variant="primary" disabled={searching}>
+                        {searching ? (
+                          <>
+                            <Spinner animation="border" size="sm" className="me-2" />
+                            Searching...
+                          </>
+                        ) : (
+                          <>
+                            <HiSearch className="me-2" />
+                            Search
+                          </>
+                        )}
+                      </Button>
+                    </Col>
+                  </Row>
+                </Form>
+
+                {searchError && (
+                  <Alert variant="danger" className="mb-3">
+                    {searchError}
+                  </Alert>
+                )}
+
+                {searchPerformed && !searching && !searchError && (
+                  <div>
+                    {searchResults.length === 0 ? (
+                      <Alert variant="info" className="mb-0">
+                        No semantic matches found for this query. Try rephrasing or increasing the context window.
+                      </Alert>
+                    ) : (
+                      <ListGroup variant="flush" className="semantic-search-results">
+                        {searchResults.map((result, index) => (
+                          <ListGroup.Item key={`${result.id || 'result'}-${index}`} className="search-result-item">
+                            <div className="d-flex justify-content-between align-items-start mb-2">
+                              <div className="fw-semibold">Match #{index + 1}</div>
+                              <div className="d-flex gap-2 align-items-center small text-muted">
+                                <Badge bg={matchBadgeVariant(result.match_type)} className="text-uppercase">
+                                  {result.match_type?.replace('_', ' ') || 'match'}
+                                </Badge>
+                                <span>
+                                  distance:{' '}
+                                  {typeof result.distance === 'number'
+                                    ? result.distance.toFixed(3)
+                                    : 'n/a'}
+                                </span>
+                              </div>
+                            </div>
+                            {(() => {
+                              const text = result.text || '';
+                              const resultKey = result.id || `${index}`;
+                              const isExpanded = !!expandedResults[resultKey];
+                              const displayText = isExpanded ? text : truncateText(text);
+                              const shouldShowToggle = text && text.length > MAX_SNIPPET_LENGTH;
+
+                              return (
+                                <>
+                                  <div className="search-result-text">
+                                    {displayText || 'No text returned for this chunk.'}
+                                  </div>
+                                  {shouldShowToggle && (
+                                    <Button
+                                      variant="link"
+                                      size="sm"
+                                      className="p-0 mt-2 search-result-toggle"
+                                      onClick={() => toggleResultExpansion(resultKey)}
+                                    >
+                                      {isExpanded ? 'Show less' : 'Show more'}
+                                    </Button>
+                                  )}
+                                </>
+                              );
+                            })()}
+                            <div className="search-result-meta text-muted small mt-2">
+                              <span className="meta-item document-link">
+                                {result.documentId ? (
+                                  <Button
+                                    variant="link"
+                                    size="sm"
+                                    className="px-1 py-0"
+                                    onClick={() => navigate(`/knowledge-hub/document/${result.documentId}`)}
+                                  >
+                                    {result.fileName || result.documentId}
+                                  </Button>
+                                ) : (
+                                  result.fileName || 'Unknown document'
+                                )}
+                              </span>
+                              {extractPageInfo(result) && (
+                                <span className="meta-item">
+                                  Page{String(extractPageInfo(result)).includes(',') ? 's' : ''}:{' '}
+                                  {extractPageInfo(result)}
+                                </span>
+                              )}
+                              {extractChunkIndex(result) !== null && (
+                                <span className="meta-item">
+                                  Chunk:{' '}
+                                  {Number.isFinite(Number(extractChunkIndex(result)))
+                                    ? Number(extractChunkIndex(result)) + 1
+                                    : extractChunkIndex(result)}
+                                </span>
+                              )}
+                            </div>
+                            {result.documentId && (
+                              <div className="mt-3">
+                                <Button
+                                  variant="outline-primary"
+                                  size="sm"
+                                  onClick={() => navigate(`/knowledge-hub/document/${result.documentId}`)}
+                                >
+                                  <HiEye className="me-1" /> Open Document
+                                </Button>
+                              </div>
+                            )}
+                          </ListGroup.Item>
+                        ))}
+                      </ListGroup>
+                    )}
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          ) : (
+            <Alert variant="warning" className="mb-4">
+              <div className="fw-semibold">RAG collection not assigned</div>
+              <div className="small mb-0">Assign an embedding collection to enable semantic search verification.</div>
+            </Alert>
           )}
           
           {/* Upload Area */}

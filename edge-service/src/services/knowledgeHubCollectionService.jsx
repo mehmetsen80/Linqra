@@ -98,6 +98,57 @@ export const knowledgeHubCollectionService = {
         error: error.response?.data?.message || 'Failed to fetch collection count'
       };
     }
+  },
+
+  // Assign Milvus collection to knowledge collection
+  assignMilvusCollection: async (collectionId, payload) => {
+    try {
+      const response = await axiosInstance.put(`/api/knowledge/collections/${collectionId}/milvus`, payload);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error assigning Milvus collection:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to assign Milvus collection'
+      };
+    }
+  },
+
+  // Remove Milvus collection assignment
+  removeMilvusCollection: async (collectionId) => {
+    try {
+      const response = await axiosInstance.delete(`/api/knowledge/collections/${collectionId}/milvus`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error removing Milvus collection assignment:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to remove Milvus collection assignment'
+      };
+    }
+  },
+
+  // Semantic search within a knowledge collection (Milvus-backed)
+  searchCollection: async (collectionId, payload) => {
+    try {
+      const response = await axiosInstance.post(`/api/knowledge/collections/${collectionId}/search`, payload);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error searching knowledge collection:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to search collection'
+      };
+    }
   }
 };
 

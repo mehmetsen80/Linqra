@@ -28,6 +28,7 @@ public class LlmModel {
     private String category;               // e.g., "chat", "embedding", "vision"
     private String endpoint;               // e.g., "https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent"
     private Integer dimensions;            // For embedding models: vector dimensions (e.g., 768, 1024, 1536)
+    private Integer contextWindowTokens;   // Optional: max context window tokens supported by the model
     
     private double inputPricePer1M;       // Input/prompt price per 1M tokens in USD
     private double outputPricePer1M;      // Output/completion price per 1M tokens in USD

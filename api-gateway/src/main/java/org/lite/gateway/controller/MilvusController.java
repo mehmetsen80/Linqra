@@ -8,10 +8,13 @@ import org.lite.gateway.dto.MilvusStoreRecordRequest;
 import org.lite.gateway.dto.MilvusVerifyRequest;
 import org.lite.gateway.dto.MilvusSearchRequest;
 import org.lite.gateway.dto.MilvusCollectionInfo;
+import org.lite.gateway.dto.MilvusCollectionVerificationResponse;
+import org.lite.gateway.dto.MilvusUpdateCollectionMetadataRequest;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.service.TeamService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
@@ -54,7 +57,9 @@ public class MilvusController {
                                 request.getCollectionName(),
                                 request.getSchemaFields(),
                                 request.getDescription(),
-                                request.getTeamId()
+                                request.getTeamId(),
+                                request.getCollectionType(),
+                                request.getProperties()
                             ))
                     )
             )
@@ -188,6 +193,7 @@ public class MilvusController {
     @GetMapping("/collections/{teamId}")
     public Mono<ResponseEntity<List<MilvusCollectionInfo>>> listCollections(
             @PathVariable String teamId,
+            @RequestParam(value = "type", required = false) String collectionType,
             ServerWebExchange exchange) {
         log.info("Listing collections for team: {}", teamId);
         return userContextService.getCurrentUsername(exchange)
@@ -197,9 +203,54 @@ public class MilvusController {
                     .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
                     .switchIfEmpty(Mono.error(new AccessDeniedException(
                         "Admin access required for team " + teamId)))
-                    .then(linqMilvusStoreService.listCollections(teamId))
+                    .then(linqMilvusStoreService.listCollections(teamId, collectionType))
             )
             .map(ResponseEntity::ok);
+    }
+
+    @GetMapping("/collections/{teamId}/{collectionName}/verify")
+    public Mono<ResponseEntity<MilvusCollectionVerificationResponse>> verifyCollection(
+            @PathVariable String teamId,
+            @PathVariable String collectionName,
+            ServerWebExchange exchange) {
+        log.info("Verifying Milvus collection {} for team {}", collectionName, teamId);
+        return userContextService.getCurrentUsername(exchange)
+                .flatMap(userService::findByUsername)
+                .flatMap(user ->
+                        teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                                .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                        "Admin access required for team " + teamId)))
+                                .then(linqMilvusStoreService.verifyCollection(collectionName, teamId))
+                )
+                .map(ResponseEntity::ok)
+                .onErrorResume(error -> {
+                    log.error("Error verifying Milvus collection {}: {}", collectionName, error.getMessage());
+                    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).build());
+                });
+    }
+
+    @PutMapping("/collections/{collectionName}/metadata")
+    public Mono<ResponseEntity<Map<String, String>>> updateCollectionMetadata(
+            @PathVariable String collectionName,
+            @RequestBody MilvusUpdateCollectionMetadataRequest request,
+            ServerWebExchange exchange) {
+        log.info("Updating metadata for collection {} (team {})", collectionName, request.getTeamId());
+
+        return userContextService.getCurrentUsername(exchange)
+                .flatMap(userService::findByUsername)
+                .flatMap(user ->
+                        teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
+                                .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                                .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                        "Admin access required for team " + request.getTeamId())))
+                                .then(linqMilvusStoreService.updateCollectionMetadata(
+                                        collectionName,
+                                        request.getTeamId(),
+                                        request.getMetadata()
+                                ))
+                )
+                .map(ResponseEntity::ok);
     }
 
     @GetMapping("/collections")

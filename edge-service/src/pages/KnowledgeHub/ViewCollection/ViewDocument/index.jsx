@@ -29,6 +29,30 @@ function ViewDocument() {
   const [metadata, setMetadata] = useState(null);
   const [loadingMetadata, setLoadingMetadata] = useState(false);
   const [hardDeleting, setHardDeleting] = useState(false);
+  const [embedding, setEmbedding] = useState({
+    running: false,
+    progress: null
+  });
+  const [stageDeleteModal, setStageDeleteModal] = useState({ show: false, scope: null });
+  const [stageDeleting, setStageDeleting] = useState(false);
+
+  const stageDeletionConfig = {
+    embedding: {
+      title: 'Delete Embedding Data',
+      message: 'This will remove all embedding vectors for this document from the assigned Milvus collection. Metadata and processed chunks will remain so you can rerun embedding when ready.',
+      success: 'Embedding vectors removed. You can rerun embedding whenever you are ready.'
+    },
+    metadata: {
+      title: 'Delete Extracted Metadata',
+      message: 'This will delete the extracted metadata JSON for this document and also remove any existing embeddings. Processed chunks will remain so you can rerun metadata extraction afterwards.',
+      success: 'Extracted metadata cleared. Re-run metadata extraction to continue.'
+    },
+    processed: {
+      title: 'Delete Processed Information',
+      message: 'This will remove processed chunks, extracted metadata, and embeddings while keeping the original file. The document will return to the uploaded state so you can reprocess from parsing onwards.',
+      success: 'Processed information removed. Re-run parsing to regenerate downstream artifacts.'
+    }
+  };
 
   useEffect(() => {
     if (currentTeam?.id && documentId) {
@@ -54,10 +78,16 @@ function ViewDocument() {
             processedAt: statusUpdate.processedAt,
             totalChunks: statusUpdate.totalChunks,
             totalTokens: statusUpdate.totalTokens,
+            totalEmbeddings: statusUpdate.totalEmbeddings,
             processedS3Key: statusUpdate.processedS3Key,
             errorMessage: statusUpdate.errorMessage
           };
         });
+        
+        setEmbedding(prev => ({
+          running: statusUpdate.status === 'EMBEDDING',
+          progress: statusUpdate.totalEmbeddings !== undefined ? statusUpdate.totalEmbeddings : (prev?.progress ?? null)
+        }));
         
         // Update fileExists based on status (file exists if status is not PENDING_UPLOAD)
         // FAILED status could still have the file if upload succeeded but processing failed
@@ -101,14 +131,21 @@ function ViewDocument() {
         }
       }
       
-      // Fetch chunk statistics if document is processed
-      if (data.status === 'PROCESSED' && data.processedS3Key) {
+      // Fetch chunk statistics if document is processed or AI ready
+      if ((data.status === 'PROCESSED' || data.status === 'AI_READY') && data.processedS3Key) {
         fetchChunkStatistics(data.processedS3Key);
       }
       
       // Fetch metadata if document has metadata extraction status or beyond
       if (['METADATA_EXTRACTION', 'EMBEDDING', 'AI_READY'].includes(data.status)) {
         fetchMetadata();
+      }
+      
+      if (data.totalEmbeddings !== undefined) {
+        setEmbedding({
+          running: data.status === 'EMBEDDING',
+          progress: data.totalEmbeddings
+        });
       }
     } catch (err) {
       console.error('Error fetching document:', err);
@@ -218,14 +255,59 @@ function ViewDocument() {
     }
   };
 
+  const openStageDeleteModal = (scope) => {
+    setStageDeleteModal({ show: true, scope });
+  };
+
+  const closeStageDeleteModal = () => {
+    if (!stageDeleting) {
+      setStageDeleteModal({ show: false, scope: null });
+    }
+  };
+
+  const handleStageDeleteConfirm = async () => {
+    if (!stageDeleteModal.scope) {
+      return;
+    }
+
+    const scopeKey = stageDeleteModal.scope;
+    try {
+      setStageDeleting(true);
+      const { success, error } = await knowledgeHubDocumentService.deleteDocumentArtifacts(documentId, scopeKey);
+      if (!success) {
+        throw new Error(error || 'Failed to delete document artifacts');
+      }
+
+      if (scopeKey !== 'embedding') {
+        setMetadata(null);
+      }
+      if (scopeKey === 'processed') {
+        setChunkStats(null);
+      }
+
+      setEmbedding({ running: false, progress: null });
+      await fetchDocument();
+
+      const successMessage = stageDeletionConfig[scopeKey]?.success || 'Document artifacts deleted.';
+      showSuccessToast(successMessage);
+      setStageDeleteModal({ show: false, scope: null });
+    } catch (err) {
+      console.error(`Error deleting document artifacts (${scopeKey}):`, err);
+      showErrorToast(err.message || 'Failed to delete document artifacts');
+    } finally {
+      setStageDeleting(false);
+    }
+  };
+
   const getStatusBadgeVariant = (status) => {
     switch (status) {
-      case 'READY':
+      case 'AI_READY':
       case 'PROCESSED':
         return 'success';
       case 'UPLOADED':
       case 'PARSING':
       case 'PARSED':
+      case 'METADATA_EXTRACTION':
       case 'EMBEDDING':
         return 'info';
       case 'PENDING_UPLOAD':
@@ -241,6 +323,17 @@ function ViewDocument() {
   const isProcessingStatus = (status) => {
     const processingStates = ['UPLOADED', 'PARSING', 'PARSED', 'PROCESSED', 'METADATA_EXTRACTION', 'EMBEDDING'];
     return processingStates.includes(status);
+  };
+
+  const getEmbeddingProviderLabel = (modelCategory) => {
+    if (!modelCategory) return 'N/A';
+    const providerKey = modelCategory.split('-')[0];
+    const providerLabels = {
+      openai: 'OpenAI',
+      gemini: 'Gemini',
+      cohere: 'Cohere'
+    };
+    return providerLabels[providerKey] || providerKey;
   };
 
   const getStatusFlowSteps = () => {
@@ -334,13 +427,12 @@ function ViewDocument() {
         currentTeam.id
       );
     } else if (step.key === 'EMBEDDING') {
-      // TODO: Add embedding command handler
-      // For now, using document processing command
-      knowledgeHubWebSocketService.sendDocumentProcessingCommand(
+      knowledgeHubWebSocketService.sendDocumentEmbeddingCommand(
         document.documentId,
         step.key,
         currentTeam.id
       );
+      setEmbedding({ running: true, progress: document.totalEmbeddings ?? null });
     } else {
       // Default fallback for other statuses
       console.warn(`Unknown step key: ${step.key}, using document processing command as fallback`);
@@ -358,6 +450,17 @@ function ViewDocument() {
     setTimeout(() => {
       fetchDocument();
     }, 1000);
+  };
+
+  const handleEmbeddingTrigger = () => {
+    if (!document || !currentTeam?.id) return;
+    knowledgeHubWebSocketService.sendDocumentEmbeddingCommand(
+      document.documentId,
+      'EMBEDDING',
+      currentTeam.id
+    );
+    setEmbedding({ running: true, progress: document.totalEmbeddings ?? null });
+    showSuccessToast('Embedding triggered...');
   };
 
   const calculateUploadDuration = () => {
@@ -726,19 +829,86 @@ function ViewDocument() {
                 <h5 className="mb-0 fw-semibold">Additional Information</h5>
               </div>
               <div className="d-flex justify-content-between align-items-center mb-3">
-                <span className="text-muted h6">Document ID</span>
-                <code className="text-secondary">{document.documentId}</code>
+                <span className="text-muted h6">RAG Collection</span>
+                <span className="text-secondary">
+                  {collection?.milvusCollectionName || 'Not assigned'}
+                </span>
               </div>
-              {document.contentType && (
-                <div className="d-flex justify-content-between align-items-center mb-3">
-                  <span className="text-muted h6">Content Type</span>
-                  <span className="text-secondary">{document.contentType}</span>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <span className="text-muted h6">Embedding Model</span>
+                <span className="text-secondary">
+                  {collection?.embeddingModelName || 'Not configured'}
+                </span>
+              </div>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <span className="text-muted h6">Embedding Category</span>
+                <span className="text-secondary">
+                  {collection?.embeddingModel || 'N/A'}
+                </span>
+              </div>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <span className="text-muted h6">Embedding Provider</span>
+                <span className="text-secondary">
+                  {getEmbeddingProviderLabel(collection?.embeddingModel)}
+                </span>
+              </div>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <span className="text-muted h6">Embedding Dimension</span>
+                <span className="text-secondary">
+                  {collection?.embeddingDimension || 'N/A'}
+                </span>
+              </div>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <span className="text-muted h6">Late Chunking</span>
+                <span className="text-secondary">
+                  {collection?.lateChunkingEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <span className="text-muted h6">Embeddings Stored</span>
+                <span className="text-secondary">
+                  {document.totalEmbeddings !== undefined ? document.totalEmbeddings : 'N/A'}
+                </span>
+              </div>
+              <div className="d-flex justify-content-between align-items-center">
+                <span className="text-muted h6">Embedding Status</span>
+                <span className="text-secondary">
+                  {embedding.running ? 'In progress' : (document.status === 'AI_READY' ? 'Completed' : 'Not started')}
+                </span>
+              </div>
+              {collection?.milvusCollectionName ? (
+                <div className="d-flex justify-content-end gap-2 mt-3">
+                  {((document.totalEmbeddings ?? 0) > 0 || document.status === 'AI_READY') && (
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => openStageDeleteModal('embedding')}
+                      disabled={embedding.running || stageDeleting || stageDeleteModal.show}
+                    >
+                      Delete Embedding Data
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline-primary"
+                    size="sm"
+                    onClick={handleEmbeddingTrigger}
+                    disabled={embedding.running}
+                  >
+                    {embedding.running ? (
+                      <>
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Embedding...
+                      </>
+                    ) : (
+                      'Run Embedding'
+                    )}
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-3 text-muted small">
+                  Assign a RAG collection to enable embedding for this document.
                 </div>
               )}
-              <div className="d-flex justify-content-between align-items-center">
-                <span className="text-muted h6">Collection</span>
-                <span className="text-secondary">{collection?.name || 'N/A'}</span>
-              </div>
             </Card.Body>
           </Card>
         </Col>
@@ -753,16 +923,28 @@ function ViewDocument() {
                     <HiChartBar className="text-primary me-2" size={24} />
                     <h5 className="mb-0 fw-semibold">Processed Chunks</h5>
                   </div>
-                  {document.processedS3Key && (
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      onClick={handleDownloadProcessedJson}
-                      disabled={downloadingProcessedJson}
-                    >
-                      <HiDownload /> {downloadingProcessedJson ? 'Downloading...' : 'Download JSON'}
-                    </Button>
-                  )}
+                  <div className="d-flex align-items-center gap-2">
+                    {document.processedS3Key && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={handleDownloadProcessedJson}
+                        disabled={downloadingProcessedJson}
+                      >
+                        <HiDownload /> {downloadingProcessedJson ? 'Downloading...' : 'Download JSON'}
+                      </Button>
+                    )}
+                    {(document.processedS3Key || (document.totalChunks ?? 0) > 0) && (
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() => openStageDeleteModal('processed')}
+                        disabled={stageDeleting || stageDeleteModal.show}
+                      >
+                        Delete Processed Data
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 {document.totalChunks !== null && document.totalChunks !== undefined && (
                   <div className="d-flex justify-content-between align-items-center mb-3">
@@ -802,9 +984,21 @@ function ViewDocument() {
           <Col md={6}>
             <Card className="border-0 bg-light h-100">
               <Card.Body>
-                <div className="d-flex align-items-center mb-3">
-                  <HiInformationCircle className="text-primary me-2" size={24} />
-                  <h5 className="mb-0 fw-semibold">Document Metadata</h5>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div className="d-flex align-items-center">
+                    <HiInformationCircle className="text-primary me-2" size={24} />
+                    <h5 className="mb-0 fw-semibold">Document Metadata</h5>
+                  </div>
+                  {metadata && (
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => openStageDeleteModal('metadata')}
+                      disabled={stageDeleting || stageDeleteModal.show}
+                    >
+                      Delete Metadata
+                    </Button>
+                  )}
                 </div>
                 {loadingMetadata ? (
                   <div className="text-center py-3">
@@ -917,6 +1111,16 @@ function ViewDocument() {
         )}
       </Row>
 
+      <ConfirmationModalWithVerification
+        show={stageDeleteModal.show}
+        onHide={closeStageDeleteModal}
+        onConfirm={handleStageDeleteConfirm}
+        title={stageDeletionConfig[stageDeleteModal.scope]?.title || 'Delete Artifacts'}
+        message={stageDeletionConfig[stageDeleteModal.scope]?.message || 'This will delete the selected derived artifacts for this document.'}
+        variant="danger"
+        confirmLabel="Delete"
+        loading={stageDeleting}
+      />
       <ConfirmationModalWithVerification
         show={showDeleteModal}
         onHide={() => setShowDeleteModal(false)}

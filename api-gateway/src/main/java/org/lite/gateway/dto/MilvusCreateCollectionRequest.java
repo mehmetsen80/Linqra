@@ -1,6 +1,7 @@
 package org.lite.gateway.dto;
 
 import lombok.Data;
+
 import java.util.List;
 import java.util.Map;
 
@@ -10,4 +11,6 @@ public class MilvusCreateCollectionRequest {
     private List<Map<String, Object>> schemaFields;
     private String description;
     private String teamId;
-} 
+    private String collectionType;
+    private Map<String, String> properties;
+}

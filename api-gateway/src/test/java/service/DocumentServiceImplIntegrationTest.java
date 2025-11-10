@@ -8,9 +8,11 @@ import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
+import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentServiceImpl;
 import org.lite.gateway.service.impl.S3ServiceImpl;
+import org.lite.gateway.service.LinqMilvusStoreService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationEventPublisher;
@@ -61,6 +63,12 @@ class DocumentServiceImplIntegrationTest {
     @Autowired
     private KnowledgeHubDocumentMetaDataRepository metadataRepository;
 
+    @Autowired
+    private KnowledgeHubCollectionRepository collectionRepository;
+
+    @Autowired
+    private LinqMilvusStoreService milvusStoreService;
+
     private KnowledgeHubDocumentServiceImpl documentService;
     private S3ServiceImpl s3Service;
     private S3Properties s3Properties;
@@ -86,7 +94,9 @@ class DocumentServiceImplIntegrationTest {
                 s3Service,
                 s3Properties,
                 chunkRepository,
-                metadataRepository
+                metadataRepository,
+                collectionRepository,
+                milvusStoreService
         );
     }
     

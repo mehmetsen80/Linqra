@@ -1,6 +1,8 @@
 package org.lite.gateway.service;
 
 import org.lite.gateway.dto.MilvusCollectionInfo;
+import org.lite.gateway.dto.MilvusCollectionSchemaInfo;
+import org.lite.gateway.dto.MilvusCollectionVerificationResponse;
 import java.util.List;
 import java.util.Map;
 
@@ -16,7 +18,12 @@ public interface LinqMilvusStoreService {
      * @param teamId The team ID for the collection.
      * @return A Mono indicating completion.
      */
-    Mono<Map<String, String>> createCollection(String collectionName, List<Map<String, Object>> schemaFields, String description, String teamId);
+    Mono<Map<String, String>> createCollection(String collectionName,
+                                               List<Map<String, Object>> schemaFields,
+                                               String description,
+                                               String teamId,
+                                               String collectionType,
+                                               Map<String, String> properties);
 
     /**
      * Generates an embedding for a given text using the specified embedding llm.
@@ -70,7 +77,11 @@ public interface LinqMilvusStoreService {
      * @param teamId The team ID for the collections.
      * @return A Mono emitting a List of collection information.
      */
-    Mono<List<MilvusCollectionInfo>> listCollections(String teamId);
+    Mono<List<MilvusCollectionInfo>> listCollections(String teamId, String collectionType);
+
+    Mono<Map<String, String>> updateCollectionMetadata(String collectionName,
+                                                       String teamId,
+                                                       Map<String, String> metadata);
 
     /**
      * Lists all collections in the system. Only accessible by SUPER_ADMIN users.
@@ -136,4 +147,41 @@ public interface LinqMilvusStoreService {
      * @return A Mono emitting a map with detailed collection information.
      */
     Mono<Map<String, Object>> getCollectionDetails();
+
+    /**
+     * Delete all records for a document within a Milvus collection (scoped to team).
+     *
+      * @param collectionName Milvus collection name
+      * @param documentId Document identifier whose embeddings should be removed
+      * @param teamId Team identifier used for access control filtering
+      * @return Mono emitting the number of deleted vectors
+      */
+    Mono<Long> deleteDocumentEmbeddings(String collectionName, String documentId, String teamId);
+
+    /**
+     * Counts the embeddings stored for a document in a Milvus collection (scoped to team).
+     *
+     * @param collectionName Milvus collection name
+     * @param documentId Document identifier
+     * @param teamId Team identifier used for access control filtering
+     * @return Mono emitting the number of vectors currently stored
+     */
+    Mono<Long> countDocumentEmbeddings(String collectionName, String documentId, String teamId);
+
+    /**
+     * Describe and verify a Milvus collection for a team.
+     *
+     * @param collectionName Milvus collection name
+     * @param teamId Team identifier
+     * @return Verification result including schema details and validation issues
+     */
+    Mono<MilvusCollectionVerificationResponse> verifyCollection(String collectionName, String teamId);
+
+    /**
+     * Retrieve cached schema information for a Milvus collection.
+     *
+     * @param collectionName Milvus collection name
+     * @return Schema info including field names and collection type
+     */
+    Mono<MilvusCollectionSchemaInfo> getCollectionSchema(String collectionName);
 }

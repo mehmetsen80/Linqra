@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -28,5 +29,17 @@ public class LinqLlmModel {
     private String apiKey;            // The API key for the service
     private List<String> supportedIntents; // e.g., ["generate", "summarize"]
     private String teamId;              // e.g., "67d0aeb17172416c411d419e" (team ID)
+
+    @Transient
+    private Integer embeddingDimension; // Derived from LlmModel for embedding category models
+
+    @Transient
+    private Double inputPricePer1M; // Derived pricing metadata (USD per 1M input tokens)
+
+    @Transient
+    private Double outputPricePer1M; // Derived pricing metadata (USD per 1M output tokens)
+
+    @Transient
+    private Integer contextWindowTokens; // Derived maximum context window tokens (if available)
 }
 

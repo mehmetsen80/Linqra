@@ -1,0 +1,22 @@
+.primary-switch .form-check-input:checked {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.primary-switch .form-check-input:focus {
+  box-shadow: 0 0 0 0.25rem rgba(237, 117, 52, 0.25);
+  border-color: var(--primary-dark);
+}
+
+.primary-switch .form-check-input {
+  cursor: pointer;
+}
+
+.dimension-column {
+  max-width: 120px;
+}
+
+.dimension-column .form-control {
+  max-width: 100px;
+}
+

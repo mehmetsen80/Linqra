@@ -129,6 +129,45 @@
   font-size: 0.9rem;
 }
 
+.milvus-collection-cell {
+  max-width: 260px;
+  min-width: 220px;
+  width: 220px;
+}
+
+.milvus-collection-cell-content {
+  overflow: hidden;
+}
+
+.milvus-collection-cell .milvus-name {
+  font-weight: 600;
+  color: #1f2937;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.milvus-collection-cell .milvus-details {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  overflow: hidden;
+}
+
+.milvus-collection-cell .milvus-details-text {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.milvus-collection-cell .badge {
+  flex-shrink: 0;
+}
+
 /* Action Buttons */
 .table td.text-end .d-flex {
   gap: 0.25rem;

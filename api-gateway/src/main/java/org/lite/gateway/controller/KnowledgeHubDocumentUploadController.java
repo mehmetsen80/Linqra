@@ -330,5 +330,47 @@ public class KnowledgeHubDocumentUploadController {
                     .body("Failed to delete document: " + error.getMessage()));
         });
     }
+
+    /**
+     * Delete document artifacts from a specific pipeline stage (processed data, metadata, embeddings)
+     */
+    @DeleteMapping("/{documentId}/artifacts/{scope}")
+    public Mono<ResponseEntity<Object>> deleteDocumentArtifacts(@PathVariable String documentId,
+                                                                @PathVariable String scope,
+                                                                ServerWebExchange exchange) {
+        log.info("Deleting document artifacts for document {} with scope {}", documentId, scope);
+
+        KnowledgeHubDocumentService.DeletionScope deletionScope;
+        try {
+            deletionScope = KnowledgeHubDocumentService.DeletionScope.valueOf(scope.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return Mono.just(ResponseEntity.badRequest()
+                    .body("Invalid deletion scope: " + scope));
+        }
+
+        return Mono.zip(
+                teamContextService.getTeamFromContext(exchange),
+                userContextService.getCurrentUsername(exchange)
+        )
+        .flatMap(tuple -> {
+            String teamId = tuple.getT1();
+            String username = tuple.getT2();
+
+            return userService.findByUsername(username)
+                    .flatMap(user ->
+                            teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                                    .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                            "Admin access required for team " + teamId)))
+                                    .then(documentService.deleteDocumentArtifacts(documentId, teamId, deletionScope))
+                    )
+                    .then(Mono.just(ResponseEntity.ok().build()));
+        })
+        .onErrorResume(error -> {
+            log.error("Error deleting artifacts for document {} with scope {}: {}", documentId, scope, error.getMessage(), error);
+            return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to delete document artifacts: " + error.getMessage()));
+        });
+    }
 }
 

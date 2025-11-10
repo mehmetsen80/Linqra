@@ -43,6 +43,33 @@ public class KnowledgeHubCollection {
     
     private List<KnowledgeCategory> categories;
     
+    /**
+     * Assigned Milvus collection name that stores embeddings for this Knowledge Hub collection
+     */
+    @Indexed
+    private String milvusCollectionName;
+    
+    /**
+     * Embedding provider / tool category (e.g. openai-embed, gemini-embed, cohere-embed)
+     */
+    private String embeddingModel;
+    
+    /**
+     * Concrete embedding model name (e.g. text-embedding-3-small, jina-embeddings-v2-base-en)
+     */
+    private String embeddingModelName;
+    
+    /**
+     * Expected embedding vector dimension for the assigned model
+     */
+    private Integer embeddingDimension;
+    
+    /**
+     * Whether late chunking pipeline should be used when generating embeddings
+     */
+    @Builder.Default
+    private boolean lateChunkingEnabled = true;
+    
     @CreatedDate
     private LocalDateTime createdAt;
     

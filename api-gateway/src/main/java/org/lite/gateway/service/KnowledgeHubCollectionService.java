@@ -1,11 +1,13 @@
 package org.lite.gateway.service;
 
+import org.lite.gateway.dto.AssignMilvusCollectionRequest;
 import org.lite.gateway.entity.KnowledgeHubCollection;
 import org.lite.gateway.enums.KnowledgeCategory;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
 
 public interface KnowledgeHubCollectionService {
     
@@ -20,5 +22,11 @@ public interface KnowledgeHubCollectionService {
     Mono<KnowledgeHubCollection> getCollectionById(String id, String teamId);
     
     Mono<Long> getCollectionCountByTeam(String teamId);
+    
+    Mono<KnowledgeHubCollection> assignMilvusCollection(String id, String teamId, String updatedBy, AssignMilvusCollectionRequest request);
+    
+    Mono<KnowledgeHubCollection> removeMilvusCollection(String id, String teamId, String updatedBy);
+
+    Mono<Map<String, Object>> searchCollection(String collectionId, String teamId, String query, Integer topK, Map<String, Object> metadataFilters);
 }
 

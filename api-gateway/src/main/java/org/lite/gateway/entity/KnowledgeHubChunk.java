@@ -53,6 +53,8 @@ public class KnowledgeHubChunk {
     
     private Double qualityScore; // Quality score between 0 and 1
     
+    private Boolean metadataOnly; // Indicates if this chunk contains only metadata (no document text)
+    
     private Long createdAt; // Timestamp when chunk was created
     
     // Optional metadata that might be useful for filtering

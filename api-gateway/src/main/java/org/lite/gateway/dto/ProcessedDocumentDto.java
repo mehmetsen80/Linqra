@@ -24,6 +24,7 @@ public class ProcessedDocumentDto {
     private ExtractedMetadata extractedMetadata;
     private ChunkingStrategy chunkingStrategy;
     private List<ChunkDto> chunks;
+    private List<FormField> formFields;
     private Statistics statistics;
     private QualityChecks qualityChecks;
     
@@ -39,6 +40,20 @@ public class ProcessedDocumentDto {
         private String ingestServiceVersion;
         private Long processingTimeMs;
         private String status;
+    }
+    
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class FormField {
+        private String name;
+        private String type;
+        private String value;
+        private List<String> options;
+        private Integer pageNumber;
+        private Boolean required;
     }
     
     @Data
@@ -107,6 +122,7 @@ public class ProcessedDocumentDto {
         private Boolean containsTable;
         private String language;
         private Double qualityScore;
+        private Boolean metadataOnly;
     }
     
     @Data

@@ -11,6 +11,7 @@ import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.S3Service;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
@@ -128,29 +129,43 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
     }
     
     private Mono<KnowledgeHubDocumentMetaData> createMetadataFromProcessedJson(KnowledgeHubDocument document) {
-        return metadataRepository.deleteByDocumentIdAndTeamIdAndCollectionId(document.getDocumentId(), document.getTeamId(), document.getCollectionId())
+        String documentId = document.getDocumentId();
+        String teamId = document.getTeamId();
+        String collectionId = document.getCollectionId();
+
+        return metadataRepository.deleteByDocumentIdAndTeamIdAndCollectionId(documentId, teamId, collectionId)
                 .then(s3Service.downloadFileContent(document.getProcessedS3Key()))
                 .flatMap(jsonBytes -> {
                     try {
                         String jsonString = new String(jsonBytes);
                         JsonNode processedJson = objectMapper.readTree(jsonString);
-                        
+
                         KnowledgeHubDocumentMetaData metadata = KnowledgeHubDocumentMetaData.builder()
-                                .documentId(document.getDocumentId())
-                                .teamId(document.getTeamId())
-                                .collectionId(document.getCollectionId())
+                                .documentId(documentId)
+                                .teamId(teamId)
+                                .collectionId(collectionId)
                                 .extractedAt(LocalDateTime.now())
                                 .status("EXTRACTED")
                                 .extractionModel(EXTRACTION_MODEL)
                                 .extractionVersion(EXTRACTION_VERSION)
                                 .build();
-                        
+
                         // Extract metadata from processed JSON
                         extractMetadataFromJson(metadata, processedJson, document);
-                        
-                        return metadataRepository.save(metadata);
+
+                        return metadataRepository.save(metadata)
+                                .onErrorResume(DuplicateKeyException.class, ex -> {
+                                    log.warn("Duplicate metadata detected for document {} (team {}, collection {}). Falling back to update existing record.",
+                                            documentId, teamId, collectionId);
+                                    return metadataRepository.findTopByDocumentIdAndTeamIdAndCollectionIdOrderByExtractedAtDesc(documentId, teamId, collectionId)
+                                            .switchIfEmpty(Mono.error(ex))
+                                            .flatMap(existing -> {
+                                                applyMetadataUpdates(existing, metadata);
+                                                return metadataRepository.save(existing);
+                                            });
+                                });
                     } catch (Exception e) {
-                        log.error("Error parsing processed JSON for document: {}", document.getDocumentId(), e);
+                        log.error("Error parsing processed JSON for document: {}", documentId, e);
                         return Mono.error(new RuntimeException("Failed to parse processed JSON: " + e.getMessage(), e));
                     }
                 });
@@ -350,6 +365,29 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
         }
         
         metadata.setCustomMetadata(customMetadata);
+    }
+    
+    private void applyMetadataUpdates(KnowledgeHubDocumentMetaData target, KnowledgeHubDocumentMetaData source) {
+        target.setTitle(source.getTitle());
+        target.setAuthor(source.getAuthor());
+        target.setSubject(source.getSubject());
+        target.setKeywords(source.getKeywords());
+        target.setLanguage(source.getLanguage());
+        target.setCreator(source.getCreator());
+        target.setProducer(source.getProducer());
+        target.setCreationDate(source.getCreationDate());
+        target.setModificationDate(source.getModificationDate());
+        target.setPageCount(source.getPageCount());
+        target.setWordCount(source.getWordCount());
+        target.setCharacterCount(source.getCharacterCount());
+        target.setDocumentType(source.getDocumentType());
+        target.setMimeType(source.getMimeType());
+        target.setCustomMetadata(source.getCustomMetadata());
+        target.setExtractionModel(source.getExtractionModel());
+        target.setExtractionVersion(source.getExtractionVersion());
+        target.setStatus(source.getStatus());
+        target.setErrorMessage(source.getErrorMessage());
+        target.setExtractedAt(source.getExtractedAt());
     }
     
     private String determineDocumentType(String contentType) {

@@ -219,7 +219,7 @@ const CreateCustomMilvusCollectionModal = ({
   return (
     <Modal show={show} onHide={creating ? undefined : onHide} size="lg" centered>
       <Modal.Header closeButton={!creating}>
-        <Modal.Title>Create Custom Milvus Collection</Modal.Title>
+        <Modal.Title>Create Custom RAG Collection</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && (

@@ -16,6 +16,7 @@ import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
@@ -281,6 +282,109 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                             .then(documentRepository.deleteById(document.getId()))
                             .doOnSuccess(success -> log.info("Successfully hard deleted document: {}", documentId));
                 });
+    }
+
+    @Override
+    public Mono<Void> deleteDocumentArtifacts(String documentId, String teamId, DeletionScope scope) {
+        log.info("Deleting document artifacts for document {} (team {}) with scope {}", documentId, teamId, scope);
+
+        return getDocumentById(documentId, teamId)
+                .flatMap(document -> switch (scope) {
+                    case EMBEDDING -> removeEmbeddingData(document).then();
+                    case METADATA -> removeEmbeddingData(document)
+                            .flatMap(this::removeMetadataData)
+                            .then();
+                    case PROCESSED -> removeEmbeddingData(document)
+                            .flatMap(this::removeMetadataData)
+                            .flatMap(this::removeProcessedData)
+                            .then();
+                });
+    }
+
+    private Mono<KnowledgeHubDocument> removeEmbeddingData(KnowledgeHubDocument document) {
+        Mono<Long> deleteMilvusEmbeddings;
+        if (StringUtils.hasText(document.getCollectionId())) {
+            deleteMilvusEmbeddings = collectionRepository.findById(document.getCollectionId())
+                    .flatMap(collection -> {
+                        String milvusCollectionName = collection.getMilvusCollectionName();
+                        if (!StringUtils.hasText(milvusCollectionName)) {
+                            log.info("Collection {} has no Milvus collection configured; skipping embedding deletion for document {}", collection.getId(), document.getDocumentId());
+                            return Mono.just(0L);
+                        }
+                        return milvusStoreService.deleteDocumentEmbeddings(milvusCollectionName, document.getDocumentId(), document.getTeamId())
+                                .doOnSuccess(count -> log.info("Deleted {} embedding vectors for document {} (collection {})", count, document.getDocumentId(), milvusCollectionName))
+                                .onErrorResume(error -> {
+                                    log.warn("Failed to delete embeddings for document {} from Milvus collection {}: {}", document.getDocumentId(), milvusCollectionName, error.getMessage());
+                                    return Mono.error(error);
+                                });
+                    })
+                    .switchIfEmpty(Mono.fromCallable(() -> {
+                        log.warn("KnowledgeHub collection {} not found when deleting embeddings for document {}", document.getCollectionId(), document.getDocumentId());
+                        return 0L;
+                    }))
+                    .onErrorResume(error -> {
+                        log.warn("Error during Milvus embedding deletion for document {}: {}", document.getDocumentId(), error.getMessage());
+                        return Mono.just(0L);
+                    });
+        } else {
+            deleteMilvusEmbeddings = Mono.just(0L);
+        }
+
+        return deleteMilvusEmbeddings
+                .onErrorResume(error -> {
+                    log.warn("Continuing after embedding deletion failure for document {}: {}", document.getDocumentId(), error.getMessage());
+                    return Mono.just(0L);
+                })
+                .then(Mono.defer(() -> {
+                    document.setTotalEmbeddings(null);
+                    document.setProcessingModel(null);
+                    document.setStatus("METADATA_EXTRACTION");
+                    document.setErrorMessage(null);
+                    return documentRepository.save(document)
+                            .doOnSuccess(saved -> log.info("Updated document {} after embedding deletion", saved.getDocumentId()));
+                }));
+    }
+
+    private Mono<KnowledgeHubDocument> removeMetadataData(KnowledgeHubDocument document) {
+        return metadataRepository.deleteByDocumentIdAndTeamIdAndCollectionId(document.getDocumentId(), document.getTeamId(), document.getCollectionId())
+                .doOnSuccess(v -> log.info("Deleted metadata record for document {}", document.getDocumentId()))
+                .doOnError(error -> log.warn("Failed to delete metadata for document {}: {}", document.getDocumentId(), error.getMessage()))
+                .onErrorResume(error -> Mono.empty())
+                .then(Mono.defer(() -> {
+                    document.setStatus("PROCESSED");
+                    document.setErrorMessage(null);
+                    return documentRepository.save(document)
+                            .doOnSuccess(saved -> log.info("Updated document {} after metadata deletion", saved.getDocumentId()));
+                }));
+    }
+
+    private Mono<KnowledgeHubDocument> removeProcessedData(KnowledgeHubDocument document) {
+        Mono<Void> deleteChunks = chunkRepository.deleteAllByDocumentId(document.getDocumentId())
+                .doOnSuccess(v -> log.info("Deleted chunk records for document {}", document.getDocumentId()))
+                .doOnError(error -> log.warn("Failed to delete chunks for document {}: {}", document.getDocumentId(), error.getMessage()))
+                .onErrorResume(error -> Mono.empty());
+
+        Mono<Void> deleteProcessedFile = Mono.empty();
+        if (StringUtils.hasText(document.getProcessedS3Key())) {
+            deleteProcessedFile = s3Service.deleteFile(document.getProcessedS3Key())
+                    .doOnSuccess(v -> log.info("Deleted processed S3 file {} for document {}", document.getProcessedS3Key(), document.getDocumentId()))
+                    .doOnError(error -> log.warn("Failed to delete processed S3 file for document {}: {}", document.getDocumentId(), error.getMessage()))
+                    .onErrorResume(error -> Mono.empty());
+        }
+
+        return Mono.when(deleteChunks, deleteProcessedFile)
+                .then(Mono.defer(() -> {
+                    document.setProcessedS3Key(null);
+                    document.setProcessedAt(null);
+                    document.setTotalChunks(null);
+                    document.setTotalTokens(null);
+                    document.setTotalEmbeddings(null);
+                    document.setProcessingModel(null);
+                    document.setStatus("UPLOADED");
+                    document.setErrorMessage(null);
+                    return documentRepository.save(document)
+                            .doOnSuccess(saved -> log.info("Updated document {} after processed data deletion", saved.getDocumentId()));
+                }));
     }
 }
 

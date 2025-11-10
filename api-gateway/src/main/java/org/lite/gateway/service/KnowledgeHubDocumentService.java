@@ -50,8 +50,23 @@ public interface KnowledgeHubDocumentService {
     Mono<Void> hardDeleteDocument(String documentId, String teamId);
 
     /**
+     * Delete derived artifacts from the document processing pipeline.
+     *
+     * @param documentId the document identifier
+     * @param teamId     the requesting team
+     * @param scope      which artifacts to delete (embedding only, metadata+embedding, processed+metadata+embedding)
+     */
+    Mono<Void> deleteDocumentArtifacts(String documentId, String teamId, DeletionScope scope);
+
+    /**
      * Result of document initiation including document and presigned URL
      */
     record DocumentInitiationResult(KnowledgeHubDocument document, PresignedUploadUrl presignedUrl) {}
+
+    enum DeletionScope {
+        EMBEDDING,
+        METADATA,
+        PROCESSED
+    }
 }
 

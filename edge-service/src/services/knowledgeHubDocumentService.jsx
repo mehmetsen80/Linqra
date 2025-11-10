@@ -157,6 +157,20 @@ export const knowledgeHubDocumentService = {
     }
   },
 
+  // Delete downstream artifacts for a document (processed data, metadata, embeddings)
+  deleteDocumentArtifacts: async (documentId, scope) => {
+    try {
+      await axiosInstance.delete(`/api/documents/${documentId}/artifacts/${scope}`);
+      return { success: true };
+    } catch (error) {
+      console.error(`Error deleting document artifacts (${scope}):`, error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.response?.data || `Failed to delete document ${scope}`
+      };
+    }
+  },
+
   // Get document metadata
   getMetadata: async (documentId) => {
     try {

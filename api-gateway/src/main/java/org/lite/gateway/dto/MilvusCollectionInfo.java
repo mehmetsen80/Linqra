@@ -20,4 +20,5 @@ public class MilvusCollectionInfo {
     private String collectionType;
     private Map<String, String> properties;
     private boolean nameLocked;
+    private Long rowCount;
 }

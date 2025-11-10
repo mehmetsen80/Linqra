@@ -24,10 +24,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -41,6 +43,10 @@ import java.util.stream.Collectors;
 public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDocumentProcessingService {
     
     private static final Pattern TABLE_LIKE_PATTERN = Pattern.compile("(\\S+\\s{2,}){2,}\\S+");
+    private static final Pattern WORD_PATTERN = Pattern.compile("\\p{L}[\\p{L}\\p{Nd}'-]*");
+    private static final int IDEAL_CHUNK_TOKENS = 350;
+    private static final int SOFT_MIN_TOKENS = 60;
+    private static final int SOFT_MAX_TOKENS = 520;
     
     private final KnowledgeHubDocumentRepository documentRepository;
     private final KnowledgeHubChunkRepository chunkRepository;
@@ -648,16 +654,126 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         };
     }
     
-    /**
-     * Calculate quality score for a chunk
-     */
     private double calculateQualityScore(ChunkingService.ChunkResult chunk) {
-        // Simple heuristic: quality based on token count
-        int tokens = chunk.getTokenCount();
-        if (tokens < 50) return 0.7;
-        if (tokens < 100) return 0.85;
-        if (tokens > 500) return 0.9;
-        return 0.95;
+        String text = chunk.getText();
+        if (!StringUtils.hasText(text)) {
+            return 0.0;
+        }
+
+        int tokenCount = Optional.ofNullable(chunk.getTokenCount())
+                .filter(count -> count > 0)
+                .orElseGet(() -> estimateTokenCount(text));
+
+        double lengthScore = computeLengthScore(tokenCount);
+        double lexicalRichnessScore = computeLexicalRichnessScore(text);
+        double densityScore = computeDensityScore(text);
+
+        double weightedScore = (lengthScore * 0.5) + (lexicalRichnessScore * 0.3) + (densityScore * 0.2);
+
+        double penalties = 0.0;
+        if (Boolean.TRUE.equals(chunk.getMetadataOnly())) {
+            penalties += 0.3;
+        }
+        if (looksLikeTable(text)) {
+            penalties += 0.15;
+        }
+        if (densityScore < 0.2) {
+            penalties += 0.1;
+        }
+        double uppercaseRatio = computeUppercaseRatio(text);
+        if (uppercaseRatio > 0.6) {
+            penalties += Math.min(0.2, (uppercaseRatio - 0.6) * 0.5);
+        }
+
+        double finalScore = clamp(weightedScore - penalties, 0.0, 1.0);
+        return Math.round(finalScore * 100.0) / 100.0;
+    }
+
+    private double computeLengthScore(int tokenCount) {
+        if (tokenCount <= 0) {
+            return 0.0;
+        }
+
+        double deviation = Math.abs(tokenCount - IDEAL_CHUNK_TOKENS) / (double) IDEAL_CHUNK_TOKENS;
+        double score = Math.exp(-deviation * deviation * 3.0);
+
+        if (tokenCount < SOFT_MIN_TOKENS) {
+            score *= (double) tokenCount / SOFT_MIN_TOKENS;
+        } else if (tokenCount > SOFT_MAX_TOKENS) {
+            score *= Math.max(0.35, (double) SOFT_MAX_TOKENS / tokenCount);
+        }
+
+        return clamp(score, 0.0, 1.0);
+    }
+
+    private double computeLexicalRichnessScore(String text) {
+        Matcher matcher = WORD_PATTERN.matcher(text.toLowerCase());
+        Set<String> uniqueTokens = new HashSet<>();
+        int totalTokens = 0;
+
+        while (matcher.find()) {
+            String token = matcher.group();
+            if (token.length() < 2) {
+                continue;
+            }
+            uniqueTokens.add(token);
+            totalTokens++;
+        }
+
+        if (totalTokens == 0) {
+            return 0.0;
+        }
+
+        double ratio = (double) uniqueTokens.size() / totalTokens;
+        return clamp((ratio - 0.35) / 0.45, 0.0, 1.0);
+    }
+
+    private double computeDensityScore(String text) {
+        long nonWhitespaceChars = text.chars()
+                .filter(ch -> !Character.isWhitespace(ch))
+                .count();
+        if (nonWhitespaceChars == 0) {
+            return 0.0;
+        }
+
+        long alphanumericChars = text.chars()
+                .filter(ch -> Character.isLetterOrDigit(ch))
+                .count();
+
+        double ratio = (double) alphanumericChars / nonWhitespaceChars;
+        return clamp((ratio - 0.4) / 0.4, 0.0, 1.0);
+    }
+
+    private double computeUppercaseRatio(String text) {
+        long letterCount = text.chars()
+                .filter(Character::isLetter)
+                .count();
+        if (letterCount == 0) {
+            return 0.0;
+        }
+
+        long uppercaseCount = text.chars()
+                .filter(Character::isUpperCase)
+                .count();
+        return (double) uppercaseCount / letterCount;
+    }
+
+    private int estimateTokenCount(String text) {
+        if (!StringUtils.hasText(text)) {
+            return 0;
+        }
+        String[] parts = text.trim().split("\\s+");
+        int count = 0;
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private double clamp(double value, double min, double max) {
+        return Math.max(min, Math.min(max, value));
     }
     
     /**

@@ -33,6 +33,26 @@ function ViewDocument() {
     running: false,
     progress: null
   });
+  const [stageDeleteModal, setStageDeleteModal] = useState({ show: false, scope: null });
+  const [stageDeleting, setStageDeleting] = useState(false);
+
+  const stageDeletionConfig = {
+    embedding: {
+      title: 'Delete Embedding Data',
+      message: 'This will remove all embedding vectors for this document from the assigned Milvus collection. Metadata and processed chunks will remain so you can rerun embedding when ready.',
+      success: 'Embedding vectors removed. You can rerun embedding whenever you are ready.'
+    },
+    metadata: {
+      title: 'Delete Extracted Metadata',
+      message: 'This will delete the extracted metadata JSON for this document and also remove any existing embeddings. Processed chunks will remain so you can rerun metadata extraction afterwards.',
+      success: 'Extracted metadata cleared. Re-run metadata extraction to continue.'
+    },
+    processed: {
+      title: 'Delete Processed Information',
+      message: 'This will remove processed chunks, extracted metadata, and embeddings while keeping the original file. The document will return to the uploaded state so you can reprocess from parsing onwards.',
+      success: 'Processed information removed. Re-run parsing to regenerate downstream artifacts.'
+    }
+  };
 
   useEffect(() => {
     if (currentTeam?.id && documentId) {
@@ -235,14 +255,59 @@ function ViewDocument() {
     }
   };
 
+  const openStageDeleteModal = (scope) => {
+    setStageDeleteModal({ show: true, scope });
+  };
+
+  const closeStageDeleteModal = () => {
+    if (!stageDeleting) {
+      setStageDeleteModal({ show: false, scope: null });
+    }
+  };
+
+  const handleStageDeleteConfirm = async () => {
+    if (!stageDeleteModal.scope) {
+      return;
+    }
+
+    const scopeKey = stageDeleteModal.scope;
+    try {
+      setStageDeleting(true);
+      const { success, error } = await knowledgeHubDocumentService.deleteDocumentArtifacts(documentId, scopeKey);
+      if (!success) {
+        throw new Error(error || 'Failed to delete document artifacts');
+      }
+
+      if (scopeKey !== 'embedding') {
+        setMetadata(null);
+      }
+      if (scopeKey === 'processed') {
+        setChunkStats(null);
+      }
+
+      setEmbedding({ running: false, progress: null });
+      await fetchDocument();
+
+      const successMessage = stageDeletionConfig[scopeKey]?.success || 'Document artifacts deleted.';
+      showSuccessToast(successMessage);
+      setStageDeleteModal({ show: false, scope: null });
+    } catch (err) {
+      console.error(`Error deleting document artifacts (${scopeKey}):`, err);
+      showErrorToast(err.message || 'Failed to delete document artifacts');
+    } finally {
+      setStageDeleting(false);
+    }
+  };
+
   const getStatusBadgeVariant = (status) => {
     switch (status) {
-      case 'READY':
+      case 'AI_READY':
       case 'PROCESSED':
         return 'success';
       case 'UPLOADED':
       case 'PARSING':
       case 'PARSED':
+      case 'METADATA_EXTRACTION':
       case 'EMBEDDING':
         return 'info';
       case 'PENDING_UPLOAD':
@@ -812,7 +877,17 @@ function ViewDocument() {
                 </span>
               </div>
               {collection?.milvusCollectionName ? (
-                <div className="d-flex justify-content-end mt-3">
+                <div className="d-flex justify-content-end gap-2 mt-3">
+                  {((document.totalEmbeddings ?? 0) > 0 || document.status === 'AI_READY') && (
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => openStageDeleteModal('embedding')}
+                      disabled={embedding.running || stageDeleting || stageDeleteModal.show}
+                    >
+                      Delete Embedding Data
+                    </Button>
+                  )}
                   <Button
                     variant="outline-primary"
                     size="sm"
@@ -848,16 +923,28 @@ function ViewDocument() {
                     <HiChartBar className="text-primary me-2" size={24} />
                     <h5 className="mb-0 fw-semibold">Processed Chunks</h5>
                   </div>
-                  {document.processedS3Key && (
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      onClick={handleDownloadProcessedJson}
-                      disabled={downloadingProcessedJson}
-                    >
-                      <HiDownload /> {downloadingProcessedJson ? 'Downloading...' : 'Download JSON'}
-                    </Button>
-                  )}
+                  <div className="d-flex align-items-center gap-2">
+                    {document.processedS3Key && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={handleDownloadProcessedJson}
+                        disabled={downloadingProcessedJson}
+                      >
+                        <HiDownload /> {downloadingProcessedJson ? 'Downloading...' : 'Download JSON'}
+                      </Button>
+                    )}
+                    {(document.processedS3Key || (document.totalChunks ?? 0) > 0) && (
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() => openStageDeleteModal('processed')}
+                        disabled={stageDeleting || stageDeleteModal.show}
+                      >
+                        Delete Processed Data
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 {document.totalChunks !== null && document.totalChunks !== undefined && (
                   <div className="d-flex justify-content-between align-items-center mb-3">
@@ -897,9 +984,21 @@ function ViewDocument() {
           <Col md={6}>
             <Card className="border-0 bg-light h-100">
               <Card.Body>
-                <div className="d-flex align-items-center mb-3">
-                  <HiInformationCircle className="text-primary me-2" size={24} />
-                  <h5 className="mb-0 fw-semibold">Document Metadata</h5>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div className="d-flex align-items-center">
+                    <HiInformationCircle className="text-primary me-2" size={24} />
+                    <h5 className="mb-0 fw-semibold">Document Metadata</h5>
+                  </div>
+                  {metadata && (
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => openStageDeleteModal('metadata')}
+                      disabled={stageDeleting || stageDeleteModal.show}
+                    >
+                      Delete Metadata
+                    </Button>
+                  )}
                 </div>
                 {loadingMetadata ? (
                   <div className="text-center py-3">
@@ -1012,6 +1111,16 @@ function ViewDocument() {
         )}
       </Row>
 
+      <ConfirmationModalWithVerification
+        show={stageDeleteModal.show}
+        onHide={closeStageDeleteModal}
+        onConfirm={handleStageDeleteConfirm}
+        title={stageDeletionConfig[stageDeleteModal.scope]?.title || 'Delete Artifacts'}
+        message={stageDeletionConfig[stageDeleteModal.scope]?.message || 'This will delete the selected derived artifacts for this document.'}
+        variant="danger"
+        confirmLabel="Delete"
+        loading={stageDeleting}
+      />
       <ConfirmationModalWithVerification
         show={showDeleteModal}
         onHide={() => setShowDeleteModal(false)}

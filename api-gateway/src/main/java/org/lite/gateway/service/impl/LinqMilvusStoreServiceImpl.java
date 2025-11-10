@@ -317,6 +317,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         String description = null;
         String collectionType = null;
         Map<String, String> properties = new HashMap<>();
+        Long rowCount = null;
 
         if (describeResponse != null && describeResponse.hasSchema()) {
             try {
@@ -374,6 +375,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
         }
 
+        long fetchedRowCount = getCollectionRowCount(collectionName);
+        if (fetchedRowCount >= 0) {
+            rowCount = fetchedRowCount;
+            properties.put("rowCount", String.valueOf(fetchedRowCount));
+        }
+
         return MilvusCollectionInfo.builder()
                 .name(collectionName)
                 .teamId(teamId)
@@ -383,6 +390,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 .collectionType(collectionType)
                 .properties(properties)
                 .nameLocked(nameLocked)
+                .rowCount(rowCount)
                 .build();
     }
 
@@ -396,9 +404,30 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         }
     }
 
+    private long getCollectionRowCount(String collectionName) {
+        try {
+            R<GetCollectionStatisticsResponse> statsResponse = milvusClient.getCollectionStatistics(
+                    GetCollectionStatisticsParam.newBuilder()
+                            .withCollectionName(collectionName)
+                            .withDatabaseName("default")
+                            .build()
+            );
+            if (statsResponse.getData() != null) {
+                for (KeyValuePair stat : statsResponse.getData().getStatsList()) {
+                    if ("row_count".equals(stat.getKey())) {
+                        return Long.parseLong(stat.getValue());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Unable to fetch row count for collection {}: {}", collectionName, e.getMessage());
+        }
+        return -1;
+    }
+
     @Override
     public Mono<Map<String, String>> storeRecord(String collectionName, Map<String, Object> record, String target, String modelName, String textField, String teamId, List<Float> embedding) {
-        log.info("Storing record in collection {} for team {} (embedding: {})", collectionName, teamId, embedding != null ? "pre-computed" : "will generate");
+        log.debug("Storing record in collection {} for team {} (embedding: {})", collectionName, teamId, embedding != null ? "pre-computed" : "will generate");
         try {
             String text = (String) record.get(textField);
             if (text == null) {
@@ -411,12 +440,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
             // If pre-computed embedding is provided, use it directly
             if (embedding != null && !embedding.isEmpty()) {
-                log.info("✅ Using pre-computed embedding (size: {}) - skipping embedding generation", embedding.size());
+                log.debug("✅ Using pre-computed embedding (size: {}) - skipping embedding generation", embedding.size());
                 return storeWithEmbedding(collectionName, record, embedding, textField, teamId);
             }
 
             // Otherwise, generate embedding as usual
-            log.info("🔄 Generating new embedding using target: {}, model: {}", target, modelName);
+            log.debug("🔄 Generating new embedding using target: {}, model: {}", target, modelName);
             return getEmbedding(text, target, modelName, teamId)
                     .flatMap(generatedEmbedding -> storeWithEmbedding(collectionName, record, generatedEmbedding, textField, teamId));
         } catch (Exception e) {
@@ -462,96 +491,21 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     Object value = record.get(fieldName);
                     
                     // Check if field is required (not nullable) and value is null
-                    if (value == null && !fieldSchema.getNullable()) {
+                    String dataTypeName = fieldSchema.getDataType() != null ? fieldSchema.getDataType().name() : "";
+                    if (value == null && Boolean.FALSE.equals(fieldSchema.getNullable())) {
                         // For non-nullable fields, provide a default value based on the data type
-                        value = switch (fieldSchema.getDataType()) {
-                            case Int64, Int32 -> 0L;
-                            case Float -> 0.0f;
-                            case Double -> 0.0;
-                            case VarChar, String -> "";
-                            default ->
-                                    throw new IllegalArgumentException("Field '" + fieldName + "' is required but no value was provided and no default value is available for its type");
-                        };
+                        value = determineDefaultValue(fieldName, dataTypeName);
                     }
                     
                     // If value is null, pass it through as-is
                     Object convertedValue = value;
                     if (value != null) {
                         try {
-                            // Convert values based on the field's data type from schema
-                            switch (fieldSchema.getDataType()) {
-                                case Int64:
-                                    if (value instanceof String) {
-                                        String strValue = ((String) value).trim();
-                                        if (strValue.isEmpty()) {
-                                            convertedValue = 0L; // Default value for empty string
-                                        } else {
-                                            convertedValue = Long.parseLong(strValue);
-                                        }
-                                    } else if (value instanceof Number) {
-                                        convertedValue = ((Number) value).longValue();
-                                    } else {
-                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Long for field " + fieldName);
-                                    }
-                                    break;
-                                case Int32:
-                                    if (value instanceof String) {
-                                        String strValue = ((String) value).trim();
-                                        if (strValue.isEmpty()) {
-                                            convertedValue = 0; // Default value for empty string
-                                        } else {
-                                            convertedValue = Integer.parseInt(strValue);
-                                        }
-                                    } else if (value instanceof Number) {
-                                        convertedValue = ((Number) value).intValue();
-                                    } else {
-                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Integer for field " + fieldName);
-                                    }
-                                    break;
-                                case Float:
-                                    if (value instanceof String) {
-                                        String strValue = ((String) value).trim();
-                                        if (strValue.isEmpty()) {
-                                            convertedValue = 0.0f;
-                                        } else {
-                                            convertedValue = Float.parseFloat(strValue);
-                                        }
-                                    } else if (value instanceof Number) {
-                                        convertedValue = ((Number) value).floatValue();
-                                    } else {
-                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Float for field " + fieldName);
-                                    }
-                                    break;
-                                case Double:
-                                    if (value instanceof String) {
-                                        String strValue = ((String) value).trim();
-                                        if (strValue.isEmpty()) {
-                                            convertedValue = 0.0;
-                                        } else {
-                                            convertedValue = Double.parseDouble(strValue);
-                                        }
-                                    } else if (value instanceof Number) {
-                                        convertedValue = ((Number) value).doubleValue();
-                                    } else {
-                                        throw new IllegalArgumentException("Cannot convert " + value.getClass().getSimpleName() + " to Double for field " + fieldName);
-                                    }
-                                    break;
-                                case VarChar:
-                                case String:
-                                    convertedValue = value.toString();
-                                    break;
-                                default:
-                            }
+                            convertedValue = coerceValueForType(value, dataTypeName, fieldName);
                         } catch (NumberFormatException e) {
                             log.warn("Failed to parse number for field {} with value '{}': {}. Using default value.", fieldName, value, e.getMessage());
                             // Use default values for number fields when parsing fails
-                            switch (fieldSchema.getDataType()) {
-                                case Int64 -> convertedValue = 0L;
-                                case Int32 -> convertedValue = 0;
-                                case Float -> convertedValue = 0.0f;
-                                case Double -> convertedValue = 0.0;
-                                default -> convertedValue = value;
-                            }
+                            convertedValue = fallbackDefaultValueForParsing(dataTypeName, value);
                         } catch (Exception e) {
                             log.warn("Failed to convert value for field {}: {}. Using original value.", fieldName, e.getMessage());
                         }
@@ -567,9 +521,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withFields(fields)
                     .build();
             
-            // log.info("Inserting record with fields: {}", fields.stream()
-            //         .map(f -> f.getName() + ": " + f.getValues().getFirst())
-            //         .collect(Collectors.joining(", ")));
+            log.debug("Inserting record with fields: {}", fields.stream()
+                    .map(f -> f.getName() + ": " + f.getValues().getFirst())
+                    .collect(Collectors.joining(", ")));
             
             R<io.milvus.grpc.MutationResult> insertResponse = milvusClient.insert(insertParam);
             if (insertResponse.getStatus() != 0) {
@@ -582,6 +536,88 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         } catch (Exception e) {
             log.error("Failed to store record in collection {}: {}", collectionName, e.getMessage(), e);
             return Mono.error(e);
+        }
+    }
+
+    private Object determineDefaultValue(String fieldName, String dataTypeName) {
+        if (dataTypeName == null) {
+            return null;
+        }
+
+        return switch (dataTypeName) {
+            case "Int64" -> 0L;
+            case "Int32", "Int8", "Int16" -> 0;
+            case "Float" -> 0.0f;
+            case "Double" -> 0.0;
+            case "Bool" -> Boolean.FALSE;
+            case "VarChar", "String", "Text" -> "";
+            default -> throw new IllegalArgumentException("Field '" + fieldName + "' is required but no value was provided and no default value is available for type " + dataTypeName);
+        };
+    }
+
+    private Object fallbackDefaultValueForParsing(String dataTypeName, Object originalValue) {
+        if (dataTypeName == null) {
+            return originalValue;
+        }
+
+        return switch (dataTypeName) {
+            case "Int64" -> 0L;
+            case "Int32", "Int16", "Int8" -> 0;
+            case "Float" -> 0.0f;
+            case "Double" -> 0.0;
+            case "Bool" -> Boolean.FALSE;
+            default -> originalValue;
+        };
+    }
+
+    private Object coerceValueForType(Object value, String dataTypeName, String fieldName) {
+        if (value == null || dataTypeName == null) {
+            return value;
+        }
+
+        try {
+            return switch (dataTypeName) {
+                case "Int64" -> {
+                    if (value instanceof Number number) {
+                        yield number.longValue();
+                    }
+                    String strValue = value.toString().trim();
+                    yield strValue.isEmpty() ? 0L : Long.parseLong(strValue);
+                }
+                case "Int32", "Int16", "Int8" -> {
+                    if (value instanceof Number number) {
+                        yield number.intValue();
+                    }
+                    String strValue = value.toString().trim();
+                    yield strValue.isEmpty() ? 0 : Integer.parseInt(strValue);
+                }
+                case "Float" -> {
+                    if (value instanceof Number number) {
+                        yield number.floatValue();
+                    }
+                    String strValue = value.toString().trim();
+                    yield strValue.isEmpty() ? 0.0f : Float.parseFloat(strValue);
+                }
+                case "Double" -> {
+                    if (value instanceof Number number) {
+                        yield number.doubleValue();
+                    }
+                    String strValue = value.toString().trim();
+                    yield strValue.isEmpty() ? 0.0 : Double.parseDouble(strValue);
+                }
+                case "Bool" -> {
+                    if (value instanceof Boolean boolValue) {
+                        yield boolValue;
+                    }
+                    String strValue = value.toString().trim();
+                    yield strValue.isEmpty() ? Boolean.FALSE : Boolean.parseBoolean(strValue);
+                }
+                case "VarChar", "String", "Text" -> value.toString();
+                default -> value;
+            };
+        } catch (Exception e) {
+            log.warn("Failed to coerce value for field {} of type {}: {}. Falling back to original value.", fieldName, dataTypeName, e.getMessage());
+            return value;
         }
     }
 
@@ -772,6 +808,13 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             if (!hasCollection.getData()) {
                 log.info("Collection {} does not exist, skipping deletion", collectionName);
                 return Mono.just(Map.of("message", "Collection " + collectionName + " does not exist"));
+            }
+
+            long rowCount = getCollectionRowCount(collectionName);
+            if (rowCount > 0) {
+                String message = String.format("Collection %s contains %d records and cannot be deleted", collectionName, rowCount);
+                log.warn(message);
+                return Mono.error(new IllegalStateException(message));
             }
 
             milvusClient.dropCollection(DropCollectionParam.newBuilder()
@@ -972,6 +1015,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                 .name(collectionName)
                                 .teamId("unknown")
                                 .nameLocked(isCollectionNameLocked(collectionName))
+                                .rowCount(null)
                                 .build();
                     }
                 }))

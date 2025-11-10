@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Container, Card, Table, Spinner, Badge, Alert, Breadcrumb } from 'react-bootstrap';
+import { Container, Card, Table, Spinner, Badge, Alert, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import { HiCollection, HiPlusCircle, HiTrash, HiCheckCircle, HiDatabase } from 'react-icons/hi';
 import { HiOutlineDatabase } from 'react-icons/hi';
@@ -260,12 +260,17 @@ const Rag = () => {
         '—';
       const verifying = verifyingCollection === collection.name;
       const propertySummary = collection.properties || {};
+      const rowCount = Number(collection.rowCount ?? collection.properties?.rowCount ?? 0);
+      const hasRecords = Number.isFinite(rowCount) && rowCount > 0;
       const metadataDetails = [];
       if (propertySummary.embeddingModelName) {
         metadataDetails.push(`Model: ${propertySummary.embeddingModelName}`);
       }
       if (propertySummary.embeddingDimension) {
         metadataDetails.push(`Dims: ${propertySummary.embeddingDimension}`);
+      }
+      if (Number.isFinite(rowCount)) {
+        metadataDetails.push(`Records: ${rowCount}`);
       }
       return (
         <tr key={collection.name}>
@@ -289,6 +294,9 @@ const Rag = () => {
           </td>
           <td>
             <Badge bg="secondary">{collection.collectionType || 'UNKNOWN'}</Badge>
+          </td>
+          <td>
+            {Number.isFinite(rowCount) ? rowCount : '—'}
           </td>
           <td className="text-end">
             <div className="d-flex justify-content-end gap-2">
@@ -324,13 +332,30 @@ const Rag = () => {
                   )}
                 </Button>
               )}
-              <Button
-                variant="outline-danger"
-                size="sm"
-                onClick={() => handleDeleteCollection(collection.name)}
+              <OverlayTrigger
+                placement="top"
+                overlay={
+                  hasRecords ? (
+                    <Tooltip id={`delete-tooltip-${collection.name}`}>
+                      Delete disabled: collection contains {rowCount} record{rowCount === 1 ? '' : 's'}.
+                    </Tooltip>
+                  ) : (
+                    <Tooltip id={`delete-tooltip-${collection.name}`}>Delete collection</Tooltip>
+                  )
+                }
               >
-                <HiTrash className="me-1" /> Delete
-              </Button>
+                <span className="d-inline-block">
+                  <Button
+                    variant="outline-danger"
+                    size="sm"
+                    disabled={hasRecords}
+                    style={hasRecords ? { pointerEvents: 'none' } : undefined}
+                    onClick={() => handleDeleteCollection(collection.name)}
+                  >
+                    <HiTrash className="me-1" /> Delete
+                  </Button>
+                </span>
+              </OverlayTrigger>
             </div>
           </td>
         </tr>
@@ -377,7 +402,7 @@ const Rag = () => {
       <Card className="border-0 mb-4">
         <Card.Header>
           <div className="d-flex align-items-center justify-content-between">
-            <h5 className="mb-0">Knowledge Hub Collections</h5>
+            <h5 className="mb-0">Knowledge Hub RAG Collections</h5>
             <div className="d-flex align-items-center gap-2">
               <Button
                 variant="link"
@@ -416,6 +441,7 @@ const Rag = () => {
                   <th>Dimension</th>
                   <th>Description</th>
                   <th>Type</th>
+                  <th>Records</th>
                   <th className="text-end">Actions</th>
                 </tr>
               </thead>
@@ -431,7 +457,7 @@ const Rag = () => {
       <Card className="border-0">
         <Card.Header>
           <div className="d-flex align-items-center justify-content-between">
-            <h5 className="mb-0">Custom Milvus Collections</h5>
+            <h5 className="mb-0">Custom RAG Collections</h5>
             <Button
               variant="outline-secondary"
               size="sm"
@@ -459,6 +485,7 @@ const Rag = () => {
                   <th>Dimension</th>
                   <th>Description</th>
                   <th>Type</th>
+                  <th>Records</th>
                   <th className="text-end">Actions</th>
                 </tr>
               </thead>

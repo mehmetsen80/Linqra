@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Alert, Table, Badge, Breadcrumb, Card, Modal, Form } from 'react-bootstrap';
+import { Alert, Table, Badge, Breadcrumb, Card, Form } from 'react-bootstrap';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin, hasAdminAccess } from '../../utils/roleUtils';
@@ -12,6 +12,7 @@ import { format, isValid, parseISO } from 'date-fns';
 import { Link, useNavigate } from 'react-router-dom';
 import AgentStats from '../../components/dashboard/AgentStats';
 import './styles.css';
+import CreateAgentModal from '../../components/agents/CreateAgentModal';
 
 function Agents() {
     const { currentTeam, loading: teamLoading } = useTeam();
@@ -82,7 +83,7 @@ function Agents() {
     };
 
     const handleMultiSelectChange = (field, selectedOptions) => {
-        const values = Array.from(selectedOptions).map(option => option.value);
+        const values = (selectedOptions || []).map(option => option.value);
         setNewAgent(prev => ({
             ...prev,
             [field]: values
@@ -270,120 +271,15 @@ function Agents() {
                 <AgentStats />
             </div>
 
-            {/* Create Agent Modal */}
-            <Modal
+            <CreateAgentModal
                 show={showCreateAgentModal}
                 onHide={() => setShowCreateAgentModal(false)}
-                centered
-                size="lg"
-            >
-                <Modal.Header closeButton>
-                    <Modal.Title>Create New Agent</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    <Form>
-                        <Form.Group className="mb-3">
-                            <Form.Label>Name <span className="text-danger">*</span></Form.Label>
-                            <Form.Control
-                                type="text"
-                                name="name"
-                                value={newAgent.name}
-                                onChange={handleNewAgentChange}
-                                placeholder="Enter agent name"
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Description <span className="text-danger">*</span></Form.Label>
-                            <Form.Control
-                                as="textarea"
-                                name="description"
-                                value={newAgent.description}
-                                onChange={handleNewAgentChange}
-                                placeholder="Enter agent description"
-                                rows={3}
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Supported Intents</Form.Label>
-                            <Form.Select
-                                multiple
-                                value={newAgent.supportedIntents}
-                                onChange={(e) => handleMultiSelectChange('supportedIntents', e.target.selectedOptions)}
-                                style={{ height: '150px' }}
-                            >
-                                <option value="MONGODB_READ">MongoDB Read</option>
-                                <option value="MONGODB_WRITE">MongoDB Write</option>
-                                <option value="MILVUS_READ">Milvus Read</option>
-                                <option value="MILVUS_WRITE">Milvus Write</option>
-                                <option value="LLM_ANALYSIS">LLM Analysis</option>
-                                <option value="LLM_GENERATION">LLM Generation</option>
-                                <option value="API_INTEGRATION">API Integration</option>
-                                <option value="WORKFLOW_ORCHESTRATION">Workflow Orchestration</option>
-                                <option value="DATA_TRANSFORMATION">Data Transformation</option>
-                                <option value="NOTIFICATION_SENDING">Notification Sending</option>
-                                <option value="FILE_PROCESSING">File Processing</option>
-                                <option value="MONITORING">Monitoring</option>
-                                <option value="REPORTING">Reporting</option>
-                                <option value="SCHEDULING">Scheduling</option>
-                                <option value="EVENT_HANDLING">Event Handling</option>
-                            </Form.Select>
-                            <Form.Text className="text-muted">
-                                Hold Ctrl/Cmd to select multiple intents
-                            </Form.Text>
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Capabilities</Form.Label>
-                            <Form.Select
-                                multiple
-                                value={newAgent.capabilities}
-                                onChange={(e) => handleMultiSelectChange('capabilities', e.target.selectedOptions)}
-                                style={{ height: '150px' }}
-                            >
-                                <option value="MONGODB_ACCESS">MongoDB Access</option>
-                                <option value="MILVUS_ACCESS">Milvus Access</option>
-                                <option value="LLM_INTEGRATION">LLM Integration</option>
-                                <option value="HTTP_CLIENT">HTTP Client</option>
-                                <option value="FILE_SYSTEM_ACCESS">File System Access</option>
-                                <option value="EMAIL_SENDING">Email Sending</option>
-                                <option value="SMS_SENDING">SMS Sending</option>
-                                <option value="SLACK_INTEGRATION">Slack Integration</option>
-                                <option value="WEBHOOK_HANDLING">Webhook Handling</option>
-                                <option value="CRON_SCHEDULING">Cron Scheduling</option>
-                                <option value="EVENT_STREAMING">Event Streaming</option>
-                                <option value="DATA_ENCRYPTION">Data Encryption</option>
-                                <option value="IMAGE_PROCESSING">Image Processing</option>
-                                <option value="PDF_PROCESSING">PDF Processing</option>
-                                <option value="JSON_PROCESSING">JSON Processing</option>
-                                <option value="XML_PROCESSING">XML Processing</option>
-                                <option value="CSV_PROCESSING">CSV Processing</option>
-                                <option value="TEMPLATE_RENDERING">Template Rendering</option>
-                                <option value="METRICS_COLLECTION">Metrics Collection</option>
-                                <option value="LOG_ANALYSIS">Log Analysis</option>
-                                <option value="BACKUP_OPERATIONS">Backup Operations</option>
-                                <option value="CACHE_MANAGEMENT">Cache Management</option>
-                            </Form.Select>
-                            <Form.Text className="text-muted">
-                                Hold Ctrl/Cmd to select multiple capabilities
-                            </Form.Text>
-                        </Form.Group>
-                    </Form>
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowCreateAgentModal(false)}>
-                        Cancel
-                    </Button>
-                    <Button 
-                        variant="primary" 
-                        onClick={handleCreateAgent}
-                        disabled={creatingAgent || !newAgent.name || !newAgent.description}
-                    >
-                        {creatingAgent ? 'Creating...' : 'Create Agent'}
-                    </Button>
-                </Modal.Footer>
-            </Modal>
+                newAgent={newAgent}
+                onChange={handleNewAgentChange}
+                onMultiSelectChange={handleMultiSelectChange}
+                onCreate={handleCreateAgent}
+                creating={creatingAgent}
+            />
         </div>
     );
 }

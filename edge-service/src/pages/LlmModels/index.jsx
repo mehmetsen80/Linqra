@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Card, Table, Modal, Form, Alert, Spinner, Badge, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
+import { Container, Row, Col, Card, Table, Form, Alert, Spinner, Badge, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import llmModelService from '../../services/llmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import { useTeam } from '../../contexts/TeamContext';
 import Button from '../../components/common/Button';
 import './styles.css';
+import CreateEditLlmModelModal from '../../components/llmmodels/CreateEditLlmModelModal';
 
 const LlmModels = () => {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ const LlmModels = () => {
     category: 'chat',
     endpoint: '',
     dimensions: null,
+    contextWindowTokens: null,
     inputPricePer1M: 0,
     outputPricePer1M: 0,
     active: true,
@@ -57,6 +59,7 @@ const LlmModels = () => {
         category: model.category || 'chat',
         endpoint: model.endpoint || '',
         dimensions: model.dimensions || null,
+        contextWindowTokens: model.contextWindowTokens || null,
         inputPricePer1M: model.inputPricePer1M,
         outputPricePer1M: model.outputPricePer1M,
         active: model.active,
@@ -71,6 +74,7 @@ const LlmModels = () => {
         category: 'chat',
         endpoint: '',
         dimensions: null,
+        contextWindowTokens: null,
         inputPricePer1M: 0,
         outputPricePer1M: 0,
         active: true,
@@ -97,11 +101,19 @@ const LlmModels = () => {
     e.preventDefault();
     
     try {
+      const payload = {
+        ...formData,
+        dimensions: formData.dimensions ? Number(formData.dimensions) : null,
+        contextWindowTokens: formData.contextWindowTokens ? Number(formData.contextWindowTokens) : null,
+        inputPricePer1M: Number(formData.inputPricePer1M),
+        outputPricePer1M: Number(formData.outputPricePer1M)
+      };
+
       if (editingModel) {
-        await llmModelService.updateModel(editingModel.id, formData);
+        await llmModelService.updateModel(editingModel.id, payload);
         showSuccessToast('Model updated successfully');
       } else {
-        await llmModelService.createModel(formData);
+        await llmModelService.createModel(payload);
         showSuccessToast('Model created successfully');
       }
       handleCloseModal();
@@ -333,188 +345,14 @@ const LlmModels = () => {
         </Card.Body>
       </Card>
 
-      {/* Create/Edit Modal */}
-      <Modal show={showModal} onHide={handleCloseModal} size="lg">
-        <Modal.Header closeButton>
-          <Modal.Title>
-            {editingModel ? 'Edit LLM Model' : 'Add New LLM Model'}
-          </Modal.Title>
-        </Modal.Header>
-        <Form onSubmit={handleSubmit}>
-          <Modal.Body>
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Model Name *</Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="modelName"
-                    value={formData.modelName}
-                    onChange={handleInputChange}
-                    placeholder="e.g., gpt-4o, gemini-2.0-flash"
-                    required
-                    disabled={!!editingModel}
-                  />
-                  <Form.Text className="text-muted">
-                    Unique identifier for the model (cannot be changed after creation)
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Display Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    name="displayName"
-                    value={formData.displayName}
-                    onChange={handleInputChange}
-                    placeholder="e.g., GPT-4 Optimized"
-                  />
-                </Form.Group>
-              </Col>
-            </Row>
-
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Provider *</Form.Label>
-                  <Form.Select
-                    name="provider"
-                    value={formData.provider}
-                    onChange={handleInputChange}
-                    required
-                  >
-                    <option value="openai">OpenAI</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="cohere">Cohere</option>
-                    <option value="other">Other</option>
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Category *</Form.Label>
-                  <Form.Select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleInputChange}
-                    required
-                  >
-                    <option value="chat">Chat/Completion</option>
-                    <option value="embedding">Embedding</option>
-                    <option value="vision">Vision</option>
-                    <option value="audio">Audio</option>
-                    <option value="other">Other</option>
-                  </Form.Select>
-                </Form.Group>
-              </Col>
-            </Row>
-
-            <Form.Group className="mb-3">
-              <Form.Label>API Endpoint</Form.Label>
-              <Form.Control
-                type="text"
-                name="endpoint"
-                value={formData.endpoint}
-                onChange={handleInputChange}
-                placeholder="e.g., https://api.openai.com/v1/chat/completions"
-              />
-              <Form.Text className="text-muted">
-                API endpoint URL for this model. Use {'{model}'} as placeholder if needed.
-              </Form.Text>
-            </Form.Group>
-
-            {formData.category === 'embedding' && (
-              <Form.Group className="mb-3">
-                <Form.Label>Dimensions</Form.Label>
-                <Form.Control
-                  type="number"
-                  min="1"
-                  name="dimensions"
-                  value={formData.dimensions || ''}
-                  onChange={handleInputChange}
-                  placeholder="e.g., 768, 1024, 1536"
-                />
-                <Form.Text className="text-muted">
-                  Vector dimensions for embedding models (e.g., 768, 1024, 1536, 3072)
-                </Form.Text>
-              </Form.Group>
-            )}
-
-            <Row>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Input Price per 1M Tokens (USD) *</Form.Label>
-                  <Form.Control
-                    type="number"
-                    step="0.00001"
-                    min="0"
-                    name="inputPricePer1M"
-                    value={formData.inputPricePer1M}
-                    onChange={handleInputChange}
-                    required
-                  />
-                  <Form.Text className="text-muted">
-                    Price per 1 million input/prompt tokens
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Output Price per 1M Tokens (USD) *</Form.Label>
-                  <Form.Control
-                    type="number"
-                    step="0.00001"
-                    min="0"
-                    name="outputPricePer1M"
-                    value={formData.outputPricePer1M}
-                    onChange={handleInputChange}
-                    required
-                  />
-                  <Form.Text className="text-muted">
-                    Price per 1 million output/completion tokens
-                  </Form.Text>
-                </Form.Group>
-              </Col>
-            </Row>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Description</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={2}
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                placeholder="Optional description of the model"
-              />
-            </Form.Group>
-
-            <Form.Group className="mb-3">
-              <Form.Check
-                type="checkbox"
-                name="active"
-                label="Active (include in cost calculations)"
-                checked={formData.active}
-                onChange={handleInputChange}
-              />
-            </Form.Group>
-          </Modal.Body>
-          <Modal.Footer className="d-flex justify-content-between">
-            <div>
-              <Button variant="secondary" onClick={handleCloseModal}>
-                Cancel
-              </Button>
-            </div>
-            <div>
-              <Button variant="primary" type="submit">
-                {editingModel ? 'Update Model' : 'Create Model'}
-              </Button>
-            </div>
-          </Modal.Footer>
-        </Form>
-      </Modal>
+      <CreateEditLlmModelModal
+        show={showModal}
+        onClose={handleCloseModal}
+        onSubmit={handleSubmit}
+        onChange={handleInputChange}
+        formData={formData}
+        editingModel={editingModel}
+      />
     </Container>
   );
 };

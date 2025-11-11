@@ -21,6 +21,7 @@ public class MilvusCollectionVerificationResponse {
     private String description;
     private boolean valid;
     private List<String> issues;
+    private Map<String, String> properties;
     private List<FieldInfo> schema;
 
     @Data

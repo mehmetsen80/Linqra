@@ -14,6 +14,8 @@ import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { format, isValid, parseISO } from 'date-fns';
 import AgentStats from '../../../components/dashboard/AgentStats';
 import './styles.css';
+import CreateAgentTaskModal from '../../../components/agents/CreateAgentTaskModal';
+import EditAgentModal from '../../../components/agents/EditAgentModal';
 
 function ViewAgent() {
     const { agentId } = useParams();
@@ -135,7 +137,7 @@ function ViewAgent() {
     };
 
     const handleMultiSelectChange = (field, selectedOptions) => {
-        const values = Array.from(selectedOptions).map(option => option.value);
+        const values = (selectedOptions || []).map(option => option.value);
         setEditedAgent(prev => ({
             ...prev,
             [field]: values
@@ -580,7 +582,7 @@ function ViewAgent() {
                             onClick={() => setShowCreateTaskModal(true)}
                             disabled={!canEditAgent}
                         >
-                            <HiPlus /> Create Task
+                            <HiPlus /> Create Agent Task
                         </Button>
                     )}
                 </Card.Header>
@@ -727,230 +729,24 @@ function ViewAgent() {
                 <AgentStats agentId={agentId} />
             </div>
 
-            {/* Create Task Modal */}
-            <Modal
+            <CreateAgentTaskModal
                 show={showCreateTaskModal}
                 onHide={() => setShowCreateTaskModal(false)}
-                centered
-            >
-                <Modal.Header closeButton>
-                    <Modal.Title>Create New Task</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    <Form>
-                        <Form.Group className="mb-3">
-                            <Form.Label>Name <span className="text-danger">*</span></Form.Label>
-                            <Form.Control
-                                type="text"
-                                name="name"
-                                value={newTask.name}
-                                onChange={handleNewTaskChange}
-                                placeholder="Enter task name"
-                            />
-                        </Form.Group>
+                onChange={handleNewTaskChange}
+                onCreate={handleCreateTask}
+                newTask={newTask}
+                creating={creatingTask}
+            />
 
-                        <Form.Group className="mb-3">
-                            <Form.Label>Description <span className="text-danger">*</span></Form.Label>
-                            <Form.Control
-                                as="textarea"
-                                name="description"
-                                value={newTask.description}
-                                onChange={handleNewTaskChange}
-                                placeholder="Enter task description"
-                                rows={3}
-                            />
-                        </Form.Group>
-
-                        <Form.Group className="mb-3">
-                            <Form.Label>Task Type</Form.Label>
-                            <Form.Select
-                                name="taskType"
-                                value={newTask.taskType}
-                                onChange={handleNewTaskChange}
-                            >
-                                <option value="WORKFLOW_EMBEDDED">Workflow Embedded</option>
-                                {/* Workflow Trigger option disabled - workflow functionality is now integrated into Agents
-                                    Users can create and execute workflows directly within the Agent interface,
-                                    eliminating the need for separate workflow triggers. Additional task types
-                                    will be added in future updates. */}
-                                {/* <option value="WORKFLOW_TRIGGER">Workflow Trigger</option> */}
-                            </Form.Select>
-                            <Form.Text className="text-muted">
-                                Steps defined inline. More task types coming soon.
-                            </Form.Text>
-                        </Form.Group>
-
-                        <Row className="mb-3">
-                            <Col md={4}>
-                                <Form.Group>
-                                    <Form.Label>Priority</Form.Label>
-                                    <Form.Control
-                                        type="number"
-                                        name="priority"
-                                        value={newTask.priority}
-                                        onChange={handleNewTaskChange}
-                                        min="1"
-                                        max="10"
-                                    />
-                                </Form.Group>
-                            </Col>
-                            <Col md={4}>
-                                <Form.Group>
-                                    <Form.Label>Max Retries</Form.Label>
-                                    <Form.Control
-                                        type="number"
-                                        name="maxRetries"
-                                        value={newTask.maxRetries}
-                                        onChange={handleNewTaskChange}
-                                        min="0"
-                                    />
-                                </Form.Group>
-                            </Col>
-                            <Col md={4}>
-                                <Form.Group>
-                                    <Form.Label>Timeout (minutes)</Form.Label>
-                                    <Form.Control
-                                        type="number"
-                                        name="timeoutMinutes"
-                                        value={newTask.timeoutMinutes}
-                                        onChange={handleNewTaskChange}
-                                        min="1"
-                                    />
-                                </Form.Group>
-                            </Col>
-                        </Row>
-                    </Form>
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowCreateTaskModal(false)}>
-                        Cancel
-                    </Button>
-                    <Button 
-                        variant="primary" 
-                        onClick={handleCreateTask}
-                        disabled={creatingTask || !newTask.name || !newTask.description}
-                    >
-                        {creatingTask ? 'Creating...' : 'Create Task'}
-                    </Button>
-                </Modal.Footer>
-            </Modal>
-
-            {/* Edit Agent Modal */}
-            <Modal
+            <EditAgentModal
                 show={showEditAgentModal}
                 onHide={() => setShowEditAgentModal(false)}
-                centered
-                size="lg"
-            >
-                <Modal.Header closeButton>
-                    <Modal.Title>Edit Agent</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    {editedAgent && (
-                        <Form>
-                            <Form.Group className="mb-3">
-                                <Form.Label>Name <span className="text-danger">*</span></Form.Label>
-                                <Form.Control
-                                    type="text"
-                                    name="name"
-                                    value={editedAgent.name || ''}
-                                    onChange={handleEditedAgentChange}
-                                    placeholder="Enter agent name"
-                                />
-                            </Form.Group>
-
-                            <Form.Group className="mb-3">
-                                <Form.Label>Description <span className="text-danger">*</span></Form.Label>
-                                <Form.Control
-                                    as="textarea"
-                                    name="description"
-                                    value={editedAgent.description || ''}
-                                    onChange={handleEditedAgentChange}
-                                    placeholder="Enter agent description"
-                                    rows={3}
-                                />
-                            </Form.Group>
-
-                            <Form.Group className="mb-3">
-                                <Form.Label>Supported Intents</Form.Label>
-                                <Form.Select
-                                    multiple
-                                    value={editedAgent.supportedIntents}
-                                    onChange={(e) => handleMultiSelectChange('supportedIntents', e.target.selectedOptions)}
-                                    style={{ height: '150px' }}
-                                >
-                                    <option value="MONGODB_READ">MongoDB Read</option>
-                                    <option value="MONGODB_WRITE">MongoDB Write</option>
-                                    <option value="MILVUS_READ">Milvus Read</option>
-                                    <option value="MILVUS_WRITE">Milvus Write</option>
-                                    <option value="LLM_ANALYSIS">LLM Analysis</option>
-                                    <option value="LLM_GENERATION">LLM Generation</option>
-                                    <option value="API_INTEGRATION">API Integration</option>
-                                    <option value="WORKFLOW_ORCHESTRATION">Workflow Orchestration</option>
-                                    <option value="DATA_TRANSFORMATION">Data Transformation</option>
-                                    <option value="NOTIFICATION_SENDING">Notification Sending</option>
-                                    <option value="FILE_PROCESSING">File Processing</option>
-                                    <option value="MONITORING">Monitoring</option>
-                                    <option value="REPORTING">Reporting</option>
-                                    <option value="SCHEDULING">Scheduling</option>
-                                    <option value="EVENT_HANDLING">Event Handling</option>
-                                </Form.Select>
-                                <Form.Text className="text-muted">
-                                    Hold Ctrl/Cmd to select multiple intents
-                                </Form.Text>
-                            </Form.Group>
-
-                            <Form.Group className="mb-3">
-                                <Form.Label>Capabilities</Form.Label>
-                                <Form.Select
-                                    multiple
-                                    value={editedAgent.capabilities}
-                                    onChange={(e) => handleMultiSelectChange('capabilities', e.target.selectedOptions)}
-                                    style={{ height: '150px' }}
-                                >
-                                    <option value="MONGODB_ACCESS">MongoDB Access</option>
-                                    <option value="MILVUS_ACCESS">Milvus Access</option>
-                                    <option value="LLM_INTEGRATION">LLM Integration</option>
-                                    <option value="HTTP_CLIENT">HTTP Client</option>
-                                    <option value="FILE_SYSTEM_ACCESS">File System Access</option>
-                                    <option value="EMAIL_SENDING">Email Sending</option>
-                                    <option value="SMS_SENDING">SMS Sending</option>
-                                    <option value="SLACK_INTEGRATION">Slack Integration</option>
-                                    <option value="WEBHOOK_HANDLING">Webhook Handling</option>
-                                    <option value="CRON_SCHEDULING">Cron Scheduling</option>
-                                    <option value="EVENT_STREAMING">Event Streaming</option>
-                                    <option value="DATA_ENCRYPTION">Data Encryption</option>
-                                    <option value="IMAGE_PROCESSING">Image Processing</option>
-                                    <option value="PDF_PROCESSING">PDF Processing</option>
-                                    <option value="JSON_PROCESSING">JSON Processing</option>
-                                    <option value="XML_PROCESSING">XML Processing</option>
-                                    <option value="CSV_PROCESSING">CSV Processing</option>
-                                    <option value="TEMPLATE_RENDERING">Template Rendering</option>
-                                    <option value="METRICS_COLLECTION">Metrics Collection</option>
-                                    <option value="LOG_ANALYSIS">Log Analysis</option>
-                                    <option value="BACKUP_OPERATIONS">Backup Operations</option>
-                                    <option value="CACHE_MANAGEMENT">Cache Management</option>
-                                </Form.Select>
-                                <Form.Text className="text-muted">
-                                    Hold Ctrl/Cmd to select multiple capabilities
-                                </Form.Text>
-                            </Form.Group>
-                        </Form>
-                    )}
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={() => setShowEditAgentModal(false)}>
-                        Cancel
-                    </Button>
-                    <Button 
-                        variant="primary" 
-                        onClick={handleSaveAgent}
-                        disabled={savingAgent || !editedAgent?.name || !editedAgent?.description}
-                    >
-                        {savingAgent ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                </Modal.Footer>
-            </Modal>
+                onSave={handleSaveAgent}
+                onChange={handleEditedAgentChange}
+                onMultiSelectChange={handleMultiSelectChange}
+                editedAgent={editedAgent}
+                saving={savingAgent}
+            />
 
             {/* Delete Confirmation Modal */}
             <ConfirmationModal

@@ -25,7 +25,9 @@
         <div class="kc-form-card">
             <div class="kc-header">
                 <h1>Linqra SSO Login</h1>
-                <p>Agentic AI Framework - Build intelligent agents with workflows, observability, and enterprise-grade security</p>
+                <p className="text-muted lead "> — Agentic AI Orchestration Platform — </p>
+                <br/>
+                <p className="text-muted lead mt-2">Design, deploy, and monitor enterprise-grade AI workflows with built-in observability and security.</p>
             </div>
             
             <#if displayMessage?? && displayMessage && message?has_content && (message.type != 'warning' || !isAppInitiatedAction??)>

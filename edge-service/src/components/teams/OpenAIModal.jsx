@@ -487,18 +487,14 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
                   <td>{config.modelCategory || 'openai-chat'}</td>
                   <td>{config.modelName || 'N/A'}</td>
                   <td>
-                    {config.endpoint && config.endpoint.length > 50 ? (
-                      <OverlayTrigger
-                        placement="top"
-                        overlay={<Tooltip>{config.endpoint}</Tooltip>}
-                      >
-                        <code className="text-truncate d-block" style={{maxWidth: '200px'}}>
-                          {config.endpoint}
-                        </code>
-                      </OverlayTrigger>
-                    ) : (
-                      <code>{config.endpoint}</code>
-                    )}
+                <OverlayTrigger
+                  placement="top"
+                  overlay={<Tooltip>{config.endpoint}</Tooltip>}
+                >
+                  <code className="text-truncate d-block" style={{ maxWidth: '200px' }}>
+                    {config.endpoint || '—'}
+                  </code>
+                </OverlayTrigger>
                   </td>   
                   <td onClick={(e) => e.stopPropagation()}>
                     <Button

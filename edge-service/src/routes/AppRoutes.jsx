@@ -43,6 +43,7 @@ import KnowledgeHub from '../pages/KnowledgeHub';
 import ViewCollection from '../pages/KnowledgeHub/ViewCollection';
 import ViewDocument from '../pages/KnowledgeHub/ViewCollection/ViewDocument';
 import Rag from '../pages/Rag';
+import ViewRag from '../pages/Rag/ViewRag';
 
 const AppRoutes = () => {
   return (
@@ -96,6 +97,7 @@ const AppRoutes = () => {
         <Route path="/knowledge-hub/collection/:collectionId" element={<ViewCollection />} />
         <Route path="/knowledge-hub/document/:documentId" element={<ViewDocument />} />
         <Route path="/rag" element={<Rag />} />
+        <Route path="/rag/view/:collectionName" element={<ViewRag />} />
         
         <Route 
           path="/teams" 

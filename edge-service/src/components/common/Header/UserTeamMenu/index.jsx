@@ -1,9 +1,20 @@
 import React, { useState } from 'react';
 import { Dropdown, Badge } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../../../contexts/AuthContext';
 import { useTeam } from '../../../../contexts/TeamContext';
-import { HiOutlineTemplate, HiOutlineChartBar, HiOutlineStatusOnline, HiOutlineLogout } from 'react-icons/hi';
+import {
+  HiOutlineTemplate,
+  HiOutlineChartBar,
+  HiOutlineStatusOnline,
+  HiOutlineLogout,
+  HiOutlineSparkles,
+  HiOutlineDatabase,
+  HiOutlineLightningBolt,
+  HiOutlineLightBulb,
+  HiOutlineCollection,
+  HiOutlineDesktopComputer
+} from 'react-icons/hi';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
 import 'tippy.js/themes/light.css';
@@ -162,9 +173,37 @@ const UserTeamMenu = () => {
             <HiOutlineChartBar size={16} style={{ marginRight: '8px' }} />
             API Metrics
           </Dropdown.Item>
-          <Dropdown.Item href="/service-status">
+          <Dropdown.Item as={Link} to="/service-status">
             <HiOutlineStatusOnline size={16} style={{ marginRight: '8px' }} />
             Service Status
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/api-routes">
+            <HiOutlineTemplate size={16} style={{ marginRight: '8px' }} />
+            Apps
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/agents">
+            <HiOutlineDesktopComputer size={16} style={{ marginRight: '8px' }} />
+            Agents
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/llm-models">
+            <HiOutlineSparkles size={16} style={{ marginRight: '8px' }} />
+            LLM Models
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/llm-usage">
+            <HiOutlineCollection size={16} style={{ marginRight: '8px' }} />
+            LLM Usage
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/execution-monitoring">
+            <HiOutlineLightningBolt size={16} style={{ marginRight: '8px' }} />
+            Executions
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/knowledge-hub">
+            <HiOutlineLightBulb size={16} style={{ marginRight: '8px' }} />
+            Knowledge Hub
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/rag">
+            <HiOutlineDatabase size={16} style={{ marginRight: '8px' }} />
+            RAG Collections
           </Dropdown.Item>
           <Dropdown.Divider />
           <Dropdown.Item onClick={handleLogoutClick}>

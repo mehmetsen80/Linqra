@@ -1834,10 +1834,11 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             DescribeCollectionResponse data = describeResponse.getData();
 
             String collectionTeamId = null;
+            Map<String, String> collectionProperties = new LinkedHashMap<>();
             for (KeyValuePair property : data.getPropertiesList()) {
+                collectionProperties.put(property.getKey(), property.getValue());
                 if ("teamId".equals(property.getKey())) {
                     collectionTeamId = property.getValue();
-                    break;
                 }
             }
 
@@ -1924,6 +1925,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .description(data.getSchema() != null ? data.getSchema().getDescription() : null)
                     .valid(validationResult.isValid())
                     .issues(validationResult.getIssues())
+                    .properties(collectionProperties)
                     .schema(fieldInfos)
                     .build();
 

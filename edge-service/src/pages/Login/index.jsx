@@ -60,7 +60,7 @@ function Login() {
           <div className={loading ? 'opacity-50' : ''}>
             <div className="auth-header">
               <h2>Welcome Back</h2>
-                        <p className="text-muted">Agentic AI Framework - Build intelligent agents with workflows, observability, and enterprise-grade security</p>
+                        <p className="text-muted lead "> — Agentic AI Orchestration Platform — design, deploy, and monitor enterprise-grade AI workflows with built-in observability and security.</p>
             </div>
             
             <Button 
@@ -82,7 +82,7 @@ function Login() {
               )}
             </Button>
             
-            <div className="separator my-3">
+            {/* <div className="separator my-3">
               <span className="separator-text">OR</span>
             </div>
 
@@ -135,7 +135,7 @@ function Login() {
                   'Sign In'
                 )}
               </Button>
-            </Form>
+            </Form> */}
 
 
             {/* TODO: Uncomment this when we decide for the registration */}

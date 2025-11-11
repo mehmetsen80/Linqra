@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Badge, 
@@ -11,7 +11,7 @@ import {
   Tooltip
 } from 'react-bootstrap';
 import Button from '../../../components/common/Button';
-import { 
+import {
   HiArrowLeft,
   HiPencil, 
   HiUsers, 
@@ -22,12 +22,17 @@ import {
   HiClock,
   HiLockClosed,
   HiKey,
-  HiSparkles
+  HiSparkles,
+  HiDatabase,
+  HiEye
 } from 'react-icons/hi';
 import { SiOpenai, SiGoogle, SiAnthropic } from 'react-icons/si';
 import { FaCloud } from 'react-icons/fa';
 import { teamService } from '../../../services/teamService';
 import { linqLlmModelService } from '../../../services/linqLlmModelService';
+import { milvusService } from '../../../services/milvusService';
+import { knowledgeHubCollectionService } from '../../../services/knowledgeHubCollectionService';
+import { knowledgeHubDocumentService } from '../../../services/knowledgeHubDocumentService';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import TeamMembersModal from '../../../components/teams/TeamMembersModal';
 import TeamRoutesModal from '../../../components/teams/TeamRoutesModal';
@@ -79,12 +84,20 @@ function ViewTeam() {
     onConfirm: () => {},
     variant: 'danger'
   });
+  const [knowledgeCollections, setKnowledgeCollections] = useState([]);
+  const [knowledgeCollectionsLoading, setKnowledgeCollectionsLoading] = useState(false);
+  const [knowledgeCollectionsError, setKnowledgeCollectionsError] = useState(null);
+  const [milvusCollections, setMilvusCollections] = useState([]);
+  const [milvusCollectionsLoading, setMilvusCollectionsLoading] = useState(false);
+  const [milvusCollectionsError, setMilvusCollectionsError] = useState(null);
 
   useEffect(() => {
     if (teamId) {
       fetchTeam();
       fetchLlmModels();
       fetchApiKeys();
+      fetchKnowledgeCollections();
+      fetchMilvusCollections();
     }
   }, [teamId]);
 
@@ -124,6 +137,67 @@ function ViewTeam() {
     }
   };
 
+  const fetchMilvusCollections = async () => {
+    if (!teamId) return;
+    try {
+      setMilvusCollectionsLoading(true);
+      setMilvusCollectionsError(null);
+      const { data, error } = await milvusService.getCollectionsForTeam(teamId);
+      if (error) throw new Error(error);
+      setMilvusCollections(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching Milvus collections:', err);
+      setMilvusCollections([]);
+      setMilvusCollectionsError(err.message || 'Failed to load Milvus collections');
+    } finally {
+      setMilvusCollectionsLoading(false);
+    }
+  };
+
+  const fetchKnowledgeCollections = async () => {
+    try {
+      setKnowledgeCollectionsLoading(true);
+      setKnowledgeCollectionsError(null);
+
+      const { success, data, error } = await knowledgeHubCollectionService.getAllCollections();
+      if (!success) {
+        throw new Error(error || 'Failed to load knowledge hub collections');
+      }
+
+      const collections = Array.isArray(data) ? data : [];
+
+      const collectionsWithDocuments = await Promise.all(
+        collections.map(async (collection) => {
+          try {
+            const documentsResponse = await knowledgeHubDocumentService.getAllDocuments({ collectionId: collection.id });
+            if (!documentsResponse.success) {
+              throw new Error(documentsResponse.error || 'Failed to load documents');
+            }
+            return {
+              ...collection,
+              documents: Array.isArray(documentsResponse.data) ? documentsResponse.data : []
+            };
+          } catch (err) {
+            console.error(`Error fetching documents for collection ${collection.id}:`, err);
+            return {
+              ...collection,
+              documents: [],
+              documentsError: err.message || 'Failed to load documents'
+            };
+          }
+        })
+      );
+
+      setKnowledgeCollections(collectionsWithDocuments);
+    } catch (err) {
+      console.error('Error fetching knowledge hub collections:', err);
+      setKnowledgeCollections([]);
+      setKnowledgeCollectionsError(err.message || 'Failed to load knowledge hub collections');
+    } finally {
+      setKnowledgeCollectionsLoading(false);
+    }
+  };
+
   const formatDate = (dateInput) => {
     if (!dateInput) return 'N/A';
     
@@ -148,6 +222,27 @@ function ViewTeam() {
       minute: '2-digit',
       second: '2-digit'
     });
+  };
+
+  const getDocumentStatusVariant = (status) => {
+    switch (status) {
+      case 'READY':
+      case 'PROCESSED':
+      case 'AI_READY':
+        return 'success';
+      case 'UPLOADED':
+      case 'PARSING':
+      case 'PARSED':
+      case 'METADATA_EXTRACTION':
+      case 'EMBEDDING':
+        return 'info';
+      case 'PENDING_UPLOAD':
+        return 'warning';
+      case 'FAILED':
+        return 'danger';
+      default:
+        return 'secondary';
+    }
   };
 
   const renderPermissionBadges = (permissions) => {
@@ -298,6 +393,98 @@ function ViewTeam() {
     // Refresh API keys when modal closes in case changes were made
     fetchApiKeys();
   };
+
+  const knowledgeCollectionRows = knowledgeCollections.flatMap((collection) => {
+    const documents = Array.isArray(collection.documents) ? collection.documents : [];
+
+    if (documents.length === 0) {
+      return [{
+        key: `${collection.id}-empty`,
+        collectionName: collection.name,
+        documentName: collection.documentsError
+          ? `Failed to load documents: ${collection.documentsError}`
+          : 'No documents yet',
+        status: null,
+        uploadedAt: null,
+        isEmpty: true,
+        isError: Boolean(collection.documentsError)
+      }];
+    }
+
+    return documents.map((doc) => ({
+      key: `${collection.id}-${doc.documentId || doc.id}`,
+      collectionName: collection.name,
+      documentName: doc.fileName || doc.documentId || 'Unnamed document',
+      status: doc.status || null,
+      uploadedAt: doc.uploadedAt || doc.createdAt || null,
+        documentId: doc.documentId || doc.id || null,
+        isEmpty: false,
+        isError: false
+    }));
+  });
+
+  const knowledgeHubMilvusCollections = useMemo(() => (
+    (milvusCollections || []).filter(
+      (collection) => (collection.collectionType || '').toUpperCase() === 'KNOWLEDGE_HUB'
+    )
+  ), [milvusCollections]);
+
+  const customMilvusCollections = useMemo(() => (
+    (milvusCollections || []).filter(
+      (collection) => (collection.collectionType || '').toUpperCase() !== 'KNOWLEDGE_HUB'
+    )
+  ), [milvusCollections]);
+
+  const renderMilvusSummaryTable = (collections) => (
+    <div className="table-responsive">
+      <table className="table table-sm mb-3">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Dimension</th>
+            <th>Description</th>
+            <th>Type</th>
+            <th>Records</th>
+          </tr>
+        </thead>
+        <tbody>
+          {collections.map((collection) => {
+            const alias = collection.properties?.collectionAlias || collection.collectionAlias || '';
+            const displayAlias = alias && alias !== collection.name ? alias : '';
+            const descriptionText =
+              collection.collectionDescription ??
+              collection.properties?.collectionDescription ??
+              collection.description ??
+              '—';
+            const rowCount = Number(collection.rowCount ?? collection.properties?.rowCount ?? 0);
+            const typeLabel = collection.collectionType || collection.properties?.collectionType || 'UNKNOWN';
+
+            return (
+              <tr key={collection.name}>
+                <td>
+                  <div className="fw-semibold small">
+                    {collection.name}
+                    {displayAlias && <span className="text-muted ms-2">({displayAlias})</span>}
+                  </div>
+                  <div className="text-muted small">
+                    Vector field: {collection.vectorFieldName || 'N/A'}
+                  </div>
+                </td>
+                <td>{collection.vectorDimension ?? 'Unknown'}</td>
+                <td className="text-muted small">
+                  {descriptionText}
+                </td>
+                <td>
+                  <Badge bg="secondary">{typeLabel}</Badge>
+                </td>
+                <td>{Number.isFinite(rowCount) ? rowCount : '—'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -697,6 +884,145 @@ function ViewTeam() {
                 </div>
               ) : (
                 <p className="text-muted mb-0">No LLM models configured yet. Click the provider buttons above to configure.</p>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+
+        {/* Knowledge Hub Collections Summary */}
+        <Col md={12}>
+          <Card className="border-0 bg-light">
+            <Card.Body>
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div className="d-flex align-items-center">
+                  <HiDocumentText className="text-primary me-2" size={24} />
+                  <h5 className="mb-0">Knowledge Hub Collections</h5>
+                </div>
+              </div>
+              {knowledgeCollectionsLoading ? (
+                <div className="text-center py-3">
+                  <Spinner animation="border" size="sm" role="status" />
+                  <span className="ms-2">Loading knowledge hub collections...</span>
+                </div>
+              ) : knowledgeCollectionsError ? (
+                <p className="text-danger mb-0">{knowledgeCollectionsError}</p>
+              ) : knowledgeCollections.length === 0 ? (
+                <p className="text-muted mb-0">
+                  No knowledge hub collections configured yet. Create a collection to start ingesting documents.
+                </p>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-sm mb-0">
+                    <thead>
+                      <tr>
+                        <th>Collection</th>
+                        <th>Document</th>
+                        <th>Status</th>
+                        <th>Uploaded</th>
+                        <th className="text-end">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {knowledgeCollectionRows.map((row) => {
+                        const isClickable = row.documentId && !row.isError && !row.isEmpty;
+                        return (
+                          <tr
+                            key={row.key}
+                            className={isClickable ? 'table-row-clickable' : undefined}
+                            onClick={() => {
+                              if (isClickable) {
+                                navigate(`/knowledge-hub/document/${row.documentId}`);
+                              }
+                            }}
+                            style={isClickable ? { cursor: 'pointer' } : undefined}
+                          >
+                            <td>{row.collectionName}</td>
+                            <td className={row.isError ? 'text-danger' : undefined}>
+                              {row.documentName}
+                            </td>
+                            <td>
+                              {row.status ? (
+                                <Badge bg={getDocumentStatusVariant(row.status)}>{row.status}</Badge>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                            <td>{row.uploadedAt && !row.isEmpty ? formatDate(row.uploadedAt) : '—'}</td>
+                            <td className="text-end">
+                              {isClickable ? (
+                                <Button
+                                  variant="outline-primary"
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    navigate(`/knowledge-hub/document/${row.documentId}`);
+                                  }}
+                                >
+                                  <HiEye className="me-1" /> View
+                                </Button>
+                              ) : (
+                                '—'
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+
+        {/* Milvus Collections Overview */}
+        <Col md={12}>
+          <Card className="border-0 bg-light">
+            <Card.Body>
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div className="d-flex align-items-center">
+                  <HiDatabase className="text-primary me-2" size={24} />
+                  <h5 className="mb-0">Milvus Collections</h5>
+                </div>
+                <Button variant="link" onClick={() => navigate('/rag')}>
+                  Manage in RAG Console
+                </Button>
+              </div>
+              {milvusCollectionsLoading ? (
+                <div className="text-center py-3">
+                  <Spinner animation="border" size="sm" role="status" />
+                  <span className="ms-2">Loading Milvus collections...</span>
+                </div>
+              ) : milvusCollectionsError ? (
+                <p className="text-danger mb-0">{milvusCollectionsError}</p>
+              ) : milvusCollections.length === 0 ? (
+                <p className="text-muted mb-0">
+                  No Milvus collections yet. Use the RAG console to create knowledge hub or custom collections.
+                </p>
+              ) : (
+                <>
+                  {knowledgeHubMilvusCollections.length > 0 && (
+                    <>
+                      <div className="text-muted text-uppercase small fw-semibold mb-2 text-start">
+                        Knowledge Hub Collections
+                      </div>
+                      {renderMilvusSummaryTable(knowledgeHubMilvusCollections)}
+                    </>
+                  )}
+                  {customMilvusCollections.length > 0 && (
+                    <>
+                      <div className="text-muted text-uppercase small fw-semibold mt-3 mb-2 text-start">
+                        Custom Collections
+                      </div>
+                      {renderMilvusSummaryTable(customMilvusCollections)}
+                    </>
+                  )}
+                  {knowledgeHubMilvusCollections.length === 0 && customMilvusCollections.length === 0 && (
+                    <p className="text-muted mb-0">
+                      No Milvus collections found for this team.
+                    </p>
+                  )}
+                </>
               )}
             </Card.Body>
           </Card>

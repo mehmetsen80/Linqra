@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Container, Card, Table, Spinner, Badge, Alert, Breadcrumb, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
-import { HiCollection, HiPlusCircle, HiTrash, HiCheckCircle, HiDatabase } from 'react-icons/hi';
+import { HiCollection, HiPlusCircle, HiTrash, HiCheckCircle, HiDatabase, HiEye } from 'react-icons/hi';
 import { HiOutlineDatabase } from 'react-icons/hi';
 import Button from '../../components/common/Button';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
@@ -300,6 +300,17 @@ const Rag = () => {
           </td>
           <td className="text-end">
             <div className="d-flex justify-content-end gap-2">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() =>
+                  navigate(`/rag/view/${encodeURIComponent(collection.name)}`, {
+                    state: { collection }
+                  })
+                }
+              >
+                <HiEye className="me-1" /> View
+              </Button>
               <Button
                 variant="outline-secondary"
                 size="sm"

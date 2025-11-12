@@ -165,6 +165,23 @@ const ExecutionMonitoring = () => {
                     return;
                 }
                 
+                const parsedTotalSteps = Number(data.totalSteps ?? 0);
+                const totalSteps = Number.isFinite(parsedTotalSteps) && parsedTotalSteps >= 0 ? parsedTotalSteps : 0;
+                const parsedCurrentStep = Number(data.currentStep ?? 0);
+                const currentStep = Number.isFinite(parsedCurrentStep) && parsedCurrentStep >= 0 ? parsedCurrentStep : 0;
+                const isFinalStep = totalSteps > 0 && currentStep >= totalSteps;
+                const derivedStatus = (data.status === 'RUNNING' && isFinalStep)
+                    ? 'COMPLETED'
+                    : data.status;
+                const normalizedPayload = {
+                    ...data,
+                    currentStep,
+                    totalSteps,
+                    status: derivedStatus,
+                    finishedAt: data.finishedAt ?? (derivedStatus === 'COMPLETED' ? new Date().toISOString() : data.finishedAt),
+                    completedAt: data.completedAt ?? (derivedStatus === 'COMPLETED' ? new Date().toISOString() : data.completedAt)
+                };
+
                 setExecutions(prevExecutions => {
                     const newExecutions = new Map(prevExecutions);
                     const currentTime = new Date().toISOString();
@@ -172,7 +189,7 @@ const ExecutionMonitoring = () => {
                     
                     // Update the execution with new data
                     newExecutions.set(data.executionId, {
-                        ...data,
+                        ...normalizedPayload,
                         lastUpdated: currentTime
                     });
                     
@@ -184,37 +201,37 @@ const ExecutionMonitoring = () => {
                             return newTimers;
                         });
                     }
-                    
-                    
-                    // Check if this is a completion update (last step reached)
-                    if (data.currentStep === data.totalSteps && data.status === 'RUNNING') {
-                        // Mark as completed if we've reached the last step
-                        const completedExecution = newExecutions.get(data.executionId);
-                        if (completedExecution) {
-                            completedExecution.status = 'COMPLETED';
-                            console.log('Marking execution as completed:', data.executionId);
-                        }
-                        
-                        // Refresh recent executions when an execution completes
-                        setTimeout(() => {
-                            loadRecentExecutions();
-                        }, 1000); // Wait 1 second for the execution to fully complete
-                    }
-                    
-                    // Also refresh recent executions for FAILED or CANCELLED status
-                    if (data.status === 'FAILED' || data.status === 'CANCELLED') {
-                        setTimeout(() => {
-                            loadRecentExecutions();
-                        }, 1000);
-                    }
-                    
                     return newExecutions;
                 });
                 
-                setError(null);
+                setRecentExecutions(prevRecent => {
+                    const existingList = Array.isArray(prevRecent) ? [...prevRecent] : [];
+                    const existingIndex = existingList.findIndex(exec => exec.executionId === data.executionId);
+                    const existingExec = existingIndex !== -1 ? existingList[existingIndex] : {};
+
+                    const updatedExec = {
+                        ...existingExec,
+                        executionId: normalizedPayload.executionId,
+                        taskName: normalizedPayload.taskName ?? existingExec.taskName,
+                        agentName: normalizedPayload.agentName ?? existingExec.agentName,
+                        status: normalizedPayload.status ?? existingExec.status,
+                        executionDurationMs: normalizedPayload.executionDurationMs ?? existingExec.executionDurationMs,
+                        startedAt: normalizedPayload.startedAt ?? existingExec.startedAt,
+                        currentStep: normalizedPayload.currentStep ?? existingExec.currentStep,
+                        totalSteps: normalizedPayload.totalSteps ?? existingExec.totalSteps,
+                        completedAt: normalizedPayload.completedAt ?? existingExec.completedAt,
+                        finishedAt: normalizedPayload.finishedAt ?? existingExec.finishedAt
+                    };
+
+                    if (existingIndex !== -1) {
+                        existingList[existingIndex] = updatedExec;
+                        return existingList;
+                    }
+
+                    return [updatedExec, ...existingList].slice(0, 100);
+                });
                 
-                // Refresh recent executions when we get new execution data
-                loadRecentExecutions();
+                setError(null);
             } catch (err) {
                 setError('Failed to process execution data');
                 console.error('Error processing execution data:', err);

@@ -174,34 +174,30 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
             // Set executedBy from the actual user who initiated the agent task
             request.setExecutedBy(execution.getExecutedBy());
 
-            // Execute the embedded workflow
-            return workflowExecutionService.executeWorkflow(request)
-                    .flatMap(response -> {
-                        // Get agent and task names for context
-                        Mono<String> agentNameMono = agentRepository.findById(agentId)
-                                .map(Agent::getName);
-                        Mono<String> taskNameMono = agentTaskRepository.findById(agentTaskId)
-                                .map(AgentTask::getName);
+            Mono<String> agentNameMono = agentRepository.findById(agentId)
+                    .map(Agent::getName);
+            Mono<String> taskNameMono = agentTaskRepository.findById(agentTaskId)
+                    .map(AgentTask::getName);
 
-                        return Mono.zip(agentNameMono, taskNameMono)
-                                .map(tuple -> {
-                                    String agentName = tuple.getT1();
-                                    String taskName = tuple.getT2();
+            return Mono.zip(agentNameMono, taskNameMono)
+                    .flatMap(tuple -> {
+                        String agentName = tuple.getT1();
+                        String taskName = tuple.getT2();
 
-                                    // Prepare agent context for tracking
+                        Map<String, Object> agentContext = Map.of(
+                                "agentId", agentId,
+                                "agentName", agentName,
+                                "agentTaskId", agentTaskId,
+                                "agentTaskName", taskName,
+                                "executionSource", "agent_embedded",
+                                "agentExecutionId", execution.getExecutionId()
+                        );
 
-                                    return Map.<String, Object>of(
-                                            "agentId", agentId,
-                                            "agentName", agentName,
-                                            "agentTaskId", agentTaskId,
-                                            "agentTaskName", taskName,
-                                            "executionSource", "agent_embedded",
-                                            "agentExecutionId", execution.getExecutionId()
-                                    );
-                                })
-                                .flatMap(agentContext ->
-                                        workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
+                        return workflowExecutionService.initializeExecutionWithAgentContext(request, agentContext)
+                                .then(workflowExecutionService.executeWorkflow(request)
+                                        .flatMap(response -> workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
                                                 .map(LinqWorkflowExecution::getId)
+                                        )
                                 );
                     });
 

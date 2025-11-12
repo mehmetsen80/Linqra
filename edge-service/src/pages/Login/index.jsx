@@ -60,7 +60,8 @@ function Login() {
           <div className={loading ? 'opacity-50' : ''}>
             <div className="auth-header">
               <h2>Welcome Back</h2>
-                        <p className="text-muted lead "> — Agentic AI Orchestration Platform — design, deploy, and monitor enterprise-grade AI workflows with built-in observability and security.</p>
+                        <p className="text-muted lead "> — Agentic AI Orchestration Platform — </p>
+                        <p className="text-muted lead ">Design, deploy, and monitor enterprise-grade AI workflows with built-in observability and security.</p>
             </div>
             
             <Button 

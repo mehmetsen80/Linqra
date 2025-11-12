@@ -327,50 +327,41 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     public Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response) {
         return trackExecution(request, response, null);
     }
-    
+
     @Override
     public Mono<LinqWorkflowExecution> trackExecutionWithAgentContext(LinqRequest request, LinqResponse response, Map<String, Object> agentContext) {
         return trackExecution(request, response, agentContext);
     }
-    
+
+    @Override
+    public Mono<LinqWorkflowExecution> initializeExecution(LinqRequest request) {
+        return initializeExecutionInternal(request, null);
+    }
+
+    @Override
+    public Mono<LinqWorkflowExecution> initializeExecutionWithAgentContext(LinqRequest request, Map<String, Object> agentContext) {
+        return initializeExecutionInternal(request, agentContext);
+    }
+
     /**
      * Internal method that handles both regular and agent context tracking
      */
     private Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response, Map<String, Object> agentContext) {
-        LinqWorkflowExecution execution = new LinqWorkflowExecution();
-        execution.setTeamId(response.getMetadata().getTeamId());
-        execution.setRequest(request);
-        execution.setResponse(response);
-        execution.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
-        
-        // Set status based on metadata status
-        execution.setStatus("success".equals(response.getMetadata().getStatus()) ? 
-            ExecutionStatus.SUCCESS : ExecutionStatus.FAILED);
-        
-        // Set agent context fields if provided
-        if (agentContext != null) {
-            execution.setAgentId((String) agentContext.get("agentId"));
-            execution.setAgentName((String) agentContext.get("agentName"));
-            execution.setAgentTaskId((String) agentContext.get("agentTaskId"));
-            execution.setAgentTaskName((String) agentContext.get("agentTaskName"));
-            execution.setExecutionSource((String) agentContext.get("executionSource"));
-            execution.setAgentExecutionId((String) agentContext.get("agentExecutionId"));
-        }
-        
-        // Calculate duration from metadata if available
+        ExecutionStatus finalStatus = "success".equals(response.getMetadata().getStatus())
+            ? ExecutionStatus.SUCCESS
+            : ExecutionStatus.FAILED;
+
+        long computedDuration = 0L;
         if (response.getMetadata() != null && response.getMetadata().getWorkflowMetadata() != null) {
-            long totalDuration = response.getMetadata().getWorkflowMetadata().stream()
+            computedDuration = response.getMetadata().getWorkflowMetadata().stream()
                 .mapToLong(LinqResponse.WorkflowStepMetadata::getDurationMs)
                 .sum();
-            execution.setDurationMs(totalDuration);
-            
-            // Set token usage for AI models
+
             response.getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
-                if (stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("gemini-chat") 
+                if (stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("gemini-chat")
                     || stepMetadata.getTarget().equals("cohere-chat") || stepMetadata.getTarget().equals("claude-chat")
-                    || stepMetadata.getTarget().equals("openai-embed") || stepMetadata.getTarget().equals("gemini-embed") 
+                    || stepMetadata.getTarget().equals("openai-embed") || stepMetadata.getTarget().equals("gemini-embed")
                     || stepMetadata.getTarget().equals("cohere-embed")) {
-                    // Get token usage from the step's result if available
                     if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
                         workflowResult.getSteps().stream()
                             .filter(step -> step.getStep() == stepMetadata.getStep())
@@ -379,66 +370,55 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                 if (step.getResult() instanceof Map<?, ?> resultMap) {
                                     LinqResponse.WorkflowStepMetadata.TokenUsage tokenUsage = new LinqResponse.WorkflowStepMetadata.TokenUsage();
                                     boolean hasTokenUsage = false;
-                                    
-                                    if ((stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("openai-embed")) 
+
+                                    if ((stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("openai-embed"))
                                         && resultMap.containsKey("usage")) {
-                                        // Handle OpenAI and OpenAI Embed token usage
                                         Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
                                         long promptTokens = ((Number) usage.get("prompt_tokens")).longValue();
-                                        long completionTokens = usage.containsKey("completion_tokens") 
+                                        long completionTokens = usage.containsKey("completion_tokens")
                                             ? ((Number) usage.get("completion_tokens")).longValue() : 0;
                                         long totalTokens = ((Number) usage.get("total_tokens")).longValue();
-                                        
+
                                         tokenUsage.setPromptTokens(promptTokens);
                                         tokenUsage.setCompletionTokens(completionTokens);
                                         tokenUsage.setTotalTokens(totalTokens);
-                                        
-                                        // Set OpenAI model
+
                                         String model = (String) resultMap.get("model");
                                         stepMetadata.setModel(model);
-                                        
-                                        // Calculate and store cost at execution time
+
                                         double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
                                         tokenUsage.setCostUsd(cost);
-                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
+                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}",
                                             model, promptTokens, completionTokens, String.format("%.6f", cost));
                                         hasTokenUsage = true;
-                                            
+
                                     } else if (stepMetadata.getTarget().equals("gemini-chat") && resultMap.containsKey("usageMetadata")) {
-                                        // Handle Gemini chat token usage (has usageMetadata)
                                         Map<?, ?> usageMetadata = (Map<?, ?>) resultMap.get("usageMetadata");
                                         long promptTokens = ((Number) usageMetadata.get("promptTokenCount")).longValue();
-                                        long completionTokens = usageMetadata.containsKey("candidatesTokenCount") 
+                                        long completionTokens = usageMetadata.containsKey("candidatesTokenCount")
                                             ? ((Number) usageMetadata.get("candidatesTokenCount")).longValue() : 0;
                                         long totalTokens = ((Number) usageMetadata.get("totalTokenCount")).longValue();
-                                        
+
                                         tokenUsage.setPromptTokens(promptTokens);
                                         tokenUsage.setCompletionTokens(completionTokens);
                                         tokenUsage.setTotalTokens(totalTokens);
-                                        
-                                        // Set Gemini model
+
                                         String model = (String) resultMap.get("modelVersion");
                                         stepMetadata.setModel(model);
-                                        
-                                        // Calculate and store cost at execution time
+
                                         double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
                                         tokenUsage.setCostUsd(cost);
-                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
+                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}",
                                             model, promptTokens, completionTokens, String.format("%.6f", cost));
                                         hasTokenUsage = true;
-                                        
+
                                     } else if (stepMetadata.getTarget().equals("gemini-embed")) {
-                                        // Handle Gemini embedding token usage (NO usageMetadata in response)
-                                        // Gemini embedding API doesn't return token usage, so we estimate from input text
-                                        
-                                        // Get the input text from the original request
                                         String inputText = "";
                                         if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
                                             for (LinqRequest.Query.WorkflowStep ws : request.getQuery().getWorkflow()) {
                                                 if (ws.getStep() == stepMetadata.getStep()) {
                                                     if (ws.getParams() != null && ws.getParams().containsKey("text")) {
                                                         Object textObj = ws.getParams().get("text");
-                                                        // The text param should already be resolved in the stored request
                                                         if (textObj instanceof String) {
                                                             inputText = (String) textObj;
                                                         }
@@ -447,17 +427,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                 }
                                             }
                                         }
-                                        
-                                        // Estimate tokens: roughly 1 token per 4 characters for English text
-                                        // This is a reasonable approximation used by many tokenizers
+
                                         long estimatedTokens = Math.max(1, inputText.length() / 4);
-                                        
+
                                         tokenUsage.setPromptTokens(estimatedTokens);
                                         tokenUsage.setCompletionTokens(0);
                                         tokenUsage.setTotalTokens(estimatedTokens);
-                                        
-                                        // Extract model from request's workflow step llmConfig
-                                        String model = "text-embedding-004"; // default
+
+                                        String model = "text-embedding-004";
                                         if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
                                             request.getQuery().getWorkflow().stream()
                                                 .filter(ws -> ws.getStep() == stepMetadata.getStep())
@@ -469,32 +446,29 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                 });
                                         }
                                         model = stepMetadata.getModel() != null ? stepMetadata.getModel() : model;
-                                        
-                                        // Calculate and store cost
+
                                         double cost = llmCostService.calculateCost(model, estimatedTokens, 0);
                                         tokenUsage.setCostUsd(cost);
-                                        log.info("⚠️ Gemini embedding - estimated {} tokens from {} chars (API doesn't return usage), cost: ${}", 
+                                        log.info("⚠️ Gemini embedding - estimated {} tokens from {} chars (API doesn't return usage), cost: ${}",
                                             estimatedTokens, inputText.length(), String.format("%.6f", cost));
                                         hasTokenUsage = true;
-                                            
-                                    } else if ((stepMetadata.getTarget().equals("cohere-chat") || stepMetadata.getTarget().equals("cohere-embed")) 
+
+                                    } else if ((stepMetadata.getTarget().equals("cohere-chat") || stepMetadata.getTarget().equals("cohere-embed"))
                                         && resultMap.containsKey("meta")) {
-                                        // Handle Cohere and Cohere Embed token usage
                                         Map<?, ?> meta = (Map<?, ?>) resultMap.get("meta");
                                         if (meta.containsKey("billed_units")) {
                                             Map<?, ?> billedUnits = (Map<?, ?>) meta.get("billed_units");
-                                            long promptTokens = billedUnits.containsKey("input_tokens") 
+                                            long promptTokens = billedUnits.containsKey("input_tokens")
                                                 ? ((Number) billedUnits.get("input_tokens")).longValue() : 0;
-                                            long completionTokens = billedUnits.containsKey("output_tokens") 
+                                            long completionTokens = billedUnits.containsKey("output_tokens")
                                                 ? ((Number) billedUnits.get("output_tokens")).longValue() : 0;
                                             long totalTokens = promptTokens + completionTokens;
-                                            
+
                                             tokenUsage.setPromptTokens(promptTokens);
                                             tokenUsage.setCompletionTokens(completionTokens);
                                             tokenUsage.setTotalTokens(totalTokens);
-                                            
-                                            // Extract model from the original request's workflow step llmConfig
-                                            String model = "command-r-08-2024"; // default
+
+                                            String model = "command-r-08-2024";
                                             if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
                                                 request.getQuery().getWorkflow().stream()
                                                     .filter(ws -> ws.getStep() == stepMetadata.getStep())
@@ -506,29 +480,26 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                     });
                                             }
                                             model = stepMetadata.getModel() != null ? stepMetadata.getModel() : model;
-                                            
-                                            // Calculate and store cost at execution time
+
                                             double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
                                             tokenUsage.setCostUsd(cost);
-                                            log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
+                                            log.debug("Calculated cost for {} ({}p/{}c tokens): ${}",
                                                 model, promptTokens, completionTokens, String.format("%.6f", cost));
                                             hasTokenUsage = true;
                                         }
                                     } else if (stepMetadata.getTarget().equals("claude-chat") && resultMap.containsKey("usage")) {
-                                        // Handle Claude token usage
                                         Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
-                                        long promptTokens = usage.containsKey("input_tokens") 
+                                        long promptTokens = usage.containsKey("input_tokens")
                                             ? ((Number) usage.get("input_tokens")).longValue() : 0;
-                                        long completionTokens = usage.containsKey("output_tokens") 
+                                        long completionTokens = usage.containsKey("output_tokens")
                                             ? ((Number) usage.get("output_tokens")).longValue() : 0;
                                         long totalTokens = promptTokens + completionTokens;
-                                        
+
                                         tokenUsage.setPromptTokens(promptTokens);
                                         tokenUsage.setCompletionTokens(completionTokens);
                                         tokenUsage.setTotalTokens(totalTokens);
-                                        
-                                        // Extract model from the original request's workflow step llmConfig
-                                        String model = "claude-sonnet-4-5"; // default
+
+                                        String model = "claude-sonnet-4-5";
                                         if (request.getQuery() != null && request.getQuery().getWorkflow() != null) {
                                             request.getQuery().getWorkflow().stream()
                                                 .filter(ws -> ws.getStep() == stepMetadata.getStep())
@@ -540,16 +511,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                 });
                                         }
                                         model = stepMetadata.getModel() != null ? stepMetadata.getModel() : model;
-                                        
-                                        // Calculate and store cost at execution time
+
                                         double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
                                         tokenUsage.setCostUsd(cost);
-                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}", 
+                                        log.debug("Calculated cost for {} ({}p/{}c tokens): ${}",
                                             model, promptTokens, completionTokens, String.format("%.6f", cost));
                                         hasTokenUsage = true;
                                     }
-                                    
-                                    // Only set tokenUsage if it was actually populated
+
                                     if (hasTokenUsage) {
                                         stepMetadata.setTokenUsage(tokenUsage);
                                     }
@@ -559,24 +528,122 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 }
             });
         }
-        
-        if (request.getQuery() != null && request.getQuery().getWorkflowId() != null) {
-            execution.setWorkflowId(request.getQuery().getWorkflowId());
+        final long totalDuration = computedDuration;
+
+        String executionIdParam = null;
+        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            Object executionIdObj = request.getQuery().getParams().get("_executionId");
+            if (executionIdObj != null) {
+                executionIdParam = String.valueOf(executionIdObj);
+            }
         }
-        
-        // Enhanced logging based on whether it's agent-triggered or not
-        if (agentContext != null) {
-            log.info("💾 Saving agent workflow execution with agentExecutionId: {}", execution.getAgentExecutionId());
-            return executionRepository.save(execution)
-                .doOnSuccess(e -> log.info("✅ Tracked agent workflow execution: {} (agentExecutionId: {}) for agent: {} with status: {}", 
-                    e.getId(), e.getAgentExecutionId(), e.getAgentName(), e.getStatus()))
-                .doOnError(error -> log.error("❌ Error tracking agent workflow execution: {}", error.getMessage()));
-        } else {
+
+        String agentExecutionId = agentContext != null ? (String) agentContext.get("agentExecutionId") : null;
+
+        Mono<LinqWorkflowExecution> existingExecutionMono = Mono.empty();
+        if (agentExecutionId != null && !agentExecutionId.isBlank()) {
+            existingExecutionMono = executionRepository.findByAgentExecutionId(agentExecutionId);
+        }
+        if (executionIdParam != null && !executionIdParam.isBlank()) {
+            existingExecutionMono = existingExecutionMono.switchIfEmpty(executionRepository.findById(executionIdParam));
+        }
+
+        return existingExecutionMono.flatMap(existing -> {
+            existing.setTeamId(response.getMetadata().getTeamId());
+            if (request.getQuery() != null && request.getQuery().getWorkflowId() != null) {
+                existing.setWorkflowId(request.getQuery().getWorkflowId());
+            }
+            existing.setRequest(request);
+            existing.setResponse(response);
+            existing.setStatus(finalStatus);
+            existing.setDurationMs(totalDuration);
+            existing.setExecutedBy(request.getExecutedBy());
+            if (existing.getExecutedAt() == null) {
+                existing.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+            }
+
+            if (agentContext != null) {
+                existing.setAgentId((String) agentContext.get("agentId"));
+                existing.setAgentName((String) agentContext.get("agentName"));
+                existing.setAgentTaskId((String) agentContext.get("agentTaskId"));
+                existing.setAgentTaskName((String) agentContext.get("agentTaskName"));
+                existing.setExecutionSource((String) agentContext.getOrDefault("executionSource", existing.getExecutionSource()));
+                existing.setAgentExecutionId((String) agentContext.get("agentExecutionId"));
+            }
+
+            log.info("💾 Updating workflow execution {}", existing.getId());
+            return executionRepository.save(existing)
+                .doOnSuccess(e -> log.info("✅ Tracked workflow execution: {} with status: {}", e.getId(), e.getStatus()))
+                .doOnError(error -> log.error("❌ Error tracking workflow execution: {}", error.getMessage()));
+        }).switchIfEmpty(Mono.defer(() -> {
+            LinqWorkflowExecution execution = new LinqWorkflowExecution();
+            execution.setTeamId(response.getMetadata().getTeamId());
+            execution.setWorkflowId(request.getQuery() != null ? request.getQuery().getWorkflowId() : null);
+            execution.setRequest(request);
+            execution.setResponse(response);
+            execution.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+            execution.setExecutedBy(request.getExecutedBy());
+            execution.setStatus(finalStatus);
+            execution.setDurationMs(totalDuration);
+
+            if (agentContext != null) {
+                execution.setAgentId((String) agentContext.get("agentId"));
+                execution.setAgentName((String) agentContext.get("agentName"));
+                execution.setAgentTaskId((String) agentContext.get("agentTaskId"));
+                execution.setAgentTaskName((String) agentContext.get("agentTaskName"));
+                execution.setExecutionSource((String) agentContext.get("executionSource"));
+                execution.setAgentExecutionId((String) agentContext.get("agentExecutionId"));
+            }
+
             log.info("💾 Saving workflow execution");
             return executionRepository.save(execution)
                 .doOnSuccess(e -> log.info("✅ Tracked workflow execution: {} with status: {}", e.getId(), e.getStatus()))
                 .doOnError(error -> log.error("❌ Error tracking workflow execution: {}", error.getMessage()));
+        }));
+    }
+
+    private Mono<LinqWorkflowExecution> initializeExecutionInternal(LinqRequest request, Map<String, Object> agentContext) {
+        if (request.getQuery() == null) {
+            request.setQuery(new LinqRequest.Query());
         }
+        if (request.getQuery().getParams() == null) {
+            request.getQuery().setParams(new HashMap<>());
+        }
+
+        Object teamIdObj = request.getQuery().getParams().get("teamId");
+        if (teamIdObj == null) {
+            return Mono.error(new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED,
+                "Team ID must be provided in params"));
+        }
+        String teamId = String.valueOf(teamIdObj);
+
+        LinqWorkflowExecution execution = new LinqWorkflowExecution();
+        execution.setTeamId(teamId);
+        execution.setWorkflowId(request.getQuery().getWorkflowId());
+        execution.setRequest(request);
+        execution.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+        execution.setExecutedBy(request.getExecutedBy());
+        execution.setStatus(ExecutionStatus.IN_PROGRESS);
+        execution.setExecutionSource(agentContext != null
+            ? (String) agentContext.getOrDefault("executionSource", "agent")
+            : "manual");
+
+        if (agentContext != null) {
+            execution.setAgentId((String) agentContext.get("agentId"));
+            execution.setAgentName((String) agentContext.get("agentName"));
+            execution.setAgentTaskId((String) agentContext.get("agentTaskId"));
+            execution.setAgentTaskName((String) agentContext.get("agentTaskName"));
+            execution.setAgentExecutionId((String) agentContext.get("agentExecutionId"));
+        }
+
+        log.info("📝 Initializing workflow execution record");
+        return executionRepository.save(execution)
+            .doOnSuccess(saved -> {
+                request.getQuery().getParams().put("_executionId", saved.getId());
+                log.info("✅ Initialized workflow execution {} with status {}", saved.getId(), saved.getStatus());
+            })
+            .doOnError(error -> log.error("❌ Error initializing workflow execution: {}", error.getMessage()));
     }
 
     @Override

@@ -19,10 +19,10 @@ const agentTaskService = {
         }
     },
 
-    executeTask: async (taskId) => {
-        console.log('Executing agent task:', taskId);
+    executeTask: async (taskId, payload = {}) => {
+        console.log('Executing agent task:', taskId, payload);
         try {
-            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/execute`, {});
+            const response = await axiosInstance.post(`/api/agent-tasks/${taskId}/execute`, payload);
             return {
                 success: true,
                 data: response.data,

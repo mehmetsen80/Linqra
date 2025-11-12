@@ -16,6 +16,21 @@ public interface LinqWorkflowExecutionService {
     Mono<LinqResponse> executeWorkflow(LinqRequest request);
 
     /**
+     * Initialize a workflow execution record (IN_PROGRESS) before execution starts
+     * @param request The original request
+     * @return The initialized execution record
+     */
+    Mono<LinqWorkflowExecution> initializeExecution(LinqRequest request);
+
+    /**
+     * Initialize a workflow execution record with agent context (IN_PROGRESS) before execution starts
+     * @param request The original request
+     * @param agentContext Agent execution context information
+     * @return The initialized execution record
+     */
+    Mono<LinqWorkflowExecution> initializeExecutionWithAgentContext(LinqRequest request, Map<String, Object> agentContext);
+
+    /**
      * Track a workflow execution
      * @param request The original request
      * @param response The execution response

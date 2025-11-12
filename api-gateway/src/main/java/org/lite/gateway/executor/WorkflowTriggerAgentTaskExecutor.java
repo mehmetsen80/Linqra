@@ -181,33 +181,28 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                     // Set executedBy from the actual user who initiated the agent task  
                     request.setExecutedBy(execution.getExecutedBy());
 
-                    // Execute the workflow
-                    return workflowExecutionService.executeWorkflow(request)
-                            .flatMap(response ->
-                                    // Get agent and task names by looking up both
-                                    Mono.zip(
-                                                    agentRepository.findById(agentId).map(agent -> agent.getName()),
-                                                    agentTaskRepository.findById(agentTaskId).map(task -> task.getName())
-                                            )
-                                            .map(tuple -> {
-                                                String agentName = tuple.getT1();
-                                                String taskName = tuple.getT2();
+                    Mono<String> agentNameMono = agentRepository.findById(agentId).map(agent -> agent.getName());
+                    Mono<String> taskNameMono = agentTaskRepository.findById(agentTaskId).map(task -> task.getName());
 
-                                                // Prepare agent context for tracking
+                    return Mono.zip(agentNameMono, taskNameMono)
+                            .flatMap(tuple -> {
+                                String agentName = tuple.getT1();
+                                String taskName = tuple.getT2();
 
-                                                return Map.<String, Object>of(
-                                                        "agentId", agentId,
-                                                        "agentName", agentName,
-                                                        "agentTaskId", agentTaskId,
-                                                        "agentTaskName", taskName,
-                                                        "executionSource", "agent",
-                                                        "agentExecutionId", execution.getExecutionId()
-                                                );
-                                            })
-                                            .flatMap(agentContext ->
-                                                    workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
-                                            )
-                            );
+                                Map<String, Object> agentContext = Map.of(
+                                        "agentId", agentId,
+                                        "agentName", agentName,
+                                        "agentTaskId", agentTaskId,
+                                        "agentTaskName", taskName,
+                                        "executionSource", "agent",
+                                        "agentExecutionId", execution.getExecutionId()
+                                );
+
+                                return workflowExecutionService.initializeExecutionWithAgentContext(request, agentContext)
+                                        .then(workflowExecutionService.executeWorkflow(request)
+                                                .flatMap(response -> workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext))
+                                        );
+                            });
                 })
                 .doOnSuccess(workflowExecution -> log.info("✅ Workflow {} triggered and tracked with execution ID: {} for agent: {}", workflowId, workflowExecution.getId(), agentId))
                 .doOnError(error -> log.error("❌ Failed to trigger workflow {} for agent {}: {}", workflowId, agentId, error.getMessage()));

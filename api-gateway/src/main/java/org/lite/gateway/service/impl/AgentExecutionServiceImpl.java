@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -49,8 +50,22 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
     // ==================== EXECUTION MANAGEMENT ====================
     
     @Override
-    public Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy) {
+    public Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy, Map<String, Object> inputOverrides) {
         log.info("Starting execution of task {} for agent {} in team {}", taskId, agentId, teamId);
+        
+        Map<String, Object> overrides = inputOverrides != null ? new HashMap<>(inputOverrides) : new HashMap<>();
+        overrides.entrySet().removeIf(entry -> entry.getValue() == null);
+        Object questionValue = overrides.get("question");
+        if (questionValue instanceof String) {
+            String trimmed = ((String) questionValue).trim();
+            if (trimmed.isEmpty()) {
+                overrides.remove("question");
+            } else {
+                overrides.put("question", trimmed);
+            }
+        } else if (questionValue != null) {
+            overrides.put("question", questionValue.toString());
+        }
         
         return Mono.zip(
                 agentRepository.findById(agentId),
@@ -100,6 +115,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                     .executedBy(executedBy)
                     .executionEnvironment("production")
                     .maxRetries(task.getMaxRetries())
+                    .inputData(overrides.isEmpty() ? null : overrides)
                     .build();
             
             // Add to queue first, then execute after a delay
@@ -269,10 +285,14 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
             // Extract workflow steps from the task's linq_config
             Map<String, Object> linqConfig = task.getLinqConfig();
             if (linqConfig != null && linqConfig.containsKey("query")) {
-                Map<String, Object> query = (Map<String, Object>) linqConfig.get("query");
-                if (query.containsKey("workflow")) {
-                    List<?> workflow = (List<?>) query.get("workflow");
-                    return workflow.size();
+                Object queryObj = linqConfig.get("query");
+                if (queryObj instanceof Map) {
+                    Map<?, ?> queryMap = (Map<?, ?>) queryObj;
+                    Object workflowObj = queryMap.get("workflow");
+                    if (workflowObj instanceof List) {
+                        List<?> workflow = (List<?>) workflowObj;
+                        return workflow.size();
+                    }
                 }
             }
         } catch (Exception e) {

@@ -78,43 +78,44 @@ public class WorkflowAdHocAgentTaskExecutor extends AgentTaskExecutor {
 
         return agentExecutionRepository.save(execution)
                 .flatMap(saved -> buildLinqRequest(agentTask, teamId, executedBy)
-                        .flatMap(request -> workflowExecutionService.executeWorkflow(request)
-                                .timeout(timeout)
-                                .retryWhen(Retry.backoff(retries, Duration.ofSeconds(2))
-                                        .filter(this::isRetryable)
-                                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
-                                .flatMap(response -> {
-                                    // Track execution with minimal agent context (ad-hoc has no agent)
-                                    Map<String, Object> agentContext = Map.of(
-                                            "agentId", "adhoc",
-                                            "agentName", "AdHoc",
-                                            "agentTaskId", taskId,
-                                            "agentTaskName", agentTask.getName(),
-                                            "executionSource", "agent_embedded_adhoc",
-                                            "agentExecutionId", saved.getExecutionId()
+                        .flatMap(request -> {
+                            Map<String, Object> agentContext = Map.of(
+                                    "agentId", "adhoc",
+                                    "agentName", "AdHoc",
+                                    "agentTaskId", taskId,
+                                    "agentTaskName", agentTask.getName(),
+                                    "executionSource", "agent_embedded_adhoc",
+                                    "agentExecutionId", saved.getExecutionId()
+                            );
+
+                            return workflowExecutionService.initializeExecutionWithAgentContext(request, agentContext)
+                                    .then(workflowExecutionService.executeWorkflow(request)
+                                            .timeout(timeout)
+                                            .retryWhen(Retry.backoff(retries, Duration.ofSeconds(2))
+                                                    .filter(this::isRetryable)
+                                                    .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
+                                            .flatMap(response -> workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
+                                                    .map(LinqWorkflowExecution::getId)
+                                                    .doOnNext(saved::setWorkflowExecutionId)
+                                                    .thenReturn(response))
+                                            .flatMap(response -> {
+                                                saved.markAsCompleted();
+                                                return agentExecutionRepository.save(saved).thenReturn((Object) response);
+                                            })
+                                            .onErrorResume(TimeoutException.class, tex -> {
+                                                log.error("Ad-hoc execution timed out for task {}: {}", agentTask.getName(), tex.getMessage());
+                                                saved.markAsTimeout();
+                                                saved.setErrorMessage("Timeout after " + timeout.toMinutes() + " minutes");
+                                                return agentExecutionRepository.save(saved).then(Mono.error(tex));
+                                            })
+                                            .onErrorResume(err -> {
+                                                log.error("Ad-hoc execution failed for task {}: {}", agentTask.getName(), err.getMessage());
+                                                saved.markAsFailed(err.getMessage() != null ? err.getMessage() : "Execution failed", "WORKFLOW_EXECUTION_FAILED");
+                                                return agentExecutionRepository.save(saved)
+                                                        .then(Mono.error(new RuntimeException("Workflow execution failed: " + saved.getErrorMessage())));
+                                            })
                                     );
-                                    return workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
-                                            .map(LinqWorkflowExecution::getId)
-                                            .doOnNext(saved::setWorkflowExecutionId)
-                                            .then(Mono.just(response));
-                                })
-                                .flatMap(response -> {
-                                    saved.markAsCompleted();
-                                    return agentExecutionRepository.save(saved).thenReturn((Object) response);
-                                })
-                                .onErrorResume(TimeoutException.class, tex -> {
-                                    log.error("Ad-hoc execution timed out for task {}: {}", agentTask.getName(), tex.getMessage());
-                                    saved.markAsTimeout();
-                                    saved.setErrorMessage("Timeout after " + timeout.toMinutes() + " minutes");
-                                    return agentExecutionRepository.save(saved).then(Mono.error(tex));
-                                })
-                                .onErrorResume(err -> {
-                                    log.error("Ad-hoc execution failed for task {}: {}", agentTask.getName(), err.getMessage());
-                                    saved.markAsFailed(err.getMessage() != null ? err.getMessage() : "Execution failed", "WORKFLOW_EXECUTION_FAILED");
-                                    return agentExecutionRepository.save(saved)
-                                            .then(Mono.error(new RuntimeException("Workflow execution failed: " + saved.getErrorMessage())));
-                                })
-                        )
+                        })
                 );
     }
 

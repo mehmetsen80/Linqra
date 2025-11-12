@@ -343,9 +343,10 @@ public class LinqWorkflowController {
                             request.getQuery().getParams().putIfAbsent("teamId", teamId);
                             log.info("Setting teamId to: {}", teamId);
                             
-                            return workflowExecutionService.executeWorkflow(request)
-                                .flatMap(response -> workflowExecutionService.trackExecution(request, response)
-                                    .thenReturn(response));
+                            return workflowExecutionService.initializeExecution(request)
+                                .then(workflowExecutionService.executeWorkflow(request)
+                                    .flatMap(response -> workflowExecutionService.trackExecution(request, response)
+                                        .thenReturn(response)));
                         });
                 })
             .doOnSuccess(response -> {

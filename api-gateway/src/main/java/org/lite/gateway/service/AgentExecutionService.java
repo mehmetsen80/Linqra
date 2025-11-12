@@ -4,6 +4,7 @@ import org.lite.gateway.entity.AgentExecution;
 import org.lite.gateway.entity.AgentTask;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import java.util.Map;
 
 public interface AgentExecutionService {
     
@@ -12,7 +13,7 @@ public interface AgentExecutionService {
     /**
      * Start execution of an agent task
      */
-    Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy);
+    Mono<AgentExecution> startTaskExecution(String agentId, String taskId, String teamId, String executedBy, Map<String, Object> inputOverrides);
     
     /**
      * Cancel a running execution

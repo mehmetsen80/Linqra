@@ -23,6 +23,7 @@ import jakarta.validation.Valid;
 
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/api/agent-tasks")
@@ -258,9 +259,28 @@ public class AgentTaskController {
     @PostMapping("/{taskId}/execute")
     public Mono<ResponseEntity<Object>> executeTask(
             @PathVariable String taskId,
+            @RequestBody(required = false) Map<String, Object> payload,
             ServerWebExchange exchange) {
         
         log.info("Executing task {} by user from context", taskId);
+        
+        Map<String, Object> overrides = null;
+        if (payload != null && !payload.isEmpty()) {
+            Map<String, Object> sanitized = new HashMap<>();
+            Object questionValue = payload.get("question");
+            if (questionValue instanceof String) {
+                String trimmed = ((String) questionValue).trim();
+                if (!trimmed.isEmpty()) {
+                    sanitized.put("question", trimmed);
+                }
+            } else if (questionValue != null) {
+                sanitized.put("question", questionValue.toString());
+            }
+            if (!sanitized.isEmpty()) {
+                overrides = sanitized;
+            }
+        }
+        final Map<String, Object> overridesFinal = overrides;
         
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> 
@@ -268,7 +288,8 @@ public class AgentTaskController {
                             authContext.getAgentId(), 
                             authContext.getTaskId(), 
                             authContext.getTeamId(), 
-                            authContext.getUsername())
+                            authContext.getUsername(),
+                            overridesFinal)
                     .map(execution -> {
                         Map<String, Object> response = Map.of(
                                 "executionId", execution.getExecutionId(),

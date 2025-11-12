@@ -67,7 +67,7 @@ public class AgentTaskQuartzJob extends QuartzJobBean {
             agentTaskRepository.save(task).block();
 
             // Start execution (blocking within Quartz job thread)
-            agentExecutionService.startTaskExecution(agentId, taskId, teamId, executedBy != null ? executedBy : "scheduler")
+            agentExecutionService.startTaskExecution(agentId, taskId, teamId, executedBy != null ? executedBy : "scheduler", null)
                     .onErrorResume(err -> {
                         log.error("[Quartz] Failed to start execution for task {}: {}", taskId, err.getMessage());
                         return Mono.empty();

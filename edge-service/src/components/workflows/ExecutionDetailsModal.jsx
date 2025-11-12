@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Modal, Badge, OverlayTrigger, Tooltip, Row, Col, Tabs, Tab } from 'react-bootstrap';
 import { JsonView, allExpanded, defaultStyles } from 'react-json-view-lite';
 import { format } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
 
 const ExecutionDetailsModal = ({ 
     show, 
@@ -94,9 +95,15 @@ const ExecutionDetailsModal = ({
                     </Row>
                     <div className="mb-3">
                         <h6>Final Result</h6>
-                        <p className="final-result">
-                            {execution.response?.result?.finalResult}
-                        </p>
+                        {execution.response?.result?.finalResult ? (
+                            <div className="final-result final-result-markdown">
+                                <ReactMarkdown>
+                                    {execution.response.result.finalResult}
+                                </ReactMarkdown>
+                            </div>
+                        ) : (
+                            <p className="final-result text-muted">No final result available.</p>
+                        )}
                     </div>
 
                     {/* Step Pipeline */}

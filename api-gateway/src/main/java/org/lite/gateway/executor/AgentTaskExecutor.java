@@ -93,14 +93,27 @@ public abstract class AgentTaskExecutor {
      * Prepare workflow parameters from task and agent context
      */
     protected Map<String, Object> prepareWorkflowParameters(AgentExecution execution, AgentTask task, Agent agent) {
+        Map<String, Object> mergedParams = new java.util.HashMap<>();
         Map<String, Object> linqConfig = task.getLinqConfig();
         if (linqConfig != null && linqConfig.containsKey("query")) {
-            Map<String, Object> query = (Map<String, Object>) linqConfig.get("query");
-            if (query.containsKey("params")) {
-                return (Map<String, Object>) query.get("params");
+            Object queryObj = linqConfig.get("query");
+            if (queryObj instanceof Map) {
+                Map<?, ?> queryMap = (Map<?, ?>) queryObj;
+                Object paramsObj = queryMap.get("params");
+                if (paramsObj instanceof Map) {
+                    Map<?, ?> paramsMap = (Map<?, ?>) paramsObj;
+                    paramsMap.forEach((key, value) -> {
+                        if (key != null) {
+                            mergedParams.put(String.valueOf(key), value);
+                        }
+                    });
+                }
             }
         }
-        return Map.of();
+        if (execution.getInputData() != null && !execution.getInputData().isEmpty()) {
+            mergedParams.putAll(execution.getInputData());
+        }
+        return mergedParams;
     }
     
     /**
@@ -109,8 +122,12 @@ public abstract class AgentTaskExecutor {
     protected String extractWorkflowId(AgentTask task) {
         Map<String, Object> linqConfig = task.getLinqConfig();
         if (linqConfig != null && linqConfig.containsKey("query")) {
-            Map<String, Object> query = (Map<String, Object>) linqConfig.get("query");
-            return (String) query.get("workflowId");
+            Object queryObj = linqConfig.get("query");
+            if (queryObj instanceof Map) {
+                Map<?, ?> queryMap = (Map<?, ?>) queryObj;
+                Object workflowId = queryMap.get("workflowId");
+                return workflowId != null ? workflowId.toString() : null;
+            }
         }
         return null;
     }

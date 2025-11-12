@@ -16,7 +16,7 @@ import { format } from 'date-fns';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import ExecutionDetailsModal from '../../../components/workflows/ExecutionDetailsModal';
 import StepDescriptions from '../../../components/workflows/StepDescriptions';
-import { HiPlay, HiArrowLeft } from 'react-icons/hi';
+import { HiPlay, HiArrowLeft, HiChatAlt } from 'react-icons/hi';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import { 
     Table, 
@@ -32,6 +32,7 @@ import {
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import './styles.css';
+import ExecuteAgentWithQuestionModal from '../../../components/agents/ExecuteAgentWithQuestionModal';
 
 function ViewAgentTask() {
     const { taskId } = useParams();
@@ -72,6 +73,8 @@ function ViewAgentTask() {
         status: '',
         result: ''
     });
+    const [showQuestionModal, setShowQuestionModal] = useState(false);
+    const [questionInput, setQuestionInput] = useState('');
     const [linkedWorkflow, setLinkedWorkflow] = useState(null);
     const [loadingWorkflow, setLoadingWorkflow] = useState(false);
     const [generatingCronDescription, setGeneratingCronDescription] = useState(false);
@@ -642,6 +645,53 @@ function ViewAgentTask() {
         }
     };
 
+    const openQuestionModal = () => {
+        const defaultQuestion = task?.linq_config?.query?.params?.question;
+        setQuestionInput(typeof defaultQuestion === 'string' ? defaultQuestion : '');
+        setShowQuestionModal(true);
+    };
+
+    const closeQuestionModal = () => {
+        setShowQuestionModal(false);
+        setQuestionInput('');
+    };
+
+    const handleQuestionChange = (event) => {
+        setQuestionInput(event.target.value ?? '');
+    };
+
+    const handleExecuteWithQuestion = async () => {
+        if (!task) return;
+
+        const trimmedQuestion = questionInput.trim();
+        if (!trimmedQuestion) {
+            showErrorToast('Please provide a question before executing.');
+            return;
+        }
+
+        try {
+            setExecuting(true);
+            setShowQuestionModal(false);
+            showSuccessToast('Task execution started with your question! Redirecting to monitoring...');
+            navigate('/execution-monitoring');
+
+            const response = await agentTaskService.executeTask(taskId, { question: trimmedQuestion });
+            console.log('Execute task with question response:', response);
+
+            if (!response.success) {
+                showErrorToast(response.error || 'Failed to execute task with question');
+            }
+        } catch (err) {
+            console.error('Error executing task with question:', err);
+            const errorMessage = err.response?.data?.message || err.message || 'Failed to execute task with question';
+            showErrorToast(errorMessage);
+        } finally {
+            setExecuting(false);
+            setShowQuestionModal(false);
+            setQuestionInput('');
+        }
+    };
+
     const handleEnableDisable = async () => {
         try {
             const response = task.enabled 
@@ -874,6 +924,24 @@ function ViewAgentTask() {
                                 disabled={!task?.enabled || executing}
                             >
                                 <HiPlay className="me-1" /> Execute
+                            </Button>
+                        </div>
+                    </OverlayTrigger>
+                    <OverlayTrigger
+                        placement="top"
+                        overlay={
+                            <Tooltip id="execute-question-tooltip">
+                                {task?.enabled ? 'Execute this task with a custom question' : 'Task must be enabled to execute'}
+                            </Tooltip>
+                        }
+                    >
+                        <div>
+                            <Button
+                                variant="outline-primary"
+                                onClick={openQuestionModal}
+                                disabled={!task?.enabled || executing}
+                            >
+                                <HiChatAlt className="me-1" /> Execute with Question
                             </Button>
                         </div>
                     </OverlayTrigger>
@@ -2971,6 +3039,16 @@ function ViewAgentTask() {
                 }}
                 execution={selectedExecution}
                 formatDate={formatDate}
+            />
+
+            {/* Execute with Question Modal */}
+            <ExecuteAgentWithQuestionModal
+                show={showQuestionModal}
+                onHide={closeQuestionModal}
+                question={questionInput}
+                onQuestionChange={handleQuestionChange}
+                onExecute={handleExecuteWithQuestion}
+                executing={executing}
             />
         </div>
     );

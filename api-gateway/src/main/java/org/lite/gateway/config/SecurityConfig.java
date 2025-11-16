@@ -117,8 +117,8 @@ public class SecurityConfig implements BeanFactoryAware {
 
     // List of public endpoints (Ant-style patterns allowed)
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
-            "/r/komunas-app/whatsapp/webhook"
-        // Add more public endpoints here as needed
+            "/r/komunas-app/whatsapp/webhook",
+            "/widget/**" // Public AI Assistant widget scripts (public API key based)
     );
 
     @Bean

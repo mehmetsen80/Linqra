@@ -11,6 +11,7 @@ import org.lite.gateway.repository.ApiRouteRepository;
 import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.repository.TeamRouteRepository;
 import org.lite.gateway.service.LinqService;
+import org.lite.gateway.service.ChatExecutionService;
 import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.LinqWorkflowService;
@@ -54,6 +55,9 @@ public class LinqServiceImpl implements LinqService {
     @NonNull
     private final LinqWorkflowExecutionService workflowExecutionService;
 
+    @NonNull
+    private final ChatExecutionService chatExecutionService;
+
     @Value("${server.host:localhost}")
     private String gatewayHost;
 
@@ -71,6 +75,12 @@ public class LinqServiceImpl implements LinqService {
                     log.info("After validateRoutePermission");
                     if (request.getQuery() == null || request.getQuery().getIntent().isEmpty()) {
                         return Mono.error(new IllegalArgumentException("Invalid LINQ request"));
+                    }
+
+                    // Handle chat requests (AI Assistant conversations)
+                    if ("assistant".equals(request.getLink().getTarget()) && "chat".equals(request.getLink().getAction())) {
+                        log.info("Processing chat request for assistant");
+                        return chatExecutionService.executeChat(request);
                     }
 
                     // Handle workflow requests
@@ -155,7 +165,7 @@ public class LinqServiceImpl implements LinqService {
         String routeIdentifier = request.getLink().getTarget();
 
         // List of AI service targets that should bypass permission checks
-        Set<String> bypassTargets = Set.of("openai-chat", "mistral-chat", "huggingface-chat", "gemini-chat", "workflow", "openai-embed",  "gemini-embed", "api-gateway");
+        Set<String> bypassTargets = Set.of("openai-chat", "mistral-chat", "huggingface-chat", "gemini-chat", "workflow", "openai-embed",  "gemini-embed", "api-gateway", "assistant");
 
         // If the target is in our bypass list, return immediately
         if (bypassTargets.contains(routeIdentifier)) {

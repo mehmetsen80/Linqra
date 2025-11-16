@@ -13,7 +13,8 @@ import {
   HiOutlineLightningBolt,
   HiOutlineLightBulb,
   HiOutlineCollection,
-  HiOutlineDesktopComputer
+  HiOutlineDesktopComputer,
+  HiOutlineChatAlt
 } from 'react-icons/hi';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
@@ -184,6 +185,10 @@ const UserTeamMenu = () => {
           <Dropdown.Item as={Link} to="/agents">
             <HiOutlineDesktopComputer size={16} style={{ marginRight: '8px' }} />
             Agents
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/ai-assistants">
+            <HiOutlineChatAlt size={16} style={{ marginRight: '8px' }} />
+            AI Assistants
           </Dropdown.Item>
           <Dropdown.Item as={Link} to="/llm-models">
             <HiOutlineSparkles size={16} style={{ marginRight: '8px' }} />

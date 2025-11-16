@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.time.Duration;
+import java.time.LocalDateTime;
 
 @Data
 public class LinqRequest {
@@ -35,7 +36,7 @@ public class LinqRequest {
 
     @Data
     public static class Query {
-        private String intent; // e.g., "random", "generate", "get_historical_saying"
+        private String intent; // e.g., "random", "generate", "get_historical_saying", "uscis_marriage_based_qna"
         private String workflowId;  // Add this field to link to predefined workflows
         @JsonInclude(JsonInclude.Include.ALWAYS)
         private Map<String, Object> params = new HashMap<>();
@@ -43,7 +44,10 @@ public class LinqRequest {
         private LlmConfig llmConfig; // For AI LLM Configuration
         
         @ValidStep
-        private List<WorkflowStep> workflow; // For chained steps
+        private List<WorkflowStep> workflow; // For chained steps (workflow execution)
+        
+        // Chat conversation support
+        private ChatConversation chat; // For AI Assistant chat conversations
 
         @Data
         public static class LlmConfig {
@@ -108,6 +112,23 @@ public class LinqRequest {
                     llmConfig.setSettings(settings);
                 }
                 this.llmConfig = llmConfig;
+            }
+        }
+        
+        @Data
+        public static class ChatConversation {
+            private String conversationId; // Existing conversation ID (for multi-turn)
+            private String assistantId; // AI Assistant ID
+            private String message; // User's message/query
+            private List<ChatMessage> history; // Conversation history (for context)
+            private Map<String, Object> context; // Additional context data
+            
+            @Data
+            public static class ChatMessage {
+                private String role; // "user" or "assistant"
+                private String content; // Message content
+                private LocalDateTime timestamp; // Message timestamp
+                private Map<String, Object> metadata; // Optional metadata (task executions, etc.)
             }
         }
     }

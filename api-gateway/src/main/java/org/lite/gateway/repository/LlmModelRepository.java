@@ -23,5 +23,12 @@ public interface LlmModelRepository extends ReactiveMongoRepository<LlmModel, St
     // Original unsorted methods (kept for backward compatibility)
     Flux<LlmModel> findByActive(boolean active);
     Flux<LlmModel> findByProviderAndActive(String provider, boolean active);
+    
+    // Chat models filtering
+    @Query(value = "{ 'category': 'chat', 'active': ?0 }", sort = "{ 'provider': 1, 'modelName': 1 }")
+    Flux<LlmModel> findByCategoryChatAndActiveSorted(boolean active);
+    
+    @Query(value = "{ 'category': 'chat' }", sort = "{ 'provider': 1, 'modelName': 1 }")
+    Flux<LlmModel> findByCategoryChatSorted();
 }
 

@@ -982,7 +982,7 @@ function ViewTeam() {
               <div className="d-flex align-items-center justify-content-between mb-3">
                 <div className="d-flex align-items-center">
                   <HiDatabase className="text-primary me-2" size={24} />
-                  <h5 className="mb-0">Milvus Collections</h5>
+                  <h5 className="mb-0">RAG Collections</h5>
                 </div>
                 <Button variant="link" onClick={() => navigate('/rag')}>
                   Manage in RAG Console

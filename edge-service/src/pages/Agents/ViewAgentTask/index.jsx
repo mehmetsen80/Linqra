@@ -937,7 +937,7 @@ function ViewAgentTask() {
                     >
                         <div>
                             <Button
-                                variant="outline-primary"
+                                variant="primary"
                                 onClick={openQuestionModal}
                                 disabled={!task?.enabled || executing}
                             >
@@ -955,7 +955,7 @@ function ViewAgentTask() {
                     >
                         <div>
                             <Button 
-                                variant={task?.enabled ? 'warning' : 'success'}
+                                variant={task?.enabled ? 'secondary' : 'success'}
                                 onClick={handleEnableDisable}
                                 disabled={!canEditTask}
                             >
@@ -973,7 +973,7 @@ function ViewAgentTask() {
                     >
                         <div>
                             <Button 
-                                variant="outline-primary" 
+                                variant="secondary" 
                                 onClick={() => setShowMetadataModal(true)}
                                 disabled={!canEditTask}
                             >

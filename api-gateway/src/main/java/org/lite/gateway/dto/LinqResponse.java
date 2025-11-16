@@ -10,6 +10,7 @@ import java.util.Map;
 public class LinqResponse {
     private Object result;  // Can be WorkflowResult, List, Map, or any other type
     private Metadata metadata;
+    private ChatResult chatResult; // For AI Assistant chat responses
 
     @Data
     public static class Metadata {
@@ -26,6 +27,28 @@ public class LinqResponse {
         private List<WorkflowStep> steps;
         private String finalResult;
         private List<String> pendingAsyncSteps;  // IDs of steps that will be executed asynchronously
+    }
+    
+    @Data
+    public static class ChatResult {
+        private String conversationId; // Conversation ID
+        private String assistantId; // AI Assistant ID
+        private String message; // Assistant's response message
+        private String intent; // Detected intent from user query
+        private String modelCategory; // Model category used (e.g., "openai-chat")
+        private String modelName; // Model name used (e.g., "gpt-4o")
+        private List<String> executedTasks; // List of Agent Task IDs that were executed
+        private Map<String, Object> taskResults; // Results from executed tasks (taskId -> result)
+        private TokenUsage tokenUsage; // Token usage for the chat response
+        private Map<String, Object> metadata; // Additional metadata (context, entities, etc.)
+        
+        @Data
+        public static class TokenUsage {
+            private long promptTokens;
+            private long completionTokens;
+            private long totalTokens;
+            private Double costUsd; // Cost calculated at execution time
+        }
     }
 
     @Data

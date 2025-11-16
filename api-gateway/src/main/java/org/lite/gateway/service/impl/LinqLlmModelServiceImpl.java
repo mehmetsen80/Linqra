@@ -139,7 +139,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 .flatMap(this::enrichWithModelMetadata)
                 .doOnNext(llmModel -> log.info("Found LLM model configuration for team {}: modelCategory={}, modelName={}", 
                     teamId, llmModel.getModelCategory(), llmModel.getModelName()))
-                .doOnComplete(() -> log.info("Completed fetching {} LLM model configurations for team: {}", teamId))
+                .doOnComplete(() -> log.info("Completed fetching LLM model configurations for team: {}", teamId))
                 .doOnError(error -> log.error("Error finding LLM model configurations for team {}: {}", teamId, error.getMessage()));
     }
 
@@ -252,7 +252,9 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
         LinqRequest.Query.LlmConfig llmConfig = request.getQuery().getLlmConfig();
         if (llmConfig != null && llmConfig.getModel() != null) {
             endpoint = endpoint.replace("{model}", llmConfig.getModel());
-            log.debug("Replaced {model} placeholder with: {}", llmConfig.getModel());
+            log.debug("Resolved LLM endpoint for model '{}' to URL: {}", llmConfig.getModel(), endpoint);
+        } else {
+            log.debug("Using static LLM endpoint (no {model} placeholder to replace): {}", endpoint);
         }
         return endpoint;
     }
@@ -268,7 +270,13 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 payload.put("model", llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "default");
                 payload.put("messages", request.getQuery().getPayload());
                 if (llmConfig != null && llmConfig.getSettings() != null) {
-                    payload.putAll(llmConfig.getSettings());
+                    // Convert max.tokens to max_tokens for OpenAI API
+                    Map<String, Object> settings = new HashMap<>(llmConfig.getSettings());
+                    if (settings.containsKey("max.tokens")) {
+                        Object value = settings.remove("max.tokens");
+                        settings.put("max_tokens", value);
+                    }
+                    payload.putAll(settings);
                 }
                 break;
             case "huggingface-chat":

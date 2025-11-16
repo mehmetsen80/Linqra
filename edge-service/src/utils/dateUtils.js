@@ -1,3 +1,5 @@
+import { format, isValid, parseISO } from 'date-fns';
+
 export const formatDateTime = (timestamp) => {
     if (!timestamp) return '-';
     
@@ -25,6 +27,22 @@ export const formatDateTime = (timestamp) => {
     } catch (error) {
         console.error('Date formatting error:', error);
         return 'Invalid Date';
+    }
+};
+
+export const formatDate = (dateValue, formatStr = 'MMM dd, yyyy') => {
+    if (!dateValue) return 'N/A';
+    try {
+        if (Array.isArray(dateValue) && dateValue.length >= 6) {
+            const [year, month, day, hour, minute, second] = dateValue;
+            const date = new Date(year, month - 1, day, hour, minute, second);
+            return isValid(date) ? format(date, formatStr) : 'N/A';
+        }
+        const date = typeof dateValue === 'string' ? parseISO(dateValue) : new Date(dateValue);
+        return isValid(date) ? format(date, formatStr) : 'N/A';
+    } catch (error) {
+        console.error('Error formatting date:', dateValue, error);
+        return 'N/A';
     }
 };
 

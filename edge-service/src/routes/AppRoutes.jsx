@@ -36,6 +36,8 @@ import WorkflowQuotes from '../pages/LinqProtocol/Workflow/Quotes';
 import Agents from '../pages/Agents';
 import ViewAgent from '../pages/Agents/ViewAgent';
 import ViewAgentTask from '../pages/Agents/ViewAgentTask';
+import AIAssistants from '../pages/AIAssistants';
+import ViewAssistant from '../pages/AIAssistants/ViewAssistant';
 import LlmUsage from '../pages/LlmUsage';
 import LlmModels from '../pages/LlmModels';
 import ExecutionMonitoring from '../pages/ExecutionMonitoring';
@@ -89,6 +91,8 @@ const AppRoutes = () => {
         <Route path="/agents" element={<Agents />} />
         <Route path="/agents/:agentId" element={<ViewAgent />} />
         <Route path="/agents/:agentId/tasks/:taskId" element={<ViewAgentTask />} />
+        <Route path="/ai-assistants" element={<AIAssistants />} />
+        <Route path="/ai-assistants/:assistantId" element={<ViewAssistant />} />
         <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
         <Route path="/llm-usage" element={<LlmUsage />} />
         <Route path="/execution-monitoring" element={<ExecutionMonitoring />} />

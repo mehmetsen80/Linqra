@@ -53,6 +53,18 @@ public class LlmModelController {
     }
     
     /**
+     * Get all chat models (category = 'chat')
+     */
+    @GetMapping("/chat")
+    public Flux<LlmModel> getChatModels(@RequestParam(required = false) Boolean active) {
+        log.info("Fetching chat models, active filter: {}", active);
+        if (active != null && active) {
+            return llmModelService.getActiveChatModels();
+        }
+        return llmModelService.getChatModels();
+    }
+    
+    /**
      * Create a new LLM model
      */
     @PostMapping

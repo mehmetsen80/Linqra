@@ -32,6 +32,16 @@ const llmModelService = {
     }
   },
 
+  async getAllChatModels(activeOnly = false) {
+    try {
+      const params = activeOnly ? '?active=true' : '';
+      const response = await axiosInstance.get(`/api/llm-models/chat${params}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   async getModelById(id) {
     try {
       const response = await axiosInstance.get(`/api/llm-models/${id}`);

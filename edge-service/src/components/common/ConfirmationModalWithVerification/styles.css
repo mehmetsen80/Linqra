@@ -40,3 +40,29 @@
   font-weight: 600;
 }
 
+/* Custom primary button styling to use our primary color instead of Bootstrap's default */
+.confirmation-modal-with-verification .custom-primary-button {
+  background-color: var(--primary-color, #ed7534) !important;
+  border-color: var(--primary-color, #ed7534) !important;
+  color: #ffffff !important;
+}
+
+.confirmation-modal-with-verification .custom-primary-button:hover:not(:disabled) {
+  background-color: var(--primary-color-dark, #d65f1f) !important;
+  border-color: var(--primary-color-dark, #d65f1f) !important;
+  color: #ffffff !important;
+}
+
+.confirmation-modal-with-verification .custom-primary-button:focus {
+  background-color: var(--primary-color, #ed7534) !important;
+  border-color: var(--primary-color, #ed7534) !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 0.2rem rgba(237, 117, 52, 0.25) !important;
+}
+
+.confirmation-modal-with-verification .custom-primary-button:disabled {
+  background-color: var(--primary-color, #ed7534) !important;
+  border-color: var(--primary-color, #ed7534) !important;
+  opacity: 0.65;
+}
+

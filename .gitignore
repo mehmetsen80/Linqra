@@ -49,3 +49,5 @@ build/
 /.kube/milvus/data/**
 /.kube/etcd/data/**
 /.kube/minio/data/**
+/.kube/neo4j/data/**
+/.kube/neo4j/logs/**

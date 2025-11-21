@@ -47,6 +47,9 @@ public class WebSocketConfig {
     private final Sinks.Many<String> chatMessagesSink = Sinks.many()
         .multicast()
         .onBackpressureBuffer(1024, false);
+    private final Sinks.Many<String> graphExtractionMessagesSink = Sinks.many()
+        .multicast()
+        .onBackpressureBuffer(1024, false);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     
@@ -188,6 +191,47 @@ public class WebSocketConfig {
         };
     }
 
+    @Bean("graphExtractionMessageChannel")
+    public MessageChannel graphExtractionMessageChannel(ObjectMapper objectMapper) {
+        return new AbstractMessageChannel() {
+            @Override
+            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
+                try {
+                    // Check if there are any active sessions
+                    if (sessions.isEmpty()) {
+                        log.debug("📊 No active WebSocket sessions, skipping graph extraction message emission");
+                        return true;
+                    }
+
+                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
+                    log.debug("📊 WebSocket sending graph extraction message: {}", jsonPayload);
+                    Sinks.EmitResult result;
+                    int attempts = 0;
+                    do {
+                        result = graphExtractionMessagesSink.tryEmitNext(jsonPayload);
+                        if (result.isFailure()) {
+                            attempts++;
+                            log.warn("Attempt {} failed to emit graph extraction message. Reason: {}. Retrying...", 
+                                attempts, result.name());
+                            Thread.sleep(100); // Small delay before retry
+                        }
+                    } while (result.isFailure() && attempts < 3);
+                    
+                    if (result.isFailure()) {
+                        log.error("Failed to emit graph extraction message after {} attempts. Reason: {}. Payload: {}", 
+                            attempts, result.name(), jsonPayload);
+                        return false;
+                    }
+                    log.debug("Successfully emitted graph extraction message after {} attempts", attempts + 1);
+                    return true;
+                } catch (Exception e) {
+                    log.error("Error converting graph extraction message to JSON", e);
+                    return false;
+                }
+            }
+        };
+    }
+
     @Bean
     public HandlerMapping webSocketHandlerMapping() {
         Map<String, WebSocketHandler> map = new HashMap<>();
@@ -216,11 +260,12 @@ public class WebSocketConfig {
             sessions.put(sessionId, session);
             log.info("WebSocket session connected: {}", sessionId);
 
-            // Handle outbound messages - merge health, execution, and chat updates
+            // Handle outbound messages - merge health, execution, chat, and graph extraction updates
             Flux<WebSocketMessage> outbound = Flux.merge(
                     messagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/health")),
                     executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution")),
-                    chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat"))
+                    chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat")),
+                    graphExtractionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/graph-extraction"))
                 )
                 .onBackpressureBuffer(256)
                 .retryWhen(Retry.backoff(3, Duration.ofMillis(100))

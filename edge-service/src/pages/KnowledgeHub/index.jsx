@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Container, Card, Table, Spinner, Breadcrumb, OverlayTrigger, Tooltip, Badge } from 'react-bootstrap';
-import { HiFolder, HiPlus, HiEye, HiPencil, HiTrash, HiBookOpen, HiLink, HiXCircle, HiCollection } from 'react-icons/hi';
+import { HiFolder, HiPlus, HiEye, HiPencil, HiTrash, HiBookOpen, HiLink, HiXCircle, HiCollection, HiCube, HiHashtag } from 'react-icons/hi';
 import { useTeam } from '../../contexts/TeamContext';
 import { knowledgeHubCollectionService } from '../../services/knowledgeHubCollectionService';
 import { milvusService } from '../../services/milvusService';
 import { llmModelService } from '../../services/llmModelService';
+import { knowledgeHubGraphService } from '../../services/knowledgeHubGraphService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
+import PropertiesViewerModal from '../../components/common/PropertiesViewerModal';
+import RelatedEntitiesModal from '../../components/common/RelatedEntitiesModal';
 import Button from '../../components/common/Button';
 import CreateCollectionModal from '../../components/knowledgeHub/CreateCollectionModal';
 import EditCollectionModal from '../../components/knowledgeHub/EditCollectionModal';
@@ -36,6 +39,27 @@ function KnowledgeHub() {
   const [loadingMilvusCollections, setLoadingMilvusCollections] = useState(false);
   const [embeddingOptions, setEmbeddingOptions] = useState([]);
   const [loadingEmbeddingOptions, setLoadingEmbeddingOptions] = useState(false);
+  const [graphStatistics, setGraphStatistics] = useState(null);
+  const [loadingGraphStats, setLoadingGraphStats] = useState(false);
+  const [graphEntities, setGraphEntities] = useState([]);
+  const [loadingGraphEntities, setLoadingGraphEntities] = useState(false);
+  const [selectedEntityType, setSelectedEntityType] = useState('All');
+  const [graphRelationships, setGraphRelationships] = useState([]);
+  const [loadingGraphRelationships, setLoadingGraphRelationships] = useState(false);
+  const [selectedRelationshipType, setSelectedRelationshipType] = useState('All');
+  const [propertiesModal, setPropertiesModal] = useState({
+    show: false,
+    title: 'Properties',
+    entityType: null,
+    entityName: null,
+    properties: {}
+  });
+  const [relatedEntitiesModal, setRelatedEntitiesModal] = useState({
+    show: false,
+    entityType: null,
+    entityId: null,
+    entityName: null
+  });
   const [confirmModal, setConfirmModal] = useState({
     show: false,
     title: '',
@@ -49,8 +73,16 @@ function KnowledgeHub() {
       fetchCollections();
       loadMilvusCollections();
       loadEmbeddingOptions();
+      fetchGraphStatistics();
     }
   }, [currentTeam?.id]);
+
+  useEffect(() => {
+    if (currentTeam?.id) {
+      fetchGraphEntities(selectedEntityType);
+      fetchGraphRelationships(selectedRelationshipType);
+    }
+  }, [currentTeam?.id, selectedEntityType, selectedRelationshipType]);
 
   const fetchCollections = async () => {
     if (!currentTeam?.id) return;
@@ -260,6 +292,100 @@ function KnowledgeHub() {
     return PROVIDER_LABELS[providerKey] || providerKey;
   };
 
+  const fetchGraphStatistics = async () => {
+    if (!currentTeam?.id) return;
+
+    try {
+      setLoadingGraphStats(true);
+      const { data, error } = await knowledgeHubGraphService.getGraphStatistics();
+      if (error) throw new Error(error);
+      setGraphStatistics(data);
+    } catch (err) {
+      console.error('Error fetching graph statistics:', err);
+    } finally {
+      setLoadingGraphStats(false);
+    }
+  };
+
+  const fetchGraphEntities = async (entityType) => {
+    if (!currentTeam?.id) return;
+
+    try {
+      setLoadingGraphEntities(true);
+      
+      if (entityType === 'All') {
+        // Fetch all entity types and combine them
+        const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
+        const entityPromises = entityTypes.map(type => 
+          knowledgeHubGraphService.findEntities(type)
+        );
+        
+        const entityResults = await Promise.all(entityPromises);
+        const allEntities = entityResults.reduce((acc, result, index) => {
+          if (result.success && Array.isArray(result.data)) {
+            // Add type to each entity if not present
+            const entityType = entityTypes[index];
+            const typedEntities = result.data.map(entity => ({
+              ...entity,
+              type: entity.type || entityType
+            }));
+            return [...acc, ...typedEntities];
+          }
+          return acc;
+        }, []);
+        
+        setGraphEntities(allEntities);
+      } else {
+        // Fetch entities for specific type
+        const { data, error } = await knowledgeHubGraphService.findEntities(entityType);
+        if (error) throw new Error(error);
+        const entities = Array.isArray(data) ? data : [];
+        // Ensure type is set
+        const typedEntities = entities.map(entity => ({
+          ...entity,
+          type: entity.type || entityType
+        }));
+        setGraphEntities(typedEntities);
+      }
+    } catch (err) {
+      console.error('Error fetching graph entities:', err);
+      showErrorToast(err.message || 'Failed to fetch entities');
+      setGraphEntities([]);
+    } finally {
+      setLoadingGraphEntities(false);
+    }
+  };
+
+  const fetchGraphRelationships = async (relationshipType) => {
+    if (!currentTeam?.id) return;
+
+    try {
+      setLoadingGraphRelationships(true);
+      const filters = { teamId: currentTeam.id };
+      if (relationshipType && relationshipType !== 'All') {
+        filters.relationshipType = relationshipType;
+      }
+      
+      const { data, error } = await knowledgeHubGraphService.findRelationships(filters);
+      if (error) throw new Error(error);
+      setGraphRelationships(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching graph relationships:', err);
+      showErrorToast(err.message || 'Failed to fetch relationships');
+      setGraphRelationships([]);
+    } finally {
+      setLoadingGraphRelationships(false);
+    }
+  };
+
+  const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
+  const entityCounts = graphStatistics?.entityCounts || {};
+  const totalEntities = graphStatistics?.totalEntities || 0;
+  const totalRelationships = graphStatistics?.totalRelationships || 0;
+  
+  // Extract unique relationship types from relationships
+  const relationshipTypes = Array.from(new Set(graphRelationships.map(r => r.relationshipType).filter(Boolean))).sort();
+
   const formatDate = (dateInput) => {
     if (!dateInput) return 'N/A';
     
@@ -325,7 +451,7 @@ function KnowledgeHub() {
           <div className="d-flex align-items-center">
             <div className="d-flex align-items-center gap-2">
               <HiBookOpen className="page-icon" />
-              <h4 className="mb-0">Knowledge Hub</h4>
+              <h4 className="mb-0">RAG Collections</h4>
             </div>
             <div className="ms-auto d-flex align-items-center gap-2">
               <Button
@@ -547,6 +673,329 @@ function KnowledgeHub() {
         </Card.Body>
       </Card>
 
+      {/* Knowledge Graph Section */}
+      <Card className="border-0 mt-4">
+        <Card.Header>
+          <div className="d-flex align-items-center">
+            <div className="d-flex align-items-center gap-2">
+              <HiHashtag className="page-icon" />
+              <h4 className="mb-0">Knowledge Graph</h4>
+            </div>
+            <div className="ms-auto d-flex align-items-center gap-2">
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => {
+                  // In development, Neo4j Browser is accessible directly on localhost:7474
+                  // In production, it's proxied through Nginx at /neo4j/
+                  const neo4jUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                    ? 'http://localhost:7474'
+                    : '/neo4j/';
+                  window.open(neo4jUrl, '_blank');
+                }}
+              >
+                <HiCube className="me-1" /> View in Neo4j Browser
+              </Button>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={fetchGraphStatistics}
+                disabled={loadingGraphStats}
+              >
+                {loadingGraphStats ? (
+                  <>
+                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
+                    <span className="ms-2">Loading...</span>
+                  </>
+                ) : (
+                  'Refresh'
+                )}
+              </Button>
+            </div>
+          </div>
+        </Card.Header>
+        <Card.Body>
+          {loadingGraphStats ? (
+            <div className="text-center py-5">
+              <Spinner animation="border" role="status">
+                <span className="visually-hidden">Loading graph statistics...</span>
+              </Spinner>
+            </div>
+          ) : (
+            <>
+              {/* Graph Statistics */}
+              <div className="mb-4">
+                <div className="row g-3 mb-3">
+                  {entityTypes.map((type) => (
+                    <div key={type} className="col-md-2">
+                      <Card className="text-center h-100">
+                        <Card.Body>
+                          <div className="text-muted small mb-1">{type}</div>
+                          <div className="h4 mb-0">{entityCounts[type] || 0}</div>
+                        </Card.Body>
+                      </Card>
+                    </div>
+                  ))}
+                </div>
+                <div className="row">
+                  <div className="col-md-6">
+                    <Card className="h-100">
+                      <Card.Body>
+                        <div className="text-muted small mb-1">Total Entities</div>
+                        <div className="h3 mb-0">{totalEntities}</div>
+                      </Card.Body>
+                    </Card>
+                  </div>
+                  <div className="col-md-6">
+                    <Card className="h-100">
+                      <Card.Body>
+                        <div className="text-muted small mb-1">Total Relationships</div>
+                        <div className="h3 mb-0">{totalRelationships}</div>
+                      </Card.Body>
+                    </Card>
+                  </div>
+                </div>
+              </div>
+
+              {/* Entity Browser */}
+              <div>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <h5>Entity Browser</h5>
+                  <div className="d-flex align-items-center gap-2">
+                    <select
+                      className="form-select form-select-sm"
+                      style={{ width: 'auto' }}
+                      value={selectedEntityType}
+                      onChange={(e) => setSelectedEntityType(e.target.value)}
+                    >
+                      <option value="All">All Types</option>
+                      {entityTypes.map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {loadingGraphEntities ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" role="status">
+                      <span className="visually-hidden">Loading entities...</span>
+                    </Spinner>
+                  </div>
+                ) : graphEntities.length === 0 ? (
+                  <div className="text-center py-4 text-muted">
+                    {selectedEntityType === 'All' 
+                      ? 'No entities found'
+                      : `No ${selectedEntityType} entities found`}
+                  </div>
+                ) : (
+                  <>
+                    <Table responsive hover>
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Name</th>
+                          <th>Type</th>
+                          <th>Properties</th>
+                          <th className="text-end">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {graphEntities.slice(0, 100).map((entity, idx) => {
+                          // Filter out system fields - same list used in both count and extraction
+                          const excludedKeys = ['id', 'name', 'type', 'teamId', 'documentId', 'extractedAt', 'createdAt', 'updatedAt'];
+                          const propertyCount = Object.keys(entity).filter(k => !excludedKeys.includes(k)).length;
+                          const entityProperties = Object.entries(entity)
+                            .filter(([key]) => !excludedKeys.includes(key))
+                            .reduce((acc, [key, value]) => {
+                              acc[key] = value;
+                              return acc;
+                            }, {});
+                          
+                          return (
+                            <tr 
+                              key={entity.id || idx}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => setPropertiesModal({
+                                show: true,
+                                title: 'Entity Properties',
+                                entityType: entity.type || 'Unknown',
+                                entityName: entity.name || entity.id || 'Unnamed',
+                                properties: entityProperties
+                              })}
+                            >
+                              <td>
+                                <code className="small">{entity.id || 'N/A'}</code>
+                              </td>
+                              <td>{entity.name || entity.id || 'Unnamed'}</td>
+                              <td>
+                                <Badge bg="secondary">{entity.type || 'Unknown'}</Badge>
+                              </td>
+                              <td
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPropertiesModal({
+                                    show: true,
+                                    title: 'Entity Properties',
+                                    entityType: entity.type || 'Unknown',
+                                    entityName: entity.name || entity.id || 'Unnamed',
+                                    properties: entityProperties
+                                  });
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <small className="text-muted">
+                                  {propertyCount} properties
+                                </small>
+                              </td>
+                              <td className="text-end" onClick={(e) => e.stopPropagation()}>
+                                <div className="d-flex gap-2 justify-content-end">
+                                  <Button
+                                    variant="outline-primary"
+                                    size="sm"
+                                    onClick={() => {
+                                      setRelatedEntitiesModal({
+                                        show: true,
+                                        entityType: entity.type || 'Unknown',
+                                        entityId: entity.id,
+                                        entityName: entity.name || entity.id || 'Unnamed'
+                                      });
+                                    }}
+                                    style={{ fontSize: '0.875rem' }}
+                                  >
+                                    <HiLink className="me-1" /> View Related Entities
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                    {graphEntities.length > 100 && (
+                      <div className="text-center mt-3 text-muted">
+                        <small>Showing first 100 of {graphEntities.length} entities</small>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Relationship Browser */}
+              <div className="mt-5">
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <h5>Relationship Browser</h5>
+                  <div className="d-flex align-items-center gap-2">
+                    <select
+                      className="form-select form-select-sm"
+                      style={{ width: 'auto' }}
+                      value={selectedRelationshipType}
+                      onChange={(e) => setSelectedRelationshipType(e.target.value)}
+                      disabled={loadingGraphRelationships}
+                    >
+                      <option value="All">All Types</option>
+                      {relationshipTypes.map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {loadingGraphRelationships ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" role="status">
+                      <span className="visually-hidden">Loading relationships...</span>
+                    </Spinner>
+                  </div>
+                ) : graphRelationships.length === 0 ? (
+                  <div className="text-center py-4 text-muted">
+                    {selectedRelationshipType === 'All' 
+                      ? 'No relationships found'
+                      : `No ${selectedRelationshipType} relationships found`}
+                  </div>
+                ) : (
+                  <>
+                    <Table responsive hover>
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>From Entity</th>
+                          <th>From Entity Name</th>
+                          <th>To Entity</th>
+                          <th>To Entity Name</th>
+                          <th>Properties</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {graphRelationships.slice(0, 100).map((relationship, idx) => {
+                          const propertyCount = Object.keys(relationship.properties || {}).length;
+                          const fromEntityName = relationship.fromEntity?.name || relationship.fromEntity?.id || 'N/A';
+                          const toEntityName = relationship.toEntity?.name || relationship.toEntity?.id || 'N/A';
+                          const relationshipTitle = `${relationship.relationshipType || 'Unknown'} Relationship`;
+                          const relationshipSubtitle = `${relationship.fromEntity?.type || 'Unknown'}:${fromEntityName} → ${relationship.toEntity?.type || 'Unknown'}:${toEntityName}`;
+                          
+                          return (
+                            <tr 
+                              key={idx}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => setPropertiesModal({
+                                show: true,
+                                title: relationshipTitle,
+                                entityType: relationship.relationshipType || 'Unknown',
+                                entityName: relationshipSubtitle,
+                                properties: relationship.properties || {}
+                              })}
+                            >
+                              <td>
+                                <Badge bg="info">{relationship.relationshipType || 'Unknown'}</Badge>
+                              </td>
+                              <td>
+                                <Badge bg="secondary">{relationship.fromEntity?.type || 'Unknown'}</Badge>
+                              </td>
+                              <td>
+                                <code className="small">{fromEntityName}</code>
+                              </td>
+                              <td>
+                                <Badge bg="secondary">{relationship.toEntity?.type || 'Unknown'}</Badge>
+                              </td>
+                              <td>
+                                <code className="small">{toEntityName}</code>
+                              </td>
+                              <td
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPropertiesModal({
+                                    show: true,
+                                    title: relationshipTitle,
+                                    entityType: relationship.relationshipType || 'Unknown',
+                                    entityName: relationshipSubtitle,
+                                    properties: relationship.properties || {}
+                                  });
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <small className="text-muted">
+                                  {propertyCount} properties
+                                </small>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                    {graphRelationships.length > 100 && (
+                      <div className="text-center mt-3 text-muted">
+                        <small>Showing first 100 of {graphRelationships.length} relationships</small>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </Card.Body>
+      </Card>
+
       {/* Modals */}
       <CreateCollectionModal
         show={showCreateModal}
@@ -585,6 +1034,23 @@ function KnowledgeHub() {
         variant={confirmModal.variant}
         confirmLabel={confirmModal.confirmLabel}
         disabled={confirmModal.disabled}
+      />
+
+      <PropertiesViewerModal
+        show={propertiesModal.show}
+        onHide={() => setPropertiesModal(prev => ({ ...prev, show: false }))}
+        title={propertiesModal.title}
+        entityType={propertiesModal.entityType}
+        entityName={propertiesModal.entityName}
+        properties={propertiesModal.properties}
+      />
+
+      <RelatedEntitiesModal
+        show={relatedEntitiesModal.show}
+        onHide={() => setRelatedEntitiesModal(prev => ({ ...prev, show: false }))}
+        entityType={relatedEntitiesModal.entityType}
+        entityId={relatedEntitiesModal.entityId}
+        entityName={relatedEntitiesModal.entityName}
       />
     </Container>
   );

@@ -18,6 +18,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -32,6 +33,10 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
 
     @NonNull
     private final WebClient.Builder webClientBuilder;
+    
+    // Provider priority for tie-breaking when models have similar costs (lower index = higher priority)
+    // Prioritizes cheaper providers: Gemini, Cohere first
+    private static final List<String> PROVIDER_PRIORITY = List.of("gemini", "cohere", "openai", "claude", "mistral");
 
     private Mono<LinqLlmModel> enrichWithModelMetadata(LinqLlmModel linqLlmModel) {
         if (linqLlmModel == null) {
@@ -189,6 +194,110 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     }
 
     @Override
+    public Mono<LinqLlmModel> findCheapestAvailableModel(List<String> modelCategories, String teamId, 
+            long estimatedPromptTokens, long estimatedCompletionTokens) {
+        log.debug("Finding cheapest available model from categories: {} for team: {}", modelCategories, teamId);
+        
+        // Fetch all available models for all specified categories and enrich with pricing
+        return Flux.fromIterable(modelCategories)
+                .flatMap(category -> findByModelCategoryAndTeamId(category, teamId))
+                .collectList()
+                .flatMap(models -> {
+                    if (models.isEmpty()) {
+                        return Mono.error(new RuntimeException(
+                                "No chat model found from categories: " + modelCategories + ". Please configure a chat model for team: " + teamId));
+                    }
+                    
+                    log.debug("Found {} available models from {} categories", models.size(), modelCategories.size());
+                    
+                    // Log all available models for debugging
+                    log.info("🔍 Available models for selection:");
+                    for (LinqLlmModel model : models) {
+                        double cost = calculateEstimatedCost(model, estimatedPromptTokens, estimatedCompletionTokens);
+                        int priority = PROVIDER_PRIORITY.indexOf(model.getProvider() != null ? model.getProvider().toLowerCase() : "");
+                        priority = priority == -1 ? Integer.MAX_VALUE : priority;
+                        log.info("  - {} (provider: {}, category: {}, priority: {}, estimated cost: ${})", 
+                                model.getModelName(),
+                                model.getProvider(),
+                                model.getModelCategory(),
+                                priority == Integer.MAX_VALUE ? "N/A" : priority,
+                                String.format("%.6f", cost));
+                    }
+                    
+                    // Sort models by cost (prioritizing Gemini/Cohere first, then by estimated cost)
+                    List<LinqLlmModel> sortedModels = models.stream()
+                            .sorted((m1, m2) -> {
+                                // Get provider priority (lower index = higher priority)
+                                int priority1 = PROVIDER_PRIORITY.indexOf(m1.getProvider() != null ? m1.getProvider().toLowerCase() : "");
+                                int priority2 = PROVIDER_PRIORITY.indexOf(m2.getProvider() != null ? m2.getProvider().toLowerCase() : "");
+                                priority1 = priority1 == -1 ? Integer.MAX_VALUE : priority1;
+                                priority2 = priority2 == -1 ? Integer.MAX_VALUE : priority2;
+                                
+                                // First sort by provider priority (Gemini/Cohere first)
+                                if (priority1 != priority2) {
+                                    return Integer.compare(priority1, priority2);
+                                }
+                                
+                                // Then sort by estimated cost per request
+                                double cost1 = calculateEstimatedCost(m1, estimatedPromptTokens, estimatedCompletionTokens);
+                                double cost2 = calculateEstimatedCost(m2, estimatedPromptTokens, estimatedCompletionTokens);
+                                return Double.compare(cost1, cost2);
+                            })
+                            .collect(Collectors.toList());
+                    
+                    // Log sorted order for debugging
+                    log.info("🔍 Models sorted by priority and cost:");
+                    for (int i = 0; i < sortedModels.size(); i++) {
+                        LinqLlmModel model = sortedModels.get(i);
+                        double cost = calculateEstimatedCost(model, estimatedPromptTokens, estimatedCompletionTokens);
+                        int priority = PROVIDER_PRIORITY.indexOf(model.getProvider() != null ? model.getProvider().toLowerCase() : "");
+                        priority = priority == -1 ? Integer.MAX_VALUE : priority;
+                        log.info("  {}. {} (provider: {}, priority: {}, cost: ${})", 
+                                i + 1,
+                                model.getModelName(),
+                                model.getProvider(),
+                                priority == Integer.MAX_VALUE ? "N/A" : priority,
+                                String.format("%.6f", cost));
+                    }
+                    
+                    LinqLlmModel cheapest = sortedModels.get(0);
+                    double estimatedCost = calculateEstimatedCost(cheapest, estimatedPromptTokens, estimatedCompletionTokens);
+                    log.info("💰 Selected cheapest model: {} / {} (provider: {}, category: {}, estimated cost: ${} per request)", 
+                            cheapest.getModelName(), 
+                            cheapest.getModelCategory(),
+                            cheapest.getProvider(),
+                            cheapest.getModelCategory(),
+                            String.format("%.6f", estimatedCost));
+                    
+                    return Mono.just(cheapest);
+                });
+    }
+    
+    /**
+     * Calculate estimated cost per request for a model
+     * Uses estimated token counts to compare models
+     * @param model The LinqLlmModel to calculate cost for
+     * @param estimatedPromptTokens Estimated prompt tokens for the request
+     * @param estimatedCompletionTokens Estimated completion tokens for the request
+     * @return Estimated cost in USD
+     */
+    private double calculateEstimatedCost(LinqLlmModel model, long estimatedPromptTokens, long estimatedCompletionTokens) {
+        Double inputPrice = model.getInputPricePer1M();
+        Double outputPrice = model.getOutputPricePer1M();
+        
+        // If pricing is not available, return a high value to deprioritize
+        if (inputPrice == null || outputPrice == null) {
+            log.debug("Model {} does not have pricing metadata, using fallback cost", model.getModelName());
+            return 999999.0; // High value to deprioritize models without pricing
+        }
+        
+        // Calculate estimated cost: (promptTokens / 1M) * inputPrice + (completionTokens / 1M) * outputPrice
+        double promptCost = (estimatedPromptTokens / 1_000_000.0) * inputPrice;
+        double completionCost = (estimatedCompletionTokens / 1_000_000.0) * outputPrice;
+        return promptCost + completionCost;
+    }
+
+    @Override
     public Mono<LinqResponse> executeLlmRequest(LinqRequest request, LinqLlmModel llmModel) {
         String intent = request.getQuery().getIntent();
         if (!llmModel.getSupportedIntents().contains(intent)) {
@@ -285,35 +394,130 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 payload.put("parameters", llmConfig != null ? llmConfig.getSettings() : new HashMap<>());
                 break;
             case "gemini-chat":
-                payload.put("contents", List.of(Map.of("parts", List.of(Map.of("text", request.getQuery().getParams().getOrDefault("prompt", ""))))));
+                // Gemini Chat API format - handle messages array
+                List<Map<String, Object>> geminiContents = new ArrayList<>();
+                if (request.getQuery().getPayload() instanceof List) {
+                    // Convert messages array to Gemini contents format
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> messages = (List<Map<String, Object>>) request.getQuery().getPayload();
+                    for (Map<String, Object> message : messages) {
+                        String role = (String) message.get("role");
+                        Object contentObj = message.get("content");
+                        String content = contentObj != null ? contentObj.toString() : "";
+                        
+                        // Gemini uses "user" and "model" roles (not "assistant" or "system")
+                        String geminiRole = "user".equals(role) ? "user" : 
+                                           ("assistant".equals(role) || "system".equals(role)) ? "model" : "user";
+                        
+                        Map<String, Object> part = new HashMap<>();
+                        part.put("text", content);
+                        
+                        Map<String, Object> geminiContent = new HashMap<>();
+                        geminiContent.put("role", geminiRole);
+                        geminiContent.put("parts", List.of(part));
+                        
+                        geminiContents.add(geminiContent);
+                    }
+                } else {
+                    // Fallback to prompt from params
+                    String prompt = request.getQuery().getParams().getOrDefault("prompt", "").toString();
+                    Map<String, Object> part = new HashMap<>();
+                    part.put("text", prompt);
+                    Map<String, Object> geminiContent = new HashMap<>();
+                    geminiContent.put("role", "user");
+                    geminiContent.put("parts", List.of(part));
+                    geminiContents.add(geminiContent);
+                }
+                payload.put("contents", geminiContents);
+                
+                // Convert max_tokens to maxOutputTokens for Gemini
                 if (llmConfig != null && llmConfig.getSettings() != null) {
-                    payload.put("generationConfig", llmConfig.getSettings());
+                    Map<String, Object> settings = new HashMap<>(llmConfig.getSettings());
+                    if (settings.containsKey("max_tokens")) {
+                        Object value = settings.remove("max_tokens");
+                        settings.put("maxOutputTokens", value);
+                    }
+                    // Also handle max.tokens if present
+                    if (settings.containsKey("max.tokens")) {
+                        Object value = settings.remove("max.tokens");
+                        settings.put("maxOutputTokens", value);
+                    }
+                    payload.put("generationConfig", settings);
                 }
                 break;
             case "claude-chat":
-                // Claude API format
+                // Claude API format - requires system message to be top-level, not in messages array
                 String claudeModel = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "claude-sonnet-4-5";
                 payload.put("model", claudeModel);
                 
                 // Handle messages array from payload
+                List<Map<String, Object>> claudeMessages = new ArrayList<>();
+                String systemMessage = null;
+                
                 if (request.getQuery().getPayload() instanceof List) {
-                    payload.put("messages", request.getQuery().getPayload());
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> messages = (List<Map<String, Object>>) request.getQuery().getPayload();
+                    
+                    // Extract system message and separate user/assistant messages
+                    for (Map<String, Object> message : messages) {
+                        String role = (String) message.get("role");
+                        Object contentObj = message.get("content");
+                        String content = contentObj != null ? contentObj.toString() : "";
+                        
+                        if ("system".equals(role)) {
+                            // Claude requires system message as top-level parameter
+                            systemMessage = content;
+                        } else if ("user".equals(role) || "assistant".equals(role)) {
+                            // Add user and assistant messages to messages array
+                            Map<String, Object> claudeMsg = new HashMap<>();
+                            claudeMsg.put("role", role);
+                            claudeMsg.put("content", content);
+                            claudeMessages.add(claudeMsg);
+                        }
+                    }
                 } else if (request.getQuery().getPayload() instanceof Map) {
                     // If payload is a Map, convert to messages format
                     Map<String, Object> payloadMap = (Map<String, Object>) request.getQuery().getPayload();
                     if (payloadMap.containsKey("messages")) {
-                        payload.put("messages", payloadMap.get("messages"));
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> messages = (List<Map<String, Object>>) payloadMap.get("messages");
+                        for (Map<String, Object> message : messages) {
+                            String role = (String) message.get("role");
+                            Object contentObj = message.get("content");
+                            String content = contentObj != null ? contentObj.toString() : "";
+                            
+                            if ("system".equals(role)) {
+                                systemMessage = content;
+                            } else if ("user".equals(role) || "assistant".equals(role)) {
+                                Map<String, Object> claudeMsg = new HashMap<>();
+                                claudeMsg.put("role", role);
+                                claudeMsg.put("content", content);
+                                claudeMessages.add(claudeMsg);
+                            }
+                        }
                     } else {
                         // Create a single user message from the payload
-                        payload.put("messages", List.of(Map.of("role", "user", "content", payloadMap.getOrDefault("content", ""))));
+                        String content = payloadMap.getOrDefault("content", "").toString();
+                        Map<String, Object> userMsg = new HashMap<>();
+                        userMsg.put("role", "user");
+                        userMsg.put("content", content);
+                        claudeMessages.add(userMsg);
                     }
                 }
+                
+                // Set system message as top-level parameter if present
+                if (systemMessage != null && !systemMessage.trim().isEmpty()) {
+                    payload.put("system", systemMessage);
+                }
+                
+                // Set messages array (only user and assistant messages)
+                payload.put("messages", claudeMessages);
                 
                 // Add settings from llmConfig (e.g., max_tokens)
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     payload.putAll(llmConfig.getSettings());
                 }
-                log.info("Building Claude payload for model: {}", claudeModel);
+                log.info("Building Claude payload for model: {} with {} messages", claudeModel, claudeMessages.size());
                 break;
             case "openai-embed":
                 Object textParam = request.getQuery().getParams().getOrDefault("text", "");
@@ -332,12 +536,55 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 log.info("Building Gemini embedding payload - text: {}, model: {}", geminiText, geminiModel);
                 break;
             case "cohere-chat":
-                // Cohere Chat API format
+                // Cohere Chat API format - requires message field (converted from messages array)
                 String cohereModel = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "command-r-08-2024";
                 payload.put("model", cohereModel);
                 
-                // Handle payload which can be either a Map (with message/preamble) or fall back to params
-                if (request.getQuery().getPayload() instanceof Map) {
+                // Handle messages array from payload - convert to Cohere format
+                StringBuilder cohereMessage = new StringBuilder();
+                StringBuilder coherePreamble = new StringBuilder();
+                
+                if (request.getQuery().getPayload() instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> messages = (List<Map<String, Object>>) request.getQuery().getPayload();
+                    
+                    // Convert messages array to Cohere format
+                    // System messages go to preamble, user/assistant messages go to message
+                    for (Map<String, Object> message : messages) {
+                        String role = (String) message.get("role");
+                        Object contentObj = message.get("content");
+                        String content = contentObj != null ? contentObj.toString() : "";
+                        
+                        if (content.trim().isEmpty()) {
+                            continue; // Skip empty messages
+                        }
+                        
+                        if ("system".equals(role)) {
+                            // System messages go to preamble
+                            if (coherePreamble.length() > 0) {
+                                coherePreamble.append("\n\n");
+                            }
+                            coherePreamble.append(content);
+                        } else if ("user".equals(role)) {
+                            // User messages go to message field
+                            if (cohereMessage.length() > 0) {
+                                cohereMessage.append("\n\nUser: ");
+                            } else {
+                                cohereMessage.append("User: ");
+                            }
+                            cohereMessage.append(content);
+                        } else if ("assistant".equals(role)) {
+                            // Assistant messages go to message field
+                            if (cohereMessage.length() > 0) {
+                                cohereMessage.append("\n\nAssistant: ");
+                            } else {
+                                cohereMessage.append("Assistant: ");
+                            }
+                            cohereMessage.append(content);
+                        }
+                    }
+                } else if (request.getQuery().getPayload() instanceof Map) {
+                    // If payload is a Map, check for message/preamble or messages array
                     Map<String, Object> coherePayload = (Map<String, Object>) request.getQuery().getPayload();
                     if (coherePayload.containsKey("message")) {
                         payload.put("message", coherePayload.get("message"));
@@ -345,19 +592,63 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     if (coherePayload.containsKey("preamble")) {
                         payload.put("preamble", coherePayload.get("preamble"));
                     }
-                    // Add any other fields from the payload
+                    if (coherePayload.containsKey("messages")) {
+                        // Convert messages array
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> messages = (List<Map<String, Object>>) coherePayload.get("messages");
+                        for (Map<String, Object> message : messages) {
+                            String role = (String) message.get("role");
+                            Object contentObj = message.get("content");
+                            String content = contentObj != null ? contentObj.toString() : "";
+                            
+                            if (content.trim().isEmpty()) {
+                                continue;
+                            }
+                            
+                            if ("system".equals(role)) {
+                                if (coherePreamble.length() > 0) {
+                                    coherePreamble.append("\n\n");
+                                }
+                                coherePreamble.append(content);
+                            } else if ("user".equals(role)) {
+                                if (cohereMessage.length() > 0) {
+                                    cohereMessage.append("\n\nUser: ");
+                                } else {
+                                    cohereMessage.append("User: ");
+                                }
+                                cohereMessage.append(content);
+                            } else if ("assistant".equals(role)) {
+                                if (cohereMessage.length() > 0) {
+                                    cohereMessage.append("\n\nAssistant: ");
+                                } else {
+                                    cohereMessage.append("Assistant: ");
+                                }
+                                cohereMessage.append(content);
+                            }
+                        }
+                    }
+                    // Add any other fields from the payload (excluding message/preamble/messages)
                     coherePayload.forEach((key, value) -> {
-                        if (!key.equals("message") && !key.equals("preamble")) {
+                        if (!key.equals("message") && !key.equals("preamble") && !key.equals("messages")) {
                             payload.put(key, value);
                         }
                     });
+                }
+                
+                // Set message and preamble if we built them from messages array
+                if (cohereMessage.length() > 0) {
+                    payload.put("message", cohereMessage.toString());
+                }
+                if (coherePreamble.length() > 0) {
+                    payload.put("preamble", coherePreamble.toString());
                 }
                 
                 // Add settings from llmConfig
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     payload.putAll(llmConfig.getSettings());
                 }
-                log.info("Building Cohere payload for model: {}", cohereModel);
+                log.info("Building Cohere payload for model: {} with message length: {}", cohereModel, 
+                        cohereMessage.length() > 0 ? cohereMessage.length() : 0);
                 break;
             case "cohere-embed":
                 // Cohere Embed API format
@@ -408,4 +699,5 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 });
     }
 }
+
 

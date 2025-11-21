@@ -190,6 +190,11 @@ milvus:
   username: ${MILVUS_USERNAME}
   password: ${MILVUS_PASSWORD}
 
+neo4j:
+  uri: ${NEO4J_URI:bolt://localhost:7687}
+  username: ${NEO4J_USERNAME}
+  password: ${NEO4J_PASSWORD}
+
 # Knowledge Hub S3 Configuration
 aws:
   region: ${AWS_REGION:us-west-2}

@@ -69,6 +69,12 @@ class DocumentServiceImplIntegrationTest {
     @Autowired
     private LinqMilvusStoreService milvusStoreService;
 
+    @Autowired(required = false)
+    private org.lite.gateway.service.Neo4jGraphService neo4jGraphService;
+    
+    @Autowired(required = false)
+    private org.lite.gateway.repository.GraphExtractionJobRepository graphExtractionJobRepository;
+
     private KnowledgeHubDocumentServiceImpl documentService;
     private S3ServiceImpl s3Service;
     private S3Properties s3Properties;
@@ -96,7 +102,9 @@ class DocumentServiceImplIntegrationTest {
                 chunkRepository,
                 metadataRepository,
                 collectionRepository,
-                milvusStoreService
+                milvusStoreService,
+                neo4jGraphService,
+                graphExtractionJobRepository
         );
     }
     

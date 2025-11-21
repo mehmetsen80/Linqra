@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Spinner, Alert, Badge, Row, Col, OverlayTrigger, Tooltip } from 'react-bootstrap';
-import { HiArrowLeft, HiDocument, HiDownload, HiTrash, HiCalendar, HiCube, HiChartBar, HiCheckCircle, HiInformationCircle } from 'react-icons/hi';
+import { Card, Spinner, Alert, Badge, Row, Col, OverlayTrigger, Tooltip, Form, Table } from 'react-bootstrap';
+import { HiArrowLeft, HiDocument, HiDownload, HiTrash, HiCalendar, HiCube, HiChartBar, HiCheckCircle, HiInformationCircle, HiHashtag, HiLink } from 'react-icons/hi';
 import { useTeam } from '../../../../contexts/TeamContext';
 import { knowledgeHubDocumentService } from '../../../../services/knowledgeHubDocumentService';
 import { knowledgeHubCollectionService } from '../../../../services/knowledgeHubCollectionService';
 import { knowledgeHubWebSocketService } from '../../../../services/knowledgeHubWebSocketService';
+import { knowledgeHubGraphService } from '../../../../services/knowledgeHubGraphService';
+import { knowledgeHubGraphWebSocketService } from '../../../../services/knowledgeHubGraphWebSocketService';
 import Button from '../../../../components/common/Button';
 import { showSuccessToast, showErrorToast } from '../../../../utils/toastConfig';
 import { formatDateTime } from '../../../../utils/dateUtils';
 import ConfirmationModalWithVerification from '../../../../components/common/ConfirmationModalWithVerification';
+import AlertMessageModal from '../../../../components/common/AlertMessageModal';
+import PropertiesViewerModal from '../../../../components/common/PropertiesViewerModal';
 import './styles.css';
 
 function ViewDocument() {
@@ -35,6 +39,38 @@ function ViewDocument() {
   });
   const [stageDeleteModal, setStageDeleteModal] = useState({ show: false, scope: null });
   const [stageDeleting, setStageDeleting] = useState(false);
+  const [extracting, setExtracting] = useState({
+    entities: false,
+    relationships: false,
+    all: false
+  });
+  const [extractionConfirmModal, setExtractionConfirmModal] = useState({
+    show: false,
+    type: null, // 'entities', 'relationships', or 'all'
+    force: false // Whether to force re-extraction
+  });
+  const [alreadyExtractedModal, setAlreadyExtractedModal] = useState({
+    show: false,
+    message: null,
+    extractionType: null // 'entities', 'relationships', or 'all'
+  });
+  const [currentJob, setCurrentJob] = useState(null); // Current extraction job
+  const [graphEntityCount, setGraphEntityCount] = useState(null);
+  const [graphRelationshipCount, setGraphRelationshipCount] = useState(null);
+  const [loadingGraphCounts, setLoadingGraphCounts] = useState(false);
+  const [documentEntities, setDocumentEntities] = useState([]);
+  const [selectedDocumentEntityType, setSelectedDocumentEntityType] = useState('All');
+  const [loadingDocumentEntities, setLoadingDocumentEntities] = useState(false);
+  const [documentRelationships, setDocumentRelationships] = useState([]);
+  const [selectedDocumentRelationshipType, setSelectedDocumentRelationshipType] = useState('All');
+  const [loadingDocumentRelationships, setLoadingDocumentRelationships] = useState(false);
+  const [propertiesModal, setPropertiesModal] = useState({
+    show: false,
+    title: 'Properties',
+    entityType: null,
+    entityName: null,
+    properties: {}
+  });
 
   const stageDeletionConfig = {
     embedding: {
@@ -61,6 +97,66 @@ function ViewDocument() {
     
     // Connect to WebSocket for document processing
     knowledgeHubWebSocketService.connect();
+    
+    // Connect to WebSocket for graph extraction updates
+    knowledgeHubGraphWebSocketService.connect();
+    
+    // Subscribe to graph extraction updates
+    const unsubscribeGraphExtraction = knowledgeHubGraphWebSocketService.subscribe((update) => {
+      // Only process updates for the current document
+      if (update.documentId === documentId) {
+        console.log('Received graph extraction update:', update);
+        
+        setCurrentJob({
+          jobId: update.jobId,
+          documentId: update.documentId,
+          teamId: update.teamId,
+          extractionType: update.extractionType,
+          status: update.status,
+          totalBatches: update.totalBatches,
+          processedBatches: update.processedBatches,
+          totalEntities: update.totalEntities,
+          totalRelationships: update.totalRelationships,
+          totalCostUsd: update.totalCostUsd,
+          errorMessage: update.errorMessage,
+          queuedAt: update.queuedAt,
+          startedAt: update.startedAt,
+          completedAt: update.completedAt
+        });
+        
+        // Update extracting state based on job status
+        const status = update.status;
+        if (status === 'QUEUED' || status === 'RUNNING') {
+          // Still processing
+          if (update.extractionType === 'entities') {
+            setExtracting(prev => ({ ...prev, entities: true }));
+          } else if (update.extractionType === 'relationships') {
+            setExtracting(prev => ({ ...prev, relationships: true }));
+          } else if (update.extractionType === 'all') {
+            setExtracting(prev => ({ ...prev, all: true }));
+          }
+        } else {
+          // Job completed, failed, or cancelled
+          setExtracting({ entities: false, relationships: false, all: false });
+          
+          if (status === 'COMPLETED') {
+            showSuccessToast(
+              `Extraction completed: ${update.totalEntities || 0} entities, ${update.totalRelationships || 0} relationships`
+            );
+            fetchMetadata();
+            fetchGraphCounts();
+            fetchDocumentEntities(); // Refresh document entities after extraction
+            fetchDocumentRelationships(); // Refresh document relationships after extraction
+            // Reset force option after successful extraction
+            setExtractionConfirmModal(prev => ({ ...prev, force: false }));
+          } else if (status === 'FAILED') {
+            showErrorToast(update.errorMessage || 'Extraction failed');
+          } else if (status === 'CANCELLED') {
+            showErrorToast('Extraction cancelled');
+          }
+        }
+      }
+    });
     
     // Subscribe to document status updates
     const unsubscribe = knowledgeHubWebSocketService.subscribe((statusUpdate) => {
@@ -98,19 +194,35 @@ function ViewDocument() {
           fetchChunkStatistics(statusUpdate.processedS3Key);
         }
         
-        // Fetch metadata if document status is METADATA_EXTRACTION or beyond
-        if (['METADATA_EXTRACTION', 'EMBEDDING', 'AI_READY'].includes(statusUpdate.status)) {
-          fetchMetadata();
-        }
+      // Fetch metadata if document status is METADATA_EXTRACTION or beyond
+      if (['METADATA_EXTRACTION', 'EMBEDDING', 'AI_READY'].includes(statusUpdate.status)) {
+        fetchMetadata();
+      }
+      
+      // Reset extraction states if extraction completes
+      if (statusUpdate.status === 'AI_READY') {
+        setExtracting({ entities: false, relationships: false, all: false });
+      }
       }
     });
     
     return () => {
       // Unsubscribe and disconnect on unmount
       unsubscribe();
+      unsubscribeGraphExtraction();
       knowledgeHubWebSocketService.disconnect();
+      knowledgeHubGraphWebSocketService.disconnect();
     };
   }, [currentTeam?.id, documentId]);
+
+  // Fetch document entities when entity type selection changes
+  useEffect(() => {
+    if (currentTeam?.id && documentId && document && 
+        (document.status === 'PROCESSED' || document.status === 'AI_READY')) {
+      fetchDocumentEntities();
+      fetchDocumentRelationships();
+    }
+  }, [currentTeam?.id, documentId, selectedDocumentEntityType, selectedDocumentRelationshipType, document?.status]);
 
   const fetchDocument = async () => {
     try {
@@ -139,6 +251,19 @@ function ViewDocument() {
       // Fetch metadata if document has metadata extraction status or beyond
       if (['METADATA_EXTRACTION', 'EMBEDDING', 'AI_READY'].includes(data.status)) {
         fetchMetadata();
+      }
+      
+      // Fetch graph entity/relationship counts if document is processed or AI ready
+      if (data.status === 'PROCESSED' || data.status === 'AI_READY') {
+        fetchGraphCounts();
+        // Load document entities if entity type is selected
+        if (selectedDocumentEntityType !== 'All') {
+          fetchDocumentEntities();
+        }
+        // Load document relationships if relationship type is selected
+        if (selectedDocumentRelationshipType !== 'All') {
+          fetchDocumentRelationships();
+        }
       }
       
       if (data.totalEmbeddings !== undefined) {
@@ -461,6 +586,442 @@ function ViewDocument() {
     );
     setEmbedding({ running: true, progress: document.totalEmbeddings ?? null });
     showSuccessToast('Embedding triggered...');
+  };
+
+  const canExtractGraph = () => {
+    return document.status === 'READY' || document.status === 'PROCESSED' || document.status === 'AI_READY';
+  };
+
+  const showExtractionConfirmModal = (type) => {
+    if (!document || !canExtractGraph()) return;
+    setExtractionConfirmModal(prev => ({ 
+      ...prev, 
+      show: true, 
+      type,
+      // Preserve force value when opening modal
+      force: prev.force || false
+    }));
+  };
+
+  const closeExtractionConfirmModal = () => {
+    setExtractionConfirmModal(prev => ({ 
+      ...prev, 
+      show: false, 
+      type: null,
+      // Don't reset force - user might want to keep it selected
+    }));
+  };
+
+  const handleForceToggle = (checked) => {
+    setExtractionConfirmModal(prev => ({ ...prev, force: checked }));
+  };
+
+  const handleExtractEntitiesConfirm = async () => {
+    if (!document || !canExtractGraph()) return;
+    
+    try {
+      const { force } = extractionConfirmModal;
+      closeExtractionConfirmModal();
+      
+      const { data, error } = await knowledgeHubGraphService.extractEntitiesFromDocument(document.documentId, force);
+      if (error) {
+        // Check if it's an idempotency error (entities already extracted)
+        if (error.includes('already extracted') && !force) {
+          // Show modal instead of toast
+          setAlreadyExtractedModal({
+            show: true,
+            message: error,
+            extractionType: 'entities'
+          });
+          return;
+        }
+        throw new Error(error);
+      }
+      
+      if (data?.jobId) {
+        // Set initial job state - WebSocket will update it
+        setCurrentJob({
+          jobId: data.jobId,
+          documentId: data.documentId,
+          teamId: currentTeam.id,
+          extractionType: 'entities',
+          status: 'QUEUED'
+        });
+        setExtracting(prev => ({ ...prev, entities: true }));
+        showSuccessToast('Entity extraction job queued. Processing in background...');
+      }
+    } catch (err) {
+      console.error('Error queueing entity extraction:', err);
+      // Check if it's an idempotency error (entities already extracted)
+      if (err.message && err.message.includes('already extracted') && !extractionConfirmModal.force) {
+        setAlreadyExtractedModal({
+          show: true,
+          message: err.message,
+          extractionType: 'entities'
+        });
+      } else {
+        showErrorToast(err.message || 'Failed to queue entity extraction');
+      }
+    }
+  };
+
+  const handleExtractRelationshipsConfirm = async () => {
+    if (!document || !canExtractGraph()) return;
+    
+    try {
+      const { force } = extractionConfirmModal;
+      closeExtractionConfirmModal();
+      
+      const { data, error } = await knowledgeHubGraphService.extractRelationshipsFromDocument(document.documentId, force);
+      if (error) {
+        if (error.includes('already extracted') && !force) {
+          // Show modal instead of toast
+          setAlreadyExtractedModal({
+            show: true,
+            message: error,
+            extractionType: 'relationships'
+          });
+          return;
+        }
+        throw new Error(error);
+      }
+      
+      if (data?.jobId) {
+        // Set initial job state - WebSocket will update it
+        setCurrentJob({
+          jobId: data.jobId,
+          documentId: data.documentId,
+          teamId: currentTeam.id,
+          extractionType: 'relationships',
+          status: 'QUEUED'
+        });
+        setExtracting(prev => ({ ...prev, relationships: true }));
+        showSuccessToast('Relationship extraction job queued. Processing in background...');
+      }
+    } catch (err) {
+      console.error('Error queueing relationship extraction:', err);
+      // Check if it's an idempotency error (relationships already extracted)
+      if (err.message && err.message.includes('already extracted') && !extractionConfirmModal.force) {
+        setAlreadyExtractedModal({
+          show: true,
+          message: err.message,
+          extractionType: 'relationships'
+        });
+      } else {
+        showErrorToast(err.message || 'Failed to queue relationship extraction');
+      }
+    }
+  };
+
+  const handleExtractAllConfirm = async () => {
+    if (!document || !canExtractGraph()) return;
+    
+    try {
+      const { force } = extractionConfirmModal;
+      closeExtractionConfirmModal();
+      
+      const { data, error } = await knowledgeHubGraphService.extractAllFromDocument(document.documentId, force);
+      if (error) {
+        if (error.includes('already extracted') && !force) {
+          // Show modal instead of toast
+          setAlreadyExtractedModal({
+            show: true,
+            message: error,
+            extractionType: 'all'
+          });
+          return;
+        }
+        throw new Error(error);
+      }
+      
+      if (data?.jobId) {
+        // Set initial job state - WebSocket will update it
+        setCurrentJob({
+          jobId: data.jobId,
+          documentId: data.documentId,
+          teamId: currentTeam.id,
+          extractionType: 'all',
+          status: 'QUEUED'
+        });
+        setExtracting(prev => ({ ...prev, all: true }));
+        showSuccessToast('Full extraction job queued. Processing in background...');
+      }
+    } catch (err) {
+      console.error('Error queueing full extraction:', err);
+      // Check if it's an idempotency error (already extracted)
+      if (err.message && err.message.includes('already extracted') && !extractionConfirmModal.force) {
+        setAlreadyExtractedModal({
+          show: true,
+          message: err.message,
+          extractionType: 'all'
+        });
+      } else {
+        showErrorToast(err.message || 'Failed to queue full extraction');
+      }
+    }
+  };
+  
+  const handleAlreadyExtractedModalClose = () => {
+    setAlreadyExtractedModal({ show: false, message: null, extractionType: null });
+  };
+  
+  const handleAlreadyExtractedForceRetry = () => {
+    const { extractionType } = alreadyExtractedModal;
+    handleAlreadyExtractedModalClose();
+    
+    // Enable force and retry the extraction
+    setExtractionConfirmModal(prev => ({
+      ...prev,
+      show: true,
+      type: extractionType,
+      force: true
+    }));
+  };
+
+  const handleCancelJob = async () => {
+    if (!currentJob?.jobId) return;
+    
+    try {
+      const { data, error } = await knowledgeHubGraphService.cancelJob(currentJob.jobId);
+      if (error) throw new Error(error);
+      
+      if (data?.cancelled) {
+        showSuccessToast('Extraction job cancelled');
+        setCurrentJob(null);
+        setExtracting({ entities: false, relationships: false, all: false });
+      }
+    } catch (err) {
+      console.error('Error cancelling job:', err);
+      showErrorToast(err.message || 'Failed to cancel job');
+    }
+  };
+
+  const handleExtractConfirm = () => {
+    const { type } = extractionConfirmModal;
+    if (type === 'entities') {
+      handleExtractEntitiesConfirm();
+    } else if (type === 'relationships') {
+      handleExtractRelationshipsConfirm();
+    } else if (type === 'all') {
+      handleExtractAllConfirm();
+    }
+  };
+
+  const getExtractionModalConfig = () => {
+    const { type, force } = extractionConfirmModal;
+    const configs = {
+      entities: {
+        title: 'Extract Entities',
+        message: force 
+          ? 'This will re-extract entities from this document using AI. This will incur additional LLM costs. Continue?'
+          : 'This will extract entities (Forms, Organizations, People, Dates, Locations, etc.) from this document using AI. This may take several minutes and will incur LLM costs. Continue?',
+        confirmLabel: 'Extract Entities'
+      },
+      relationships: {
+        title: 'Extract Relationships',
+        message: force
+          ? 'This will re-extract relationships from this document using AI. This will incur additional LLM costs. Continue?'
+          : 'This will extract relationships between entities from this document using AI. Entities must be extracted first. This may take several minutes and will incur LLM costs. Continue?',
+        confirmLabel: 'Extract Relationships'
+      },
+      all: {
+        title: 'Extract All',
+        message: force
+          ? 'This will re-extract both entities and relationships from this document using AI. This will incur additional LLM costs. Continue?'
+          : 'This will extract both entities and relationships from this document using AI. This may take several minutes and will incur LLM costs. Continue?',
+        confirmLabel: 'Extract All'
+      }
+    };
+    return configs[type] || configs.entities;
+  };
+
+
+  const fetchGraphCounts = async () => {
+    if (!documentId || !currentTeam?.id) return;
+    
+    try {
+      setLoadingGraphCounts(true);
+      const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
+      
+      // Fetch entities for each type filtered by documentId
+      const entityPromises = entityTypes.map(type => 
+        knowledgeHubGraphService.findEntities(type, { documentId })
+      );
+      
+      const entityResults = await Promise.all(entityPromises);
+      const totalEntities = entityResults.reduce((sum, result) => {
+        return sum + (result.success && Array.isArray(result.data) ? result.data.length : 0);
+      }, 0);
+      
+      setGraphEntityCount(totalEntities);
+      
+      // Fetch relationships filtered by documentId
+      const relationshipResult = await knowledgeHubGraphService.findRelationships({ 
+        documentId, 
+        teamId: currentTeam.id 
+      });
+      
+      const totalRelationships = relationshipResult.success && Array.isArray(relationshipResult.data) 
+        ? relationshipResult.data.length 
+        : 0;
+      
+      setGraphRelationshipCount(totalRelationships);
+    } catch (err) {
+      console.error('Error fetching graph counts:', err);
+      // Don't show error toast - counts are optional
+    } finally {
+      setLoadingGraphCounts(false);
+    }
+  };
+
+  const fetchDocumentEntities = async () => {
+    if (!documentId || !currentTeam?.id) {
+      setDocumentEntities([]);
+      return;
+    }
+    
+    try {
+      setLoadingDocumentEntities(true);
+      
+      if (selectedDocumentEntityType === 'All') {
+        // Fetch all entity types and combine them
+        const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
+        const entityPromises = entityTypes.map(type => 
+          knowledgeHubGraphService.findEntities(type, { documentId })
+        );
+        
+        const entityResults = await Promise.all(entityPromises);
+        const allEntities = entityResults.reduce((acc, result, index) => {
+          if (result.success && Array.isArray(result.data)) {
+            // Add type to each entity if not present
+            const entityType = entityTypes[index];
+            const typedEntities = result.data.map(entity => ({
+              ...entity,
+              type: entity.type || entityType
+            }));
+            return [...acc, ...typedEntities];
+          }
+          return acc;
+        }, []);
+        
+        setDocumentEntities(allEntities);
+      } else {
+        // Fetch entities for specific type
+        const { data, error } = await knowledgeHubGraphService.findEntities(
+          selectedDocumentEntityType, 
+          { documentId }
+        );
+        if (error) throw new Error(error);
+        const entities = Array.isArray(data) ? data : [];
+        // Ensure type is set
+        const typedEntities = entities.map(entity => ({
+          ...entity,
+          type: entity.type || selectedDocumentEntityType
+        }));
+        setDocumentEntities(typedEntities);
+      }
+    } catch (err) {
+      console.error('Error fetching document entities:', err);
+      showErrorToast(err.message || 'Failed to fetch document entities');
+      setDocumentEntities([]);
+    } finally {
+      setLoadingDocumentEntities(false);
+    }
+  };
+
+  const fetchDocumentRelationships = async () => {
+    if (!documentId || !currentTeam?.id) {
+      setDocumentRelationships([]);
+      return;
+    }
+
+    try {
+      setLoadingDocumentRelationships(true);
+      const filters = { 
+        teamId: currentTeam.id,
+        documentId: documentId
+      };
+      
+      if (selectedDocumentRelationshipType && selectedDocumentRelationshipType !== 'All') {
+        filters.relationshipType = selectedDocumentRelationshipType;
+      }
+      
+      const { data, error } = await knowledgeHubGraphService.findRelationships(filters);
+      if (error) throw new Error(error);
+      setDocumentRelationships(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching document relationships:', err);
+      showErrorToast(err.message || 'Failed to fetch document relationships');
+      setDocumentRelationships([]);
+    } finally {
+      setLoadingDocumentRelationships(false);
+    }
+  };
+
+  const getGraphExtractionInfo = () => {
+    if (!metadata?.customMetadata?.graphExtraction && graphEntityCount === null) return null;
+    
+    const graphExtraction = metadata?.customMetadata?.graphExtraction;
+    const entityExtraction = graphExtraction?.entityExtraction;
+    const relationshipExtraction = graphExtraction?.relationshipExtraction;
+    
+    // Debug logging to help troubleshoot model info display
+    if (graphExtraction) {
+      console.log('Graph Extraction Metadata:', {
+        entityExtraction: entityExtraction ? {
+          modelName: entityExtraction.modelName,
+          modelCategory: entityExtraction.modelCategory,
+          provider: entityExtraction.provider,
+          hasModelInfo: !!(entityExtraction.modelName || entityExtraction.provider)
+        } : null,
+        relationshipExtraction: relationshipExtraction ? {
+          modelName: relationshipExtraction.modelName,
+          modelCategory: relationshipExtraction.modelCategory,
+          provider: relationshipExtraction.provider,
+          hasModelInfo: !!(relationshipExtraction.modelName || relationshipExtraction.provider)
+        } : null
+      });
+    }
+    
+    // Use graphEntityCount from Neo4j query if available, otherwise 0
+    const entityCount = graphEntityCount !== null ? graphEntityCount : 0;
+    const relationshipCount = graphRelationshipCount !== null ? graphRelationshipCount : 0;
+    const entityCost = entityExtraction?.costUsd || 0;
+    const relationshipCost = relationshipExtraction?.costUsd || 0;
+    const totalCost = entityCost + relationshipCost;
+    
+    const hasData = entityCount > 0 || relationshipCount > 0 || entityExtraction || relationshipExtraction;
+    
+    if (!hasData) return null;
+    
+    return {
+      entityCount,
+      relationshipCount,
+      entityCost,
+      relationshipCost,
+      totalCost,
+      extractedAt: entityExtraction?.extractedAt || relationshipExtraction?.extractedAt,
+      // Timing information - separate for entities and relationships
+      entityStartedAt: entityExtraction?.startedAt,
+      entityCompletedAt: entityExtraction?.completedAt,
+      entityDurationMs: entityExtraction?.durationMs,
+      relationshipStartedAt: relationshipExtraction?.startedAt,
+      relationshipCompletedAt: relationshipExtraction?.completedAt,
+      relationshipDurationMs: relationshipExtraction?.durationMs,
+      // Model information - separate for entities and relationships
+      entityModelName: entityExtraction?.modelName,
+      entityModelCategory: entityExtraction?.modelCategory,
+      entityProvider: entityExtraction?.provider,
+      entityExtraction: entityExtraction, // Keep full object to check if extraction exists
+      relationshipModelName: relationshipExtraction?.modelName,
+      relationshipModelCategory: relationshipExtraction?.modelCategory,
+      relationshipProvider: relationshipExtraction?.provider,
+      relationshipExtraction: relationshipExtraction, // Keep full object to check if extraction exists
+      // For backwards compatibility - use entity model if available, otherwise relationship model
+      modelName: entityExtraction?.modelName || relationshipExtraction?.modelName,
+      modelCategory: entityExtraction?.modelCategory || relationshipExtraction?.modelCategory,
+      provider: entityExtraction?.provider || relationshipExtraction?.provider
+    };
   };
 
   const calculateUploadDuration = () => {
@@ -1109,7 +1670,537 @@ function ViewDocument() {
             </Card>
           </Col>
         )}
+
+        {/* Knowledge Graph Extraction */}
+        {canExtractGraph() && (
+          <Col md={12}>
+            <Card className="border-0 bg-light h-100">
+              <Card.Body>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <div className="d-flex align-items-center">
+                    <HiHashtag className="text-primary me-2" size={24} />
+                    <h5 className="mb-0 fw-semibold">Knowledge Graph</h5>
+                  </div>
+                  <Button
+                    variant="outline-secondary"
+                    size="sm"
+                    onClick={() => {
+                      // In development, Neo4j Browser is accessible directly on localhost:7474
+                      // In production, it's proxied through Nginx at /neo4j/
+                      const neo4jUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                        ? 'http://localhost:7474'
+                        : '/neo4j/';
+                      window.open(neo4jUrl, '_blank');
+                    }}
+                  >
+                    <HiCube className="me-1" /> View in Neo4j
+                  </Button>
+                </div>
+                
+                {loadingGraphCounts ? (
+                  <div className="text-center py-3 mb-3">
+                    <Spinner animation="border" size="sm" />
+                    <span className="ms-2 text-muted">Loading graph info...</span>
+                  </div>
+                ) : (() => {
+                  const graphInfo = getGraphExtractionInfo();
+                  return graphInfo ? (
+                    <div className="mb-3">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <span className="text-muted h6">Status</span>
+                        <Badge bg="success">Extracted</Badge>
+                      </div>
+                      {graphInfo.totalCost > 0 && (
+                        <div className="d-flex justify-content-between align-items-center mb-3">
+                          <span className="text-muted h6 text-start">Total Extraction Cost</span>
+                          <span className="text-secondary fw-semibold">${graphInfo.totalCost.toFixed(6)}</span>
+                        </div>
+                      )}
+                      
+                      {/* Entities Section */}
+                      {(graphInfo.entityCount > 0 || graphInfo.entityStartedAt || graphInfo.entityModelName || graphInfo.entityProvider || graphInfo.entityExtraction) && (
+                        <div className="mb-3 pb-3 border-bottom">
+                          <h6 className="text-muted mb-2 fw-semibold text-start">Entities</h6>
+                          {graphInfo.entityCount > 0 && (
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="text-muted small">Count</span>
+                              <span className="text-secondary">{graphInfo.entityCount}</span>
+                            </div>
+                          )}
+                          {graphInfo.entityStartedAt && (
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="text-muted small">Started</span>
+                              <span className="text-secondary small">
+                                {formatDateTime(new Date(graphInfo.entityStartedAt))}
+                              </span>
+                            </div>
+                          )}
+                          {graphInfo.entityCompletedAt && (
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="text-muted small">Completed</span>
+                              <span className="text-secondary small">
+                                {formatDateTime(new Date(graphInfo.entityCompletedAt))}
+                                {graphInfo.entityDurationMs && (
+                                  <span className="text-muted ms-2">
+                                    ({Math.round(graphInfo.entityDurationMs / 1000)}s)
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {(graphInfo.entityModelName || graphInfo.entityProvider || graphInfo.entityExtraction) && (
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="text-muted small">Model</span>
+                              <span className="text-secondary small">
+                                {graphInfo.entityModelName || 'Unknown'}
+                                {graphInfo.entityProvider && (
+                                  <span className="text-muted ms-1">({graphInfo.entityProvider})</span>
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {graphInfo.entityCost > 0 && (
+                            <div className="d-flex justify-content-between align-items-center">
+                              <span className="text-muted small">Cost</span>
+                              <span className="text-secondary small">${graphInfo.entityCost.toFixed(6)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Relationships Section */}
+                      {(graphInfo.relationshipCount > 0 || graphInfo.relationshipStartedAt || graphInfo.relationshipModelName || graphInfo.relationshipProvider || graphInfo.relationshipExtraction) && (
+                        <div className="mb-3">
+                          <h6 className="text-muted mb-2 fw-semibold text-start">Relationships</h6>
+                          {graphInfo.relationshipCount > 0 && (
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="text-muted small">Count</span>
+                              <span className="text-secondary">{graphInfo.relationshipCount}</span>
+                            </div>
+                          )}
+                          {graphInfo.relationshipStartedAt && (
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="text-muted small">Started</span>
+                              <span className="text-secondary small">
+                                {formatDateTime(new Date(graphInfo.relationshipStartedAt))}
+                              </span>
+                            </div>
+                          )}
+                          {graphInfo.relationshipCompletedAt && (
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="text-muted small">Completed</span>
+                              <span className="text-secondary small">
+                                {formatDateTime(new Date(graphInfo.relationshipCompletedAt))}
+                                {graphInfo.relationshipDurationMs && (
+                                  <span className="text-muted ms-2">
+                                    ({Math.round(graphInfo.relationshipDurationMs / 1000)}s)
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {(graphInfo.relationshipModelName || graphInfo.relationshipProvider || graphInfo.relationshipExtraction) && (
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <span className="text-muted small">Model</span>
+                              <span className="text-secondary small">
+                                {graphInfo.relationshipModelName || 'Unknown'}
+                                {graphInfo.relationshipProvider && (
+                                  <span className="text-muted ms-1">({graphInfo.relationshipProvider})</span>
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {graphInfo.relationshipCost > 0 && (
+                            <div className="d-flex justify-content-between align-items-center">
+                              <span className="text-muted small">Cost</span>
+                              <span className="text-secondary small">${graphInfo.relationshipCost.toFixed(6)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Fallback to old extractedAt for backwards compatibility */}
+                      {!graphInfo.entityStartedAt && !graphInfo.relationshipStartedAt && graphInfo.extractedAt && (
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="text-muted h6">Extracted At</span>
+                          <span className="text-secondary small">
+                            {formatDateTime(new Date(graphInfo.extractedAt))}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-center py-3 text-muted mb-3">
+                      <p className="mb-0">No graph data extracted yet</p>
+                    </div>
+                  );
+                })()}
+
+                <div className="mb-2">
+                  <Form.Check
+                    type="checkbox"
+                    id="force-extraction-checkbox"
+                    label="Force re-extraction (will re-extract even if already extracted, incurring additional costs)"
+                    checked={extractionConfirmModal.force}
+                    onChange={(e) => handleForceToggle(e.target.checked)}
+                    disabled={extracting.entities || extracting.relationships || extracting.all}
+                    className="text-start"
+                  />
+                </div>
+                <div className="d-flex gap-2 align-items-start">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => showExtractionConfirmModal('entities')}
+                    disabled={extracting.entities || extracting.all}
+                  >
+                    {extracting.entities || extracting.all ? (
+                      <>
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Extracting...
+                      </>
+                    ) : (
+                      <>
+                        <HiCube className="me-0" /> Extract Entities
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => showExtractionConfirmModal('relationships')}
+                    disabled={extracting.relationships || extracting.all}
+                  >
+                    {extracting.relationships || extracting.all ? (
+                      <>
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Extracting...
+                      </>
+                    ) : (
+                      <>
+                        <HiLink className="me-0" /> Extract Relationships
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => showExtractionConfirmModal('all')}
+                    disabled={extracting.entities || extracting.relationships || extracting.all}
+                    className="ms-auto"
+                  >
+                    {extracting.all ? (
+                      <>
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Extracting...
+                      </>
+                    ) : (
+                      <>
+                        <HiHashtag className="me-2" /> Extract All
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Job Status Display */}
+                {currentJob && (currentJob.status === 'QUEUED' || currentJob.status === 'RUNNING') && (
+                  <div className="mt-3 p-3 bg-light rounded border">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <div>
+                        <strong>Extraction Job Status</strong>
+                        <Badge bg={currentJob.status === 'QUEUED' ? 'secondary' : 'primary'} className="ms-2">
+                          {currentJob.status}
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={handleCancelJob}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                    <div className="mt-2">
+                      {currentJob.status === 'QUEUED' ? (
+                        <small className="text-muted d-block">
+                          Waiting to start extraction...
+                        </small>
+                      ) : (
+                        <>
+                          {currentJob.processedBatches !== null && currentJob.totalBatches !== null && (
+                            <div className="mb-2">
+                              <small className="text-muted">
+                                Processing batch {currentJob.processedBatches} of {currentJob.totalBatches}
+                              </small>
+                              <div className="progress mt-1" style={{ height: '6px' }}>
+                                <div
+                                  className="progress-bar"
+                                  role="progressbar"
+                                  style={{
+                                    width: `${(currentJob.processedBatches / currentJob.totalBatches) * 100}%`
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {currentJob.totalEntities !== null && (
+                            <small className="text-muted d-block">
+                              Entities extracted: {currentJob.totalEntities}
+                            </small>
+                          )}
+                          {currentJob.totalRelationships !== null && (
+                            <small className="text-muted d-block">
+                              Relationships extracted: {currentJob.totalRelationships}
+                            </small>
+                          )}
+                          {currentJob.processedBatches === null && currentJob.totalBatches === null && 
+                           currentJob.totalEntities === null && currentJob.totalRelationships === null && (
+                            <small className="text-muted d-block">
+                              Starting extraction...
+                            </small>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
+        )}
       </Row>
+
+      {/* Document Entities Browser */}
+      {document && (document.status === 'PROCESSED' || document.status === 'AI_READY') && (
+        <Row className="mt-4">
+          <Col md={12}>
+            <Card className="border-0 bg-light h-100">
+              <Card.Body>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <h5 className="mb-0 fw-semibold">Document Entities</h5>
+                  <div className="d-flex align-items-center gap-2">
+                    <select
+                      className="form-select form-select-sm"
+                      style={{ width: 'auto' }}
+                      value={selectedDocumentEntityType}
+                      onChange={(e) => setSelectedDocumentEntityType(e.target.value)}
+                      disabled={loadingDocumentEntities}
+                    >
+                      <option value="All">All Types</option>
+                      {['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'].map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {loadingDocumentEntities ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" role="status">
+                      <span className="visually-hidden">Loading entities...</span>
+                    </Spinner>
+                  </div>
+                ) : documentEntities.length === 0 ? (
+                  <div className="text-center py-4 text-muted">
+                    {selectedDocumentEntityType === 'All' 
+                      ? 'No entities found for this document'
+                      : `No ${selectedDocumentEntityType} entities found for this document`}
+                  </div>
+                ) : (
+                  <>
+                    <Table responsive hover>
+                      <thead>
+                        <tr>
+                          <th>ID</th>
+                          <th>Name</th>
+                          <th>Type</th>
+                          <th>Properties</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {documentEntities.slice(0, 100).map((entity, idx) => {
+                          // Filter out system fields - same list used in both count and extraction
+                          const excludedKeys = ['id', 'name', 'type', 'teamId', 'documentId', 'extractedAt', 'createdAt', 'updatedAt'];
+                          const propertyCount = Object.keys(entity).filter(k => !excludedKeys.includes(k)).length;
+                          const entityProperties = Object.entries(entity)
+                            .filter(([key]) => !excludedKeys.includes(key))
+                            .reduce((acc, [key, value]) => {
+                              acc[key] = value;
+                              return acc;
+                            }, {});
+                          
+                          return (
+                            <tr 
+                              key={entity.id || idx}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => setPropertiesModal({
+                                show: true,
+                                title: 'Entity Properties',
+                                entityType: entity.type || 'Unknown',
+                                entityName: entity.name || entity.id || 'Unnamed',
+                                properties: entityProperties
+                              })}
+                            >
+                              <td>
+                                <code className="small">{entity.id || 'N/A'}</code>
+                              </td>
+                              <td>{entity.name || entity.id || 'Unnamed'}</td>
+                              <td>
+                                <Badge bg="secondary">{entity.type || 'Unknown'}</Badge>
+                              </td>
+                              <td
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPropertiesModal({
+                                    show: true,
+                                    title: 'Entity Properties',
+                                    entityType: entity.type || 'Unknown',
+                                    entityName: entity.name || entity.id || 'Unnamed',
+                                    properties: entityProperties
+                                  });
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <small className="text-muted">
+                                  {propertyCount} properties
+                                </small>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                    {documentEntities.length > 100 && (
+                      <div className="text-center mt-3 text-muted">
+                        <small>Showing first 100 of {documentEntities.length} entities</small>
+                      </div>
+                    )}
+                  </>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+      )}
+
+      {/* Document Relationships Browser */}
+      {document && (document.status === 'PROCESSED' || document.status === 'AI_READY') && (
+        <Row className="mt-4">
+          <Col md={12}>
+            <Card className="border-0 bg-light h-100">
+              <Card.Body>
+                <div className="d-flex align-items-center justify-content-between mb-3">
+                  <h5 className="mb-0 fw-semibold">Document Relationships</h5>
+                  <div className="d-flex align-items-center gap-2">
+                    <select
+                      className="form-select form-select-sm"
+                      style={{ width: 'auto' }}
+                      value={selectedDocumentRelationshipType}
+                      onChange={(e) => setSelectedDocumentRelationshipType(e.target.value)}
+                      disabled={loadingDocumentRelationships}
+                    >
+                      <option value="All">All Types</option>
+                      {Array.from(new Set(documentRelationships.map(r => r.relationshipType).filter(Boolean))).sort().map((type) => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {loadingDocumentRelationships ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" role="status">
+                      <span className="visually-hidden">Loading relationships...</span>
+                    </Spinner>
+                  </div>
+                ) : documentRelationships.length === 0 ? (
+                  <div className="text-center py-4 text-muted">
+                    {selectedDocumentRelationshipType === 'All' 
+                      ? 'No relationships found for this document'
+                      : `No ${selectedDocumentRelationshipType} relationships found for this document`}
+                  </div>
+                ) : (
+                  <>
+                    <Table responsive hover>
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>From Entity</th>
+                          <th>From Entity Name</th>
+                          <th>To Entity</th>
+                          <th>To Entity Name</th>
+                          <th>Properties</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {documentRelationships.slice(0, 100).map((relationship, idx) => {
+                          const propertyCount = Object.keys(relationship.properties || {}).length;
+                          const fromEntityName = relationship.fromEntity?.name || relationship.fromEntity?.id || 'N/A';
+                          const toEntityName = relationship.toEntity?.name || relationship.toEntity?.id || 'N/A';
+                          const relationshipTitle = `${relationship.relationshipType || 'Unknown'} Relationship`;
+                          const relationshipSubtitle = `${relationship.fromEntity?.type || 'Unknown'}:${fromEntityName} → ${relationship.toEntity?.type || 'Unknown'}:${toEntityName}`;
+                          
+                          return (
+                            <tr 
+                              key={idx}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => setPropertiesModal({
+                                show: true,
+                                title: relationshipTitle,
+                                entityType: relationship.relationshipType || 'Unknown',
+                                entityName: relationshipSubtitle,
+                                properties: relationship.properties || {}
+                              })}
+                            >
+                              <td>
+                                <Badge bg="info">{relationship.relationshipType || 'Unknown'}</Badge>
+                              </td>
+                              <td>
+                                <Badge bg="secondary">{relationship.fromEntity?.type || 'Unknown'}</Badge>
+                              </td>
+                              <td>
+                                <code className="small">{fromEntityName}</code>
+                              </td>
+                              <td>
+                                <Badge bg="secondary">{relationship.toEntity?.type || 'Unknown'}</Badge>
+                              </td>
+                              <td>
+                                <code className="small">{toEntityName}</code>
+                              </td>
+                              <td
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPropertiesModal({
+                                    show: true,
+                                    title: relationshipTitle,
+                                    entityType: relationship.relationshipType || 'Unknown',
+                                    entityName: relationshipSubtitle,
+                                    properties: relationship.properties || {}
+                                  });
+                                }}
+                                style={{ cursor: 'pointer' }}
+                              >
+                                <small className="text-muted">
+                                  {propertyCount} properties
+                                </small>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </Table>
+                    {documentRelationships.length > 100 && (
+                      <div className="text-center mt-3 text-muted">
+                        <small>Showing first 100 of {documentRelationships.length} relationships</small>
+                      </div>
+                    )}
+                  </>
+                )}
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
+      )}
 
       <ConfirmationModalWithVerification
         show={stageDeleteModal.show}
@@ -1130,6 +2221,53 @@ function ViewDocument() {
         variant="danger"
         confirmLabel="Delete"
         loading={hardDeleting}
+      />
+      {extractionConfirmModal.type && (
+        <ConfirmationModalWithVerification
+          show={extractionConfirmModal.show}
+          onHide={closeExtractionConfirmModal}
+          onConfirm={handleExtractConfirm}
+          title={getExtractionModalConfig().title}
+          message={getExtractionModalConfig().message}
+          variant="primary"
+          confirmLabel={getExtractionModalConfig().confirmLabel}
+          loading={extracting.entities || extracting.relationships || extracting.all}
+        />
+      )}
+      
+      {/* Already Extracted Modal */}
+      <AlertMessageModal
+        show={alreadyExtractedModal.show}
+        onHide={handleAlreadyExtractedModalClose}
+        title="Already Extracted"
+        message={
+          <>
+            {alreadyExtractedModal.message}
+            <div className="mt-3">
+              <p className="mb-0 text-muted small">
+                To re-extract and incur additional costs, check the "Force re-extraction" checkbox and try again.
+              </p>
+            </div>
+          </>
+        }
+        variant="warning"
+        primaryButton={{
+          label: 'Force Re-extract',
+          onClick: handleAlreadyExtractedForceRetry
+        }}
+        secondaryButton={{
+          label: 'Close',
+          onClick: handleAlreadyExtractedModalClose
+        }}
+      />
+
+      <PropertiesViewerModal
+        show={propertiesModal.show}
+        onHide={() => setPropertiesModal(prev => ({ ...prev, show: false }))}
+        title={propertiesModal.title}
+        entityType={propertiesModal.entityType}
+        entityName={propertiesModal.entityName}
+        properties={propertiesModal.properties}
       />
     </div>
   );

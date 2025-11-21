@@ -682,12 +682,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     @Override
     public Mono<Void> deleteExecution(String executionId, String teamId) {
         return executionRepository.findById(executionId)
-            .filter(execution -> execution.getTeamId().equals(teamId))
-            .switchIfEmpty(Mono.error(new ResponseStatusException(
-                HttpStatus.NOT_FOUND, 
-                "Execution not found or access denied")))
-            .flatMap(execution -> executionRepository.delete(execution)
-                .doOnSuccess(v -> log.info("Deleted execution: {}", executionId))
+                .filter(execution -> execution.getTeamId().equals(teamId))
+                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                    HttpStatus.NOT_FOUND, 
+                    "Execution not found or access denied")))
+                .flatMap(execution -> executionRepository.delete(execution)
+                    .doOnSuccess(v -> log.info("Deleted execution: {}", executionId))
                 .doOnError(error -> log.error("Error deleting execution: {}", error.getMessage())));
     }
 

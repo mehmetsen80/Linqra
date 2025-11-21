@@ -16,6 +16,7 @@ import org.lite.gateway.service.ConversationService;
 import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.LlmCostService;
+import org.lite.gateway.service.KnowledgeHubGraphContextService;
 import org.lite.gateway.entity.Agent;
 import org.lite.gateway.entity.AgentExecution;
 import org.lite.gateway.entity.AgentTask;
@@ -53,6 +54,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
     private final LinqWorkflowExecutionService workflowExecutionService;
     private final LlmCostService llmCostService;
     private final ObjectMapper objectMapper;
+    private final KnowledgeHubGraphContextService knowledgeHubGraphContextService;
     
     @Autowired(required = false)
     @Qualifier("chatMessageChannel")
@@ -271,6 +273,14 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
         // Extract user message
         final String userMessage = extractUserMessage(messages);
         
+        // Enrich context with Knowledge Graph information
+        Mono<Map<String, Object>> graphContextMono = knowledgeHubGraphContextService
+                .enrichContextWithGraph(userMessage, assistant.getTeamId())
+                .onErrorResume(error -> {
+                    log.warn("Failed to enrich context with Knowledge Graph: {}", error.getMessage());
+                    return Mono.just(Map.of()); // Return empty context on error
+                });
+        
         // Execute Agent Tasks first if assistant has selectedTasks
         Mono<Map<String, Object>> taskResultsMono;
         if (assistant.getSelectedTasks() != null && !assistant.getSelectedTasks().isEmpty()) {
@@ -321,9 +331,14 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
                         "LLM model not found: " + modelCategory + "/" + modelName + " for team " + assistant.getTeamId())))
-                .flatMap(llmModel -> taskResultsMono.flatMap(taskResults -> {
-                    // Build enriched messages with task results in context
-                    List<Map<String, Object>> enrichedMessages = enrichMessagesWithTaskResults(messages, taskResults, assistant.getSystemPrompt());
+                .flatMap(llmModel -> Mono.zip(taskResultsMono, graphContextMono)
+                        .flatMap(tuple -> {
+                            Map<String, Object> taskResults = tuple.getT1();
+                            Map<String, Object> graphContext = tuple.getT2();
+                            
+                            // Build enriched messages with task results and graph context
+                            List<Map<String, Object>> enrichedMessages = enrichMessagesWithContext(
+                                    messages, taskResults, graphContext, assistant.getSystemPrompt());
                     
                     // Build chat request
                     LinqRequest chatRequest = new LinqRequest();
@@ -384,7 +399,71 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                     log.warn("⚠️ Could not extract token usage from LLM response");
                                 }
                                 
-                                chatResult.setMetadata(new HashMap<>());
+                                // Add Knowledge Graph documents to metadata for frontend display
+                                Map<String, Object> metadata = new HashMap<>();
+                                @SuppressWarnings("unchecked")
+                                List<Map<String, Object>> graphDocuments = (List<Map<String, Object>>) graphContext.getOrDefault("documents", Collections.emptyList());
+                                @SuppressWarnings("unchecked")
+                                List<Map<String, Object>> entities = (List<Map<String, Object>>) graphContext.getOrDefault("entities", Collections.emptyList());
+                                
+                                if (!graphDocuments.isEmpty()) {
+                                    // Build a map of documentId -> entity names for this document
+                                    Map<String, List<String>> documentToEntityNames = new HashMap<>();
+                                    for (Map<String, Object> entity : entities) {
+                                        String docId = (String) entity.get("documentId");
+                                        if (docId != null && !docId.isEmpty()) {
+                                            String entityName = (String) entity.getOrDefault("name", "");
+                                            String entityType = (String) entity.getOrDefault("type", "");
+                                            // Only include Form entities for document titles
+                                            if ("Form".equals(entityType) && !entityName.isEmpty()) {
+                                                documentToEntityNames.computeIfAbsent(docId, k -> new ArrayList<>()).add(entityName);
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Format documents for frontend with entity names
+                                    List<Map<String, Object>> formattedDocs = graphDocuments.stream()
+                                            .map(doc -> {
+                                                String docId = (String) doc.get("documentId");
+                                                String fileName = (String) doc.get("fileName");
+                                                
+                                                Map<String, Object> formatted = new HashMap<>();
+                                                formatted.put("documentId", docId);
+                                                formatted.put("fileName", fileName);
+                                                
+                                                // Use entity name(s) if available
+                                                List<String> entityNames = documentToEntityNames.getOrDefault(docId, Collections.emptyList());
+                                                String title;
+                                                if (!entityNames.isEmpty()) {
+                                                    // Use the first entity name, or join if multiple
+                                                    title = entityNames.size() == 1 
+                                                            ? entityNames.get(0)
+                                                            : String.join(", ", entityNames);
+                                                    formatted.put("formName", title);
+                                                } else {
+                                                    // No entity name in graph - just use filename as-is, no assumptions
+                                                    title = fileName;
+                                                    formatted.put("formName", null);
+                                                }
+                                                
+                                                formatted.put("title", title);
+                                                
+                                                return formatted;
+                                            })
+                                            .collect(java.util.stream.Collectors.toList());
+                                    metadata.put("knowledgeGraphDocuments", formattedDocs);
+                                    
+                                    // Also add to taskResults so frontend can display them alongside RAG documents
+                                    // Create a synthetic task result for Knowledge Graph documents
+                                    Map<String, Object> graphTaskResult = new HashMap<>();
+                                    graphTaskResult.put("documents", formattedDocs);
+                                    graphTaskResult.put("source", "knowledge_graph");
+                                    taskResults.put("_knowledgeGraph", graphTaskResult);
+                                    
+                                    log.debug("Added {} Knowledge Graph documents to chat response metadata and taskResults", formattedDocs.size());
+                                }
+                                chatResult.setMetadata(metadata);
+                                chatResult.setTaskResults(taskResults); // Update taskResults with Knowledge Graph documents
                                 
                                 LinqResponse chatResponse = new LinqResponse();
                                 chatResponse.setChatResult(chatResult);
@@ -476,52 +555,155 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
     }
     
     /**
-     * Enrich messages with task results in context
+     * Enrich messages with task results and Knowledge Graph context
      */
-    private List<Map<String, Object>> enrichMessagesWithTaskResults(
+    private List<Map<String, Object>> enrichMessagesWithContext(
             List<Map<String, Object>> messages,
             Map<String, Object> taskResults,
+            Map<String, Object> graphContext,
             String systemPrompt) {
         
         // Create a copy of messages
         List<Map<String, Object>> enrichedMessages = new ArrayList<>(messages);
         
-        // Add task results to system message or create a new system message
-        if (!taskResults.isEmpty()) {
-            StringBuilder taskContext = new StringBuilder();
-            if (systemPrompt != null && !systemPrompt.isEmpty()) {
-                taskContext.append(systemPrompt).append("\n\n");
-            }
-            taskContext.append("Agent Task Results:\n");
-            for (Map.Entry<String, Object> entry : taskResults.entrySet()) {
-                taskContext.append("- Task ").append(entry.getKey()).append(": ");
-                if (entry.getValue() instanceof String) {
-                    taskContext.append(entry.getValue());
-                } else {
-                    taskContext.append(objectMapper.valueToTree(entry.getValue()).toString());
+        // Build enriched system prompt with task results and graph context
+        StringBuilder enrichedContext = new StringBuilder();
+        
+        // Start with original system prompt if available
+        if (systemPrompt != null && !systemPrompt.isEmpty()) {
+            enrichedContext.append(systemPrompt).append("\n\n");
+        }
+        
+        // Add Knowledge Graph context if available
+        if (graphContext != null && !graphContext.isEmpty()) {
+            Integer entityCount = (Integer) graphContext.getOrDefault("entityCount", 0);
+            if (entityCount > 0) {
+                enrichedContext.append("=== Knowledge Graph Context ===\n");
+                enrichedContext.append(graphContext.getOrDefault("summary", "")).append("\n");
+                
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> entities = (List<Map<String, Object>>) graphContext.getOrDefault("entities", Collections.emptyList());
+                if (!entities.isEmpty()) {
+                    enrichedContext.append("\nRelevant Entities:\n");
+                    for (Map<String, Object> entity : entities) {
+                        String type = (String) entity.getOrDefault("type", "Unknown");
+                        String name = (String) entity.getOrDefault("name", (String) entity.getOrDefault("id", "Unnamed"));
+                        String id = (String) entity.getOrDefault("id", "");
+                        
+                        enrichedContext.append("- ").append(name).append(" (").append(type);
+                        if (!id.isEmpty() && !id.equals(name)) {
+                            enrichedContext.append(", ID: ").append(id);
+                        }
+                        enrichedContext.append(")\n");
+                        
+                        // Add key properties (exclude system fields)
+                        entity.entrySet().stream()
+                                .filter(e -> !isSystemField(e.getKey()))
+                                .limit(3) // Limit to 3 key properties
+                                .forEach(e -> {
+                                    Object value = e.getValue();
+                                    if (value != null && !(value instanceof List) && !(value instanceof Map)) {
+                                        enrichedContext.append("  - ").append(e.getKey()).append(": ").append(value).append("\n");
+                                    }
+                                });
+                    }
                 }
-                taskContext.append("\n");
-            }
-            
-            // Find existing system message or add new one at the beginning
-            boolean hasSystemMessage = false;
-            for (Map<String, Object> msg : enrichedMessages) {
-                if ("system".equals(msg.get("role"))) {
-                    msg.put("content", taskContext.toString());
-                    hasSystemMessage = true;
-                    break;
+                
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> relationships = (List<Map<String, Object>>) graphContext.getOrDefault("relationships", Collections.emptyList());
+                if (!relationships.isEmpty() && relationships.size() <= 5) {
+                    enrichedContext.append("\nRelevant Relationships:\n");
+                    for (Map<String, Object> rel : relationships) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> from = (Map<String, Object>) rel.getOrDefault("fromEntity", Map.of());
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> to = (Map<String, Object>) rel.getOrDefault("toEntity", Map.of());
+                        String relType = (String) rel.getOrDefault("relationshipType", "RELATED_TO");
+                        
+                        enrichedContext.append("- ")
+                                .append(from.getOrDefault("name", from.get("id")))
+                                .append(" [").append(relType).append("] ")
+                                .append(to.getOrDefault("name", to.get("id")))
+                                .append("\n");
+                    }
                 }
-            }
-            
-            if (!hasSystemMessage) {
-                Map<String, Object> systemMsg = new HashMap<>();
-                systemMsg.put("role", "system");
-                systemMsg.put("content", taskContext.toString());
-                enrichedMessages.add(0, systemMsg);
+                
+                // Add document information from Knowledge Graph
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> documents = (List<Map<String, Object>>) graphContext.getOrDefault("documents", Collections.emptyList());
+                if (!documents.isEmpty()) {
+                    enrichedContext.append("\n=== CRITICAL: Available Documents from Knowledge Graph (")
+                            .append(documents.size())
+                            .append(" documents) ===\n");
+                    enrichedContext.append("You MUST provide download links or references for ALL of these documents, not just one:\n\n");
+                    int docIndex = 1;
+                    for (Map<String, Object> doc : documents) {
+                        String documentId = (String) doc.getOrDefault("documentId", "");
+                        String fileName = (String) doc.getOrDefault("fileName", "Unknown");
+                        
+                        enrichedContext.append(docIndex++).append(". ").append(fileName);
+                        if (!documentId.isEmpty()) {
+                            enrichedContext.append(" (Document ID: ").append(documentId).append(")");
+                        }
+                        enrichedContext.append("\n");
+                    }
+                    enrichedContext.append("\n**IMPORTANT**: When the user asks for forms or documents, you MUST reference ALL ")
+                            .append(documents.size())
+                            .append(" documents listed above. Do NOT return only one document. ")
+                            .append("Include download links or document references for EACH of the documents listed.\n\n");
+                }
+                enrichedContext.append("\n");
             }
         }
         
+        // Add task results if available
+        if (!taskResults.isEmpty()) {
+            enrichedContext.append("=== Agent Task Results ===\n");
+            for (Map.Entry<String, Object> entry : taskResults.entrySet()) {
+                enrichedContext.append("- Task ").append(entry.getKey()).append(": ");
+                if (entry.getValue() instanceof String) {
+                    enrichedContext.append(entry.getValue());
+                } else {
+                    try {
+                        enrichedContext.append(objectMapper.valueToTree(entry.getValue()).toString());
+                    } catch (Exception e) {
+                        enrichedContext.append(entry.getValue().toString());
+                    }
+                }
+                enrichedContext.append("\n");
+            }
+            enrichedContext.append("\n");
+        }
+        
+        // Find existing system message or add new one at the beginning
+        boolean hasSystemMessage = false;
+        for (Map<String, Object> msg : enrichedMessages) {
+            if ("system".equals(msg.get("role"))) {
+                // Append to existing system message if there's new context
+                String existingContent = (String) msg.get("content");
+                if (enrichedContext.length() > 0 && (systemPrompt == null || !existingContent.contains(enrichedContext.toString()))) {
+                    msg.put("content", enrichedContext.toString());
+                }
+                hasSystemMessage = true;
+                break;
+            }
+        }
+        
+        if (!hasSystemMessage && enrichedContext.length() > 0) {
+            Map<String, Object> systemMsg = new HashMap<>();
+            systemMsg.put("role", "system");
+            systemMsg.put("content", enrichedContext.toString());
+            enrichedMessages.add(0, systemMsg);
+        }
+        
         return enrichedMessages;
+    }
+    
+    private boolean isSystemField(String key) {
+        return key.equals("id") || key.equals("name") || key.equals("type") || 
+               key.equals("teamId") || key.equals("documentId") || 
+               key.equals("extractedAt") || key.equals("createdAt") || key.equals("updatedAt") ||
+               key.equals("relatedEntities") || key.equals("relationships");
     }
     
     /**

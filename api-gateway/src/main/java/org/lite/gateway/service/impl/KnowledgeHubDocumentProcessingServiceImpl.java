@@ -246,7 +246,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
 
         List<Integer> pageBoundaries = computePageBoundaries(text, pageCount);
         int searchIndex = 0;
-
+        
         for (ChunkingService.ChunkResult chunk : chunks) {
             String chunkText = chunk.getText();
             if (!StringUtils.hasText(chunkText)) {
@@ -426,7 +426,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                                         .options(field.getOptions())
                                         .pageNumber(field.getPageNumber())
                                         .required(field.getRequired())
-                                        .build())
+                        .build())
                                 .toList())
                 .qualityChecks(ProcessedDocumentDto.QualityChecks.builder()
                         .allChunksValid(true)

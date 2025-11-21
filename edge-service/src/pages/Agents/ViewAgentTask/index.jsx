@@ -904,7 +904,7 @@ function ViewAgentTask() {
                 </h4>
                 <div className="d-flex gap-2">
                     <Button 
-                        variant="outline-secondary" 
+                        variant="secondary" 
                         onClick={() => navigate(`/agents/${task?.agentId}`)}
                     >
                         <HiArrowLeft className="me-1" /> Back to Agent

@@ -624,6 +624,28 @@ db.team_routes.createIndex(
 );
 
 // ============================================================================
+// GRAPH_EXTRACTION_JOBS COLLECTION
+// ============================================================================
+
+// 1. Document Team Status Index
+db.graph_extraction_jobs.createIndex(
+  { "documentId": 1, "teamId": 1, "status": 1 },
+  { 
+    "name": "document_team_status_idx",
+    "background": true
+  }
+);
+
+// 2. Team Status Created Index
+db.graph_extraction_jobs.createIndex(
+  { "teamId": 1, "status": 1, "createdAt": -1 },
+  { 
+    "name": "team_status_created_idx",
+    "background": true
+  }
+);
+
+// ============================================================================
 // VERIFY ALL INDEXES
 // ============================================================================
 
@@ -749,6 +771,12 @@ db.team_members.getIndexes().forEach(function(index) {
 
 print("\n=== TEAM_ROUTES Indexes ===");
 db.team_routes.getIndexes().forEach(function(index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== GRAPH_EXTRACTION_JOBS Indexes ===");
+db.graph_extraction_jobs.getIndexes().forEach(function(index) {
   print("Index: " + index.name);
   printjson(index.key);
 });

@@ -12,7 +12,8 @@ import {
   Row,
   Col,
   OverlayTrigger,
-  Tooltip
+  Tooltip,
+  Table
 } from 'react-bootstrap';
 import { HiArrowLeft, HiChatAlt, HiCode, HiClipboardCopy, HiCheck, HiPlus, HiDownload } from 'react-icons/hi';
 import Button from '../../../components/common/Button';
@@ -55,6 +56,7 @@ function ViewAssistant() {
     const [isCancelling, setIsCancelling] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [deleteModal, setDeleteModal] = useState({ show: false, conversation: null });
+    const [hasAutoSelectedConversation, setHasAutoSelectedConversation] = useState(false);
 
     useEffect(() => {
         if (assistantId && currentTeam) {
@@ -210,6 +212,13 @@ function ViewAssistant() {
                     ? response.data 
                     : response.data.content || [];
                 setConversations(conversationsList);
+                
+                // Auto-select the first (latest) conversation on initial load if none is selected
+                if (!hasAutoSelectedConversation && conversationsList.length > 0 && !selectedConversationId) {
+                    const firstConversation = conversationsList[0];
+                    setHasAutoSelectedConversation(true);
+                    loadConversation(firstConversation.id);
+                }
             }
         } catch (err) {
             console.error('Error loading conversations:', err);
@@ -273,6 +282,7 @@ function ViewAssistant() {
         setConversationId(null);
         setMessages([]);
         setInputMessage('');
+        // Don't reset hasAutoSelectedConversation - we still want to prevent auto-selection after user manually starts new
     };
 
     const handleConfirmDeleteConversation = async () => {
@@ -671,7 +681,8 @@ function ViewAssistant() {
                                                                                     docsMap.set(docId, {
                                                                                         documentId: docId,
                                                                                         title: doc.title,
-                                                                                        fileName: doc.fileName
+                                                                                        fileName: doc.fileName,
+                                                                                        formName: doc.formName || doc.title
                                                                                     });
                                                                                 }
                                                                             }
@@ -687,7 +698,8 @@ function ViewAssistant() {
                                                                                 docsMap.set(docId, {
                                                                                     documentId: docId,
                                                                                     title: item.title,
-                                                                                    fileName: item.fileName
+                                                                                    fileName: item.fileName,
+                                                                                    formName: item.formName || item.title
                                                                                 });
                                                                             }
                                                                         }
@@ -695,26 +707,65 @@ function ViewAssistant() {
                                                                 });
                                                                 const docs = Array.from(docsMap.values());
                                                                 if (!docs.length) return null;
+                                                                
+                                                                // Check if we have form names (from Knowledge Graph)
+                                                                const hasFormNames = docs.some(doc => doc.formName || (doc.title && doc.title !== doc.fileName));
+                                                                
                                                                 return (
-                                                                    <div className="knowledge-doc-links mt-1">
-                                                                        <div className="text-muted small mb-1">
-                                                                            Download:&nbsp;
+                                                                    <div className="knowledge-doc-links mt-2">
+                                                                        <div className="text-muted small mb-2">
                                                                             {docs.length === 1
                                                                                 ? 'Related Knowledge Hub document'
                                                                                 : 'Related Knowledge Hub documents'}
                                                                         </div>
-                                                                        {docs.map(doc => (
-                                                                            <Button
-                                                                                key={doc.documentId}
-                                                                                variant="link"
-                                                                                size="sm"
-                                                                                className="p-0 me-3 knowledge-doc-link d-inline-flex align-items-center"
-                                                                                onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.title || doc.fileName)}
-                                                                            >
-                                                                                <HiDownload className="me-1" />
-                                                                                {doc.title || doc.fileName || 'Download document'}
-                                                                            </Button>
-                                                                        ))}
+                                                                        {hasFormNames && docs.length > 1 ? (
+                                                                            // Table format for multiple documents with form names
+                                                                            <Table striped bordered hover size="sm" className="mb-0">
+                                                                                <thead>
+                                                                                    <tr>
+                                                                                        <th style={{ width: '50%' }}>Form Name</th>
+                                                                                        <th style={{ width: '30%' }}>File Name</th>
+                                                                                        <th style={{ width: '20%' }}>Action</th>
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody>
+                                                                                    {docs.map(doc => (
+                                                                                        <tr key={doc.documentId}>
+                                                                                            <td>{doc.formName || doc.title || 'N/A'}</td>
+                                                                                            <td>
+                                                                                                <code className="small">{doc.fileName || 'N/A'}</code>
+                                                                                            </td>
+                                                                                            <td>
+                                                                                                <Button
+                                                                                                    variant="outline-primary"
+                                                                                                    size="sm"
+                                                                                                    onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.title || doc.fileName)}
+                                                                                                >
+                                                                                                    <HiDownload className="me-1" />
+                                                                                                    Download
+                                                                                                </Button>
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    ))}
+                                                                                </tbody>
+                                                                            </Table>
+                                                                        ) : (
+                                                                            // Button links for single document or when no form names
+                                                                            <div>
+                                                                                {docs.map(doc => (
+                                                                                    <Button
+                                                                                        key={doc.documentId}
+                                                                                        variant="link"
+                                                                                        size="sm"
+                                                                                        className="p-0 me-3 knowledge-doc-link d-inline-flex align-items-center"
+                                                                                        onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.title || doc.fileName)}
+                                                                                    >
+                                                                                        <HiDownload className="me-1" />
+                                                                                        {doc.title || doc.fileName || 'Download document'}
+                                                                                    </Button>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 );
                                                             })()}

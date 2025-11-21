@@ -36,6 +36,8 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
     private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
     private final KnowledgeHubCollectionRepository collectionRepository;
     private final LinqMilvusStoreService milvusStoreService;
+    private final org.lite.gateway.service.Neo4jGraphService neo4jGraphService;
+    private final org.lite.gateway.repository.GraphExtractionJobRepository graphExtractionJobRepository;
     
     @Override
     public Mono<DocumentInitiationResult> initiateDocumentUpload(UploadInitiateRequest request, String teamId) {
@@ -276,9 +278,91 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                 })
                                 .switchIfEmpty(Mono.fromRunnable(() -> log.warn("KnowledgeHub collection {} not found while hard deleting document {}", document.getCollectionId(), documentId)));
                     }
+                    
+                    // Delete GraphExtractionJob records for this document
+                    Mono<Void> deleteGraphExtractionJobs = graphExtractionJobRepository
+                            .findByDocumentIdAndTeamId(documentId, document.getTeamId())
+                            .flatMap(job -> graphExtractionJobRepository.deleteById(job.getId()))
+                            .then()
+                            .doOnSuccess(v -> log.info("Deleted GraphExtractionJob records for document: {}", documentId))
+                            .doOnError(error -> log.warn("Error deleting GraphExtractionJob records for document {}: {}", 
+                                    documentId, error.getMessage()))
+                            .onErrorResume(error -> {
+                                log.warn("Failed to delete GraphExtractionJob records for document {}, continuing: {}", 
+                                        documentId, error.getMessage());
+                                return Mono.empty();
+                            });
+                    
+                    // Delete Neo4j graph data (entities and relationships) for this document
+                    // First, delete relationships with this documentId
+                    Mono<Void> deleteGraphRelationships = neo4jGraphService.executeQuery(
+                            "MATCH ()-[r]-() WHERE r.documentId = $documentId DELETE r RETURN count(r) as deleted",
+                            java.util.Map.of("documentId", documentId)
+                    )
+                    .collectList()
+                    .flatMap(results -> {
+                        long totalDeleted = results.stream()
+                                .mapToLong(result -> {
+                                    Object deleted = result.get("deleted");
+                                    if (deleted instanceof Number) {
+                                        return ((Number) deleted).longValue();
+                                    }
+                                    return 0L;
+                                })
+                                .sum();
+                        if (totalDeleted > 0) {
+                            log.info("Deleted {} relationships from Neo4j graph for document: {}", totalDeleted, documentId);
+                        }
+                        return Mono.empty();
+                    })
+                    .doOnError(error -> log.warn("Error deleting Neo4j relationships for document {}: {}", 
+                            documentId, error.getMessage()))
+                    .onErrorResume(error -> {
+                        log.warn("Failed to delete Neo4j relationships for document {}, continuing: {}", 
+                                documentId, error.getMessage());
+                        return Mono.empty();
+                    })
+                    .then();
+                    
+                    // Delete entities with this documentId (using DETACH DELETE to remove any remaining relationships)
+                    // Note: We delete by documentId only since team access is already verified at the service layer
+                    log.info("Deleting Neo4j entities for document: {} (team: {})", documentId, document.getTeamId());
+                    Mono<Void> deleteGraphEntities = neo4jGraphService.executeQuery(
+                            "MATCH (e) WHERE e.documentId = $documentId " +
+                            "DETACH DELETE e RETURN count(e) as deleted",
+                            java.util.Map.of("documentId", documentId)
+                    )
+                    .collectList()
+                    .flatMap(results -> {
+                        long totalDeleted = results.stream()
+                                .mapToLong(result -> {
+                                    Object deleted = result.get("deleted");
+                                    if (deleted instanceof Number) {
+                                        return ((Number) deleted).longValue();
+                                    }
+                                    return 0L;
+                                })
+                                .sum();
+                        if (totalDeleted > 0) {
+                            log.info("✅ Deleted {} entities from Neo4j graph for document: {} (team: {})", 
+                                    totalDeleted, documentId, document.getTeamId());
+                        } else {
+                            log.warn("⚠️ No entities found to delete for document: {} (team: {}). Entities may have already been deleted or don't exist.", 
+                                    documentId, document.getTeamId());
+                        }
+                        return Mono.empty();
+                    })
+                    .doOnError(error -> log.error("❌ Error deleting Neo4j entities for document {} (team: {}): {}", 
+                            documentId, document.getTeamId(), error.getMessage(), error))
+                    .onErrorResume(error -> {
+                        log.error("❌ Failed to delete Neo4j entities for document {} (team: {}), continuing: {}", 
+                                documentId, document.getTeamId(), error.getMessage());
+                        return Mono.empty();
+                    })
+                    .then();
 
                     // Execute all deletions in parallel, then delete the document record
-                    return Mono.when(deleteChunks, deleteMetadata, deleteRawFile, deleteProcessedFile, deleteMilvusEmbeddings)
+                    return Mono.when(deleteChunks, deleteMetadata, deleteRawFile, deleteProcessedFile, deleteMilvusEmbeddings, deleteGraphExtractionJobs, deleteGraphRelationships, deleteGraphEntities)
                             .then(documentRepository.deleteById(document.getId()))
                             .doOnSuccess(success -> log.info("Successfully hard deleted document: {}", documentId));
                 });

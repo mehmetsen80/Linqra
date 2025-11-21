@@ -108,7 +108,7 @@ const ConfirmationModalWithVerification = ({
           <Button 
             variant={variant} 
             onClick={handleConfirm}
-            className="px-4"
+            className={`px-4 ${variant === 'primary' ? 'custom-primary-button' : ''}`}
             disabled={!code || code.toUpperCase() !== expectedCode || loading}
           >
             {loading ? (

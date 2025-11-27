@@ -193,7 +193,6 @@ jobs:
               --filter='protect postgres/data/***' \
               --filter='protect pgadmin/data/***' \
               --filter='protect keycloak/data/***' \
-              --filter='protect chroma/data/***' \
               --filter='protect milvus/data/***' \
               --filter='protect etcd/data/***' \
               --filter='protect minio/data/***' \
@@ -203,7 +202,6 @@ jobs:
               --exclude 'postgres/data/' \
               --exclude 'pgadmin/data/' \
               --exclude 'keycloak/data/' \
-              --exclude 'chroma/data/' \
               --exclude 'milvus/data/' \
               --exclude 'etcd/data/' \
               --exclude 'minio/data/' \

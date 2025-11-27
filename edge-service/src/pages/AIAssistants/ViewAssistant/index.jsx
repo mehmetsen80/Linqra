@@ -74,7 +74,7 @@ function ViewAssistant() {
         if (!conversationId) return;
 
         const unsubscribe = chatWebSocketService.subscribeToConversation(conversationId, (update) => {
-            console.log('💬 Received chat update:', update);
+            // console.log('💬 Received chat update:', update);
             
             switch (update.type) {
                 case 'LLM_RESPONSE_STREAMING_STARTED':

@@ -24,13 +24,21 @@ server:
     context-path: /eureka
   ssl:
     enabled: true
-    key-store: ${EUREKA_KEY_STORE}
-    key-store-password: ${EUREKA_KEY_STORE_PASSWORD}
-    key-alias: ${EUREKA_ALIAS_NAME:eureka-app}
+    key-store: ${vault.eureka.key.store}
+    key-store-password: ${vault.eureka.keystore.password}
+    key-alias: ${vault.eureka.alias.name}
     key-store-type: PKCS12
-    trust-store: ${EUREKA_TRUST_STORE}
-    trust-store-password: ${EUREKA_TRUST_STORE_PASSWORD}
+    trust-store: ${vault.eureka.trust.store}
+    trust-store-password: ${vault.eureka.truststore.password}
 
+# Vault Configuration
+# Default path: /app/secrets/vault.encrypted (for Docker)
+# Overridden in application-dev.yml for IDE/local runs with ./secrets/vault.encrypted
+vault:
+  file:
+    path: /app/secrets/vault.encrypted
+  master:
+    key: ${VAULT_MASTER_KEY}
 
 logging:
   level:

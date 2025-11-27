@@ -327,7 +327,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     public Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response) {
         return trackExecution(request, response, null);
     }
-
+    
     @Override
     public Mono<LinqWorkflowExecution> trackExecutionWithAgentContext(LinqRequest request, LinqResponse response, Map<String, Object> agentContext) {
         return trackExecution(request, response, agentContext);
@@ -342,7 +342,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     public Mono<LinqWorkflowExecution> initializeExecutionWithAgentContext(LinqRequest request, Map<String, Object> agentContext) {
         return initializeExecutionInternal(request, agentContext);
     }
-
+    
     /**
      * Internal method that handles both regular and agent context tracking
      */
@@ -356,7 +356,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             computedDuration = response.getMetadata().getWorkflowMetadata().stream()
                 .mapToLong(LinqResponse.WorkflowStepMetadata::getDurationMs)
                 .sum();
-
+            
             response.getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
                 if (stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("gemini-chat")
                     || stepMetadata.getTarget().equals("cohere-chat") || stepMetadata.getTarget().equals("claude-chat")
@@ -370,7 +370,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                 if (step.getResult() instanceof Map<?, ?> resultMap) {
                                     LinqResponse.WorkflowStepMetadata.TokenUsage tokenUsage = new LinqResponse.WorkflowStepMetadata.TokenUsage();
                                     boolean hasTokenUsage = false;
-
+                                    
                                     if ((stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("openai-embed"))
                                         && resultMap.containsKey("usage")) {
                                         Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
@@ -520,7 +520,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                     }
 
                                     if (hasTokenUsage) {
-                                        stepMetadata.setTokenUsage(tokenUsage);
+                                    stepMetadata.setTokenUsage(tokenUsage);
                                     }
                                 }
                             });
@@ -586,7 +586,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             execution.setStatus(finalStatus);
             execution.setDurationMs(totalDuration);
 
-            if (agentContext != null) {
+        if (agentContext != null) {
                 execution.setAgentId((String) agentContext.get("agentId"));
                 execution.setAgentName((String) agentContext.get("agentName"));
                 execution.setAgentTaskId((String) agentContext.get("agentTaskId"));

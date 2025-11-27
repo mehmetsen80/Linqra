@@ -80,7 +80,7 @@ class ChatWebSocketService {
             else if (frame.command === 'MESSAGE') {
                 try {
                     const payload = JSON.parse(frame.body);
-                    console.log('💬 Received chat update:', payload);
+                    // console.log('💬 Received chat update:', payload);
                     
                     // Notify all subscribers
                     this.notifySubscribers(payload);

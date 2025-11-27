@@ -342,35 +342,6 @@ export const knowledgeHubGraphService = {
         error: error.response?.data?.message || error.message || 'Failed to find relationships'
       };
     }
-  },
-
-  /**
-   * Find related entities for a specific entity
-   * @param {string} entityType - Type of the entity (e.g., "Person", "Organization")
-   * @param {string} entityId - ID of the entity
-   * @param {string} relationshipType - Optional relationship type filter
-   * @param {number} maxDepth - Maximum depth to traverse (default: 1)
-   * @returns {Promise} Promise with list of related entities
-   */
-  findRelatedEntities: async (entityType, entityId, relationshipType = null, maxDepth = 1) => {
-    try {
-      let url = `/api/knowledge-graph/entities/${entityType}/${entityId}/related?maxDepth=${maxDepth}`;
-      if (relationshipType) {
-        url += `&relationshipType=${relationshipType}`;
-      }
-      
-      const response = await axiosInstance.get(url);
-      return {
-        success: true,
-        data: response.data
-      };
-    } catch (error) {
-      console.error('Error finding related entities:', error);
-      return {
-        success: false,
-        error: error.response?.data?.message || error.message || 'Failed to find related entities'
-      };
-    }
   }
 };
 

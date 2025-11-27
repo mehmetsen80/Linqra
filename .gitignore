@@ -45,9 +45,20 @@ build/
 /.kube/pgadmin/data/**
 /.kube/redis/data/**
 /.kube/keycloak/data/**
-/.kube/chroma/data/**
 /.kube/milvus/data/**
 /.kube/etcd/data/**
 /.kube/minio/data/**
 /.kube/neo4j/data/**
 /.kube/neo4j/logs/**
+
+### Vault Files (Never commit encrypted secrets!)
+/secrets/*.encrypted
+/secrets/*.backup
+/secrets/*.tmp
+/secrets/.gitkeep
+/secrets/secrets..json
+
+### Environment Files (Never commit secrets!)
+.env
+.env.local
+.env.*.local

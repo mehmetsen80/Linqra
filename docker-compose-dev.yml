@@ -13,16 +13,17 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB" ]
       interval: 10s
       timeout: 3s
       retries: 3
     volumes:
       - ./.kube/postgres/data/:/var/lib/postgresql/pgdata
+      - ./secrets:/app/secrets:ro
     environment:
-      POSTGRES_DB: keycloak
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: password
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-dev}
+      VAULT_REQUIRED_VARS: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD
     networks:
       - linqra-network
 
@@ -50,10 +51,6 @@ services:
       dockerfile: ./.kube/keycloak/Dockerfile
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres-service:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: password
-
       KC_HTTP_ENABLED: true
       KC_HTTP_PORT: 8080
       KC_HOSTNAME: localhost
@@ -61,12 +58,14 @@ services:
       KC_HOSTNAME_STRICT: false
       KC_HOSTNAME_STRICT_HTTPS: false
       KC_HOSTNAME_STRICT_BACKCHANNEL: false
+      KC_HOSTNAME_URL: http://localhost:8281
 
       KC_LOG_LEVEL: info
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
-      KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-dev}
+      VAULT_REQUIRED_VARS: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,KEYCLOAK_ADMIN,KEYCLOAK_ADMIN_PASSWORD
 
     command:
       - start-dev
@@ -75,11 +74,12 @@ services:
       - ./.kube/keycloak/data/import:/opt/keycloak/data/import
       - ./.kube/keycloak/data/export:/opt/keycloak/data/export
       - ./.kube/keycloak/themes:/opt/keycloak/themes
+      - ./secrets:/app/secrets:ro
     depends_on:
       postgres-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000;echo -e 'GET /health/ready HTTP/1.1\r\nhost: http://localhost\r\nConnection: close\r\n\r\n' >&3;if [ $? -eq 0 ]; then echo 'Healthcheck Successful';exit 0;else echo 'Healthcheck Failed';exit 1;fi;"]
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080;echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3;if [ $? -eq 0 ]; then echo 'Healthcheck Successful';exit 0;else echo 'Healthcheck Failed';exit 1;fi;"]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -100,14 +100,16 @@ services:
       dockerfile: ./.kube/mongodb/Dockerfile
     container_name: mongodb1
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: mongopw
       MONGO_REPLICA_SET_NAME: rs0
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-dev}
+      VAULT_REQUIRED_VARS: MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD
     ports:
       - "27017:27017"
     volumes:
       - ./.kube/mongodb/data1/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
+      - ./secrets:/app/secrets:ro
     networks:
       - linqra-network
     command: mongod --bind_ip_all --replSet rs0 --port 27017 -keyFile /data/mongo-keyfile
@@ -123,14 +125,16 @@ services:
       dockerfile: ./.kube/mongodb/Dockerfile
     container_name: mongodb2
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: mongopw
       MONGO_REPLICA_SET_NAME: rs0
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-dev}
+      VAULT_REQUIRED_VARS: MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD
     ports:
       - "27018:27018"
     volumes:
       - ./.kube/mongodb/data2/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
+      - ./secrets:/app/secrets:ro
     networks:
       - linqra-network
     command: mongod  --bind_ip_all  --replSet rs0 --port 27018 -keyFile /data/mongo-keyfile
@@ -146,14 +150,16 @@ services:
       dockerfile: ./.kube/mongodb/Dockerfile
     container_name: mongodb3
     environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: mongopw
       MONGO_REPLICA_SET_NAME: rs0
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-dev}
+      VAULT_REQUIRED_VARS: MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD
     ports:
       - "27019:27019"
     volumes:
       - ./.kube/mongodb/data3/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
+      - ./secrets:/app/secrets:ro
     networks:
       - linqra-network
     command: mongod --bind_ip_all --replSet rs0 --port 27019 -keyFile /data/mongo-keyfile
@@ -196,13 +202,17 @@ services:
 
   # MinIO for Milvus
   minio-service:
-    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    build:
+      context: .
+      dockerfile: ./.kube/minio/Dockerfile
     environment:
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-dev}
+      VAULT_REQUIRED_VARS: MINIO_ACCESS_KEY,MINIO_SECRET_KEY
     volumes:
       - ./.kube/minio/data:/data
-    command: server /data --console-address ":9001"
+      - ./secrets:/app/secrets:ro
+    command: ["server", "/data", "--console-address", ":9001"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -219,15 +229,17 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd-service:2379
       MINIO_ADDRESS: minio-service:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
+      MINIO_ACCESS_KEY: $MINIO_ACCESS_KEY
+      MINIO_SECRET_KEY: $MINIO_SECRET_KEY
       COMMON_CFG_RETENTION_DURATION: 168h
       # Milvus authentication
       MILVUS_AUTH_ENABLED: "true"
-      MILVUS_USERNAME: ${MILVUS_USERNAME}
-      MILVUS_PASSWORD: ${MILVUS_PASSWORD}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-dev}
+      VAULT_REQUIRED_VARS: MILVUS_USERNAME,MILVUS_PASSWORD,MINIO_ACCESS_KEY,MINIO_SECRET_KEY
     volumes:
       - ./.kube/milvus/data:/var/lib/milvus
+      - ./secrets:/app/secrets:ro
     ports:
       - "19530:19530"
       - "9091:9091"
@@ -266,7 +278,6 @@ services:
       dockerfile: ./.kube/neo4j/Dockerfile
     container_name: neo4j-service
     environment:
-      - NEO4J_AUTH=neo4j/LinqP7707ra
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=2G
@@ -275,7 +286,9 @@ services:
       - NEO4J_dbms_connector_http_listen__address=0.0.0.0:7474
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
       - NEO4J_dbms_security_procedures_allowlist=apoc.*
-      # Enable APOC procedures for advanced graph operations
+      - VAULT_MASTER_KEY=${VAULT_MASTER_KEY}
+      - VAULT_ENVIRONMENT=${VAULT_ENVIRONMENT:-dev}
+      - VAULT_REQUIRED_VARS=NEO4J_USERNAME,NEO4J_PASSWORD
     ports:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt (Java driver uses this)
@@ -284,6 +297,7 @@ services:
       - ./.kube/neo4j/logs:/logs
       - ./.kube/neo4j/import:/var/lib/neo4j/import
       - ./.kube/neo4j/plugins:/plugins
+      - ./secrets:/app/secrets:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474/"]
       interval: 10s
@@ -302,115 +316,70 @@ services:
       restart_policy:
         condition: on-failure
 
-#  ##### ENABLE THIS FOR DOCKERIZATION FOR ALL REMAINING SERVICES
-# Discovery Server (Eureka)
-#   discovery-service:
-#    build:
-#      context: .
-#      dockerfile: .kube/eureka/Dockerfile
-#    environment:
-#      EUREKA_KEY_STORE: eureka-keystore.jks
-#      EUREKA_KEY_STORE_PASSWORD: 123456
-#      EUREKA_TRUST_STORE: eureka-truststore.jks
-#      EUREKA_TRUST_STORE_PASSWORD: 123456
-#      EUREKA_GATEWAY_URL: discovery-service
-#      EUREKA_ALIAS_NAME: eureka-app-container
-#    ports:
-#      - "8761:8761"
-#    volumes:
-#      - ./discovery-server:/app/discovery-server
-#      - ./keys:/app/keys
-#    networks:
-#      - linqra-network
+ ##### ENABLE THIS FOR DOCKERIZATION FOR ALL REMAINING SERVICES
+ # Discovery Server (Eureka)
+  discovery-service:
+   build:
+     context: .
+     dockerfile: .kube/eureka/Dockerfile
+   environment:
+     # Vault configuration for discovery-server (needed to read vault secrets)
+     VAULT_ENVIRONMENT: dev-docker
+     # Vault file path is hardcoded to /app/secrets/vault.encrypted in application.yml
+     VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+   ports:
+     - "8761:8761"
+   volumes:
+     - ./discovery-server:/app/discovery-server
+     - ./keys:/app/keys
+     - ./secrets:/app/secrets:ro  # Vault file directory (read-only for security)
+   networks:
+     - linqra-network
 
 
-#  # Load Balancer
-#   gateway-loadbalancer:
-#    image: haproxy:2.8
-#    ports:
-#      - "7777:7777"
-#    volumes:
-#      - ./.kube/gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-#      - ./keys/haproxy/gateway-combined-container.pem:/etc/ssl/gateway-cert.pem:ro
-#    networks:
-#      - linqra-network
-#    depends_on:
-#      - api-gateway-service
+ # Load Balancer
+  gateway-loadbalancer:
+   image: haproxy:2.8
+   ports:
+     - "7777:7777"
+   volumes:
+     - ./.kube/gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+     - ./keys/haproxy/gateway-combined-container.pem:/etc/ssl/gateway-cert.pem:ro
+   networks:
+     - linqra-network
+   depends_on:
+     - api-gateway-service
 
-  # # API Gateway Service
-  # api-gateway-service:
-  #   build:
-  #     context: .
-  #     dockerfile: ./.kube/gateway/Dockerfile
-  #   environment:
-  #     SPRING_PROFILES_ACTIVE: dev
-  #     GATEWAY_TRUST_STORE: /app/gateway-truststore.jks
-  #     GATEWAY_TRUST_STORE_PASSWORD: 123456
-  #     GATEWAY_KEY_STORE: /app/gateway-keystore.jks
-  #     GATEWAY_KEY_STORE_PASSWORD: 123456
-  #     GATEWAY_API_HOST: api-gateway-service
-  #     GATEWAY_ALIAS_NAME: gateway-app-container
-  #     REDIS_GATEWAY_URL: redis-service
-  #     # Redis connection pool optimizations for Docker
-  #     SPRING_REDIS_TIMEOUT: 5000
-  #     SPRING_REDIS_CONNECT_TIMEOUT: 5000
-  #     SPRING_REDIS_POOL_MAX_ACTIVE: 10
-  #     SPRING_REDIS_POOL_MAX_IDLE: 5
-  #     SPRING_REDIS_POOL_MIN_IDLE: 2
-  #     SPRING_REDIS_POOL_MAX_WAIT: 5000
-  #     # MongoDB connection pool optimizations
-  #     MONGO_GATEWAY_URL: "mongodb://root:mongopw@mongodb1:27017,mongodb2:27018,mongodb3:27019/admin?replicaSet=rs0&maxPoolSize=10&minPoolSize=2&maxIdleTimeMS=30000&serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=30000&maxConnecting=5"
-  #     KEYCLOAK_GATEWAY_URL: keycloak-service
-  #     KEYCLOAK_GATEWAY_PORT: 8080
-  #     KEYCLOAK_CLIENT_SECRET: HrjvST9kAZYQXoLP8Wn3g012Ui7Loqah
-  #     EUREKA_GATEWAY_URL: discovery-service
-  #     EUREKA_INSTANCE_URL: api-gateway-service
-  #     SLACK_ENABLED: false
-  #     SLACK_WEBHOOK_URL: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
-  #     SMTP_ENABLED: false
-  #     SMTP_PASSWORD: 123456
-  #     SMTP_USERNAME: abcdef
-  #     OAUTH2_REDIRECT_URI: https://localhost:3000/callback
-  #     MILVUS_HOST: milvus-service
-  #     MILVUS_PORT: 19530
-  #     # AWS S3 Configuration for Knowledge Hub (local development)
-  #     AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-  #     AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
-  #     AWS_REGION: ${AWS_REGION:-us-west-2}
-  #     AWS_S3_BUCKET: ${AWS_S3_BUCKET:-linqra-knowledge-hub}
-  #   volumes:
-  #     - ./api-gateway:/app/api-gateway
-  #     - ./keys:/app/keys
-  #   deploy:
-  #     replicas: 1
-  #     restart_policy:
-  #       condition: on-failure
-  #   expose:
-  #     - "7777"
-  #   networks:
-  #     - linqra-network
-  #   depends_on:
-  #     - mongodb1
-  #     - mongodb2
-  #     - mongodb3
-  #     - keycloak-service
-  #     - redis-service
-
-# chroma vector database (commented out)
-# chroma-service:
-#   build:
-#     context: .
-#     dockerfile: ./.kube/chroma/Dockerfile
-#   environment:
-#     ALLOW_RESET: "true"
-#   volumes:
-#     - ./.kube/chroma/data:/chroma/data
-#   ports:
-#     - "8000:8000"
-#   networks:
-#     - linqra-network
-#   healthcheck:
-#     test: ["CMD-SHELL", "curl -s http://localhost:8000/api/v2/heartbeat > /dev/null || exit 0"]
-#     interval: 10s
-#     timeout: 3s
-#     retries: 3
+  # API Gateway Service
+  api-gateway-service:
+    build:
+      context: .
+      dockerfile: ./.kube/gateway/Dockerfile
+    environment:
+      VAULT_ENVIRONMENT: dev-docker
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_REQUIRED_VARS: SPRING_PROFILES_ACTIVE,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GATEWAY_TRUSTSTORE_PASSWORD
+      # Redis connection pool optimizations for Docker
+      SPRING_REDIS_TIMEOUT: 5000
+      SPRING_REDIS_CONNECT_TIMEOUT: 5000
+      SPRING_REDIS_POOL_MAX_ACTIVE: 10
+      SPRING_REDIS_POOL_MAX_IDLE: 5
+      SPRING_REDIS_POOL_MIN_IDLE: 2
+      SPRING_REDIS_POOL_MAX_WAIT: 5000
+    volumes:
+      - ./keys:/app/keys
+      - ./secrets:/app/secrets:ro  # Vault file directory (read-only for security)
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    expose:
+      - "7777"
+    networks:
+      - linqra-network
+    depends_on:
+      - mongodb1
+      - mongodb2
+      - mongodb3
+      - keycloak-service
+      - redis-service

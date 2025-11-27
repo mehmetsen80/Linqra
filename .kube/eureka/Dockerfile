@@ -28,21 +28,15 @@ COPY keys/eureka-truststore.jks eureka-truststore.jks
 # Set permissions for the keystore and truststore files
 RUN chmod 644 /app/eureka-truststore.jks /app/eureka-keystore.jks
 
-# Define the environment variables for keystore and truststore
-ENV EUREKA_KEY_STORE=/app/eureka-keystore.jks
-ENV EUREKA_KEY_STORE_PASSWORD=123456
-ENV EUREKA_TRUST_STORE=/app/eureka-truststore.jks
-ENV EUREKA_TRUST_STORE_PASSWORD=123456
-ENV EUREKA_ALIAS_NAME=eureka-app-container
-
 # Expose the secure port for Eureka
 EXPOSE 8761
 
-# Import all certificates from eureka-truststore.jks into the default cacerts
-RUN keytool -importkeystore -srckeystore /app/eureka-truststore.jks \
-            -destkeystore "${JAVA_HOME}/lib/security/cacerts" \
-            -srcstorepass "$EUREKA_TRUST_STORE_PASSWORD" \
-            -deststorepass "$EUREKA_TRUST_STORE_PASSWORD" -noprompt -srcstoretype JKS -deststoretype JKS
+# Note: Certificate import into Java cacerts is not needed because:
+# 1. Spring Boot uses the custom truststore directly via application.yml configuration
+# 2. SSL configuration (keystore/truststore) is handled by Spring Boot using vault secrets at runtime
+# 3. This eliminates the need for build-time password (no hardcoded secrets!)
 
-# Run the Eureka server with SSL configuration
-ENTRYPOINT ["java", "-Djavax.net.debug=all", "-Dhttps.protocols=TLSv1.2,TLSv1.3", "-Djavax.net.debug=ssl:handshake", "-Djavax.net.ssl.keyStore=${EUREKA_KEY_STORE}", "-Djavax.net.ssl.keyStoreType=JKS", "-Djavax.net.ssl.keyStorePassword=$EUREKA_KEY_STORE_PASSWORD", "-Djavax.net.ssl.trustStore=${JAVA_HOME}/lib/security/cacerts", "-Djavax.net.ssl.trustStorePassword=$EUREKA_TRUST_STORE_PASSWORD", "-jar", "DiscoveryService.jar"]
+# Run the Eureka server
+# SSL configuration is handled by Spring Boot via application.yml (using vault secrets)
+# No need for Java system properties - Spring Boot reads from vault at runtime
+ENTRYPOINT ["java", "-Dhttps.protocols=TLSv1.2,TLSv1.3", "-jar", "DiscoveryService.jar"]

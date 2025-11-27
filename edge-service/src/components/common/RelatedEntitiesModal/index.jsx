@@ -39,17 +39,20 @@ const RelatedEntitiesModal = ({
     setError(null);
     
     try {
-      const { data, error: fetchError } = await knowledgeHubGraphService.findRelatedEntities(
+      const result = await knowledgeHubGraphService.findRelatedEntities(
         entityType, 
         entityId,
-        null, // relationshipType - null means all types
-        1 // maxDepth
+        {
+          relationshipType: null, // null means all types
+          maxDepth: 1
+        }
       );
       
-      if (fetchError) {
-        setError(fetchError);
+      if (!result.success || result.error) {
+        setError(result.error || 'Failed to fetch related entities');
         setRelatedEntities([]);
       } else {
+        const data = result.data;
         // Transform the data to include relationship information
         // The backend returns entities with relationshipType and relationshipProperties for direct relationships
         const transformed = Array.isArray(data) ? data.map(entity => {

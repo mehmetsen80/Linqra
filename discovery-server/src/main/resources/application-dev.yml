@@ -1,0 +1,12 @@
+# Development profile configuration for discovery-server
+# Used when running locally from IDE or with SPRING_PROFILES_ACTIVE=dev
+
+# Vault Configuration
+# Path: /app/secrets/vault.encrypted (for Docker)
+# Falls back to ./secrets/vault.encrypted (for IDE) if Docker path doesn't exist
+vault:
+  file:
+    path: /app/secrets/vault.encrypted
+  master:
+    key: ${VAULT_MASTER_KEY}
+

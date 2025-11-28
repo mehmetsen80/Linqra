@@ -316,7 +316,7 @@ services:
       restart_policy:
         condition: on-failure
 
- ##### ENABLE THIS FOR DOCKERIZATION FOR ALL REMAINING SERVICES
+ ##### ENABLE THIS FOR DOCKERIZATION FOR ALL REMAINING SERVICES IF YOU WANT TO RUN ALL SERVICES IN DOCKER
  # Discovery Server (Eureka)
   discovery-service:
    build:
@@ -378,8 +378,10 @@ services:
     networks:
       - linqra-network
     depends_on:
+      - discovery-service
       - mongodb1
       - mongodb2
       - mongodb3
       - keycloak-service
       - redis-service
+      - neo4j-service

@@ -15,16 +15,17 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB" ]
       interval: 10s
       timeout: 3s
       retries: 3
     volumes:
       - ./.kube/postgres/data/:/var/lib/postgresql/pgdata
+      - ./secrets:/app/secrets:ro
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD
     networks:
       - linqra-network
 
@@ -52,10 +53,6 @@ services:
       dockerfile: ./.kube/keycloak/Dockerfile
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres-service:5432/${POSTGRES_DB}
-      KC_DB_USERNAME: ${POSTGRES_USER}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-
       KC_HTTP_ENABLED: true
       KC_HTTP_PORT: 8080
       KC_HTTP_RELATIVE_PATH: /keycloak
@@ -73,20 +70,23 @@ services:
       KC_LOG_LEVEL: info
       KC_METRICS_ENABLED: true
       KC_HEALTH_ENABLED: true
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       KC_FEATURES: admin
 
       KC_SPI_RESOURCES_PUBLIC_URL: https://linqra.com/keycloak/resources
       KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_REDIRECT_HOSTNAME: https://linqra.com/keycloak
       KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_LEGACY_IFRAME_COMPATIBLE: "true"
       KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_SUPPRESS_LOGOUT_CONFIRMATION_SCREEN: "true"
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,KEYCLOAK_ADMIN,KEYCLOAK_ADMIN_PASSWORD
+
     command:
       - start
     volumes:
       - ./.kube/keycloak/data/import:/opt/keycloak/data/import
       - ./.kube/keycloak/data/export:/opt/keycloak/data/export
       - ./.kube/keycloak/themes:/opt/keycloak/themes
+      - ./secrets:/app/secrets:ro
     depends_on:
       postgres-service:
         condition: service_healthy
@@ -112,14 +112,16 @@ services:
       dockerfile: ./.kube/mongodb/Dockerfile
     container_name: mongodb1
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_REPLICA_SET_NAME: rs0
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD
     ports:
       - "27017:27017"
     volumes:
       - ./.kube/mongodb/data1/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
+      - ./secrets:/app/secrets:ro
     networks:
       - linqra-network
     command: mongod --bind_ip_all --replSet rs0 --port 27017 -keyFile /data/mongo-keyfile
@@ -135,14 +137,16 @@ services:
       dockerfile: ./.kube/mongodb/Dockerfile
     container_name: mongodb2
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_REPLICA_SET_NAME: rs0
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD
     ports:
       - "27018:27018"
     volumes:
       - ./.kube/mongodb/data2/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
+      - ./secrets:/app/secrets:ro
     networks:
       - linqra-network
     command: mongod  --bind_ip_all  --replSet rs0 --port 27018 -keyFile /data/mongo-keyfile
@@ -158,14 +162,16 @@ services:
       dockerfile: ./.kube/mongodb/Dockerfile
     container_name: mongodb3
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_REPLICA_SET_NAME: rs0
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: MONGO_INITDB_ROOT_USERNAME,MONGO_INITDB_ROOT_PASSWORD
     ports:
       - "27019:27019"
     volumes:
       - ./.kube/mongodb/data3/:/data/db
       - ./.kube/mongodb/mongo-keyfile:/data/mongo-keyfile
+      - ./secrets:/app/secrets:ro
     networks:
       - linqra-network
     command: mongod --bind_ip_all --replSet rs0 --port 27019 -keyFile /data/mongo-keyfile
@@ -208,16 +214,17 @@ services:
 
   # MinIO for Milvus
   minio-service:
-    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    build:
+      context: .
+      dockerfile: ./.kube/minio/Dockerfile
     environment:
-      # MinIO credentials stored in vault - passed via environment variables
-      # These should be set externally: MINIO_ACCESS_KEY, MINIO_SECRET_KEY
-      # Or stored in vault and injected by a script/init container
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: MINIO_ACCESS_KEY,MINIO_SECRET_KEY
     volumes:
       - ./.kube/minio/data:/data
-    command: server /data --console-address ":9001"
+      - ./secrets:/app/secrets:ro
+    command: ["server", "/data", "--console-address", ":9001"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
@@ -234,19 +241,14 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd-service:2379
       MINIO_ADDRESS: minio-service:9000
-      # MinIO credentials stored in vault - passed via environment variables
-      # These should be set externally: MINIO_ACCESS_KEY, MINIO_SECRET_KEY
-      # Or stored in vault and injected by a script/init container
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       COMMON_CFG_RETENTION_DURATION: 168h
       MILVUS_AUTH_ENABLED: "true"
-      # Milvus credentials stored in vault - passed via environment variables
-      # These should match vault.milvus.username and vault.milvus.password
-      MILVUS_USERNAME: ${MILVUS_USERNAME}
-      MILVUS_PASSWORD: ${MILVUS_PASSWORD}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: MILVUS_USERNAME,MILVUS_PASSWORD,MINIO_ACCESS_KEY,MINIO_SECRET_KEY
     volumes:
       - ./.kube/milvus/data:/var/lib/milvus
+      - ./secrets:/app/secrets:ro
     ports:
       - "19530:19530"
       - "9091:9091"
@@ -278,9 +280,6 @@ services:
       MILVUS_DATABASE: default
       MILVUS_USE_SSL: "false"
       MILVUS_INSECURE: "true"
-      MILVUS_AUTH_ENABLED: "true"
-      MILVUS_AUTH_USERNAME: ${MILVUS_USERNAME}
-      MILVUS_AUTH_PASSWORD: ${MILVUS_PASSWORD}
     ports:
       - "8000:3000"
     networks:
@@ -295,7 +294,6 @@ services:
       dockerfile: ./.kube/neo4j/Dockerfile
     container_name: neo4j-service
     environment:
-      - NEO4J_AUTH=${NEO4J_USERNAME}/${NEO4J_PASSWORD}
       - NEO4J_PLUGINS=["apoc"]
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=2G
@@ -304,7 +302,9 @@ services:
       - NEO4J_dbms_connector_http_listen__address=0.0.0.0:7474
       - NEO4J_dbms_security_procedures_unrestricted=apoc.*
       - NEO4J_dbms_security_procedures_allowlist=apoc.*
-      # Enable APOC procedures for advanced graph operations
+      - VAULT_MASTER_KEY=${VAULT_MASTER_KEY}
+      - VAULT_ENVIRONMENT=${VAULT_ENVIRONMENT:-ec2}
+      - VAULT_REQUIRED_VARS=NEO4J_USERNAME,NEO4J_PASSWORD
     ports:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt (Java driver uses this)
@@ -313,6 +313,7 @@ services:
       - ./.kube/neo4j/logs:/logs
       - ./.kube/neo4j/import:/var/lib/neo4j/import
       - ./.kube/neo4j/plugins:/plugins
+      - ./secrets:/app/secrets:ro
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474/"]
       interval: 10s
@@ -331,25 +332,19 @@ services:
       restart_policy:
         condition: on-failure
 
-  ##### ENABLE THIS FOR DOCKERIZATION FOR ALL REMAINING SERVICES
   # Discovery Server (Eureka)
   discovery-service:
     build:
       context: .
       dockerfile: .kube/eureka/Dockerfile
-    #    image: discovery-service:latest
     environment:
-      # Vault configuration - discovery-server reads secrets from vault via VaultPropertySource (like api-gateway)
-      # All Eureka SSL configuration (keystore, truststore, passwords) are stored in vault and read via ${vault.*} references in application.yml
-      # Vault file is mounted at /app/secrets/vault.encrypted (see volumes section)
-      # VAULT_ENVIRONMENT not set - will use SPRING_PROFILES_ACTIVE (ec2) to map to "ec2" environment
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
     ports:
       - "8761:8761"
     volumes:
       - ./discovery-server:/app/discovery-server
       - ./keys:/app/keys
-      - ./secrets:/app/secrets:ro  # Mount vault file (read-only for discovery-server)
+      - ./secrets:/app/secrets:ro
     networks:
       - linqra-network
 
@@ -373,28 +368,18 @@ services:
       context: .
       dockerfile: ./.kube/gateway/Dockerfile
     environment:
-      SPRING_PROFILES_ACTIVE: ec2
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_REQUIRED_VARS: SPRING_PROFILES_ACTIVE,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GATEWAY_TRUSTSTORE_PASSWORD
       SPRING_REDIS_TIMEOUT: 5000
       SPRING_REDIS_CONNECT_TIMEOUT: 5000
       SPRING_REDIS_POOL_MAX_ACTIVE: 10
       SPRING_REDIS_POOL_MAX_IDLE: 5
       SPRING_REDIS_POOL_MIN_IDLE: 2
       SPRING_REDIS_POOL_MAX_WAIT: 5000
-
-      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
-
-      # Docker networking optimizations
-      JAVA_OPTS: "-Djava.net.preferIPv4Stack=true -Dsun.net.client.defaultConnectTimeout=5000 -Dsun.net.client.defaultReadTimeout=30000"
-      DOCKER_CONTAINER: "true"
-      # Debug logging for container identification
-      #LOGGING_LEVEL_ORG_LITE_GATEWAY: "DEBUG"
-      #LOGGING_LEVEL_REACTOR_NETTY: "DEBUG"
-      #LOGGING_LEVEL_ORG_SPRING_DATA_MONGODB: "DEBUG"
-      #LOGGING_LEVEL_ORG_MONGODB_DRIVER: "DEBUG"
     volumes:
-      - ./api-gateway:/app/api-gateway
       - ./keys:/app/keys
-      - ./secrets:/app/secrets:rw  # Vault file directory (read-write) - PERSISTS on host across container restarts
+      - ./secrets:/app/secrets:ro
     deploy:
       resources:
         limits:

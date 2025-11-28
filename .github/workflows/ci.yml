@@ -80,6 +80,16 @@ jobs:
           path: scripts/
           if-no-files-found: error
 
+      # Upload vault-reader source for building in Docker and CI vault generation
+      - name: Upload vault-reader source
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-reader-source
+          path: |
+            vault-reader/**
+            !vault-reader/target/**
+            !vault-reader/target/
+
   # we build react here in the GitHub actions
   react-build:
     needs: java-app
@@ -150,8 +160,125 @@ jobs:
           name: react-build
           path: edge-service/dist
 
+  generate-vault:
+    needs: java-app
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Download vault-reader source
+        uses: actions/download-artifact@v4
+        with:
+          name: vault-reader-source
+          path: vault-reader
+
+      - name: Download scripts
+        uses: actions/download-artifact@v4
+        with:
+          name: scripts-config
+          path: scripts
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Build vault-reader
+        run: |
+          cd vault-reader
+          mvn clean package -DskipTests
+
+      - name: Create secrets.json from GitHub secret
+        env:
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
+          SECRETS_JSON: ${{ secrets.SECRETS_JSON }}
+        run: |
+          mkdir -p secrets
+          
+          # Generate VAULT_MASTER_KEY if not set
+          if [ -z "$VAULT_MASTER_KEY" ]; then
+            echo "Generating new VAULT_MASTER_KEY..."
+            VAULT_MASTER_KEY=$(openssl rand -base64 32)
+            echo "Generated VAULT_MASTER_KEY (save this to GitHub secrets: VAULT_MASTER_KEY)"
+            echo "VAULT_MASTER_KEY=$VAULT_MASTER_KEY"
+          fi
+          
+          # Check if SECRETS_JSON secret is provided
+          if [ -z "$SECRETS_JSON" ]; then
+            echo "ERROR: SECRETS_JSON GitHub secret is not set"
+            echo "Please add your complete secrets.json file content (with 'ec2' environment) as a GitHub secret named 'SECRETS_JSON'"
+            echo ""
+            echo "The JSON should have this structure:"
+            echo '{'
+            echo '  "ec2": {'
+            echo '    "postgres.db": "...",'
+            echo '    "postgres.user": "...",'
+            echo '    ...'
+            echo '  }'
+            echo '}'
+            exit 1
+          fi
+          
+          # Write the JSON secret to file
+          echo "$SECRETS_JSON" > secrets/secrets.json
+          
+          # Validate JSON structure
+          if ! jq . secrets/secrets.json > /dev/null 2>&1; then
+            echo "ERROR: Invalid JSON structure in SECRETS_JSON secret"
+            echo "Please ensure the JSON is valid and properly formatted"
+            exit 1
+          fi
+          
+          # Verify ec2 environment exists in JSON
+          if ! jq -e 'has("ec2")' secrets/secrets.json > /dev/null 2>&1; then
+            echo "ERROR: 'ec2' environment not found in SECRETS_JSON"
+            echo "Available environments:"
+            jq -r 'keys[]' secrets/secrets.json | sed 's/^/  - /'
+            echo ""
+            echo "The JSON must contain an 'ec2' environment with all required secrets"
+            exit 1
+          fi
+          
+          echo "✅ secrets.json created and validated"
+
+      - name: Generate vault.encrypted
+        env:
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
+        run: |
+          # Generate VAULT_MASTER_KEY if not provided
+          if [ -z "$VAULT_MASTER_KEY" ]; then
+            export VAULT_MASTER_KEY=$(openssl rand -base64 32)
+            echo "Generated VAULT_MASTER_KEY: $VAULT_MASTER_KEY"
+            echo "⚠️  IMPORTANT: Add this to GitHub secrets as VAULT_MASTER_KEY"
+          fi
+          
+          # Run bootstrap script to create vault
+          export VAULT_ENVIRONMENT=ec2
+          chmod +x scripts/bootstrap-vault.sh
+          bash scripts/bootstrap-vault.sh secrets/secrets.json ec2
+          
+          # Verify vault file was created
+          if [ ! -f secrets/vault.encrypted ]; then
+            echo "ERROR: vault.encrypted was not created"
+            exit 1
+          fi
+          
+          echo "✅ vault.encrypted created successfully"
+
+      - name: Upload vault file
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-encrypted
+          path: secrets/vault.encrypted
+          retention-days: 1
+
   deploy:
-    needs: [java-app, react-build]
+    needs: [java-app, react-build, generate-vault]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
 
@@ -169,6 +296,7 @@ jobs:
           EC2_HOST: ${{ secrets.HOST_DNS_PROD }}
           EC2_USERNAME: ${{ secrets.USERNAME_PROD }}
           TARGET_DIR: ${{ secrets.TARGET_DIR_PROD }}
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
         run: |
           # Disable strict host key checking
           mkdir -p ~/.ssh
@@ -182,6 +310,19 @@ jobs:
           # Use scp for sensitive or always-fresh files
           scp -v artifacts/docker-compose/docker-compose-ec2.yml $EC2_USERNAME@$EC2_HOST:/var/www/linqra/docker-compose.yml
           scp -v artifacts/root-pom/pom.xml $EC2_USERNAME@$EC2_HOST:/var/www/linqra/pom.xml
+
+          # Upload vault-reader source
+          if [ -d "artifacts/vault-reader-source" ]; then
+            rsync -avz --delete --rsync-path="sudo rsync" artifacts/vault-reader-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/vault-reader/
+          fi
+
+          # Upload generated vault.encrypted file
+          if [ -f "artifacts/vault-encrypted/vault.encrypted" ]; then
+            echo "Uploading vault.encrypted file to EC2..."
+            scp -v artifacts/vault-encrypted/vault.encrypted $EC2_USERNAME@$EC2_HOST:/tmp/vault.encrypted
+          else
+            echo "WARNING: vault.encrypted file not found in artifacts"
+          fi
 
           # .kube, keys, and scripts (if needed, use scp or rsync as appropriate)
           # CRITICAL: Protect all data directories from deletion during rsync
@@ -221,6 +362,31 @@ jobs:
             sudo chmod -R 600 /var/www/linqra/keys/* || echo 'No keys to set permissions for'
             sudo find /var/www/linqra/keys -type d -exec chmod 755 {} \;
             sudo find /var/www/linqra/keys -type f ! -name 'mongo-keyfile' -exec chmod 600 {} \;
+
+            # Ensure secrets directory exists with proper permissions
+            echo 'Setting up secrets directory for vault'
+            if [ ! -d /var/www/linqra/secrets ]; then
+              sudo mkdir -p /var/www/linqra/secrets
+              sudo chown ubuntu:ubuntu /var/www/linqra/secrets
+              sudo chmod 700 /var/www/linqra/secrets
+            fi
+            
+            # Copy vault.encrypted from /tmp if it was uploaded
+            if [ -f /tmp/vault.encrypted ]; then
+              echo 'Copying vault.encrypted from /tmp to secrets directory'
+              sudo mv /tmp/vault.encrypted /var/www/linqra/secrets/vault.encrypted
+              sudo chown ubuntu:ubuntu /var/www/linqra/secrets/vault.encrypted
+              sudo chmod 600 /var/www/linqra/secrets/vault.encrypted
+              echo '✅ vault.encrypted file deployed and permissions set'
+            elif [ -f /var/www/linqra/secrets/vault.encrypted ]; then
+              echo 'vault.encrypted already exists, preserving existing file'
+              sudo chown ubuntu:ubuntu /var/www/linqra/secrets/vault.encrypted
+              sudo chmod 600 /var/www/linqra/secrets/vault.encrypted
+            else
+              echo 'WARNING: vault.encrypted file not found'
+              echo 'This should have been generated in CI/CD pipeline'
+              exit 1
+            fi
 
               # Create edge-service .env on EC2 (not stored in repo)
               if [ ! -d /var/www/linqra/edge-service ]; then echo 'edge-service directory not found at /var/www/linqra/edge-service'; exit 1; fi
@@ -322,9 +488,19 @@ jobs:
             echo 'Ensuring the Docker network exists'
             sudo docker network ls | grep -q linqra-network || sudo docker network create linqra-network
 
+            # Set VAULT_MASTER_KEY environment variable for docker-compose
+            echo 'Setting VAULT_MASTER_KEY from GitHub secrets'
+            export VAULT_MASTER_KEY=\"\${VAULT_MASTER_KEY}\"
+            export VAULT_ENVIRONMENT=\"\${VAULT_ENVIRONMENT:-ec2}\"
+            
+            if [ -z \"\$VAULT_MASTER_KEY\" ]; then
+              echo 'ERROR: VAULT_MASTER_KEY not set. Please add VAULT_MASTER_KEY to GitHub repository secrets.'
+              exit 1
+            fi
+
             # Build and start containers
             echo 'Building and starting containers'
-            sudo docker compose -f docker-compose.yml -p linqra up -d --build
+            sudo -E docker compose -f docker-compose.yml -p linqra up -d --build
 
             # Check if containers are running
             echo 'Checking if containers are running'

@@ -317,71 +317,71 @@ services:
         condition: on-failure
 
  ##### ENABLE THIS FOR DOCKERIZATION FOR ALL REMAINING SERVICES IF YOU WANT TO RUN ALL SERVICES IN DOCKER
- # Discovery Server (Eureka)
-  discovery-service:
-   build:
-     context: .
-     dockerfile: .kube/eureka/Dockerfile
-   environment:
-     # Vault configuration for discovery-server (needed to read vault secrets)
-     VAULT_ENVIRONMENT: dev-docker
-     # Vault file path is hardcoded to /app/secrets/vault.encrypted in application.yml
-     VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
-   ports:
-     - "8761:8761"
-   volumes:
-     - ./discovery-server:/app/discovery-server
-     - ./keys:/app/keys
-     - ./secrets:/app/secrets:ro  # Vault file directory (read-only for security)
-   networks:
-     - linqra-network
+#  # Discovery Server (Eureka)
+#   discovery-service:
+#    build:
+#      context: .
+#      dockerfile: .kube/eureka/Dockerfile
+#    environment:
+#      # Vault configuration for discovery-server (needed to read vault secrets)
+#      VAULT_ENVIRONMENT: dev-docker
+#      # Vault file path is hardcoded to /app/secrets/vault.encrypted in application.yml
+#      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+#    ports:
+#      - "8761:8761"
+#    volumes:
+#      - ./discovery-server:/app/discovery-server
+#      - ./keys:/app/keys
+#      - ./secrets:/app/secrets:ro  # Vault file directory (read-only for security)
+#    networks:
+#      - linqra-network
 
 
- # Load Balancer
-  gateway-loadbalancer:
-   image: haproxy:2.8
-   ports:
-     - "7777:7777"
-   volumes:
-     - ./.kube/gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-     - ./keys/haproxy/gateway-combined-container.pem:/etc/ssl/gateway-cert.pem:ro
-   networks:
-     - linqra-network
-   depends_on:
-     - api-gateway-service
+#  # Load Balancer
+#   gateway-loadbalancer:
+#    image: haproxy:2.8
+#    ports:
+#      - "7777:7777"
+#    volumes:
+#      - ./.kube/gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+#      - ./keys/haproxy/gateway-combined-container.pem:/etc/ssl/gateway-cert.pem:ro
+#    networks:
+#      - linqra-network
+#    depends_on:
+#      - api-gateway-service
 
-  # API Gateway Service
-  api-gateway-service:
-    build:
-      context: .
-      dockerfile: ./.kube/gateway/Dockerfile
-    environment:
-      VAULT_ENVIRONMENT: dev-docker
-      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
-      VAULT_REQUIRED_VARS: SPRING_PROFILES_ACTIVE,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GATEWAY_TRUSTSTORE_PASSWORD
-      # Redis connection pool optimizations for Docker
-      SPRING_REDIS_TIMEOUT: 5000
-      SPRING_REDIS_CONNECT_TIMEOUT: 5000
-      SPRING_REDIS_POOL_MAX_ACTIVE: 10
-      SPRING_REDIS_POOL_MAX_IDLE: 5
-      SPRING_REDIS_POOL_MIN_IDLE: 2
-      SPRING_REDIS_POOL_MAX_WAIT: 5000
-    volumes:
-      - ./keys:/app/keys
-      - ./secrets:/app/secrets:ro  # Vault file directory (read-only for security)
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-    expose:
-      - "7777"
-    networks:
-      - linqra-network
-    depends_on:
-      - discovery-service
-      - mongodb1
-      - mongodb2
-      - mongodb3
-      - keycloak-service
-      - redis-service
-      - neo4j-service
+#   # API Gateway Service
+#   api-gateway-service:
+#     build:
+#       context: .
+#       dockerfile: ./.kube/gateway/Dockerfile
+#     environment:
+#       VAULT_ENVIRONMENT: dev-docker
+#       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+#       VAULT_REQUIRED_VARS: SPRING_PROFILES_ACTIVE,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GATEWAY_TRUSTSTORE_PASSWORD
+#       # Redis connection pool optimizations for Docker
+#       SPRING_REDIS_TIMEOUT: 5000
+#       SPRING_REDIS_CONNECT_TIMEOUT: 5000
+#       SPRING_REDIS_POOL_MAX_ACTIVE: 10
+#       SPRING_REDIS_POOL_MAX_IDLE: 5
+#       SPRING_REDIS_POOL_MIN_IDLE: 2
+#       SPRING_REDIS_POOL_MAX_WAIT: 5000
+#     volumes:
+#       - ./keys:/app/keys
+#       - ./secrets:/app/secrets:ro  # Vault file directory (read-only for security)
+#     deploy:
+#       replicas: 1
+#       restart_policy:
+#         condition: on-failure
+#     expose:
+#       - "7777"
+#     networks:
+#       - linqra-network
+#     depends_on:
+#       - discovery-service
+#       - mongodb1
+#       - mongodb2
+#       - mongodb3
+#       - keycloak-service
+#       - redis-service
+#       - neo4j-service

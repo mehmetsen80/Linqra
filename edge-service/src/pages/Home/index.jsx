@@ -319,27 +319,50 @@ function Home() {
               <h3>Traditional Way</h3>
               <div className="code-block">
                 <code>
-                  {`// First API Call
-POST /v1/chat/completions
+                  {`// Step 1: Generate embedding
+POST https://api.openai.com/v1/embeddings
 Authorization: Bearer sk-...
 Content-Type: application/json
 
 {
-  "model": "gpt-3.5-turbo",
-  "messages": [
-    {"role": "user", "content": "Analyze this text"}
-  ]
+  "model": "text-embedding-3-small",
+  "input": "What is machine learning?"
 }
 
-// Second API Call
-POST /v1/embeddings
+// Step 2: Search vector database
+POST https://your-milvus-api/search
+Authorization: Bearer your-api-key
+Content-Type: application/json
+
+{
+  "collection": "knowledge_base",
+  "vector": [0.123, -0.456, ...],
+  "top_k": 5
+}
+
+// Step 3: Generate LLM response
+POST https://api.openai.com/v1/chat/completions
 Authorization: Bearer sk-...
 Content-Type: application/json
 
 {
-  "model": "text-embedding-ada-002",
-  "input": "Process the analysis"
-}`}
+  "model": "gpt-4o",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Answer using the provided context..."
+    },
+    {
+      "role": "user",
+      "content": "Question: What is machine learning?\\n\\nContext: [parsed search results]"
+    }
+  ],
+  "temperature": 0.3,
+  "max_tokens": 500
+}
+
+// Manual error handling, retries,
+// data transformation between steps...`}
                 </code>
               </div>
             </div>
@@ -353,34 +376,53 @@ Content-Type: application/json
                   <br/>
                   {`{
   "link": {
-    "target": "ai-workflow",
-    "action": "create"
+    "target": "workflow",
+    "action": "execute"
   },
   "query": {
-    "intent": "workflow/execute",
-    "payload": {
-      "workflow": {
-        "steps": [
+    "intent": "knowledge_base_qna",
+    "params": {
+      "question": "What is machine learning?",
+      "teamId": "your-team-id"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/milvus/collections/knowledge_base/search",
+        "payload": {
+          "text": "{{params.question}}",
+          "teamId": "{{params.teamId}}",
+          "modelCategory": "openai-embed",
+          "modelName": "text-embedding-3-small",
+          "nResults": 5
+        }
+      },
+      {
+        "step": 2,
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
           {
-            "id": "chat",
-            "service": "chat-service",
-            "action": "completion",
-            "input": {
-              "message": "Analyze this text"
-            }
+            "role": "system",
+            "content": "Answer using the provided context..."
           },
           {
-            "id": "embedding",
-            "service": "embedding-service",
-            "action": "create",
-            "input": {
-              "text": "#{chat.response}"
-            },
-            "dependsOn": ["chat"]
+            "role": "user",
+            "content": "Question: {{params.question}}\\n\\nContext: {{step1.result.results}}"
           }
-        ]
+        ],
+        "llmConfig": {
+          "model": "gpt-4o",
+          "settings": {
+            "temperature": 0.3,
+            "max.tokens": 500
+          }
+        }
       }
-    }
+    ]
   }
 }`}
                 </code>

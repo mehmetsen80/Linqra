@@ -59,22 +59,29 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                 stats.setHourlyExecutions(new HashMap<>());
                 stats.setDailyExecutions(new HashMap<>());
                 
+                // Filter out null executions before processing
+                List<LinqWorkflowExecution> validExecutions = executions.stream()
+                    .filter(e -> e != null && e.getExecutedAt() != null)
+                    .toList();
+                
                 // Overall stats
-                stats.setTotalExecutions(executions.size());
-                stats.setSuccessfulExecutions((int) executions.stream()
+                stats.setTotalExecutions(validExecutions.size());
+                stats.setSuccessfulExecutions((int) validExecutions.stream()
                     .filter(e -> e.getStatus() == ExecutionStatus.SUCCESS)
                     .count());
-                stats.setFailedExecutions((int) executions.stream()
+                stats.setFailedExecutions((int) validExecutions.stream()
                     .filter(e -> e.getStatus() == ExecutionStatus.FAILED)
                     .count());
-                stats.setAverageExecutionTime(executions.stream()
-                    .mapToLong(LinqWorkflowExecution::getDurationMs)
+                stats.setAverageExecutionTime(validExecutions.stream()
+                    .map(LinqWorkflowExecution::getDurationMs)
+                    .filter(duration -> duration != null)
+                    .mapToLong(Long::longValue)
                     .average()
                     .orElse(0.0));
                 
                 // Process each execution
-                executions.forEach(execution -> {
-                    // Time-based stats
+                validExecutions.forEach(execution -> {
+                    // Time-based stats (already validated executedAt is not null)
                     String hour = execution.getExecutedAt().format(DateTimeFormatter.ofPattern("HH:00"));
                     String day = execution.getExecutedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                     stats.getHourlyExecutions().merge(hour, 1, Integer::sum);
@@ -85,7 +92,9 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                         execution.getResponse().getMetadata() != null && 
                         execution.getResponse().getMetadata().getWorkflowMetadata() != null) {
                         
-                        execution.getResponse().getMetadata().getWorkflowMetadata().forEach(stepMetadata -> {
+                        execution.getResponse().getMetadata().getWorkflowMetadata().stream()
+                            .filter(stepMetadata -> stepMetadata != null)
+                            .forEach(stepMetadata -> {
                             // Step stats
                             LinqWorkflowStats.StepStats stepStats = stats.getStepStats().computeIfAbsent(stepMetadata.getStep(), k -> new LinqWorkflowStats.StepStats());
                             stepStats.setTotalExecutions(stepStats.getTotalExecutions() + 1);
@@ -94,35 +103,48 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                             } else {
                                 stepStats.setFailedExecutions(stepStats.getFailedExecutions() + 1);
                             }
-                            stepStats.setAverageDurationMs(
-                                (stepStats.getAverageDurationMs() * (stepStats.getTotalExecutions() - 1) + 
-                                stepMetadata.getDurationMs()) / stepStats.getTotalExecutions()
-                            );
+                            Long stepDuration = stepMetadata.getDurationMs();
+                            if (stepDuration != null) {
+                                stepStats.setAverageDurationMs(
+                                    (stepStats.getAverageDurationMs() * (stepStats.getTotalExecutions() - 1) + 
+                                    stepDuration) / stepStats.getTotalExecutions()
+                                );
+                            }
                             
                             // Target stats
                             String target = stepMetadata.getTarget();
-                            LinqWorkflowStats.TargetStats targetStats = stats.getTargetStats().computeIfAbsent(target, k -> new LinqWorkflowStats.TargetStats());
-                            targetStats.setTotalExecutions(targetStats.getTotalExecutions() + 1);
-                            targetStats.setAverageDurationMs(
-                                (targetStats.getAverageDurationMs() * (targetStats.getTotalExecutions() - 1) + 
-                                stepMetadata.getDurationMs()) / targetStats.getTotalExecutions()
-                            );
-                            
-                            // Model stats for AI targets
-                            if (target.equals("openai-chat") || target.equals("gemini-chat") || target.equals("cohere-chat") || target.equals("claude-chat") ||
-                             target.equals("openai-embed") || target.equals("gemini-embed") || target.equals("cohere-embed")) {
-                                String model = execution.getRequest().getQuery().getWorkflow().stream()
-                                    .filter(step -> step.getStep() == stepMetadata.getStep())
-                                    .findFirst()
-                                    .map(step -> step.getLlmConfig() != null ? step.getLlmConfig().getModel() : null)
-                                    .orElse("unknown");
+                            if (target != null) {
+                                LinqWorkflowStats.TargetStats targetStats = stats.getTargetStats().computeIfAbsent(target, k -> new LinqWorkflowStats.TargetStats());
+                                targetStats.setTotalExecutions(targetStats.getTotalExecutions() + 1);
+                                if (stepDuration != null) {
+                                    targetStats.setAverageDurationMs(
+                                        (targetStats.getAverageDurationMs() * (targetStats.getTotalExecutions() - 1) + 
+                                        stepDuration) / targetStats.getTotalExecutions()
+                                    );
+                                }
                                 
-                                LinqWorkflowStats.ModelStats modelStats = stats.getModelStats().computeIfAbsent(model, k -> new LinqWorkflowStats.ModelStats());
-                                modelStats.setTotalExecutions(modelStats.getTotalExecutions() + 1);
-                                modelStats.setAverageDurationMs(
-                                    (modelStats.getAverageDurationMs() * (modelStats.getTotalExecutions() - 1) + 
-                                    stepMetadata.getDurationMs()) / modelStats.getTotalExecutions()
-                                );
+                                // Model stats for AI targets
+                                if (target.equals("openai-chat") || target.equals("gemini-chat") || target.equals("cohere-chat") || target.equals("claude-chat") ||
+                                 target.equals("openai-embed") || target.equals("gemini-embed") || target.equals("cohere-embed")) {
+                                    String model = "unknown";
+                                    if (execution.getRequest() != null && 
+                                        execution.getRequest().getQuery() != null && 
+                                        execution.getRequest().getQuery().getWorkflow() != null) {
+                                        model = execution.getRequest().getQuery().getWorkflow().stream()
+                                            .filter(step -> step != null && step.getStep() == stepMetadata.getStep())
+                                            .findFirst()
+                                            .map(step -> step.getLlmConfig() != null ? step.getLlmConfig().getModel() : null)
+                                            .orElse("unknown");
+                                    }
+                                
+                                    LinqWorkflowStats.ModelStats modelStats = stats.getModelStats().computeIfAbsent(model, k -> new LinqWorkflowStats.ModelStats());
+                                    modelStats.setTotalExecutions(modelStats.getTotalExecutions() + 1);
+                                    if (stepDuration != null) {
+                                        modelStats.setAverageDurationMs(
+                                            (modelStats.getAverageDurationMs() * (modelStats.getTotalExecutions() - 1) + 
+                                            stepDuration) / modelStats.getTotalExecutions()
+                                        );
+                                    }
                                 
                                 // Token usage extraction
                                 if (execution.getResponse().getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
@@ -215,6 +237,7 @@ public class LinqWorkflowStatsServiceImpl implements LinqWorkflowStatsService {
                                             }
                                         }
                                     }
+                                }
                                 }
                             }
                         });

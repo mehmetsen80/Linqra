@@ -70,6 +70,9 @@ public class EarlyVaultService implements LinqraVaultService {
             }
             
             return value;
+        } catch (SecretNotFoundException e) {
+            // Let SecretNotFoundException propagate so VaultPropertySource can handle it gracefully
+            throw e;
         } catch (Exception e) {
             log.error("Failed to get secret '{}' for environment '{}': {}", key, env, e.getMessage());
             throw new RuntimeException("Failed to get secret: " + key, e);

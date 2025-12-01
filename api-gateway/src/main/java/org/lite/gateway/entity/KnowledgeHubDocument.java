@@ -68,5 +68,20 @@ public class KnowledgeHubDocument {
     private String processingModel; // LLM model used for embeddings
     private Long totalTokens; // Total tokens in the document
     private Integer totalEmbeddings;
+    
+    // File encryption metadata
+    /**
+     * Encryption key version used to encrypt the raw file in S3.
+     * Format: "v1", "v2", etc.
+     * Null = unencrypted (legacy file)
+     */
+    private String encryptionKeyVersion; // e.g., "v1", "v2"
+    
+    /**
+     * Whether the raw file in S3 is encrypted.
+     * false = legacy unencrypted file (for backward compatibility)
+     * true = encrypted file (new uploads)
+     */
+    private Boolean encrypted = false; // Default false for backward compatibility
 }
 

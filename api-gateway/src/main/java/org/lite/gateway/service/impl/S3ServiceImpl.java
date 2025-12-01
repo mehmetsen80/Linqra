@@ -116,6 +116,48 @@ public class S3ServiceImpl implements S3Service {
     }
     
     @Override
+    public Mono<Void> uploadFileBytes(String s3Key, byte[] fileBytes, String contentType, String encryptionKeyVersion) {
+        return Mono.fromCallable(() -> {
+            try {
+                log.info("Uploading file bytes to S3: {} ({} bytes)", s3Key, fileBytes.length);
+                
+                Map<String, String> metadata = new HashMap<>();
+                metadata.put("uploaded-at", Instant.now().toString());
+                metadata.put("upload-method", "server-side-encrypted");
+                
+                // Store encryption key version in S3 metadata for recovery/audit purposes
+                if (encryptionKeyVersion != null && !encryptionKeyVersion.isEmpty()) {
+                    metadata.put("encryption-key-version", encryptionKeyVersion);
+                    log.debug("Storing encryption key version {} in S3 metadata for key: {}", encryptionKeyVersion, s3Key);
+                }
+                
+                PutObjectRequest putObjectRequest = PutObjectRequest.builder()
+                        .bucket(s3Properties.getBucketName())
+                        .key(s3Key)
+                        .contentType(contentType)
+                        .contentLength((long) fileBytes.length)
+                        .metadata(metadata)
+                        .serverSideEncryption(ServerSideEncryption.AES256) // Additional layer of protection
+                        .build();
+                
+                ByteBuffer byteBuffer = ByteBuffer.wrap(fileBytes);
+                CompletableFuture<PutObjectResponse> future = s3AsyncClient.putObject(
+                        putObjectRequest,
+                        AsyncRequestBody.fromByteBuffer(byteBuffer)
+                );
+                
+                return future;
+            } catch (Exception e) {
+                log.error("Failed to upload file bytes to S3: {}", s3Key, e);
+                throw new StorageException("Failed to upload file bytes to S3", e);
+            }
+        })
+        .flatMap(future -> Mono.fromFuture(future))
+        .doOnSuccess(response -> log.info("Successfully uploaded file bytes to S3: {}", s3Key))
+        .then();
+    }
+    
+    @Override
     public Mono<Void> downloadFile(String s3Key) {
         // Placeholder implementation - use generatePresignedDownloadUrl for actual downloads
         log.info("Download requested for S3 key: {} - Use generatePresignedDownloadUrl instead", s3Key);

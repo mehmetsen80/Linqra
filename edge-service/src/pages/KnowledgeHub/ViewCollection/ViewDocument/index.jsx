@@ -1,31 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Spinner, Alert, Badge, Row, Col, OverlayTrigger, Tooltip, Form, Table } from 'react-bootstrap';
-import { HiArrowLeft, HiDocument, HiDownload, HiTrash, HiCalendar, HiCube, HiChartBar, HiCheckCircle, HiInformationCircle, HiHashtag, HiLink } from 'react-icons/hi';
+import { HiArrowLeft, HiDocument, HiDownload, HiTrash, HiCalendar, HiCube, HiChartBar, HiCheckCircle, HiInformationCircle, HiHashtag, HiLink, HiLockClosed, HiLockOpen } from 'react-icons/hi';
 import { useTeam } from '../../../../contexts/TeamContext';
+import { useAuth } from '../../../../contexts/AuthContext';
 import { knowledgeHubDocumentService } from '../../../../services/knowledgeHubDocumentService';
 import { knowledgeHubCollectionService } from '../../../../services/knowledgeHubCollectionService';
 import { knowledgeHubWebSocketService } from '../../../../services/knowledgeHubWebSocketService';
 import { knowledgeHubGraphService } from '../../../../services/knowledgeHubGraphService';
 import { knowledgeHubGraphWebSocketService } from '../../../../services/knowledgeHubGraphWebSocketService';
+import { isSuperAdmin, hasAdminAccess } from '../../../../utils/roleUtils';
 import Button from '../../../../components/common/Button';
 import { showSuccessToast, showErrorToast } from '../../../../utils/toastConfig';
 import { formatDateTime } from '../../../../utils/dateUtils';
 import ConfirmationModalWithVerification from '../../../../components/common/ConfirmationModalWithVerification';
 import AlertMessageModal from '../../../../components/common/AlertMessageModal';
 import PropertiesViewerModal from '../../../../components/common/PropertiesViewerModal';
+import EncryptionVersionWarningBanner from '../../../../components/common/EncryptionVersionWarningBanner';
 import './styles.css';
 
 function ViewDocument() {
   const { documentId } = useParams();
   const navigate = useNavigate();
   const { currentTeam } = useTeam();
+  const { user } = useAuth();
   const [document, setDocument] = useState(null);
   const [collection, setCollection] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
-  const [downloadingProcessedJson, setDownloadingProcessedJson] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [fileExists, setFileExists] = useState(null);
   const [chunkStats, setChunkStats] = useState(null);
@@ -69,8 +72,184 @@ function ViewDocument() {
     title: 'Properties',
     entityType: null,
     entityName: null,
-    properties: {}
+    properties: {},
+    loading: false
   });
+  const [currentEncryptionKeyVersion, setCurrentEncryptionKeyVersion] = useState(null);
+
+  // Helper function to truncate encrypted names for display
+  const truncateEncryptedName = (name, maxLength = 60) => {
+    if (!name || typeof name !== 'string') return name || 'N/A';
+    if (name.length <= maxLength) return name;
+    return name.substring(0, maxLength) + '...';
+  };
+
+  // Helper function to compare version numbers (e.g., "v1" < "v2")
+  const compareVersion = (v1, v2) => {
+    if (!v1 || !v2) return false;
+    const num1 = parseInt(v1.replace('v', '')) || 0;
+    const num2 = parseInt(v2.replace('v', '')) || 0;
+    return num1 < num2;
+  };
+
+  // Helper function to get entity encryption version
+  const getEntityEncryptionVersion = (entity) => {
+    // Prefer property-level version, fallback to entity-level version
+    return entity.name_encryption_version || entity.encryptionKeyVersion || null;
+  };
+
+  // Helper function to check if entity is using outdated encryption key
+  const isOutdatedEncryption = (entity) => {
+    if (!currentEncryptionKeyVersion) return false;
+    const entityVersion = getEntityEncryptionVersion(entity);
+    if (!entityVersion) return true; // Legacy/unencrypted entities are considered outdated
+    return compareVersion(entityVersion, currentEncryptionKeyVersion);
+  };
+
+  const handleOpenPropertiesModal = async (title, entityType, entityName, properties, fromEntity = null, toEntity = null) => {
+    const isAdmin = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
+    
+    if (isAdmin) {
+      // For admin users, decrypt properties and entity names before showing
+      setPropertiesModal({
+        show: true,
+        title,
+        entityType,
+        entityName,
+        properties: {},
+        loading: true
+      });
+
+      try {
+        // Build a combined properties map that includes entity names and encryption version markers for decryption
+        const propertiesToDecrypt = { ...(properties || {}) };
+        
+        // Build entity name properties with encryption version markers
+        const fromEntityProps = {};
+        if (fromEntity?.name) {
+          fromEntityProps['name'] = fromEntity.name;
+          // Include encryption version markers if present
+          if (fromEntity.name_encryption_version) {
+            fromEntityProps['name_encryption_version'] = fromEntity.name_encryption_version;
+          } else if (fromEntity.encryptionKeyVersion) {
+            fromEntityProps['encryptionKeyVersion'] = fromEntity.encryptionKeyVersion;
+          }
+        }
+        
+        const toEntityProps = {};
+        if (toEntity?.name) {
+          toEntityProps['name'] = toEntity.name;
+          // Include encryption version markers if present
+          if (toEntity.name_encryption_version) {
+            toEntityProps['name_encryption_version'] = toEntity.name_encryption_version;
+          } else if (toEntity.encryptionKeyVersion) {
+            toEntityProps['encryptionKeyVersion'] = toEntity.encryptionKeyVersion;
+          }
+        }
+        
+        // Determine if this is a relationship (has fromEntity and toEntity) or an entity
+        const isRelationship = fromEntity !== null && toEntity !== null;
+        
+        let updatedEntityName = entityName; // Default to the passed entityName
+        
+        if (isRelationship) {
+          // Decrypt relationship entity names separately if they exist
+          let decryptedFromName = fromEntity?.name || fromEntity?.id || 'N/A';
+          let decryptedToName = toEntity?.name || toEntity?.id || 'N/A';
+          
+          if (Object.keys(fromEntityProps).length > 0) {
+            const fromNameResult = await knowledgeHubGraphService.decryptProperties(fromEntityProps);
+            if (fromNameResult.success && fromNameResult.data?.name) {
+              decryptedFromName = fromNameResult.data.name;
+            }
+          }
+          
+          if (Object.keys(toEntityProps).length > 0) {
+            const toNameResult = await knowledgeHubGraphService.decryptProperties(toEntityProps);
+            if (toNameResult.success && toNameResult.data?.name) {
+              decryptedToName = toNameResult.data.name;
+            }
+          }
+          
+          // Update subtitle with decrypted names for relationships
+          const fromType = fromEntity?.type || 'Unknown';
+          const toType = toEntity?.type || 'Unknown';
+          updatedEntityName = `${fromType}:${decryptedFromName} → ${toType}:${decryptedToName}`;
+        } else {
+          // For entities, decrypt the entity name if it exists in properties
+          if (properties?.name) {
+            const entityNameProps = {
+              name: properties.name
+            };
+            // Include encryption version markers if present
+            if (properties.name_encryption_version) {
+              entityNameProps['name_encryption_version'] = properties.name_encryption_version;
+            } else if (properties.encryptionKeyVersion) {
+              entityNameProps['encryptionKeyVersion'] = properties.encryptionKeyVersion;
+            }
+            
+            if (Object.keys(entityNameProps).length > 1) { // Has name + encryption version
+              const entityNameResult = await knowledgeHubGraphService.decryptProperties(entityNameProps);
+              if (entityNameResult.success && entityNameResult.data?.name) {
+                updatedEntityName = entityNameResult.data.name;
+              }
+            } else {
+              // No encryption version, use the name as-is
+              updatedEntityName = properties.name;
+            }
+          }
+        }
+        
+        // Decrypt relationship properties if they exist
+        if (Object.keys(propertiesToDecrypt).length > 0) {
+          const result = await knowledgeHubGraphService.decryptProperties(propertiesToDecrypt);
+          if (result.success) {
+            setPropertiesModal(prev => ({
+              ...prev,
+              entityName: updatedEntityName,
+              properties: result.data || {},
+              loading: false
+            }));
+          } else {
+            // If decryption fails, show original properties but with decrypted entity names
+            console.warn('Failed to decrypt properties:', result.error);
+            setPropertiesModal(prev => ({
+              ...prev,
+              entityName: updatedEntityName,
+              properties: properties || {},
+              loading: false
+            }));
+          }
+        } else {
+          // No properties to decrypt, but still update entity name
+          setPropertiesModal(prev => ({
+            ...prev,
+            entityName: updatedEntityName,
+            properties: properties || {},
+            loading: false
+          }));
+        }
+      } catch (error) {
+        console.error('Error decrypting properties:', error);
+        // On error, show original properties
+        setPropertiesModal(prev => ({
+          ...prev,
+          properties: properties || {},
+          loading: false
+        }));
+      }
+    } else {
+      // For non-admin users, show as-is
+      setPropertiesModal({
+        show: true,
+        title,
+        entityType,
+        entityName,
+        properties: properties || {},
+        loading: false
+      });
+    }
+  };
 
   const stageDeletionConfig = {
     embedding: {
@@ -215,6 +394,25 @@ function ViewDocument() {
     };
   }, [currentTeam?.id, documentId]);
 
+  // Fetch current encryption key version on component mount
+  useEffect(() => {
+    const fetchCurrentEncryptionVersion = async () => {
+      try {
+        const result = await knowledgeHubGraphService.getCurrentEncryptionKeyVersion();
+        if (result.success && result.data?.currentKeyVersion) {
+          setCurrentEncryptionKeyVersion(result.data.currentKeyVersion);
+        }
+      } catch (err) {
+        console.error('Error fetching current encryption key version:', err);
+        // Don't show error toast - this is optional information
+      }
+    };
+    
+    if (currentTeam?.id) {
+      fetchCurrentEncryptionVersion();
+    }
+  }, [currentTeam?.id]);
+
   // Fetch document entities when entity type selection changes
   useEffect(() => {
     if (currentTeam?.id && documentId && document && 
@@ -284,17 +482,17 @@ function ViewDocument() {
   const handleDownload = async () => {
     try {
       setDownloading(true);
-      const { data, error } = await knowledgeHubDocumentService.generateDownloadUrl(documentId);
-      if (error) throw new Error(error);
+      const result = await knowledgeHubDocumentService.downloadDocument(documentId, document?.fileName);
       
-      // Open the presigned URL in a new window to download
-      if (data.downloadUrl) {
-        window.open(data.downloadUrl, '_blank');
-        showSuccessToast('Download initiated');
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to download document');
       }
+      
+      // File download triggered automatically via blob URL
+      // Note: Browser's download dialog will appear, so we don't need a success toast
     } catch (err) {
       console.error('Error downloading document:', err);
-      showErrorToast(err.response?.data?.error || err.message || 'Failed to download document');
+      showErrorToast(err.message || 'Failed to download document');
     } finally {
       setDownloading(false);
     }
@@ -316,6 +514,7 @@ function ViewDocument() {
       if (processedJson.statistics) {
         setChunkStats({
           avgQualityScore: processedJson.statistics.avgQualityScore,
+          encryptionKeyVersion: processedJson.encryptionKeyVersion,
           // We already have totalChunks and totalTokens from document
         });
       }
@@ -327,24 +526,6 @@ function ViewDocument() {
     }
   };
 
-  const handleDownloadProcessedJson = async () => {
-    try {
-      setDownloadingProcessedJson(true);
-      const { data, error } = await knowledgeHubDocumentService.generateProcessedJsonDownloadUrl(documentId);
-      if (error) throw new Error(error);
-      
-      // Open the presigned URL in a new window to download
-      if (data.downloadUrl) {
-        window.open(data.downloadUrl, '_blank');
-        showSuccessToast('Processed JSON download initiated');
-      }
-    } catch (err) {
-      console.error('Error downloading processed JSON:', err);
-      showErrorToast(err.response?.data?.error || err.message || 'Failed to download processed JSON');
-    } finally {
-      setDownloadingProcessedJson(false);
-    }
-  };
 
   const fetchMetadata = async () => {
     if (!documentId) return;
@@ -844,9 +1025,9 @@ function ViewDocument() {
       const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
       
       // Fetch entities for each type filtered by documentId
-      const entityPromises = entityTypes.map(type => 
-        knowledgeHubGraphService.findEntities(type, { documentId })
-      );
+        const entityPromises = entityTypes.map(type => 
+          knowledgeHubGraphService.findEntities(type, { documentId, teamId: currentTeam.id })
+        );
       
       const entityResults = await Promise.all(entityPromises);
       const totalEntities = entityResults.reduce((sum, result) => {
@@ -887,7 +1068,7 @@ function ViewDocument() {
         // Fetch all entity types and combine them
         const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
         const entityPromises = entityTypes.map(type => 
-          knowledgeHubGraphService.findEntities(type, { documentId })
+          knowledgeHubGraphService.findEntities(type, { documentId, teamId: currentTeam.id })
         );
         
         const entityResults = await Promise.all(entityPromises);
@@ -909,7 +1090,7 @@ function ViewDocument() {
         // Fetch entities for specific type
         const { data, error } = await knowledgeHubGraphService.findEntities(
           selectedDocumentEntityType, 
-          { documentId }
+          { documentId, teamId: currentTeam.id }
         );
         if (error) throw new Error(error);
         const entities = Array.isArray(data) ? data : [];
@@ -1302,6 +1483,67 @@ function ViewDocument() {
                   {document.fileSize ? `${(document.fileSize / 1024 / 1024).toFixed(2)} MB` : 'N/A'}
                 </span>
               </div>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <span className="text-muted h6">Encryption Status</span>
+                <div className="d-flex align-items-center gap-2">
+                  {document.encrypted ? (
+                    <>
+                      <HiLockClosed className="text-success" size={18} />
+                      <Badge bg="success">Encrypted</Badge>
+                    </>
+                  ) : (
+                    <>
+                      <HiLockOpen className="text-warning" size={18} />
+                      <Badge bg="warning">Not Encrypted</Badge>
+                    </>
+                  )}
+                </div>
+              </div>
+              {document.encrypted && (
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <span className="text-muted h6">Encryption Key Version</span>
+                  <div className="d-flex align-items-center gap-2">
+                    {document.encryptionKeyVersion ? (
+                      <>
+                        <Badge 
+                          bg={
+                            currentEncryptionKeyVersion && 
+                            compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion)
+                              ? "warning" 
+                              : "info"
+                          }
+                          title={
+                            currentEncryptionKeyVersion && 
+                            compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion)
+                              ? `File encrypted with ${document.encryptionKeyVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`
+                              : `File encrypted with key version ${document.encryptionKeyVersion}`
+                          }
+                        >
+                          {document.encryptionKeyVersion}
+                        </Badge>
+                        {currentEncryptionKeyVersion && 
+                         compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion) && (
+                          <OverlayTrigger
+                            placement="top"
+                            overlay={
+                              <Tooltip>
+                                This file is encrypted with an older key version ({document.encryptionKeyVersion}). 
+                                Current version is {currentEncryptionKeyVersion}. Re-upload the file to encrypt with the latest version.
+                              </Tooltip>
+                            }
+                          >
+                            <HiInformationCircle className="text-warning" size={16} />
+                          </OverlayTrigger>
+                        )}
+                      </>
+                    ) : (
+                      <Badge bg="secondary" title="Legacy encrypted file - encryption key version not tracked">
+                        Unknown
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="d-flex justify-content-between align-items-center">
                 <span className="text-muted h6">Status</span>
                 <Badge 
@@ -1381,13 +1623,13 @@ function ViewDocument() {
           </Col>
         )}
 
-        {/* Additional Information */}
+        {/* RAG Information */}
         <Col md={6}>
           <Card className="border-0 bg-light h-100">
             <Card.Body>
               <div className="d-flex align-items-center mb-3">
                 <HiDocument className="text-primary me-2" size={24} />
-                <h5 className="mb-0 fw-semibold">Additional Information</h5>
+                <h5 className="mb-0 fw-semibold">RAG Information</h5>
               </div>
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <span className="text-muted h6">RAG Collection</span>
@@ -1485,16 +1727,6 @@ function ViewDocument() {
                     <h5 className="mb-0 fw-semibold">Processed Chunks</h5>
                   </div>
                   <div className="d-flex align-items-center gap-2">
-                    {document.processedS3Key && (
-                      <Button
-                        variant="outline-primary"
-                        size="sm"
-                        onClick={handleDownloadProcessedJson}
-                        disabled={downloadingProcessedJson}
-                      >
-                        <HiDownload /> {downloadingProcessedJson ? 'Downloading...' : 'Download JSON'}
-                      </Button>
-                    )}
                     {(document.processedS3Key || (document.totalChunks ?? 0) > 0) && (
                       <Button
                         variant="outline-danger"
@@ -1534,6 +1766,55 @@ function ViewDocument() {
                     <span className="text-muted h6">Avg Quality Score</span>
                     <span className="text-secondary">N/A</span>
                   </div>
+                )}
+                {document.processedS3Key && (
+                  <>
+                    <hr className="my-3" />
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <span className="text-muted h6">Encryption Status</span>
+                      <div className="d-flex align-items-center gap-2">
+                        <HiLockClosed className="text-success" size={18} />
+                        <Badge bg="success">Encrypted</Badge>
+                      </div>
+                    </div>
+                    {chunkStats?.encryptionKeyVersion && (
+                      <div className="d-flex justify-content-between align-items-center mb-3">
+                        <span className="text-muted h6">Encryption Key Version</span>
+                        <div className="d-flex align-items-center gap-2">
+                          <Badge 
+                            bg={
+                              currentEncryptionKeyVersion && 
+                              compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion)
+                                ? "warning" 
+                                : "info"
+                            }
+                            title={
+                              currentEncryptionKeyVersion && 
+                              compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion)
+                                ? `Processed data encrypted with ${chunkStats.encryptionKeyVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`
+                                : `Processed data encrypted with key version ${chunkStats.encryptionKeyVersion}`
+                            }
+                          >
+                            {chunkStats.encryptionKeyVersion}
+                          </Badge>
+                          {currentEncryptionKeyVersion && 
+                           compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion) && (
+                            <OverlayTrigger
+                              placement="top"
+                              overlay={
+                                <Tooltip>
+                                  This processed data is encrypted with an older key version ({chunkStats.encryptionKeyVersion}). 
+                                  Current version is {currentEncryptionKeyVersion}. Re-process the document to encrypt with the latest version.
+                                </Tooltip>
+                              }
+                            >
+                              <HiInformationCircle className="text-warning" size={16} />
+                            </OverlayTrigger>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </Card.Body>
             </Card>
@@ -1655,9 +1936,65 @@ function ViewDocument() {
                     {/* Extraction Info */}
                     <hr className="my-3" />
                     {metadata.extractedAt && (
-                      <div className="d-flex justify-content-between align-items-center">
+                      <div className="d-flex justify-content-between align-items-center mb-3">
                         <span className="text-muted h6">Extracted At</span>
                         <span className="text-secondary small">{formatDateTime(metadata.extractedAt)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Encryption Info */}
+                    <hr className="my-3" />
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <span className="text-muted h6">Encryption Status</span>
+                      <div className="d-flex align-items-center gap-2">
+                        {metadata.encryptionKeyVersion ? (
+                          <>
+                            <HiLockClosed className="text-success" size={18} />
+                            <Badge bg="success">Encrypted</Badge>
+                          </>
+                        ) : (
+                          <>
+                            <HiLockOpen className="text-warning" size={18} />
+                            <Badge bg="warning">Not Encrypted</Badge>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {metadata.encryptionKeyVersion && (
+                      <div className="d-flex justify-content-between align-items-center">
+                        <span className="text-muted h6">Encryption Key Version</span>
+                        <div className="d-flex align-items-center gap-2">
+                          <Badge 
+                            bg={
+                              currentEncryptionKeyVersion && 
+                              compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion)
+                                ? "warning" 
+                                : "info"
+                            }
+                            title={
+                              currentEncryptionKeyVersion && 
+                              compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion)
+                                ? `Metadata encrypted with ${metadata.encryptionKeyVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`
+                                : `Metadata encrypted with key version ${metadata.encryptionKeyVersion}`
+                            }
+                          >
+                            {metadata.encryptionKeyVersion}
+                          </Badge>
+                          {currentEncryptionKeyVersion && 
+                           compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion) && (
+                            <OverlayTrigger
+                              placement="top"
+                              overlay={
+                                <Tooltip>
+                                  This metadata is encrypted with an older key version ({metadata.encryptionKeyVersion}). 
+                                  Current version is {currentEncryptionKeyVersion}. Re-extract metadata to encrypt with the latest version.
+                                </Tooltip>
+                              }
+                            >
+                              <HiInformationCircle className="text-warning" size={16} />
+                            </OverlayTrigger>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1994,6 +2331,28 @@ function ViewDocument() {
                   </div>
                 </div>
 
+                {(() => {
+                  const outdatedCount = documentEntities.filter(e => isOutdatedEncryption(e)).length;
+                  return (
+                    <EncryptionVersionWarningBanner
+                      show={outdatedCount > 0 && currentEncryptionKeyVersion}
+                      variant="warning"
+                      heading={
+                        <>
+                          {outdatedCount} {outdatedCount === 1 ? 'entity' : 'entities'} {outdatedCount === 1 ? 'is' : 'are'} encrypted with an outdated key version
+                        </>
+                      }
+                      message={
+                        <>
+                          These entities are encrypted with an older encryption key version and need to be re-encrypted.
+                          To fix this, you should: <strong>1) Hard delete all files</strong>, <strong>2) Re-upload the documents</strong>, and <strong>3) Re-extract the entities</strong>.
+                          This will ensure all data is encrypted with the current version ({currentEncryptionKeyVersion}).
+                        </>
+                      }
+                    />
+                  );
+                })()}
+
                 {loadingDocumentEntities ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" role="status">
@@ -2014,6 +2373,7 @@ function ViewDocument() {
                           <th>ID</th>
                           <th>Name</th>
                           <th>Type</th>
+                          <th>Encryption Version</th>
                           <th>Properties</th>
                         </tr>
                       </thead>
@@ -2029,35 +2389,75 @@ function ViewDocument() {
                               return acc;
                             }, {});
                           
+                          // Include name with encryption info for decryption in the modal
+                          const propertiesWithName = {
+                            ...entityProperties,
+                            name: entity.name,
+                            ...(entity.name_encryption_version && { name_encryption_version: entity.name_encryption_version }),
+                            ...(entity.encryptionKeyVersion && { encryptionKeyVersion: entity.encryptionKeyVersion })
+                          };
+                          
                           return (
                             <tr 
                               key={entity.id || idx}
                               style={{ cursor: 'pointer' }}
-                              onClick={() => setPropertiesModal({
-                                show: true,
-                                title: 'Entity Properties',
-                                entityType: entity.type || 'Unknown',
-                                entityName: entity.name || entity.id || 'Unnamed',
-                                properties: entityProperties
-                              })}
+                              onClick={() => handleOpenPropertiesModal(
+                                'Entity Properties',
+                                entity.type || 'Unknown',
+                                entity.name || entity.id || 'Unnamed',
+                                propertiesWithName,
+                                null, // fromEntity - not a relationship
+                                null  // toEntity - not a relationship
+                              )}
                             >
                               <td>
                                 <code className="small">{entity.id || 'N/A'}</code>
                               </td>
-                              <td>{entity.name || entity.id || 'Unnamed'}</td>
+                              <td>
+                                <code className="small" title={entity.name || entity.id || 'Unnamed'}>
+                                  {truncateEncryptedName(entity.name || entity.id || 'Unnamed')}
+                                </code>
+                              </td>
                               <td>
                                 <Badge bg="secondary">{entity.type || 'Unknown'}</Badge>
+                              </td>
+                              <td>
+                                {(() => {
+                                  const entityVersion = getEntityEncryptionVersion(entity);
+                                  const isOutdated = isOutdatedEncryption(entity);
+                                  const displayVersion = entityVersion || 'none';
+                                  
+                                  if (isOutdated && currentEncryptionKeyVersion) {
+                                    return (
+                                      <div>
+                                        <Badge bg="warning" className="me-1" title={`Entity encrypted with ${displayVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`}>
+                                          {displayVersion}
+                                        </Badge>
+                                        <small className="text-warning" title={`Needs re-encryption. Current: ${currentEncryptionKeyVersion}`}>
+                                          ⚠️ Outdated
+                                        </small>
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  return (
+                                    <Badge bg={entityVersion ? "success" : "secondary"} title={entityVersion ? `Encrypted with ${displayVersion}` : 'Not encrypted (legacy)'}>
+                                      {displayVersion}
+                                    </Badge>
+                                  );
+                                })()}
                               </td>
                               <td
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setPropertiesModal({
-                                    show: true,
-                                    title: 'Entity Properties',
-                                    entityType: entity.type || 'Unknown',
-                                    entityName: entity.name || entity.id || 'Unnamed',
-                                    properties: entityProperties
-                                  });
+                                  handleOpenPropertiesModal(
+                                    'Entity Properties',
+                                    entity.type || 'Unknown',
+                                    entity.name || entity.id || 'Unnamed',
+                                    propertiesWithName,
+                                    null, // fromEntity - not a relationship
+                                    null  // toEntity - not a relationship
+                                  );
                                 }}
                                 style={{ cursor: 'pointer' }}
                               >
@@ -2127,8 +2527,10 @@ function ViewDocument() {
                           <th>Type</th>
                           <th>From Entity</th>
                           <th>From Entity Name</th>
+                          <th>From Encryption</th>
                           <th>To Entity</th>
                           <th>To Entity Name</th>
+                          <th>To Encryption</th>
                           <th>Properties</th>
                         </tr>
                       </thead>
@@ -2144,13 +2546,14 @@ function ViewDocument() {
                             <tr 
                               key={idx}
                               style={{ cursor: 'pointer' }}
-                              onClick={() => setPropertiesModal({
-                                show: true,
-                                title: relationshipTitle,
-                                entityType: relationship.relationshipType || 'Unknown',
-                                entityName: relationshipSubtitle,
-                                properties: relationship.properties || {}
-                              })}
+                              onClick={() => handleOpenPropertiesModal(
+                                relationshipTitle,
+                                relationship.relationshipType || 'Unknown',
+                                relationshipSubtitle,
+                                relationship.properties || {},
+                                relationship.fromEntity,
+                                relationship.toEntity
+                              )}
                             >
                               <td>
                                 <Badge bg="info">{relationship.relationshipType || 'Unknown'}</Badge>
@@ -2159,24 +2562,77 @@ function ViewDocument() {
                                 <Badge bg="secondary">{relationship.fromEntity?.type || 'Unknown'}</Badge>
                               </td>
                               <td>
-                                <code className="small">{fromEntityName}</code>
+                                <code className="small" title={fromEntityName}>
+                                  {truncateEncryptedName(fromEntityName)}
+                                </code>
+                              </td>
+                              <td>
+                                {(() => {
+                                  const fromVersion = getEntityEncryptionVersion(relationship.fromEntity);
+                                  const fromOutdated = relationship.fromEntity && isOutdatedEncryption(relationship.fromEntity);
+                                  const fromDisplayVersion = fromVersion || 'none';
+                                  
+                                  if (fromOutdated && currentEncryptionKeyVersion) {
+                                    return (
+                                      <div>
+                                        <Badge bg="warning" className="me-1" title={`Entity encrypted with ${fromDisplayVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`}>
+                                          {fromDisplayVersion}
+                                        </Badge>
+                                        <small className="text-warning">⚠️</small>
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  return (
+                                    <Badge bg={fromVersion ? "success" : "secondary"} title={fromVersion ? `Encrypted with ${fromDisplayVersion}` : 'Not encrypted (legacy)'}>
+                                      {fromDisplayVersion}
+                                    </Badge>
+                                  );
+                                })()}
                               </td>
                               <td>
                                 <Badge bg="secondary">{relationship.toEntity?.type || 'Unknown'}</Badge>
                               </td>
                               <td>
-                                <code className="small">{toEntityName}</code>
+                                <code className="small" title={toEntityName}>
+                                  {truncateEncryptedName(toEntityName)}
+                                </code>
+                              </td>
+                              <td>
+                                {(() => {
+                                  const toVersion = getEntityEncryptionVersion(relationship.toEntity);
+                                  const toOutdated = relationship.toEntity && isOutdatedEncryption(relationship.toEntity);
+                                  const toDisplayVersion = toVersion || 'none';
+                                  
+                                  if (toOutdated && currentEncryptionKeyVersion) {
+                                    return (
+                                      <div>
+                                        <Badge bg="warning" className="me-1" title={`Entity encrypted with ${toDisplayVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`}>
+                                          {toDisplayVersion}
+                                        </Badge>
+                                        <small className="text-warning">⚠️</small>
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  return (
+                                    <Badge bg={toVersion ? "success" : "secondary"} title={toVersion ? `Encrypted with ${toDisplayVersion}` : 'Not encrypted (legacy)'}>
+                                      {toDisplayVersion}
+                                    </Badge>
+                                  );
+                                })()}
                               </td>
                               <td
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setPropertiesModal({
-                                    show: true,
-                                    title: relationshipTitle,
-                                    entityType: relationship.relationshipType || 'Unknown',
-                                    entityName: relationshipSubtitle,
-                                    properties: relationship.properties || {}
-                                  });
+                                  handleOpenPropertiesModal(
+                                    relationshipTitle,
+                                    relationship.relationshipType || 'Unknown',
+                                    relationshipSubtitle,
+                                    relationship.properties || {},
+                                    relationship.fromEntity,
+                                    relationship.toEntity
+                                  );
                                 }}
                                 style={{ cursor: 'pointer' }}
                               >
@@ -2268,6 +2724,7 @@ function ViewDocument() {
         entityType={propertiesModal.entityType}
         entityName={propertiesModal.entityName}
         properties={propertiesModal.properties}
+        loading={propertiesModal.loading}
       />
     </div>
   );

@@ -2,11 +2,13 @@ package org.lite.gateway.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.lite.gateway.dto.ProcessedDocumentDto;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.KnowledgeHubDocumentMetaData;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
+import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.S3Service;
@@ -36,6 +38,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
     private final ObjectMapper objectMapper;
     private final MessageChannel executionMessageChannel;
     private final KnowledgeHubDocumentEmbeddingService embeddingService;
+    private final ChunkEncryptionService chunkEncryptionService;
     
     public KnowledgeHubDocumentMetaDataServiceImpl(
             KnowledgeHubDocumentMetaDataRepository metadataRepository,
@@ -43,13 +46,15 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
             S3Service s3Service,
             ObjectMapper objectMapper,
             @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel,
-            KnowledgeHubDocumentEmbeddingService embeddingService) {
+            KnowledgeHubDocumentEmbeddingService embeddingService,
+            ChunkEncryptionService chunkEncryptionService) {
         this.metadataRepository = metadataRepository;
         this.documentRepository = documentRepository;
         this.s3Service = s3Service;
         this.objectMapper = objectMapper;
         this.executionMessageChannel = executionMessageChannel;
         this.embeddingService = embeddingService;
+        this.chunkEncryptionService = chunkEncryptionService;
     }
     
     @Override
@@ -137,8 +142,15 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
                 .then(s3Service.downloadFileContent(document.getProcessedS3Key()))
                 .flatMap(jsonBytes -> {
                     try {
-                        String jsonString = new String(jsonBytes);
-                        JsonNode processedJson = objectMapper.readTree(jsonString);
+                        // Parse as ProcessedDocumentDto to decrypt sensitive fields
+                        ProcessedDocumentDto processedDoc = objectMapper.readValue(new String(jsonBytes), ProcessedDocumentDto.class);
+                        
+                        // Decrypt sensitive fields in processed document
+                        decryptProcessedDocumentDto(processedDoc, teamId);
+                        
+                        // Convert decrypted DTO back to JsonNode for backward compatibility with extraction logic
+                        String decryptedJsonString = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(processedDoc);
+                        JsonNode processedJson = objectMapper.readTree(decryptedJsonString);
 
                         KnowledgeHubDocumentMetaData metadata = KnowledgeHubDocumentMetaData.builder()
                                 .documentId(documentId)
@@ -150,8 +162,13 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
                                 .extractionVersion(EXTRACTION_VERSION)
                                 .build();
 
-                        // Extract metadata from processed JSON
+                        // Extract metadata from processed JSON (now decrypted)
                         extractMetadataFromJson(metadata, processedJson, document);
+                        
+                        // Encrypt sensitive metadata fields before saving
+                        String encryptionKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
+                        encryptMetadataFields(metadata, teamId, encryptionKeyVersion);
+                        metadata.setEncryptionKeyVersion(encryptionKeyVersion);
 
                         return metadataRepository.save(metadata)
                                 .onErrorResume(DuplicateKeyException.class, ex -> {
@@ -176,13 +193,25 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
         return s3Service.downloadFileContent(document.getProcessedS3Key())
                 .flatMap(jsonBytes -> {
                     try {
-                        String jsonString = new String(jsonBytes);
-                        JsonNode processedJson = objectMapper.readTree(jsonString);
+                        // Parse as ProcessedDocumentDto to decrypt sensitive fields
+                        ProcessedDocumentDto processedDoc = objectMapper.readValue(new String(jsonBytes), ProcessedDocumentDto.class);
                         
-                        // Update existing metadata
+                        // Decrypt sensitive fields in processed document
+                        decryptProcessedDocumentDto(processedDoc, document.getTeamId());
+                        
+                        // Convert decrypted DTO back to JsonNode for backward compatibility with extraction logic
+                        String decryptedJsonString = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(processedDoc);
+                        JsonNode processedJson = objectMapper.readTree(decryptedJsonString);
+                        
+                        // Update existing metadata (from decrypted JSON)
                         extractMetadataFromJson(existing, processedJson, document);
                         existing.setExtractedAt(LocalDateTime.now());
                         existing.setStatus("EXTRACTED");
+                        
+                        // Encrypt sensitive metadata fields before saving
+                        String encryptionKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
+                        encryptMetadataFields(existing, document.getTeamId(), encryptionKeyVersion);
+                        existing.setEncryptionKeyVersion(encryptionKeyVersion);
                         
                         return metadataRepository.save(existing);
                     } catch (Exception e) {
@@ -412,6 +441,11 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
     @Override
     public Mono<KnowledgeHubDocumentMetaData> getMetadataExtract(String documentId, String teamId) {
         return metadataRepository.findTopByDocumentIdAndTeamIdOrderByExtractedAtDesc(documentId, teamId)
+                .map(metadata -> {
+                    // Decrypt sensitive metadata fields before returning
+                    decryptMetadataFields(metadata, teamId);
+                    return metadata;
+                })
                 .switchIfEmpty(documentRepository.findByDocumentId(documentId)
                         .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)))
                         .filter(doc -> Objects.equals(doc.getTeamId(), teamId))
@@ -420,6 +454,11 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
                             log.info("Metadata not found for document {} — triggering extraction on demand.", documentId);
                             return extractMetadata(documentId, teamId)
                                     .flatMap(meta -> metadataRepository.findTopByDocumentIdAndTeamIdAndCollectionIdOrderByExtractedAtDesc(documentId, teamId, doc.getCollectionId()))
+                                    .map(metadata -> {
+                                        // Decrypt sensitive metadata fields before returning
+                                        decryptMetadataFields(metadata, teamId);
+                                        return metadata;
+                                    })
                                     .switchIfEmpty(Mono.error(new RuntimeException("Metadata extract not found for document: " + documentId)))
                                     .onErrorResume(err -> {
                                         log.error("On-demand metadata extraction failed for document {}: {}", documentId, err.getMessage());
@@ -467,6 +506,238 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
         } catch (Exception e) {
             log.error("Error publishing document status update via WebSocket for document: {}", 
                     document.getDocumentId(), e);
+        }
+    }
+    
+    /**
+     * Encrypt sensitive metadata fields before storing in MongoDB.
+     * 
+     * @param metadata The metadata entity to encrypt
+     * @param teamId The team ID for key derivation
+     * @param encryptionKeyVersion The encryption key version to use
+     */
+    private void encryptMetadataFields(KnowledgeHubDocumentMetaData metadata, String teamId, String encryptionKeyVersion) {
+        try {
+            // Encrypt sensitive string fields
+            if (metadata.getTitle() != null && !metadata.getTitle().isEmpty()) {
+                String encrypted = chunkEncryptionService.encryptChunkText(metadata.getTitle(), teamId, encryptionKeyVersion);
+                metadata.setTitle(encrypted);
+            }
+            
+            if (metadata.getAuthor() != null && !metadata.getAuthor().isEmpty()) {
+                String encrypted = chunkEncryptionService.encryptChunkText(metadata.getAuthor(), teamId, encryptionKeyVersion);
+                metadata.setAuthor(encrypted);
+            }
+            
+            if (metadata.getSubject() != null && !metadata.getSubject().isEmpty()) {
+                String encrypted = chunkEncryptionService.encryptChunkText(metadata.getSubject(), teamId, encryptionKeyVersion);
+                metadata.setSubject(encrypted);
+            }
+            
+            if (metadata.getKeywords() != null && !metadata.getKeywords().isEmpty()) {
+                String encrypted = chunkEncryptionService.encryptChunkText(metadata.getKeywords(), teamId, encryptionKeyVersion);
+                metadata.setKeywords(encrypted);
+            }
+            
+            if (metadata.getCreator() != null && !metadata.getCreator().isEmpty()) {
+                String encrypted = chunkEncryptionService.encryptChunkText(metadata.getCreator(), teamId, encryptionKeyVersion);
+                metadata.setCreator(encrypted);
+            }
+            
+            if (metadata.getProducer() != null && !metadata.getProducer().isEmpty()) {
+                String encrypted = chunkEncryptionService.encryptChunkText(metadata.getProducer(), teamId, encryptionKeyVersion);
+                metadata.setProducer(encrypted);
+            }
+            
+            // Encrypt string values in customMetadata Map
+            if (metadata.getCustomMetadata() != null && !metadata.getCustomMetadata().isEmpty()) {
+                Map<String, Object> encryptedCustomMetadata = new HashMap<>();
+                for (Map.Entry<String, Object> entry : metadata.getCustomMetadata().entrySet()) {
+                    if (entry.getValue() instanceof String && !((String) entry.getValue()).isEmpty()) {
+                        // Encrypt string values in custom metadata
+                        String encrypted = chunkEncryptionService.encryptChunkText((String) entry.getValue(), teamId, encryptionKeyVersion);
+                        encryptedCustomMetadata.put(entry.getKey(), encrypted);
+                    } else {
+                        // Keep non-string values as-is
+                        encryptedCustomMetadata.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                metadata.setCustomMetadata(encryptedCustomMetadata);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to encrypt some metadata fields for team {}: {}. Some fields may remain unencrypted.", 
+                teamId, e.getMessage());
+        }
+    }
+    
+    /**
+     * Decrypt sensitive metadata fields when retrieving from MongoDB.
+     * 
+     * @param metadata The metadata entity to decrypt
+     * @param teamId The team ID for key derivation
+     */
+    private void decryptMetadataFields(KnowledgeHubDocumentMetaData metadata, String teamId) {
+        if (metadata == null) {
+            return;
+        }
+        
+        String keyVersion = metadata.getEncryptionKeyVersion();
+        if (keyVersion == null || keyVersion.isEmpty()) {
+            keyVersion = "v1"; // Default to v1 for legacy data
+        }
+        
+        try {
+            // Decrypt sensitive string fields
+            if (metadata.getTitle() != null && !metadata.getTitle().isEmpty()) {
+                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getTitle(), teamId, keyVersion);
+                metadata.setTitle(decrypted);
+            }
+            
+            if (metadata.getAuthor() != null && !metadata.getAuthor().isEmpty()) {
+                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getAuthor(), teamId, keyVersion);
+                metadata.setAuthor(decrypted);
+            }
+            
+            if (metadata.getSubject() != null && !metadata.getSubject().isEmpty()) {
+                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getSubject(), teamId, keyVersion);
+                metadata.setSubject(decrypted);
+            }
+            
+            if (metadata.getKeywords() != null && !metadata.getKeywords().isEmpty()) {
+                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getKeywords(), teamId, keyVersion);
+                metadata.setKeywords(decrypted);
+            }
+            
+            if (metadata.getCreator() != null && !metadata.getCreator().isEmpty()) {
+                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getCreator(), teamId, keyVersion);
+                metadata.setCreator(decrypted);
+            }
+            
+            if (metadata.getProducer() != null && !metadata.getProducer().isEmpty()) {
+                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getProducer(), teamId, keyVersion);
+                metadata.setProducer(decrypted);
+            }
+            
+            // Decrypt string values in customMetadata Map
+            if (metadata.getCustomMetadata() != null && !metadata.getCustomMetadata().isEmpty()) {
+                Map<String, Object> decryptedCustomMetadata = new HashMap<>();
+                for (Map.Entry<String, Object> entry : metadata.getCustomMetadata().entrySet()) {
+                    if (entry.getValue() instanceof String && !((String) entry.getValue()).isEmpty()) {
+                        try {
+                            // Try to decrypt string values in custom metadata
+                            String decrypted = chunkEncryptionService.decryptChunkText((String) entry.getValue(), teamId, keyVersion);
+                            decryptedCustomMetadata.put(entry.getKey(), decrypted);
+                        } catch (Exception e) {
+                            // If decryption fails, assume it's already plaintext or invalid
+                            log.debug("Failed to decrypt custom metadata field '{}': {}. Keeping as-is.", 
+                                entry.getKey(), e.getMessage());
+                            decryptedCustomMetadata.put(entry.getKey(), entry.getValue());
+                        }
+                    } else {
+                        // Keep non-string values as-is
+                        decryptedCustomMetadata.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                metadata.setCustomMetadata(decryptedCustomMetadata);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to decrypt some metadata fields for team {} with key version {}: {}. Some fields may remain encrypted.", 
+                teamId, keyVersion, e.getMessage());
+        }
+    }
+    
+    /**
+     * Decrypt sensitive fields in ProcessedDocumentDto after reading from S3.
+     * Decrypts chunk text and metadata fields.
+     * 
+     * @param processedDoc The processed document DTO to decrypt
+     * @param teamId The team ID for key derivation
+     */
+    private void decryptProcessedDocumentDto(ProcessedDocumentDto processedDoc, String teamId) {
+        if (processedDoc == null) {
+            return;
+        }
+        
+        String keyVersion = processedDoc.getEncryptionKeyVersion();
+        if (keyVersion == null || keyVersion.isEmpty()) {
+            keyVersion = "v1"; // Default to v1 for legacy data
+        }
+        
+        try {
+            // Decrypt chunk text
+            if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
+                for (ProcessedDocumentDto.ChunkDto chunk : processedDoc.getChunks()) {
+                    if (chunk.getText() != null && !chunk.getText().isEmpty()) {
+                        try {
+                            String decryptedText = chunkEncryptionService.decryptChunkText(
+                                chunk.getText(), 
+                                teamId, 
+                                keyVersion
+                            );
+                            chunk.setText(decryptedText);
+                        } catch (Exception e) {
+                            log.debug("Failed to decrypt chunk text for team {} with key version {}: {}. Keeping encrypted value.", 
+                                teamId, keyVersion, e.getMessage());
+                            // Keep encrypted if decryption fails (might be legacy unencrypted data)
+                        }
+                    }
+                }
+            }
+            
+            // Decrypt sensitive metadata fields
+            if (processedDoc.getExtractedMetadata() != null) {
+                ProcessedDocumentDto.ExtractedMetadata metadata = processedDoc.getExtractedMetadata();
+                
+                try {
+                    if (metadata.getTitle() != null && !metadata.getTitle().isEmpty()) {
+                        metadata.setTitle(chunkEncryptionService.decryptChunkText(metadata.getTitle(), teamId, keyVersion));
+                    }
+                    if (metadata.getAuthor() != null && !metadata.getAuthor().isEmpty()) {
+                        metadata.setAuthor(chunkEncryptionService.decryptChunkText(metadata.getAuthor(), teamId, keyVersion));
+                    }
+                    if (metadata.getSubject() != null && !metadata.getSubject().isEmpty()) {
+                        metadata.setSubject(chunkEncryptionService.decryptChunkText(metadata.getSubject(), teamId, keyVersion));
+                    }
+                    if (metadata.getKeywords() != null && !metadata.getKeywords().isEmpty()) {
+                        metadata.setKeywords(chunkEncryptionService.decryptChunkText(metadata.getKeywords(), teamId, keyVersion));
+                    }
+                    if (metadata.getCreator() != null && !metadata.getCreator().isEmpty()) {
+                        metadata.setCreator(chunkEncryptionService.decryptChunkText(metadata.getCreator(), teamId, keyVersion));
+                    }
+                    if (metadata.getProducer() != null && !metadata.getProducer().isEmpty()) {
+                        metadata.setProducer(chunkEncryptionService.decryptChunkText(metadata.getProducer(), teamId, keyVersion));
+                    }
+                    if (metadata.getFormTitle() != null && !metadata.getFormTitle().isEmpty()) {
+                        metadata.setFormTitle(chunkEncryptionService.decryptChunkText(metadata.getFormTitle(), teamId, keyVersion));
+                    }
+                    if (metadata.getFormNumber() != null && !metadata.getFormNumber().isEmpty()) {
+                        metadata.setFormNumber(chunkEncryptionService.decryptChunkText(metadata.getFormNumber(), teamId, keyVersion));
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to decrypt metadata fields for team {} with key version {}: {}. Some fields may remain encrypted.", 
+                        teamId, keyVersion, e.getMessage());
+                }
+            }
+            
+            // Decrypt form field values
+            if (processedDoc.getFormFields() != null && !processedDoc.getFormFields().isEmpty()) {
+                for (ProcessedDocumentDto.FormField field : processedDoc.getFormFields()) {
+                    if (field.getValue() != null && !field.getValue().isEmpty()) {
+                        try {
+                            field.setValue(chunkEncryptionService.decryptChunkText(field.getValue(), teamId, keyVersion));
+                        } catch (Exception e) {
+                            log.debug("Failed to decrypt form field value for team {}: {}. Keeping encrypted value.", 
+                                teamId, e.getMessage());
+                        }
+                    }
+                }
+            }
+            
+            log.debug("Decrypted processed document DTO for team {} with key version {}", teamId, keyVersion);
+            
+        } catch (Exception e) {
+            log.warn("Failed to decrypt some fields in processed document DTO for team {}: {}. Some fields may remain encrypted.", 
+                teamId, e.getMessage());
         }
     }
 }

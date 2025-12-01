@@ -7,6 +7,7 @@ import org.lite.gateway.dto.MilvusCollectionInfo;
 import org.lite.gateway.dto.MilvusCollectionSchemaInfo;
 import org.lite.gateway.dto.MilvusCollectionVerificationResponse;
 import org.lite.gateway.repository.AgentTaskRepository;
+import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.validation.validator.MilvusSchemaValidator;
@@ -63,6 +64,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     private final LinqLlmModelService linqLlmModelService;
     private final MilvusServiceClient milvusClient;
     private final AgentTaskRepository agentTaskRepository;
+    private final ChunkEncryptionService chunkEncryptionService;
     private final ConcurrentHashMap<String, MilvusCollectionSchemaInfo> collectionSchemaCache = new ConcurrentHashMap<>();
 
     private static final String EMBEDDING_FIELD = "embedding";
@@ -191,7 +193,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
 
             AlterCollectionParam.Builder alterBuilder = AlterCollectionParam.newBuilder()
-                    .withCollectionName(collectionName)
+                .withCollectionName(collectionName)
                     .withDatabaseName("default");
             collectionProperties.forEach(alterBuilder::withProperty);
             milvusClient.alterCollection(alterBuilder.build());
@@ -461,70 +463,70 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         try {
             String text = (String) record.get(textField);
             
-            // First get the collection schema to ensure we provide all fields
-            R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
-                DescribeCollectionParam.newBuilder()
-                    .withCollectionName(collectionName)
-                    .withDatabaseName("default")
-                    .build()
-            );
-            
-            List<InsertParam.Field> fields = new ArrayList<>();
-            
+                            // First get the collection schema to ensure we provide all fields
+                            R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
+                                DescribeCollectionParam.newBuilder()
+                                    .withCollectionName(collectionName)
+                                    .withDatabaseName("default")
+                                    .build()
+                            );
+                            
+                            List<InsertParam.Field> fields = new ArrayList<>();
+                            
             // Add ID field with unique identifier per record
             long uniqueId = Math.abs(UUID.randomUUID().getMostSignificantBits());
-            fields.add(new InsertParam.Field("id", Collections.singletonList(uniqueId)));
-            
+                            fields.add(new InsertParam.Field("id", Collections.singletonList(uniqueId)));
+                            
             // Add created_at field with current timestamp
             fields.add(new InsertParam.Field("created_at", Collections.singletonList(System.currentTimeMillis())));
-            
-            // Add embedding field
-            fields.add(new InsertParam.Field("embedding", Collections.singletonList(embedding)));
-            
-            // Add text field
-            fields.add(new InsertParam.Field(textField, Collections.singletonList(text)));
-            
-            // Add all other fields from the schema, using null if not provided in the record
-            for (io.milvus.grpc.FieldSchema fieldSchema : describeResponse.getData().getSchema().getFieldsList()) {
-                String fieldName = fieldSchema.getName();
-                if (!fieldName.equals("id") && !fieldName.equals("embedding") && !fieldName.equals(textField)) {
-                    Object value = record.get(fieldName);
-                    
-                    // Check if field is required (not nullable) and value is null
+                            
+                            // Add embedding field
+                            fields.add(new InsertParam.Field("embedding", Collections.singletonList(embedding)));
+                            
+                            // Add text field
+                            fields.add(new InsertParam.Field(textField, Collections.singletonList(text)));
+                            
+                            // Add all other fields from the schema, using null if not provided in the record
+                            for (io.milvus.grpc.FieldSchema fieldSchema : describeResponse.getData().getSchema().getFieldsList()) {
+                                String fieldName = fieldSchema.getName();
+                                if (!fieldName.equals("id") && !fieldName.equals("embedding") && !fieldName.equals(textField)) {
+                                    Object value = record.get(fieldName);
+                                    
+                                    // Check if field is required (not nullable) and value is null
                     String dataTypeName = fieldSchema.getDataType() != null ? fieldSchema.getDataType().name() : "";
                     if (value == null && Boolean.FALSE.equals(fieldSchema.getNullable())) {
-                        // For non-nullable fields, provide a default value based on the data type
+                                        // For non-nullable fields, provide a default value based on the data type
                         value = determineDefaultValue(fieldName, dataTypeName);
-                    }
-                    
-                    // If value is null, pass it through as-is
-                    Object convertedValue = value;
-                    if (value != null) {
-                        try {
+                                    }
+                                    
+                                    // If value is null, pass it through as-is
+                                    Object convertedValue = value;
+                                    if (value != null) {
+                                        try {
                             convertedValue = coerceValueForType(value, dataTypeName, fieldName);
-                        } catch (NumberFormatException e) {
-                            log.warn("Failed to parse number for field {} with value '{}': {}. Using default value.", fieldName, value, e.getMessage());
-                            // Use default values for number fields when parsing fails
+                                        } catch (NumberFormatException e) {
+                                            log.warn("Failed to parse number for field {} with value '{}': {}. Using default value.", fieldName, value, e.getMessage());
+                                            // Use default values for number fields when parsing fails
                             convertedValue = fallbackDefaultValueForParsing(dataTypeName, value);
-                        } catch (Exception e) {
-                            log.warn("Failed to convert value for field {}: {}. Using original value.", fieldName, e.getMessage());
-                        }
-                    }
-                    
-                    // Add the field with either the converted value or null
-                    fields.add(new InsertParam.Field(fieldName, Collections.singletonList(convertedValue)));
-                }
-            }
+                                        } catch (Exception e) {
+                                            log.warn("Failed to convert value for field {}: {}. Using original value.", fieldName, e.getMessage());
+                                        }
+                                    }
+                                    
+                                    // Add the field with either the converted value or null
+                                    fields.add(new InsertParam.Field(fieldName, Collections.singletonList(convertedValue)));
+                                }
+                            }
 
-            InsertParam insertParam = InsertParam.newBuilder()
-                    .withCollectionName(collectionName)
-                    .withFields(fields)
-                    .build();
-            
+                            InsertParam insertParam = InsertParam.newBuilder()
+                                    .withCollectionName(collectionName)
+                                    .withFields(fields)
+                                    .build();
+                            
             log.debug("Inserting record with fields: {}", fields.stream()
-                    .map(f -> f.getName() + ": " + f.getValues().getFirst())
-                    .collect(Collectors.joining(", ")));
-            
+                                    .map(f -> f.getName() + ": " + f.getValues().getFirst())
+                                    .collect(Collectors.joining(", ")));
+                            
             R<io.milvus.grpc.MutationResult> insertResponse = milvusClient.insert(insertParam);
             if (insertResponse.getStatus() != 0) {
                 log.error("Milvus insert returned non-zero status {} for collection {}", insertResponse.getStatus(), collectionName);
@@ -532,11 +534,11 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             MutationResultWrapper insertResultWrapper = new MutationResultWrapper(insertResponse.getData());
             long insertCount = insertResultWrapper.getInsertCount();
             log.info("Stored record in collection {} (inserted {} vectors)", collectionName, insertCount);
-            return Mono.just(Map.of("message", "Record stored successfully in collection " + collectionName));
-        } catch (Exception e) {
-            log.error("Failed to store record in collection {}: {}", collectionName, e.getMessage(), e);
-            return Mono.error(e);
-        }
+                            return Mono.just(Map.of("message", "Record stored successfully in collection " + collectionName));
+                        } catch (Exception e) {
+                            log.error("Failed to store record in collection {}: {}", collectionName, e.getMessage(), e);
+                            return Mono.error(e);
+                        }
     }
 
     private Object determineDefaultValue(String fieldName, String dataTypeName) {
@@ -701,6 +703,15 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     public Mono<Map<String, Object>> queryRecords(String collectionName, List<Float> embedding, int nResults, String[] outputFields, String teamId) {
         log.info("Querying collection {} for {} results (team: {})", collectionName, nResults, teamId);
         try {
+            // Ensure encryptionKeyVersion and teamId are included for decryption
+            List<String> outputFieldsList = new ArrayList<>(Arrays.asList(outputFields));
+            if (!outputFieldsList.contains("encryptionKeyVersion")) {
+                outputFieldsList.add("encryptionKeyVersion");
+            }
+            if (!outputFieldsList.contains("teamId")) {
+                outputFieldsList.add("teamId");
+            }
+            
             SearchParam searchParam = SearchParam.newBuilder()
                     .withCollectionName(collectionName)
                     .withFloatVectors(List.of(embedding))
@@ -708,7 +719,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withMetricType(METRIC_TYPE)
                     .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
                     .withVectorFieldName(EMBEDDING_FIELD)
-                    .withOutFields(Arrays.asList(outputFields))
+                    .withOutFields(outputFieldsList)
                     .withExpr("teamId == \"" + teamId + "\"")  // Filter by teamId during search
                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}")
                     .withDatabaseName("default")
@@ -720,7 +731,6 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             List<Map<String, Object>> metadatas = new ArrayList<>();
             List<Float> distances = new ArrayList<>();
 
-            String idField = Arrays.stream(outputFields).filter(f -> f.equals("id")).findFirst().orElse("id");
             String textField = Arrays.stream(outputFields).filter(f -> !f.equals("id") && !f.equals("embedding")).findFirst().orElse(outputFields[0]);
 
             SearchResultData resultData = results.getResults();
@@ -736,13 +746,53 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     ids.add(idFieldData.getScalars().getLongData().getData(i));
                 }
                 
-                // Get text field
+                // Get text field (encrypted)
                 var textFieldData = resultData.getFieldsDataList().stream()
                     .filter(f -> f.getFieldName().equals(textField))
                     .findFirst()
                     .orElse(null);
+                String encryptedText = null;
                 if (textFieldData != null && textFieldData.getScalars().hasStringData() && textFieldData.getScalars().getStringData().getDataCount() > i) {
-                    documents.add(textFieldData.getScalars().getStringData().getData(i));
+                    encryptedText = textFieldData.getScalars().getStringData().getData(i);
+                }
+                
+                // Get encryptionKeyVersion and teamId for decryption
+                String keyVersion = "v1"; // Default to v1 for legacy data
+                var keyVersionFieldData = resultData.getFieldsDataList().stream()
+                    .filter(f -> f.getFieldName().equals("encryptionKeyVersion"))
+                    .findFirst()
+                    .orElse(null);
+                if (keyVersionFieldData != null && keyVersionFieldData.getScalars().hasStringData() && keyVersionFieldData.getScalars().getStringData().getDataCount() > i) {
+                    String version = keyVersionFieldData.getScalars().getStringData().getData(i);
+                    if (version != null && !version.isEmpty()) {
+                        keyVersion = version;
+                    }
+                }
+                
+                String recordTeamId = teamId; // Use provided teamId as fallback
+                var teamIdFieldData = resultData.getFieldsDataList().stream()
+                    .filter(f -> f.getFieldName().equals("teamId"))
+                    .findFirst()
+                    .orElse(null);
+                if (teamIdFieldData != null && teamIdFieldData.getScalars().hasStringData() && teamIdFieldData.getScalars().getStringData().getDataCount() > i) {
+                    String tid = teamIdFieldData.getScalars().getStringData().getData(i);
+                    if (tid != null && !tid.isEmpty()) {
+                        recordTeamId = tid;
+                    }
+                }
+                
+                // Decrypt text if it exists
+                if (encryptedText != null && !encryptedText.isEmpty()) {
+                    try {
+                        String decryptedText = chunkEncryptionService.decryptChunkText(encryptedText, recordTeamId, keyVersion);
+                        documents.add(decryptedText);
+                    } catch (Exception e) {
+                        log.warn("Failed to decrypt chunk text for team {} with key version {}: {}. Returning encrypted text.", 
+                            recordTeamId, keyVersion, e.getMessage());
+                        documents.add(encryptedText); // Fallback to encrypted text if decryption fails
+                    }
+                } else {
+                    documents.add(encryptedText); // null or empty
                 }
                 
                 // Get distance field
@@ -1006,7 +1056,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                 return buildCollectionInfo(collectionName, teamId, describeResponse.getData());
                             }
                         }
-
+                        
                         log.info("No teamId found for collection {}", collectionName);
                         return buildCollectionInfo(collectionName, "unknown", describeResponse.getData());
                     } catch (Exception e) {
@@ -1148,6 +1198,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                 .orElse(null);
 
                         List<String> outFields = buildOutFields(textField, metadataFilters, availableFields, collectionType);
+                        // Ensure decryption fields are included
+                        outFields = ensureDecryptionFields(outFields);
                         
                         // Use vector search to find similar records
                         SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
@@ -1208,14 +1260,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                 ids.add(idFieldData.getScalars().getLongData().getData(i));
                             }
                             
-                            // Get text field
-                            var textFieldData = resultData.getFieldsDataList().stream()
-                                .filter(f -> f.getFieldName().equals(textField))
-                                .findFirst()
-                                .orElse(null);
-                            if (textFieldData != null && textFieldData.getScalars().hasStringData() && textFieldData.getScalars().getStringData().getDataCount() > i) {
-                                documents.add(textFieldData.getScalars().getStringData().getData(i));
-                            }
+                            // Get and decrypt text field
+                            String decryptedText = decryptTextFromSearchResults(resultData, textField, i, teamId);
+                            documents.add(decryptedText);
                             
                             // Get distance field
                             var distanceField = resultData.getFieldsDataList().stream()
@@ -1336,9 +1383,10 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     private String buildFilterExpression(String teamId, Map<String, Object> metadataFilters) {
         List<String> conditions = new ArrayList<>();
         
-        // Note: Team filtering is optional since we already verify collection ownership
-        // If you need team filtering, uncomment the line below and ensure 'teamId' field exists in your schema
-        // conditions.add("teamId == \"" + teamId + "\"");
+        // Always filter by teamId for multi-tenant isolation and security
+        if (teamId != null && !teamId.isEmpty()) {
+            conditions.add("teamId == \"" + teamId + "\"");
+        }
         
         // Add dynamic metadata filters
         if (metadataFilters != null) {
@@ -1367,13 +1415,14 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     private String buildFilterExpression(String teamId, Map<String, Object> metadataFilters, String textField) {
         List<String> conditions = new ArrayList<>();
         
+        // Always filter by teamId for multi-tenant isolation and security
+        if (teamId != null && !teamId.isEmpty()) {
+            conditions.add("teamId == \"" + teamId + "\"");
+        }
+        
         // Add filter to exclude empty or null text fields
         conditions.add(textField + " != \"\"");
         conditions.add(textField + " != null");
-        
-        // Note: Team filtering is optional since we already verify collection ownership
-        // If you need team filtering, uncomment the line below and ensure 'teamId' field exists in your schema
-        // conditions.add("teamId == \"" + teamId + "\"");
         
         // Add dynamic metadata filters
         if (metadataFilters != null) {
@@ -1538,6 +1587,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                 .orElse(null);
 
                         List<String> outFields = buildOutFields(textField, metadataFilters, availableFields, collectionType);
+                        // Ensure decryption fields are included
+                        outFields = ensureDecryptionFields(outFields);
                         
                         // Use vector search to find similar records
                         SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
@@ -1585,8 +1636,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
                             for (int rank = 0; rank < resultsForQuery; rank++) {
                                 int index = offset + rank;
-                                Map<String, Object> record = new HashMap<>();
-
+                            Map<String, Object> record = new HashMap<>();
+                            
                                 // Add query/rank context (useful for debugging/UI)
                                 record.put("query_index", queryIndex);
                                 record.put("rank", rank + 1);
@@ -1598,16 +1649,10 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     record.put("id", resultData.getIds().getStrId().getData(index));
                                 }
 
-                                // Chunk text field
-                                var textFieldData = resultData.getFieldsDataList().stream()
-                                        .filter(f -> f.getFieldName().equals(textField))
-                                        .findFirst()
-                                        .orElse(null);
-                                if (textFieldData != null) {
-                                    Object value = extractFieldValue(textFieldData, index);
-                                    if (value != null) {
-                                        record.put(textField, value);
-                                    }
+                                // Chunk text field (decrypted)
+                                String decryptedText = decryptTextFromSearchResults(resultData, textField, index, teamId);
+                                if (decryptedText != null) {
+                                    record.put(textField, decryptedText);
                                 }
 
                                 // Distance (similarity score)
@@ -1617,33 +1662,33 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                 }
                                 record.put("distance", distance);
 
-                                if (distance < 0.1f) {
-                                    record.put("match_type", "exact");
-                                } else if (distance < 0.3f) {
-                                    record.put("match_type", "high_similarity");
-                                } else if (distance < 0.5f) {
-                                    record.put("match_type", "medium_similarity");
-                                } else {
-                                    record.put("match_type", "low_similarity");
-                                }
-
+                            if (distance < 0.1f) {
+                                record.put("match_type", "exact");
+                            } else if (distance < 0.3f) {
+                                record.put("match_type", "high_similarity");
+                            } else if (distance < 0.5f) {
+                                record.put("match_type", "medium_similarity");
+                            } else {
+                                record.put("match_type", "low_similarity");
+                            }
+                            
                                 // Additional metadata fields
-                                for (String fieldName : outFields) {
-                                    if (!fieldName.equals("id") && !fieldName.equals(textField)) {
-                                        var fieldData = resultData.getFieldsDataList().stream()
-                                                .filter(f -> f.getFieldName().equals(fieldName))
-                                                .findFirst()
-                                                .orElse(null);
-                                        if (fieldData != null) {
+                            for (String fieldName : outFields) {
+                                if (!fieldName.equals("id") && !fieldName.equals(textField)) {
+                                    var fieldData = resultData.getFieldsDataList().stream()
+                                        .filter(f -> f.getFieldName().equals(fieldName))
+                                        .findFirst()
+                                        .orElse(null);
+                                    if (fieldData != null) {
                                             Object value = extractFieldValue(fieldData, index);
                                             if (value != null) {
-                                                record.put(fieldName, value);
+                                        record.put(fieldName, value);
                                             }
-                                        }
                                     }
                                 }
-
-                                searchResults.add(record);
+                            }
+                            
+                            searchResults.add(record);
                             }
 
                             offset += resultsForQuery;
@@ -1995,5 +2040,90 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             log.error("Failed to count embeddings for document {} in collection {}: {}", documentId, collectionName, e.getMessage());
             return Mono.error(e);
         }
+    }
+    
+    /**
+     * Helper method to decrypt text from Milvus search results.
+     * Extracts encryptionKeyVersion and teamId from field data and decrypts the text.
+     * 
+     * @param resultData The search result data
+     * @param textField The name of the text field
+     * @param index The index of the result to decrypt
+     * @param defaultTeamId The default teamId to use if not found in results
+     * @return Decrypted text, or encrypted text if decryption fails
+     */
+    private String decryptTextFromSearchResults(SearchResultData resultData, String textField, int index, String defaultTeamId) {
+        // Get encrypted text
+        var textFieldData = resultData.getFieldsDataList().stream()
+                .filter(f -> f.getFieldName().equals(textField))
+                .findFirst()
+                .orElse(null);
+        
+        String encryptedText = null;
+        if (textFieldData != null) {
+            Object value = extractFieldValue(textFieldData, index);
+            if (value != null) {
+                encryptedText = value.toString();
+            }
+        }
+        
+        if (encryptedText == null || encryptedText.isEmpty()) {
+            return encryptedText;
+        }
+        
+        // Get encryptionKeyVersion
+        String keyVersion = "v1"; // Default to v1 for legacy data
+        var keyVersionFieldData = resultData.getFieldsDataList().stream()
+                .filter(f -> f.getFieldName().equals("encryptionKeyVersion"))
+                .findFirst()
+                .orElse(null);
+        if (keyVersionFieldData != null) {
+            Object versionObj = extractFieldValue(keyVersionFieldData, index);
+            if (versionObj != null) {
+                String version = versionObj.toString();
+                if (version != null && !version.isEmpty()) {
+                    keyVersion = version;
+                }
+            }
+        }
+        
+        // Get teamId
+        String recordTeamId = defaultTeamId;
+        var teamIdFieldData = resultData.getFieldsDataList().stream()
+                .filter(f -> f.getFieldName().equals("teamId"))
+                .findFirst()
+                .orElse(null);
+        if (teamIdFieldData != null) {
+            Object teamIdObj = extractFieldValue(teamIdFieldData, index);
+            if (teamIdObj != null) {
+                String tid = teamIdObj.toString();
+                if (tid != null && !tid.isEmpty()) {
+                    recordTeamId = tid;
+                }
+            }
+        }
+        
+        // Decrypt text
+        try {
+            return chunkEncryptionService.decryptChunkText(encryptedText, recordTeamId, keyVersion);
+        } catch (Exception e) {
+            log.warn("Failed to decrypt chunk text for team {} with key version {}: {}. Returning encrypted text.", 
+                recordTeamId, keyVersion, e.getMessage());
+            return encryptedText; // Fallback to encrypted text if decryption fails
+        }
+    }
+    
+    /**
+     * Helper method to ensure encryptionKeyVersion and teamId are included in output fields for decryption.
+     */
+    private List<String> ensureDecryptionFields(List<String> outFields) {
+        List<String> fields = new ArrayList<>(outFields);
+        if (!fields.contains("encryptionKeyVersion")) {
+            fields.add("encryptionKeyVersion");
+        }
+        if (!fields.contains("teamId")) {
+            fields.add("teamId");
+        }
+        return fields;
     }
 }

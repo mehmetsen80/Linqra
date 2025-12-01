@@ -3,14 +3,18 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Container, Card, Table, Spinner, Breadcrumb, OverlayTrigger, Tooltip, Badge } from 'react-bootstrap';
 import { HiFolder, HiPlus, HiEye, HiPencil, HiTrash, HiBookOpen, HiLink, HiXCircle, HiCollection, HiCube, HiHashtag } from 'react-icons/hi';
 import { useTeam } from '../../contexts/TeamContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { isSuperAdmin, hasAdminAccess } from '../../utils/roleUtils';
 import { knowledgeHubCollectionService } from '../../services/knowledgeHubCollectionService';
 import { milvusService } from '../../services/milvusService';
 import { llmModelService } from '../../services/llmModelService';
 import { knowledgeHubGraphService } from '../../services/knowledgeHubGraphService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
+import ConfirmationModalWithVerification from '../../components/common/ConfirmationModalWithVerification';
 import PropertiesViewerModal from '../../components/common/PropertiesViewerModal';
 import RelatedEntitiesModal from '../../components/common/RelatedEntitiesModal';
+import EncryptionVersionWarningBanner from '../../components/common/EncryptionVersionWarningBanner';
 import Button from '../../components/common/Button';
 import CreateCollectionModal from '../../components/knowledgeHub/CreateCollectionModal';
 import EditCollectionModal from '../../components/knowledgeHub/EditCollectionModal';
@@ -26,6 +30,7 @@ const PROVIDER_LABELS = {
 function KnowledgeHub() {
   const navigate = useNavigate();
   const { currentTeam } = useTeam();
+  const { user } = useAuth();
   const [collections, setCollections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [operationLoading, setOperationLoading] = useState(false);
@@ -52,13 +57,15 @@ function KnowledgeHub() {
     title: 'Properties',
     entityType: null,
     entityName: null,
-    properties: {}
+    properties: {},
+    loading: false
   });
   const [relatedEntitiesModal, setRelatedEntitiesModal] = useState({
     show: false,
     entityType: null,
     entityId: null,
-    entityName: null
+    entityName: null,
+    entity: null // Full entity object with encryption version markers
   });
   const [confirmModal, setConfirmModal] = useState({
     show: false,
@@ -67,6 +74,153 @@ function KnowledgeHub() {
     onConfirm: () => {},
     variant: 'danger'
   });
+  const [showDeleteAllEntitiesModal, setShowDeleteAllEntitiesModal] = useState(false);
+  const [deletingAllEntities, setDeletingAllEntities] = useState(false);
+  const [currentEncryptionKeyVersion, setCurrentEncryptionKeyVersion] = useState(null);
+
+  // Helper function to truncate encrypted names for display
+  const truncateEncryptedName = (name, maxLength = 60) => {
+    if (!name || typeof name !== 'string') return name || 'N/A';
+    if (name.length <= maxLength) return name;
+    return name.substring(0, maxLength) + '...';
+  };
+
+  // Helper function to compare version numbers (e.g., "v1" < "v2")
+  const compareVersion = (v1, v2) => {
+    if (!v1 || !v2) return false;
+    const num1 = parseInt(v1.replace('v', '')) || 0;
+    const num2 = parseInt(v2.replace('v', '')) || 0;
+    return num1 < num2;
+  };
+
+  // Helper function to get entity encryption version
+  const getEntityEncryptionVersion = (entity) => {
+    // Prefer property-level version, fallback to entity-level version
+    return entity?.name_encryption_version || entity?.encryptionKeyVersion || null;
+  };
+
+  // Helper function to check if entity is using outdated encryption key
+  const isOutdatedEncryption = (entity) => {
+    if (!currentEncryptionKeyVersion || !entity) return false;
+    const entityVersion = getEntityEncryptionVersion(entity);
+    if (!entityVersion) return true; // Legacy/unencrypted entities are considered outdated
+    return compareVersion(entityVersion, currentEncryptionKeyVersion);
+  };
+
+  const handleOpenPropertiesModal = async (title, entityType, entityName, properties, fromEntity = null, toEntity = null) => {
+    const isAdmin = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
+    
+    if (isAdmin) {
+      // For admin users, decrypt properties and entity names before showing
+      setPropertiesModal({
+        show: true,
+        title,
+        entityType,
+        entityName,
+        properties: {},
+        loading: true
+      });
+
+      try {
+        // Build a combined properties map that includes entity names and encryption version markers for decryption
+        const propertiesToDecrypt = { ...(properties || {}) };
+        
+        // Build entity name properties with encryption version markers
+        const fromEntityProps = {};
+        if (fromEntity?.name) {
+          fromEntityProps['name'] = fromEntity.name;
+          // Include encryption version markers if present
+          if (fromEntity.name_encryption_version) {
+            fromEntityProps['name_encryption_version'] = fromEntity.name_encryption_version;
+          } else if (fromEntity.encryptionKeyVersion) {
+            fromEntityProps['encryptionKeyVersion'] = fromEntity.encryptionKeyVersion;
+          }
+        }
+        
+        const toEntityProps = {};
+        if (toEntity?.name) {
+          toEntityProps['name'] = toEntity.name;
+          // Include encryption version markers if present
+          if (toEntity.name_encryption_version) {
+            toEntityProps['name_encryption_version'] = toEntity.name_encryption_version;
+          } else if (toEntity.encryptionKeyVersion) {
+            toEntityProps['encryptionKeyVersion'] = toEntity.encryptionKeyVersion;
+          }
+        }
+        
+        // Decrypt entity names separately if they exist
+        let decryptedFromName = fromEntity?.name || fromEntity?.id || 'N/A';
+        let decryptedToName = toEntity?.name || toEntity?.id || 'N/A';
+        
+        if (Object.keys(fromEntityProps).length > 0) {
+          const fromNameResult = await knowledgeHubGraphService.decryptProperties(fromEntityProps);
+          if (fromNameResult.success && fromNameResult.data?.name) {
+            decryptedFromName = fromNameResult.data.name;
+          }
+        }
+        
+        if (Object.keys(toEntityProps).length > 0) {
+          const toNameResult = await knowledgeHubGraphService.decryptProperties(toEntityProps);
+          if (toNameResult.success && toNameResult.data?.name) {
+            decryptedToName = toNameResult.data.name;
+          }
+        }
+        
+        // Update subtitle with decrypted names
+        const fromType = fromEntity?.type || 'Unknown';
+        const toType = toEntity?.type || 'Unknown';
+        const updatedEntityName = `${fromType}:${decryptedFromName} → ${toType}:${decryptedToName}`;
+        
+        // Decrypt relationship properties if they exist
+        if (Object.keys(propertiesToDecrypt).length > 0) {
+          const result = await knowledgeHubGraphService.decryptProperties(propertiesToDecrypt);
+          if (result.success) {
+            setPropertiesModal(prev => ({
+              ...prev,
+              entityName: updatedEntityName,
+              properties: result.data || {},
+              loading: false
+            }));
+          } else {
+            // If decryption fails, show original properties but with decrypted entity names
+            console.warn('Failed to decrypt properties:', result.error);
+            setPropertiesModal(prev => ({
+              ...prev,
+              entityName: updatedEntityName,
+              properties: properties || {},
+              loading: false
+            }));
+          }
+        } else {
+          // No properties to decrypt, but still update entity name
+          setPropertiesModal(prev => ({
+            ...prev,
+            entityName: updatedEntityName,
+            properties: properties || {},
+            loading: false
+          }));
+        }
+      } catch (error) {
+        console.error('Error decrypting properties:', error);
+        // On error, show original properties
+        setPropertiesModal(prev => ({
+          ...prev,
+          properties: properties || {},
+          loading: false
+        }));
+      }
+    } else {
+      // For non-admin users, show as-is
+      setPropertiesModal({
+        show: true,
+        title,
+        entityType,
+        entityName,
+        properties: properties || {},
+        loading: false
+      });
+    }
+  };
 
   useEffect(() => {
     if (currentTeam?.id) {
@@ -74,6 +228,19 @@ function KnowledgeHub() {
       loadMilvusCollections();
       loadEmbeddingOptions();
       fetchGraphStatistics();
+      
+      // Fetch current encryption key version
+      const fetchCurrentEncryptionVersion = async () => {
+        try {
+          const result = await knowledgeHubGraphService.getCurrentEncryptionKeyVersion();
+          if (result.success && result.data?.currentKeyVersion) {
+            setCurrentEncryptionKeyVersion(result.data.currentKeyVersion);
+          }
+        } catch (err) {
+          console.error('Error fetching current encryption key version:', err);
+        }
+      };
+      fetchCurrentEncryptionVersion();
     }
   }, [currentTeam?.id]);
 
@@ -317,7 +484,7 @@ function KnowledgeHub() {
         // Fetch all entity types and combine them
         const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
         const entityPromises = entityTypes.map(type => 
-          knowledgeHubGraphService.findEntities(type)
+          knowledgeHubGraphService.findEntities(type, { teamId: currentTeam.id })
         );
         
         const entityResults = await Promise.all(entityPromises);
@@ -336,8 +503,8 @@ function KnowledgeHub() {
         
         setGraphEntities(allEntities);
       } else {
-        // Fetch entities for specific type
-        const { data, error } = await knowledgeHubGraphService.findEntities(entityType);
+        // Fetch entities for specific type - filtered by teamId only (no documentId)
+        const { data, error } = await knowledgeHubGraphService.findEntities(entityType, { teamId: currentTeam.id });
         if (error) throw new Error(error);
         const entities = Array.isArray(data) ? data : [];
         // Ensure type is set
@@ -353,6 +520,47 @@ function KnowledgeHub() {
       setGraphEntities([]);
     } finally {
       setLoadingGraphEntities(false);
+    }
+  };
+
+  const handleDeleteAllEntities = () => {
+    setShowDeleteAllEntitiesModal(true);
+  };
+
+  const handleDeleteAllEntitiesConfirm = async () => {
+    setDeletingAllEntities(true);
+    
+    try {
+      const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
+      let totalDeleted = 0;
+      const errors = [];
+
+      // Delete all entities of each type
+      for (const entityType of entityTypes) {
+        const result = await knowledgeHubGraphService.deleteAllEntitiesByType(entityType);
+        if (result.success && result.data) {
+          totalDeleted += result.data.deletedCount || 0;
+        } else {
+          errors.push(`${entityType}: ${result.error || 'Unknown error'}`);
+        }
+      }
+
+      if (errors.length > 0) {
+        showErrorToast(`Deleted ${totalDeleted} entities, but some errors occurred: ${errors.join(', ')}`);
+      } else {
+        showSuccessToast(`Successfully deleted ${totalDeleted} entities and all their relationships.`);
+      }
+
+      // Refresh entities and statistics
+      await fetchGraphEntities(selectedEntityType);
+      await fetchGraphStatistics();
+      
+      setShowDeleteAllEntitiesModal(false);
+    } catch (error) {
+      console.error('Error deleting all entities:', error);
+      showErrorToast(error.message || 'Failed to delete all entities');
+    } finally {
+      setDeletingAllEntities(false);
     }
   };
 
@@ -685,6 +893,7 @@ function KnowledgeHub() {
               <Button
                 variant="outline-secondary"
                 size="sm"
+                className="me-2"
                 onClick={() => {
                   // In development, Neo4j Browser is accessible directly on localhost:7474
                   // In production, it's proxied through Nginx at /neo4j/
@@ -694,7 +903,16 @@ function KnowledgeHub() {
                   window.open(neo4jUrl, '_blank');
                 }}
               >
-                <HiCube className="me-1" /> View in Neo4j Browser
+                <HiCube className="me-0" /> View in Neo4j Browser
+              </Button>
+              <Button
+                variant="outline-danger"
+                size="sm"
+                className="me-2"
+                onClick={handleDeleteAllEntities}
+                disabled={loadingGraphEntities || loadingGraphStats}
+              >
+                <HiTrash className="me-0" /> Delete All Entities
               </Button>
               <Button
                 variant="outline-primary"
@@ -776,6 +994,28 @@ function KnowledgeHub() {
                   </div>
                 </div>
 
+                {(() => {
+                  const outdatedCount = graphEntities.filter(e => isOutdatedEncryption(e)).length;
+                  return (
+                    <EncryptionVersionWarningBanner
+                      show={outdatedCount > 0 && currentEncryptionKeyVersion}
+                      variant="warning"
+                      heading={
+                        <>
+                          {outdatedCount} {outdatedCount === 1 ? 'entity' : 'entities'} {outdatedCount === 1 ? 'is' : 'are'} encrypted with an outdated key version
+                        </>
+                      }
+                      message={
+                        <>
+                          These entities are encrypted with an older encryption key version and need to be re-encrypted.
+                          To fix this, you should: <strong>1) Hard delete all files</strong>, <strong>2) Re-upload the documents</strong>, and <strong>3) Re-extract the entities</strong>.
+                          This will ensure all data is encrypted with the current version ({currentEncryptionKeyVersion}).
+                        </>
+                      }
+                    />
+                  );
+                })()}
+
                 {loadingGraphEntities ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" role="status">
@@ -796,6 +1036,7 @@ function KnowledgeHub() {
                           <th>ID</th>
                           <th>Name</th>
                           <th>Type</th>
+                          <th>Encryption Version</th>
                           <th>Properties</th>
                           <th className="text-end">Actions</th>
                         </tr>
@@ -816,31 +1057,59 @@ function KnowledgeHub() {
                             <tr 
                               key={entity.id || idx}
                               style={{ cursor: 'pointer' }}
-                              onClick={() => setPropertiesModal({
-                                show: true,
-                                title: 'Entity Properties',
-                                entityType: entity.type || 'Unknown',
-                                entityName: entity.name || entity.id || 'Unnamed',
-                                properties: entityProperties
-                              })}
+                              onClick={() => handleOpenPropertiesModal(
+                                'Entity Properties',
+                                entity.type || 'Unknown',
+                                entity.name || entity.id || 'Unnamed',
+                                entityProperties
+                              )}
                             >
                               <td>
                                 <code className="small">{entity.id || 'N/A'}</code>
                               </td>
-                              <td>{entity.name || entity.id || 'Unnamed'}</td>
+                              <td>
+                                <code className="small" title={entity.name || entity.id || 'Unnamed'}>
+                                  {truncateEncryptedName(entity.name || entity.id || 'Unnamed')}
+                                </code>
+                              </td>
                               <td>
                                 <Badge bg="secondary">{entity.type || 'Unknown'}</Badge>
+                              </td>
+                              <td>
+                                {(() => {
+                                  const entityVersion = getEntityEncryptionVersion(entity);
+                                  const isOutdated = isOutdatedEncryption(entity);
+                                  const displayVersion = entityVersion || 'none';
+                                  
+                                  if (isOutdated && currentEncryptionKeyVersion) {
+                                    return (
+                                      <div>
+                                        <Badge bg="warning" className="me-1" title={`Entity encrypted with ${displayVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`}>
+                                          {displayVersion}
+                                        </Badge>
+                                        <small className="text-warning" title={`Needs re-encryption. Current: ${currentEncryptionKeyVersion}`}>
+                                          ⚠️ Outdated
+                                        </small>
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  return (
+                                    <Badge bg={entityVersion ? "success" : "secondary"} title={entityVersion ? `Encrypted with ${displayVersion}` : 'Not encrypted (legacy)'}>
+                                      {displayVersion}
+                                    </Badge>
+                                  );
+                                })()}
                               </td>
                               <td
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setPropertiesModal({
-                                    show: true,
-                                    title: 'Entity Properties',
-                                    entityType: entity.type || 'Unknown',
-                                    entityName: entity.name || entity.id || 'Unnamed',
-                                    properties: entityProperties
-                                  });
+                                  handleOpenPropertiesModal(
+                                    'Entity Properties',
+                                    entity.type || 'Unknown',
+                                    entity.name || entity.id || 'Unnamed',
+                                    entityProperties
+                                  );
                                 }}
                                 style={{ cursor: 'pointer' }}
                               >
@@ -858,7 +1127,8 @@ function KnowledgeHub() {
                                         show: true,
                                         entityType: entity.type || 'Unknown',
                                         entityId: entity.id,
-                                        entityName: entity.name || entity.id || 'Unnamed'
+                                        entityName: entity.name || entity.id || 'Unnamed',
+                                        entity: entity // Pass full entity object for decryption
                                       });
                                     }}
                                     style={{ fontSize: '0.875rem' }}
@@ -921,8 +1191,10 @@ function KnowledgeHub() {
                           <th>Type</th>
                           <th>From Entity</th>
                           <th>From Entity Name</th>
+                          <th>From Encryption</th>
                           <th>To Entity</th>
                           <th>To Entity Name</th>
+                          <th>To Encryption</th>
                           <th>Properties</th>
                         </tr>
                       </thead>
@@ -938,13 +1210,14 @@ function KnowledgeHub() {
                             <tr 
                               key={idx}
                               style={{ cursor: 'pointer' }}
-                              onClick={() => setPropertiesModal({
-                                show: true,
-                                title: relationshipTitle,
-                                entityType: relationship.relationshipType || 'Unknown',
-                                entityName: relationshipSubtitle,
-                                properties: relationship.properties || {}
-                              })}
+                              onClick={() => handleOpenPropertiesModal(
+                                relationshipTitle,
+                                relationship.relationshipType || 'Unknown',
+                                relationshipSubtitle,
+                                relationship.properties || {},
+                                relationship.fromEntity,
+                                relationship.toEntity
+                              )}
                             >
                               <td>
                                 <Badge bg="info">{relationship.relationshipType || 'Unknown'}</Badge>
@@ -953,24 +1226,77 @@ function KnowledgeHub() {
                                 <Badge bg="secondary">{relationship.fromEntity?.type || 'Unknown'}</Badge>
                               </td>
                               <td>
-                                <code className="small">{fromEntityName}</code>
+                                <code className="small" title={fromEntityName}>
+                                  {truncateEncryptedName(fromEntityName)}
+                                </code>
+                              </td>
+                              <td>
+                                {(() => {
+                                  const fromVersion = getEntityEncryptionVersion(relationship.fromEntity);
+                                  const fromOutdated = relationship.fromEntity && isOutdatedEncryption(relationship.fromEntity);
+                                  const fromDisplayVersion = fromVersion || 'none';
+                                  
+                                  if (fromOutdated && currentEncryptionKeyVersion) {
+                                    return (
+                                      <div>
+                                        <Badge bg="warning" className="me-1" title={`Entity encrypted with ${fromDisplayVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`}>
+                                          {fromDisplayVersion}
+                                        </Badge>
+                                        <small className="text-warning">⚠️</small>
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  return (
+                                    <Badge bg={fromVersion ? "success" : "secondary"} title={fromVersion ? `Encrypted with ${fromDisplayVersion}` : 'Not encrypted (legacy)'}>
+                                      {fromDisplayVersion}
+                                    </Badge>
+                                  );
+                                })()}
                               </td>
                               <td>
                                 <Badge bg="secondary">{relationship.toEntity?.type || 'Unknown'}</Badge>
                               </td>
                               <td>
-                                <code className="small">{toEntityName}</code>
+                                <code className="small" title={toEntityName}>
+                                  {truncateEncryptedName(toEntityName)}
+                                </code>
+                              </td>
+                              <td>
+                                {(() => {
+                                  const toVersion = getEntityEncryptionVersion(relationship.toEntity);
+                                  const toOutdated = relationship.toEntity && isOutdatedEncryption(relationship.toEntity);
+                                  const toDisplayVersion = toVersion || 'none';
+                                  
+                                  if (toOutdated && currentEncryptionKeyVersion) {
+                                    return (
+                                      <div>
+                                        <Badge bg="warning" className="me-1" title={`Entity encrypted with ${toDisplayVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`}>
+                                          {toDisplayVersion}
+                                        </Badge>
+                                        <small className="text-warning">⚠️</small>
+                                      </div>
+                                    );
+                                  }
+                                  
+                                  return (
+                                    <Badge bg={toVersion ? "success" : "secondary"} title={toVersion ? `Encrypted with ${toDisplayVersion}` : 'Not encrypted (legacy)'}>
+                                      {toDisplayVersion}
+                                    </Badge>
+                                  );
+                                })()}
                               </td>
                               <td
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setPropertiesModal({
-                                    show: true,
-                                    title: relationshipTitle,
-                                    entityType: relationship.relationshipType || 'Unknown',
-                                    entityName: relationshipSubtitle,
-                                    properties: relationship.properties || {}
-                                  });
+                                  handleOpenPropertiesModal(
+                                    relationshipTitle,
+                                    relationship.relationshipType || 'Unknown',
+                                    relationshipSubtitle,
+                                    relationship.properties || {},
+                                    relationship.fromEntity,
+                                    relationship.toEntity
+                                  );
                                 }}
                                 style={{ cursor: 'pointer' }}
                               >
@@ -1035,6 +1361,16 @@ function KnowledgeHub() {
         confirmLabel={confirmModal.confirmLabel}
         disabled={confirmModal.disabled}
       />
+      <ConfirmationModalWithVerification
+        show={showDeleteAllEntitiesModal}
+        onHide={() => setShowDeleteAllEntitiesModal(false)}
+        onConfirm={handleDeleteAllEntitiesConfirm}
+        title="Delete All Entities"
+        message="Are you sure you want to delete ALL entities (Form, Organization, Person, Date, Location, Document) for this team? This action cannot be undone and will also delete all relationships."
+        variant="danger"
+        confirmLabel="Delete All"
+        loading={deletingAllEntities}
+      />
 
       <PropertiesViewerModal
         show={propertiesModal.show}
@@ -1043,6 +1379,7 @@ function KnowledgeHub() {
         entityType={propertiesModal.entityType}
         entityName={propertiesModal.entityName}
         properties={propertiesModal.properties}
+        loading={propertiesModal.loading}
       />
 
       <RelatedEntitiesModal
@@ -1051,6 +1388,7 @@ function KnowledgeHub() {
         entityType={relatedEntitiesModal.entityType}
         entityId={relatedEntitiesModal.entityId}
         entityName={relatedEntitiesModal.entityName}
+        entity={relatedEntitiesModal.entity}
       />
     </Container>
   );

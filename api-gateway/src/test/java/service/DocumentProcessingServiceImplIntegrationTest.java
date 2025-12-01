@@ -7,6 +7,7 @@ import org.lite.gateway.entity.KnowledgeHubChunk;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
+import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.ChunkingService;
 import org.lite.gateway.service.TikaDocumentParser;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentProcessingServiceImpl;
@@ -66,6 +67,9 @@ class DocumentProcessingServiceImplIntegrationTest {
     @Autowired
     private KnowledgeHubChunkRepository chunkRepository;
     
+    @Autowired(required = false)
+    private ChunkEncryptionService chunkEncryptionService;
+    
     private KnowledgeHubDocumentProcessingServiceImpl documentProcessingService;
     private S3ServiceImpl s3Service;
     private S3Properties s3Properties;
@@ -108,6 +112,12 @@ class DocumentProcessingServiceImplIntegrationTest {
             // log.debug("Event published: {}", event.getClass().getSimpleName());
         };
         
+        // Create a no-op ChunkEncryptionService for testing if not autowired
+        // This passes through text without encryption for integration tests
+        ChunkEncryptionService encryptionService = chunkEncryptionService != null 
+            ? chunkEncryptionService 
+            : createNoOpEncryptionService();
+        
         // Create KnowledgeHubDocumentProcessingServiceImpl
         this.documentProcessingService = new KnowledgeHubDocumentProcessingServiceImpl(
                 documentRepository,
@@ -117,8 +127,52 @@ class DocumentProcessingServiceImplIntegrationTest {
                 chunkingService,
                 s3Properties,
                 mockEventPublisher,
+                encryptionService,
                 mockExecutionMessageChannel
         );
+    }
+    
+    /**
+     * Create a no-op ChunkEncryptionService for testing that passes through text without encryption.
+     * This allows tests to run without requiring vault setup.
+     */
+    private ChunkEncryptionService createNoOpEncryptionService() {
+        return new ChunkEncryptionService() {
+            @Override
+            public String encryptChunkText(String plaintext, String teamId) {
+                return plaintext; // No encryption for tests
+            }
+            
+            @Override
+            public String encryptChunkText(String plaintext, String teamId, String keyVersion) {
+                return plaintext; // No encryption for tests
+            }
+            
+            @Override
+            public String decryptChunkText(String encryptedText, String teamId, String keyVersion) {
+                return encryptedText; // No decryption for tests (assumes already plaintext)
+            }
+            
+            @Override
+            public String getCurrentKeyVersion() {
+                return "v1"; // Default version
+            }
+            
+            @Override
+            public byte[] encryptFile(byte[] fileBytes, String teamId) {
+                return fileBytes; // No encryption for tests
+            }
+            
+            @Override
+            public byte[] encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
+                return fileBytes; // No encryption for tests
+            }
+            
+            @Override
+            public byte[] decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
+                return encryptedBytes; // No decryption for tests (assumes already plaintext)
+            }
+        };
     }
     
     @Test
@@ -237,6 +291,8 @@ class DocumentProcessingServiceImplIntegrationTest {
                     assertNotNull(chunk.getChunkIndex());
                     assertNotNull(chunk.getCreatedAt());
                     assertEquals("sentence", chunk.getChunkStrategy());
+                    // Verify encryption key version is set (even if using no-op encryption for tests)
+                    assertNotNull(chunk.getEncryptionKeyVersion(), "Encryption key version should be set");
                     return true;
                 })
                 .verifyComplete();
@@ -315,6 +371,11 @@ class DocumentProcessingServiceImplIntegrationTest {
             // log.debug("Event published: {}", event.getClass().getSimpleName());
         };
         
+        // Use the same encryption service (no-op if not autowired)
+        ChunkEncryptionService encryptionService = chunkEncryptionService != null 
+            ? chunkEncryptionService 
+            : createNoOpEncryptionService();
+        
         KnowledgeHubDocumentProcessingServiceImpl devDocumentProcessingService = new KnowledgeHubDocumentProcessingServiceImpl(
                 documentRepository,
                 chunkRepository,
@@ -323,6 +384,7 @@ class DocumentProcessingServiceImplIntegrationTest {
                 chunkingService,
                 devS3Properties,
                 mockEventPublisher,
+                encryptionService,
                 mockExecutionMessageChannel
         );
         
@@ -446,6 +508,8 @@ class DocumentProcessingServiceImplIntegrationTest {
                     assertNotNull(chunk.getChunkIndex());
                     assertNotNull(chunk.getCreatedAt());
                     assertNotNull(chunk.getChunkStrategy());
+                    // Verify encryption key version is set (even if using no-op encryption for tests)
+                    assertNotNull(chunk.getEncryptionKeyVersion(), "Encryption key version should be set");
                     return true;
                 })
                 .verifyComplete();

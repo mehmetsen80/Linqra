@@ -14,7 +14,8 @@ import {
   HiOutlineLightBulb,
   HiOutlineCollection,
   HiOutlineDesktopComputer,
-  HiOutlineChatAlt
+  HiOutlineChatAlt,
+  HiDownload
 } from 'react-icons/hi';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
@@ -209,6 +210,10 @@ const UserTeamMenu = () => {
           <Dropdown.Item as={Link} to="/rag">
             <HiOutlineDatabase size={16} style={{ marginRight: '8px' }} />
             RAG Collections
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/knowledge-hub/export">
+            <HiDownload size={16} style={{ marginRight: '8px' }} />
+            Export Collections
           </Dropdown.Item>
           <Dropdown.Divider />
           <Dropdown.Item onClick={handleLogoutClick}>

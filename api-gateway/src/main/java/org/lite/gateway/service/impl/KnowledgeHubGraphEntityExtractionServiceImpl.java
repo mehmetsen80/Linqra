@@ -28,6 +28,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
+import java.util.function.Function;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -168,7 +170,7 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                                                                         .filter(Objects::nonNull)
                                                                         .collect(Collectors.joining("\n\n---\n\n"));
                                                                 
-                                                                log.debug("Processing batch {}/{} with {} chunks ({} chars)", 
+                                                                log.info("Processing batch {}/{} with {} chunks ({} chars)",
                                                                         batchIndex + 1, batches.size(), batch.size(), batchText.length());
                                                                 
                                                                 // Add a small delay between batches to respect rate limits (except for first batch)
@@ -197,7 +199,7 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                                                                                 provider.set(result.provider);
                                                                             }
                                                                             
-                                                                            log.debug("Extracted {} entities from batch {}/{}", 
+                                                                            log.info("Extracted {} entities from batch {}/{}",
                                                                                     result.entities.size(), batchIndex + 1, batches.size());
                                                                             
                                                                             // Store entities in Neo4j
@@ -210,9 +212,13 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                                                                                         properties.put("documentId", documentId);
                                                                                         properties.put("extractedAt", System.currentTimeMillis());
                                                                                         
+                                                                                        // Log all entity types being extracted
+                                                                                        log.debug("🔍 Extracting {} entity: {} with properties: {}", entityType, entityId, properties.keySet());
+                                                                                        
                                                                                         return graphService.upsertEntity(entityType, entityId, properties, teamId)
-                                                                                                .doOnSuccess(id -> log.debug("Upserted entity {}:{} from document {}", 
-                                                                                                        entityType, id, documentId))
+                                                                                                .doOnSuccess(id -> {
+                                                                                                    log.info("✅ Successfully upserted {} entity {}:{} from document {}", entityType, entityType, id, documentId);
+                                                                                                })
                                                                                                 .onErrorContinue((error, obj) -> 
                                                                                                         log.error("Error upserting entity {}:{}: {}", 
                                                                                                                 entityType, entityId, error.getMessage()));
@@ -362,6 +368,23 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                                             new TypeReference<List<Map<String, Object>>>() {});
                                     
                                     log.debug("Parsed {} entities from LLM response", entities.size());
+                                    
+                                    // Log entity type counts for debugging
+                                    Map<String, Long> entityTypeCounts = entities.stream()
+                                            .map(e -> (String) e.get("type"))
+                                            .filter(Objects::nonNull)
+                                            .collect(Collectors.groupingBy(
+                                                    Function.identity(), 
+                                                    Collectors.counting()
+                                            ));
+                                    if (!entityTypeCounts.isEmpty()) {
+                                        log.info("📋 Extracted entity type counts: {}", entityTypeCounts);
+                                    }
+                                    if (entityTypeCounts.containsKey("Document")) {
+                                        log.info("✅ Found {} Document entities in LLM response", entityTypeCounts.get("Document"));
+                                    } else {
+                                        log.debug("ℹ️ No Document entities found in LLM response (extracted types: {})", entityTypeCounts.keySet());
+                                    }
                                     
                                     // Store token usage in a thread-local or pass via context for tracking
                                     // For now, just return entities (costs are tracked separately)

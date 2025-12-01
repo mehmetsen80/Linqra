@@ -12,6 +12,7 @@ import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
 import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,6 +33,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
     private final ApplicationEventPublisher eventPublisher;
     private final S3Service s3Service;
     private final S3Properties s3Properties;
+    private final ChunkEncryptionService chunkEncryptionService;
     private final KnowledgeHubChunkRepository chunkRepository;
     private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
     private final KnowledgeHubCollectionRepository collectionRepository;
@@ -97,33 +99,102 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                 .flatMap(document -> {
                     log.info("Completing upload for document: {}", documentId);
                     
-                    document.setStatus("UPLOADED");
-                    document.setUploadedAt(LocalDateTime.now());
-                    document.setS3Key(s3Key);
+                    // Check if file is already encrypted
+                    boolean alreadyEncrypted = document.getEncrypted() != null && document.getEncrypted() 
+                            && document.getEncryptionKeyVersion() != null && !document.getEncryptionKeyVersion().isEmpty();
                     
-                    return documentRepository.save(document)
-                            .doOnSuccess(doc -> {
-                                log.info("Document upload completed: {}", documentId);
+                    if (alreadyEncrypted) {
+                        log.info("Document {} is already encrypted with key version: {}", documentId, document.getEncryptionKeyVersion());
+                        // File is already encrypted, just update status
+                        document.setStatus("UPLOADED");
+                        document.setUploadedAt(LocalDateTime.now());
+                        document.setS3Key(s3Key);
+                        
+                        return documentRepository.save(document)
+                                .doOnSuccess(doc -> publishProcessingEvent(doc, documentId));
+                    }
+                    
+                    // File is not encrypted yet - encrypt it
+                    log.info("Encrypting file for document: {}", documentId);
+                    
+                    return s3Service.downloadFileContent(s3Key)
+                            .flatMap(plainBytes -> {
+                                try {
+                                    // Encrypt file bytes
+                                    String encryptionKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
+                                    byte[] encryptedBytes = chunkEncryptionService.encryptFile(
+                                            plainBytes, 
+                                            document.getTeamId(), 
+                                            encryptionKeyVersion
+                                    );
+                                    
+                                    log.info("Encrypted file for document {}: {} bytes -> {} bytes (key version: {})", 
+                                            documentId, plainBytes.length, encryptedBytes.length, encryptionKeyVersion);
+                                    
+                                    // Re-upload encrypted file (replace original)
+                                    return s3Service.uploadFileBytes(
+                                            s3Key, 
+                                            encryptedBytes, 
+                                            document.getContentType(),
+                                            encryptionKeyVersion // Pass encryption key version to store in S3 metadata
+                                    )
+                                    .then(Mono.fromCallable(() -> {
+                                        // Update document metadata with encryption info
+                                        document.setStatus("UPLOADED");
+                                        document.setUploadedAt(LocalDateTime.now());
+                                        document.setS3Key(s3Key);
+                                        document.setEncrypted(true);
+                                        document.setEncryptionKeyVersion(encryptionKeyVersion);
+                                        document.setFileSize((long) encryptedBytes.length); // Update file size after encryption
+                                        
+                                        log.info("File encrypted and re-uploaded for document: {}", documentId);
+                                        return document;
+                                    }));
+                                } catch (Exception e) {
+                                    log.error("Failed to encrypt file for document {}: {}", documentId, e.getMessage(), e);
+                                    return Mono.error(new RuntimeException("Failed to encrypt file: " + e.getMessage(), e));
+                                }
+                            })
+                            .flatMap(updatedDoc -> documentRepository.save(updatedDoc))
+                            .doOnSuccess(doc -> publishProcessingEvent(doc, documentId))
+                            .onErrorResume(error -> {
+                                log.error("Error encrypting file for document {}: {}", documentId, error.getMessage(), error);
+                                // If encryption fails, still mark as uploaded but log warning
+                                document.setStatus("UPLOADED");
+                                document.setUploadedAt(LocalDateTime.now());
+                                document.setS3Key(s3Key);
+                                document.setEncrypted(false);
+                                document.setEncryptionKeyVersion(null);
                                 
-                                // Publish processing event
-                                KnowledgeHubDocumentProcessingEvent event = KnowledgeHubDocumentProcessingEvent.builder()
-                                        .documentId(doc.getDocumentId())
-                                        .teamId(doc.getTeamId())
-                                        .collectionId(doc.getCollectionId())
-                                        .s3Bucket(s3Properties.getBucketName())
-                                        .s3Key(doc.getS3Key())
-                                        .fileName(doc.getFileName())
-                                        .fileSize(doc.getFileSize())
-                                        .contentType(doc.getContentType())
-                                        .chunkSize(doc.getChunkSize())
-                                        .overlapTokens(doc.getOverlapTokens())
-                                        .chunkStrategy(doc.getChunkStrategy())
-                                        .build();
-                                
-                                eventPublisher.publishEvent(event);
-                                log.info("Published document processing event for: {}", documentId);
+                                return documentRepository.save(document)
+                                        .doOnSuccess(doc -> {
+                                            log.warn("Document {} uploaded but NOT encrypted due to error: {}", documentId, error.getMessage());
+                                            publishProcessingEvent(doc, documentId);
+                                        });
                             });
                 });
+    }
+    
+    private void publishProcessingEvent(KnowledgeHubDocument doc, String documentId) {
+        log.info("Document upload completed: {}", documentId);
+        
+        // Publish processing event
+        KnowledgeHubDocumentProcessingEvent event = KnowledgeHubDocumentProcessingEvent.builder()
+                .documentId(doc.getDocumentId())
+                .teamId(doc.getTeamId())
+                .collectionId(doc.getCollectionId())
+                .s3Bucket(s3Properties.getBucketName())
+                .s3Key(doc.getS3Key())
+                .fileName(doc.getFileName())
+                .fileSize(doc.getFileSize())
+                .contentType(doc.getContentType())
+                .chunkSize(doc.getChunkSize())
+                .overlapTokens(doc.getOverlapTokens())
+                .chunkStrategy(doc.getChunkStrategy())
+                .build();
+        
+        eventPublisher.publishEvent(event);
+        log.info("Published document processing event for: {}", documentId);
     }
     
     @Override
@@ -232,33 +303,41 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                     // Delete raw S3 file if it exists
                     Mono<Void> deleteRawFile = Mono.empty();
                     if (document.getS3Key() != null && !document.getS3Key().isEmpty()) {
+                        log.info("Attempting to delete raw S3 file for document: {} - S3 key: {}", 
+                                documentId, document.getS3Key());
                         deleteRawFile = s3Service.deleteFile(document.getS3Key())
-                                .doOnSuccess(v -> log.info("Deleted raw S3 file for document: {} - {}", 
+                                .doOnSuccess(v -> log.info("✅ Successfully deleted raw S3 file for document: {} - {}", 
                                         documentId, document.getS3Key()))
-                                .doOnError(error -> log.warn("Error deleting raw S3 file for document {}: {}", 
-                                        documentId, error.getMessage()))
+                                .doOnError(error -> log.error("❌ ERROR deleting raw S3 file for document {} - S3 key: {} - Error: {}", 
+                                        documentId, document.getS3Key(), error.getMessage(), error))
                                 .onErrorResume(error -> {
-                                    // Log warning but continue even if S3 deletion fails
-                                    log.warn("Failed to delete raw S3 file for document {}, continuing: {}", 
-                                            documentId, error.getMessage());
+                                    // Log error but continue even if S3 deletion fails (don't block other deletions)
+                                    log.error("❌ FAILED to delete raw S3 file for document {} - S3 key: {} - Error: {} - Continuing with other deletions", 
+                                            documentId, document.getS3Key(), error.getMessage());
                                     return Mono.empty();
                                 });
+                    } else {
+                        log.warn("⚠️ No S3 key found for document: {} - skipping raw file deletion", documentId);
                     }
                     
                     // Delete processed S3 file if it exists
                     Mono<Void> deleteProcessedFile = Mono.empty();
                     if (document.getProcessedS3Key() != null && !document.getProcessedS3Key().isEmpty()) {
+                        log.info("Attempting to delete processed S3 file for document: {} - S3 key: {}", 
+                                documentId, document.getProcessedS3Key());
                         deleteProcessedFile = s3Service.deleteFile(document.getProcessedS3Key())
-                                .doOnSuccess(v -> log.info("Deleted processed S3 file for document: {} - {}", 
+                                .doOnSuccess(v -> log.info("✅ Successfully deleted processed S3 file for document: {} - {}", 
                                         documentId, document.getProcessedS3Key()))
-                                .doOnError(error -> log.warn("Error deleting processed S3 file for document {}: {}", 
-                                        documentId, error.getMessage()))
+                                .doOnError(error -> log.error("❌ ERROR deleting processed S3 file for document {} - S3 key: {} - Error: {}", 
+                                        documentId, document.getProcessedS3Key(), error.getMessage(), error))
                                 .onErrorResume(error -> {
-                                    // Log warning but continue even if S3 deletion fails
-                                    log.warn("Failed to delete processed S3 file for document {}, continuing: {}", 
-                                            documentId, error.getMessage());
+                                    // Log error but continue even if S3 deletion fails (don't block other deletions)
+                                    log.error("❌ FAILED to delete processed S3 file for document {} - S3 key: {} - Error: {} - Continuing with other deletions", 
+                                            documentId, document.getProcessedS3Key(), error.getMessage());
                                     return Mono.empty();
                                 });
+                    } else {
+                        log.info("No processed S3 key for document: {} - skipping processed file deletion", documentId);
                     }
 
                     Mono<Void> deleteMilvusEmbeddings = Mono.empty();

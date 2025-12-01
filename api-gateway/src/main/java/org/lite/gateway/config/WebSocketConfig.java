@@ -50,6 +50,9 @@ public class WebSocketConfig {
     private final Sinks.Many<String> graphExtractionMessagesSink = Sinks.many()
         .multicast()
         .onBackpressureBuffer(1024, false);
+    private final Sinks.Many<String> collectionExportMessageSink = Sinks.many()
+        .multicast()
+        .onBackpressureBuffer(1024, false);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     
@@ -232,6 +235,47 @@ public class WebSocketConfig {
         };
     }
 
+    @Bean("collectionExportMessageChannel")
+    public MessageChannel collectionExportMessageChannel(ObjectMapper objectMapper) {
+        return new AbstractMessageChannel() {
+            @Override
+            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
+                try {
+                    // Check if there are any active sessions
+                    if (sessions.isEmpty()) {
+                        log.debug("📦 No active WebSocket sessions, skipping export message emission");
+                        return true;
+                    }
+
+                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
+                    log.debug("📦 WebSocket sending export message: {}", jsonPayload);
+                    Sinks.EmitResult result;
+                    int attempts = 0;
+                    do {
+                        result = collectionExportMessageSink.tryEmitNext(jsonPayload);
+                        if (result.isFailure()) {
+                            attempts++;
+                            log.warn("Attempt {} failed to emit export message. Reason: {}. Retrying...", 
+                                attempts, result.name());
+                            Thread.sleep(100); // Small delay before retry
+                        }
+                    } while (result.isFailure() && attempts < 3);
+                    
+                    if (result.isFailure()) {
+                        log.error("Failed to emit export message after {} attempts. Reason: {}. Payload: {}", 
+                            attempts, result.name(), jsonPayload);
+                        return false;
+                    }
+                    log.debug("Successfully emitted export message after {} attempts", attempts + 1);
+                    return true;
+                } catch (Exception e) {
+                    log.error("Error converting export message to JSON", e);
+                    return false;
+                }
+            }
+        };
+    }
+
     @Bean
     public HandlerMapping webSocketHandlerMapping() {
         Map<String, WebSocketHandler> map = new HashMap<>();
@@ -260,12 +304,13 @@ public class WebSocketConfig {
             sessions.put(sessionId, session);
             log.info("WebSocket session connected: {}", sessionId);
 
-            // Handle outbound messages - merge health, execution, chat, and graph extraction updates
+            // Handle outbound messages - merge health, execution, chat, graph extraction, and export updates
             Flux<WebSocketMessage> outbound = Flux.merge(
                     messagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/health")),
                     executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution")),
                     chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat")),
-                    graphExtractionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/graph-extraction"))
+                    graphExtractionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/graph-extraction")),
+                    collectionExportMessageSink.asFlux().map(msg -> createStompFrame(msg, "/topic/collection-export"))
                 )
                 .onBackpressureBuffer(256)
                 .retryWhen(Retry.backoff(3, Duration.ofMillis(100))

@@ -9,7 +9,8 @@ const PropertiesViewerModal = ({
   title = "Properties",
   properties = {},
   entityType = null,
-  entityName = null
+  entityName = null,
+  loading = false
 }) => {
   // Convert properties object to array of key-value pairs
   // Note: Properties passed to this modal should already be filtered, but we filter again for safety
@@ -61,7 +62,14 @@ const PropertiesViewerModal = ({
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        {propertyEntries.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-4">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Decrypting properties...</span>
+            </div>
+            <p className="mt-2 text-muted">Decrypting properties...</p>
+          </div>
+        ) : propertyEntries.length === 0 ? (
           <div className="text-center py-4 text-muted">
             No additional properties available
           </div>

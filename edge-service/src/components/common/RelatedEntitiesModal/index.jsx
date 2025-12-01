@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Table, Spinner, Badge } from 'react-bootstrap';
 import { HiLink } from 'react-icons/hi';
+import { useAuth } from '../../../contexts/AuthContext';
+import { useTeam } from '../../../contexts/TeamContext';
+import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
 import Button from '../Button';
 import PropertiesViewerModal from '../PropertiesViewerModal';
 import { knowledgeHubGraphService } from '../../../services/knowledgeHubGraphService';
@@ -11,8 +14,12 @@ const RelatedEntitiesModal = ({
   onHide, 
   entityType,
   entityId,
-  entityName
+  entityName,
+  entity // Optional: full entity object with encryption version markers
 }) => {
+  const { user } = useAuth();
+  const { currentTeam } = useTeam();
+  const [decryptedEntityName, setDecryptedEntityName] = useState(entityName);
   const [relatedEntities, setRelatedEntities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -24,15 +31,52 @@ const RelatedEntitiesModal = ({
     properties: {}
   });
 
+  const decryptEntityName = async () => {
+    const isAdmin = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
+    if (!isAdmin || !entity) {
+      setDecryptedEntityName(entityName);
+      return;
+    }
+
+    // Check if entity name is encrypted (has encryption version markers)
+    const entityVersion = entity.name_encryption_version || entity.encryptionKeyVersion;
+    if (!entityVersion || !entity.name) {
+      setDecryptedEntityName(entityName);
+      return;
+    }
+
+    try {
+      // Build properties map with encryption version markers
+      const entityProps = {
+        name: entity.name,
+        name_encryption_version: entity.name_encryption_version || entity.encryptionKeyVersion
+      };
+
+      const result = await knowledgeHubGraphService.decryptProperties(entityProps);
+      if (result.success && result.data?.name) {
+        setDecryptedEntityName(result.data.name);
+      } else {
+        setDecryptedEntityName(entityName);
+      }
+    } catch (error) {
+      console.error('Error decrypting entity name:', error);
+      setDecryptedEntityName(entityName);
+    }
+  };
+
   useEffect(() => {
     if (show && entityType && entityId) {
       fetchRelatedEntities();
+      // Decrypt entity name if user is admin
+      decryptEntityName();
     } else {
       // Reset state when modal is closed
       setRelatedEntities([]);
       setError(null);
+      setDecryptedEntityName(entityName);
     }
-  }, [show, entityType, entityId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, entityType, entityId, entityName, entity]);
 
   const fetchRelatedEntities = async () => {
     setLoading(true);
@@ -109,8 +153,8 @@ const RelatedEntitiesModal = ({
         <Modal.Title className="d-flex align-items-center gap-2">
           <HiLink className="text-primary" />
           Related Entities
-          {entityName && (
-            <code className="small ms-2 text-muted">({entityName})</code>
+          {decryptedEntityName && (
+            <code className="small ms-2 text-muted">({decryptedEntityName})</code>
           )}
         </Modal.Title>
       </Modal.Header>

@@ -646,6 +646,56 @@ db.graph_extraction_jobs.createIndex(
 );
 
 // ============================================================================
+// COLLECTION_EXPORT_JOBS COLLECTION
+// ============================================================================
+
+// 1. JobId Unique Index (unique constraint)
+db.collection_export_jobs.createIndex(
+  { "jobId": 1 },
+  { 
+    "name": "jobId_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// 2. TeamId Index
+db.collection_export_jobs.createIndex(
+  { "teamId": 1 },
+  { 
+    "name": "teamId_idx",
+    "background": true
+  }
+);
+
+// 3. ExportedBy Index
+db.collection_export_jobs.createIndex(
+  { "exportedBy": 1 },
+  { 
+    "name": "exported_by_idx",
+    "background": true
+  }
+);
+
+// 4. Team Status Created Index (compound)
+db.collection_export_jobs.createIndex(
+  { "teamId": 1, "status": 1, "createdAt": -1 },
+  { 
+    "name": "team_status_created_idx",
+    "background": true
+  }
+);
+
+// 5. ExportedBy Created Index (compound)
+db.collection_export_jobs.createIndex(
+  { "exportedBy": 1, "createdAt": -1 },
+  { 
+    "name": "exported_by_created_idx",
+    "background": true
+  }
+);
+
+// ============================================================================
 // VERIFY ALL INDEXES
 // ============================================================================
 
@@ -777,6 +827,12 @@ db.team_routes.getIndexes().forEach(function(index) {
 
 print("\n=== GRAPH_EXTRACTION_JOBS Indexes ===");
 db.graph_extraction_jobs.getIndexes().forEach(function(index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== COLLECTION_EXPORT_JOBS Indexes ===");
+db.collection_export_jobs.getIndexes().forEach(function(index) {
   print("Index: " + index.name);
   printjson(index.key);
 });

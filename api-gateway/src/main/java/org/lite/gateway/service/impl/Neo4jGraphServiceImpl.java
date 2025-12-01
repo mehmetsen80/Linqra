@@ -2,6 +2,7 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.Neo4jGraphService;
 import org.neo4j.driver.Driver;
 import org.neo4j.driver.Result;
@@ -21,6 +22,19 @@ import java.util.stream.Collectors;
 public class Neo4jGraphServiceImpl implements Neo4jGraphService {
 
     private final Driver neo4jDriver;
+    private final ChunkEncryptionService chunkEncryptionService;
+    
+    /**
+     * Sensitive property keys that should be encrypted when storing entities in Neo4j.
+     * These properties contain confidential information that should not be visible to database administrators.
+     */
+    private static final Set<String> SENSITIVE_PROPERTY_KEYS = Set.of(
+        "name", "description", "address", "phone", "email", "website",
+        "contactInfo", "title", "role", "affiliation",
+        "street", "city", "state", "zipCode", "country", "coordinates",
+        "documentType", "documentNumber", "issuingAuthority",
+        "requiredFields", "filingInstructions", "purpose"
+    );
 
     @Override
     public Mono<String> upsertEntity(String entityType, String entityId, Map<String, Object> properties, String teamId) {
@@ -37,11 +51,29 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 cleanProperties.remove("createdAt");
                 cleanProperties.remove("updatedAt");
                 
+                // Log entity type and properties before encryption (for debugging)
+                log.debug("Processing {} entity {} for team {}. Properties before encryption: {}", entityType, entityId, teamId, cleanProperties.keySet());
+                
+                // Encrypt sensitive properties before storing
+                String encryptionKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
+                cleanProperties = encryptSensitiveProperties(cleanProperties, teamId, encryptionKeyVersion, entityType, entityId);
+                // Store entity-level encryption version for tracking
+                cleanProperties.put("encryptionKeyVersion", encryptionKeyVersion);
+                
                 StringBuilder cypher = new StringBuilder();
                 cypher.append("MERGE (e:").append(entityType).append(" {id: $entityId, teamId: $teamId}) ");
                 // ON CREATE and ON MATCH must come immediately after MERGE
-                cypher.append("ON CREATE SET e.createdAt = timestamp(), e += $properties ");
-                cypher.append("ON MATCH SET e.updatedAt = timestamp(), e += $properties ");
+                cypher.append("ON CREATE SET e.createdAt = timestamp() ");
+                cypher.append("ON MATCH SET e.updatedAt = timestamp() ");
+                // First, remove all sensitive properties that might have old encryption markers
+                // This ensures we don't leave orphaned encryption_version properties
+                for (String sensitiveKey : SENSITIVE_PROPERTY_KEYS) {
+                    cypher.append("REMOVE e.").append(sensitiveKey).append("_encryption_version ");
+                }
+                // Now set all properties - this will fully overwrite existing properties including plaintext ones
+                if (!cleanProperties.isEmpty()) {
+                    cypher.append("SET e += $properties ");
+                }
                 cypher.append("RETURN e.id as id");
                 
                 params.put("properties", cleanProperties);
@@ -119,28 +151,34 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
     public Flux<Map<String, Object>> findEntities(String entityType, Map<String, Object> filters, String teamId) {
         return Mono.fromCallable(() -> {
             try (Session session = neo4jDriver.session()) {
+                if (teamId == null || teamId.trim().isEmpty()) {
+                    log.error("teamId is null or empty when finding entities of type {}", entityType);
+                    throw new IllegalArgumentException("teamId is required for finding entities");
+                }
+                
                 Map<String, Object> params = new HashMap<>();
                 params.put("teamId", teamId);
                 
-                StringBuilder cypher = new StringBuilder();
-                cypher.append("MATCH (e:").append(entityType).append(" {teamId: $teamId}) ");
+                // Remove teamId from filters if present (we always enforce it separately)
+                Map<String, Object> cleanFilters = filters != null ? new HashMap<>(filters) : new HashMap<>();
+                cleanFilters.remove("teamId");
                 
-                if (filters != null && !filters.isEmpty()) {
-                    cypher.append("WHERE ");
+                StringBuilder cypher = new StringBuilder();
+                cypher.append("MATCH (e:").append(entityType).append(") ");
+                cypher.append("WHERE e.teamId = $teamId "); // Always enforce teamId filtering
+                
+                if (!cleanFilters.isEmpty()) {
                     int index = 0;
-                    boolean first = true;
-                    for (Map.Entry<String, Object> filter : filters.entrySet()) {
-                        if (!first) {
-                            cypher.append("AND ");
-                        }
-                        String paramName = "filter" + index++;
-                        cypher.append("e.").append(filter.getKey()).append(" = $").append(paramName).append(" ");
-                        params.put(paramName, filter.getValue());
-                        first = false;
+                    for (Map.Entry<String, Object> filter : cleanFilters.entrySet()) {
+                        cypher.append("AND e.").append(filter.getKey()).append(" = $filter").append(index).append(" ");
+                        params.put("filter" + index, filter.getValue());
+                        index++;
                     }
                 }
                 
                 cypher.append("RETURN e");
+                
+                log.debug("Executing Cypher query for team {}: {}", teamId, cypher.toString());
                 
                 Result result = session.run(cypher.toString(), params);
                 return result.stream()
@@ -154,7 +192,8 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                                 map.put(key, value);
                             }
                         });
-                        return map;
+                        // Decrypt sensitive properties before returning
+                        return decryptSensitiveProperties(map, teamId);
                     })
                     .collect(Collectors.toList());
             } catch (Neo4jException e) {
@@ -210,7 +249,8 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                             map.put("relationshipType", relType);
                             map.put("relationshipProperties", relProps);
                             
-                            return map;
+                            // Decrypt sensitive properties before returning
+                            return decryptSensitiveProperties(map, teamId);
                         })
                         .collect(Collectors.toList());
                 } else {
@@ -248,7 +288,9 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                             if (rels != null && !rels.isNull()) {
                                 map.put("relationships", rels.asList());
                             }
-                            return map;
+                            
+                            // Decrypt sensitive properties before returning
+                            return decryptSensitiveProperties(map, teamId);
                         })
                         .collect(Collectors.toList());
                 }
@@ -307,6 +349,33 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
             } catch (Neo4jException e) {
                 log.error("Error deleting entity {}:{} for team {}: {}", entityType, entityId, teamId, e.getMessage());
                 throw new RuntimeException("Failed to delete entity", e);
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<Long> deleteAllEntitiesByType(String entityType, String teamId) {
+        return Mono.fromCallable(() -> {
+            try (Session session = neo4jDriver.session()) {
+                Map<String, Object> params = new HashMap<>();
+                params.put("teamId", teamId);
+                
+                // Use DETACH DELETE to remove entities and all their relationships
+                String cypher = "MATCH (e:" + entityType + " {teamId: $teamId}) " +
+                               "DETACH DELETE e " +
+                               "RETURN count(e) as deleted";
+                
+                Result result = session.run(cypher, params);
+                if (result.hasNext()) {
+                    long deleted = result.single().get("deleted").asLong();
+                    log.info("Deleted {} entities of type {} for team {}", deleted, entityType, teamId);
+                    return deleted;
+                }
+                log.warn("No entities of type {} found for team {} to delete", entityType, teamId);
+                return 0L;
+            } catch (Neo4jException e) {
+                log.error("Error deleting all entities of type {} for team {}: {}", entityType, teamId, e.getMessage());
+                throw new RuntimeException("Failed to delete entities", e);
             }
         }).subscribeOn(Schedulers.boundedElastic());
     }
@@ -397,5 +466,141 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
         }
         return sanitized;
     }
+    
+    /**
+     * Encrypt sensitive properties before storing in Neo4j.
+     * 
+     * @param properties The entity properties
+     * @param teamId The team ID for key derivation
+     * @param encryptionKeyVersion The encryption key version to use
+     * @param entityType Optional entity type for logging (can be null)
+     * @param entityId Optional entity ID for logging (can be null)
+     * @return Properties map with sensitive fields encrypted
+     */
+    private Map<String, Object> encryptSensitiveProperties(Map<String, Object> properties, String teamId, String encryptionKeyVersion, String entityType, String entityId) {
+        if (chunkEncryptionService == null) {
+            log.error("ChunkEncryptionService is null! Cannot encrypt entity properties. This should not happen - check service initialization.");
+            throw new IllegalStateException("ChunkEncryptionService is not available. Cannot encrypt sensitive entity properties.");
+        }
+        
+        Map<String, Object> encryptedProperties = new HashMap<>(properties);
+        int encryptedCount = 0;
+        int failedCount = 0;
+        
+        // Log all properties for debugging
+        String entityInfo = (entityType != null && entityId != null) 
+            ? String.format("%s:%s", entityType, entityId) 
+            : "entity";
+        log.info("Encrypting {} properties. Available properties: {}", entityInfo, properties.keySet());
+        
+        for (String key : SENSITIVE_PROPERTY_KEYS) {
+            Object value = encryptedProperties.get(key);
+            if (value instanceof String && !((String) value).isEmpty()) {
+                try {
+                    // Encrypt the property value with current key version
+                    String encryptedValue = chunkEncryptionService.encryptChunkText(
+                        (String) value,
+                        teamId,
+                        encryptionKeyVersion
+                    );
+                    encryptedProperties.put(key, encryptedValue);
+                    // Store key version per property (for decryption later)
+                    encryptedProperties.put(key + "_encryption_version", encryptionKeyVersion);
+                    encryptedCount++;
+                    log.info("Encrypted property '{}' for {} (team: {}, key version: {})", key, entityInfo, teamId, encryptionKeyVersion);
+                } catch (Exception e) {
+                    log.error("Failed to encrypt property '{}' for team {}: {}. This is a critical error - entity will be stored with unencrypted sensitive data!", 
+                        key, teamId, e.getMessage(), e);
+                    failedCount++;
+                    // Continue with plaintext if encryption fails (better than losing data)
+                }
+            } else if (encryptedProperties.containsKey(key)) {
+                log.info("Property '{}' exists but is not a non-empty String (value: {}, type: {}). Skipping encryption.", 
+                    key, value, value != null ? value.getClass().getSimpleName() : "null");
+            }
+        }
+        
+        if (encryptedCount > 0) {
+            log.info("Encrypted {} sensitive properties for {} (team: {}, key version: {})", encryptedCount, entityInfo, teamId, encryptionKeyVersion);
+        } else {
+            log.warn("No sensitive properties were encrypted for {} (team: {}). Available properties: {}. SENSITIVE_PROPERTY_KEYS: {}", 
+                entityInfo, teamId, properties.keySet(), SENSITIVE_PROPERTY_KEYS);
+        }
+        if (failedCount > 0) {
+            log.error("Failed to encrypt {} sensitive properties for {} (team: {}). Entity contains unencrypted sensitive data!", failedCount, entityInfo, teamId);
+        }
+        
+        return encryptedProperties;
+    }
+    
+    /**
+     * Decrypt sensitive properties when retrieving from Neo4j.
+     * 
+     * @param entity The entity map with properties
+     * @param teamId The team ID for key derivation
+     * @return Entity map with sensitive fields decrypted
+     */
+    private Map<String, Object> decryptSensitiveProperties(Map<String, Object> entity, String teamId) {
+        Map<String, Object> decryptedEntity = new HashMap<>(entity);
+        
+        // Get entity-level encryption version (fallback if property-level version missing)
+        String entityEncryptionVersion = (String) decryptedEntity.get("encryptionKeyVersion");
+        
+        for (String key : SENSITIVE_PROPERTY_KEYS) {
+            Object value = decryptedEntity.get(key);
+            if (value instanceof String && !((String) value).isEmpty()) {
+                // Check if this property has an encryption version marker
+                String propertyKeyVersion = (String) decryptedEntity.get(key + "_encryption_version");
+                
+                // Only decrypt if we have an encryption version marker (property-level or entity-level)
+                // If no version marker exists, assume it's legacy plaintext data
+                if (propertyKeyVersion == null || propertyKeyVersion.isEmpty()) {
+                    if (entityEncryptionVersion == null || entityEncryptionVersion.isEmpty()) {
+                        // No encryption version marker - legacy plaintext data, skip decryption
+                        decryptedEntity.remove(key + "_encryption_version");
+                        continue;
+                    }
+                    // Use entity-level version
+                    propertyKeyVersion = entityEncryptionVersion;
+                }
+                
+                try {
+                    // Decrypt the property value using the detected key version
+                    String decryptedValue = chunkEncryptionService.decryptChunkText(
+                        (String) value,
+                        teamId,
+                        propertyKeyVersion
+                    );
+                    decryptedEntity.put(key, decryptedValue);
+                } catch (Exception e) {
+                    log.warn("Failed to decrypt property '{}' for team {} with key version '{}': {}. Returning as-is (may be legacy plaintext).", 
+                        key, teamId, propertyKeyVersion, e.getMessage());
+                    // Continue with original value if decryption fails (may be legacy plaintext)
+                }
+                
+                // Remove encryption version metadata from returned entity
+                decryptedEntity.remove(key + "_encryption_version");
+            } else {
+                // Remove encryption version metadata even if property is null/empty
+                decryptedEntity.remove(key + "_encryption_version");
+            }
+        }
+        
+        // Remove entity-level encryption version from returned entity (internal metadata)
+        decryptedEntity.remove("encryptionKeyVersion");
+        
+        return decryptedEntity;
+    }
+
+    @Override
+    public Mono<Map<String, Object>> decryptProperties(Map<String, Object> properties, String teamId) {
+        return Mono.fromCallable(() -> {
+            if (properties == null || properties.isEmpty()) {
+                return properties;
+            }
+            return decryptSensitiveProperties(properties, teamId);
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
 }
+
 

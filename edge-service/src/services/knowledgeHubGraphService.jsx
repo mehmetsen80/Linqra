@@ -29,24 +29,60 @@ export const knowledgeHubGraphService = {
    */
   findEntities: async (entityType, filters = {}) => {
     try {
-      const params = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value != null) {
-          params.append(key, value);
-        }
+      // Use direct Cypher query to get encrypted entity names (similar to relationships)
+      // This bypasses backend decryption and returns raw encrypted values for table display
+      const params = { teamId: filters.teamId || '' };
+      let whereClause = 'WHERE e.teamId = $teamId';
+      
+      // Add documentId filter if provided
+      if (filters.documentId) {
+        whereClause += ' AND e.documentId = $documentId';
+        params.documentId = filters.documentId;
+      }
+      
+      const cypherQuery = `MATCH (e:${entityType}) ${whereClause} RETURN e.id as id, labels(e)[0] as type, e.name as name, e.encryptionKeyVersion as encryptionKeyVersion, e.name_encryption_version as name_encryption_version, properties(e) as properties LIMIT 1000`;
+      
+      // Call executeCypherQuery directly using axiosInstance
+      const response = await axiosInstance.post('/api/knowledge-graph/query', {
+        query: cypherQuery,
+        parameters: params
       });
-
-      const url = `/api/knowledge-graph/entities/${entityType}${params.toString() ? `?${params.toString()}` : ''}`;
-      const response = await axiosInstance.get(url);
+      
+      const data = response.data;
+      
+      // Transform the results into entity format with encrypted names (similar to relationships)
+      const entities = (Array.isArray(data) ? data : []).map(record => {
+        const entity = {
+          id: record.id,
+          type: entityType,
+          name: record.name, // This is the encrypted value from Neo4j (like relationships)
+          encryptionKeyVersion: record.encryptionKeyVersion,
+          name_encryption_version: record.name_encryption_version
+        };
+        
+        // Include all other properties from properties(e) (excluding system/metadata fields)
+        if (record.properties) {
+          Object.keys(record.properties).forEach(key => {
+            if (!['id', 'name', 'teamId', 'documentId', 'extractedAt', 'createdAt', 'updatedAt', 
+                  'encryptionKeyVersion', 'name_encryption_version'].includes(key) &&
+              !key.endsWith('_encryption_version')) {
+              entity[key] = record.properties[key];
+            }
+          });
+        }
+        
+        return entity;
+      });
+      
       return {
         success: true,
-        data: response.data
+        data: entities
       };
     } catch (error) {
       console.error('Error finding entities:', error);
       return {
         success: false,
-        error: error.response?.data?.message || 'Failed to find entities'
+        error: error.response?.data?.message || error.message || 'Failed to find entities'
       };
     }
   },
@@ -243,6 +279,27 @@ export const knowledgeHubGraphService = {
   },
 
   /**
+   * Delete all entities of a specific type for the current team
+   * @param {string} entityType - Type of entity (Form, Organization, Person, Date, Location, Document)
+   * @returns {Promise} Promise with deletion result including deletedCount
+   */
+  deleteAllEntitiesByType: async (entityType) => {
+    try {
+      const response = await axiosInstance.delete(`/api/knowledge-graph/entities/${entityType}`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error deleting all entities by type:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to delete all entities'
+      };
+    }
+  },
+
+  /**
    * Execute a custom Cypher query
    * @param {string} cypherQuery - Cypher query string
    * @param {object} parameters - Query parameters
@@ -291,7 +348,7 @@ export const knowledgeHubGraphService = {
         params.documentId = filters.documentId;
       }
       
-      const cypherQuery = `${matchClause} ${whereClause} RETURN type(r) as relationshipType, from.id as fromId, labels(from)[0] as fromType, from.name as fromName, to.id as toId, labels(to)[0] as toType, to.name as toName, properties(r) as relProps LIMIT 1000`;
+      const cypherQuery = `${matchClause} ${whereClause} RETURN type(r) as relationshipType, from.id as fromId, labels(from)[0] as fromType, from.name as fromName, from.encryptionKeyVersion as fromEncryptionVersion, from.name_encryption_version as fromNameEncryptionVersion, to.id as toId, labels(to)[0] as toType, to.name as toName, to.encryptionKeyVersion as toEncryptionVersion, to.name_encryption_version as toNameEncryptionVersion, properties(r) as relProps LIMIT 1000`;
       
       // Call executeCypherQuery directly using axiosInstance
       const response = await axiosInstance.post('/api/knowledge-graph/query', {
@@ -308,12 +365,16 @@ export const knowledgeHubGraphService = {
           fromEntity: {
             id: record.fromId,
             type: record.fromType,
-            name: record.fromName
+            name: record.fromName,
+            encryptionKeyVersion: record.fromEncryptionVersion,
+            name_encryption_version: record.fromNameEncryptionVersion
           },
           toEntity: {
             id: record.toId,
             type: record.toType,
-            name: record.toName
+            name: record.toName,
+            encryptionKeyVersion: record.toEncryptionVersion,
+            name_encryption_version: record.toNameEncryptionVersion
           },
           properties: {}
         };
@@ -340,6 +401,58 @@ export const knowledgeHubGraphService = {
       return {
         success: false,
         error: error.response?.data?.message || error.message || 'Failed to find relationships'
+      };
+    }
+  },
+
+  /**
+   * Get current encryption key version
+   * @returns {Promise} Promise with current encryption key version
+   */
+  getCurrentEncryptionKeyVersion: async () => {
+    try {
+      const response = await axiosInstance.get('/api/knowledge-graph/encryption/version');
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error getting current encryption key version:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to get encryption key version'
+      };
+    }
+  },
+
+  /**
+   * Decrypt properties (for ADMIN/SUPER_ADMIN only)
+   * @param {object} properties - Properties map that may contain encrypted values
+   * @returns {Promise} Promise with decrypted properties
+   */
+  decryptProperties: async (properties) => {
+    try {
+      const response = await axiosInstance.post('/api/knowledge-graph/properties/decrypt', {
+        properties: properties
+      });
+      
+      // Response.data is the decrypted properties map directly
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error decrypting properties:', error);
+      // Check for 403 Forbidden (access denied)
+      if (error.response?.status === 403) {
+        return {
+          success: false,
+          error: 'Access denied: Only administrators can decrypt properties'
+        };
+      }
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to decrypt properties'
       };
     }
   }

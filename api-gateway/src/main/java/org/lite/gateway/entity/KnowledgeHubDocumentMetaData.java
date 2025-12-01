@@ -75,6 +75,14 @@ public class KnowledgeHubDocumentMetaData {
     private String extractionModel; // Model or method used for extraction
     private String extractionVersion; // Version of extraction logic
     
+    /**
+     * Encryption key version used to encrypt sensitive metadata fields.
+     * Format: "v1", "v2", etc.
+     * Null or "v1" = default/legacy key or unencrypted
+     * "v2" = new key after rotation
+     */
+    private String encryptionKeyVersion; // e.g., "v1", "v2"
+    
     // Status
     private String status; // EXTRACTING, EXTRACTED, FAILED
     private String errorMessage;

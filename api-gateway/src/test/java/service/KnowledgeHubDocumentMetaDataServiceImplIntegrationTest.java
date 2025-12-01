@@ -9,6 +9,7 @@ import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentMetaDataServiceImpl;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
+import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.impl.S3ServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -109,6 +110,44 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
         
         // Create KnowledgeHubDocumentMetaDataServiceImpl
         KnowledgeHubDocumentEmbeddingService noopEmbeddingService = (docId, teamId) -> Mono.empty();
+        
+        // Create no-op ChunkEncryptionService for testing
+        ChunkEncryptionService noopEncryptionService = new ChunkEncryptionService() {
+            @Override
+            public String encryptChunkText(String plaintext, String teamId) {
+                return plaintext; // Return as-is for testing
+            }
+            
+            @Override
+            public String encryptChunkText(String plaintext, String teamId, String keyVersion) {
+                return plaintext; // Return as-is for testing
+            }
+            
+            @Override
+            public String decryptChunkText(String encryptedText, String teamId, String keyVersion) {
+                return encryptedText; // Return as-is for testing
+            }
+            
+            @Override
+            public String getCurrentKeyVersion() {
+                return "v1"; // Return default version for testing
+            }
+            
+            @Override
+            public byte[] encryptFile(byte[] fileBytes, String teamId) {
+                return fileBytes; // Return as-is for testing
+            }
+            
+            @Override
+            public byte[] encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
+                return fileBytes; // Return as-is for testing
+            }
+            
+            @Override
+            public byte[] decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
+                return encryptedBytes; // Return as-is for testing
+            }
+        };
 
         this.metadataService = new KnowledgeHubDocumentMetaDataServiceImpl(
                 metadataRepository,
@@ -116,7 +155,8 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
                 s3Service,
                 objectMapper,
                 mockExecutionMessageChannel,
-                noopEmbeddingService
+                noopEmbeddingService,
+                noopEncryptionService
         );
     }
     

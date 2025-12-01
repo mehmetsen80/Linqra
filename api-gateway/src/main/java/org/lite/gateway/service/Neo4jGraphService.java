@@ -82,10 +82,26 @@ public interface Neo4jGraphService {
     Mono<Boolean> deleteEntity(String entityType, String entityId, String teamId);
 
     /**
+     * Delete all entities of a specific type for a team
+     * @param entityType Type of entities to delete (e.g., "Form", "Person", "Organization")
+     * @param teamId Team ID for multi-tenant isolation
+     * @return Mono with count of deleted entities
+     */
+    Mono<Long> deleteAllEntitiesByType(String entityType, String teamId);
+
+    /**
      * Get graph statistics for a team
      * @param teamId Team ID
      * @return Mono with statistics map (entity counts, relationship counts, etc.)
      */
     Mono<Map<String, Object>> getGraphStatistics(String teamId);
+
+    /**
+     * Decrypt sensitive properties in a properties map (for ADMIN/SUPER_ADMIN only).
+     * @param properties Map of properties that may contain encrypted values
+     * @param teamId Team ID for key derivation
+     * @return Mono with decrypted properties map
+     */
+    Mono<Map<String, Object>> decryptProperties(Map<String, Object> properties, String teamId);
 }
 

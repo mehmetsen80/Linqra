@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.event.KnowledgeHubDocumentMetaDataEvent;
 import org.lite.gateway.service.KnowledgeHubGraphEntityExtractionService;
 import org.lite.gateway.service.KnowledgeHubGraphRelationshipExtractionService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -13,10 +14,13 @@ import reactor.core.publisher.Mono;
 /**
  * Listener for Knowledge Graph extraction events
  * Triggers entity and relationship extraction asynchronously after document metadata extraction
+ * 
+ * Can be disabled by setting knowledge.graph.auto-extract.enabled=false in application properties
  */
 @Component
 @Slf4j
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "knowledge.graph.auto-extract.enabled", havingValue = "true", matchIfMissing = false)
 public class KnowledgeHubGraphExtractionEventListener {
     
     private final KnowledgeHubGraphEntityExtractionService entityExtractionService;
@@ -25,10 +29,11 @@ public class KnowledgeHubGraphExtractionEventListener {
     @Async
     @EventListener
     public void handleDocumentMetaDataEvent(KnowledgeHubDocumentMetaDataEvent event) {
+        
         String documentId = event.getDocumentId();
         String teamId = event.getTeamId();
         
-        log.info("Received document metadata event for document: {}, team: {}. Triggering entity extraction.", 
+        log.info("Received document metadata event for document: {}, team: {}. Triggering automatic entity extraction.", 
                 documentId, teamId);
         
         // Extract entities first, then relationships

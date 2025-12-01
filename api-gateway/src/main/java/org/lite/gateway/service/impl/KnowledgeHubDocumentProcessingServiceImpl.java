@@ -56,6 +56,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
     private final S3Properties s3Properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ApplicationEventPublisher eventPublisher;
+    private final ChunkEncryptionService chunkEncryptionService;
     
     private final MessageChannel executionMessageChannel;
     
@@ -68,6 +69,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             ChunkingService chunkingService,
             S3Properties s3Properties,
             ApplicationEventPublisher eventPublisher,
+            ChunkEncryptionService chunkEncryptionService,
             @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel) {
         this.documentRepository = documentRepository;
         this.chunkRepository = chunkRepository;
@@ -76,6 +78,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         this.chunkingService = chunkingService;
         this.s3Properties = s3Properties;
         this.eventPublisher = eventPublisher;
+        this.chunkEncryptionService = chunkEncryptionService;
         this.executionMessageChannel = executionMessageChannel;
     }
     
@@ -164,10 +167,32 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                     return s3Service.downloadFileContent(document.getS3Key())
                             .doOnSuccess(bytes -> log.info("Downloaded {} bytes for document: {}", bytes.length, documentId))
                             .flatMap(bytes -> {
+                                // Check if file is encrypted and decrypt if needed
+                                byte[] fileBytes = bytes;
+                                if (document.getEncrypted() != null && document.getEncrypted() 
+                                        && document.getEncryptionKeyVersion() != null && !document.getEncryptionKeyVersion().isEmpty()) {
+                                    try {
+                                        log.info("Decrypting encrypted file for document: {} (key version: {})", 
+                                                documentId, document.getEncryptionKeyVersion());
+                                        fileBytes = chunkEncryptionService.decryptFile(
+                                                bytes, 
+                                                document.getTeamId(), 
+                                                document.getEncryptionKeyVersion()
+                                        );
+                                        log.info("Decrypted file for document {}: {} bytes -> {} bytes", 
+                                                documentId, bytes.length, fileBytes.length);
+                                    } catch (Exception e) {
+                                        log.error("Failed to decrypt file for document {}: {}", documentId, e.getMessage(), e);
+                                        return Mono.error(new RuntimeException("Failed to decrypt file: " + e.getMessage(), e));
+                                    }
+                                } else {
+                                    log.debug("File for document {} is not encrypted (legacy file)", documentId);
+                                }
+                                
                                 // Step 2: Parse document with Tika
                                 log.info("Parsing document with Tika: {}", documentId);
                                 TikaDocumentParser.ParseResult parseResult = 
-                                        tikaDocumentParser.parse(bytes, document.getContentType());
+                                        tikaDocumentParser.parse(fileBytes, document.getContentType());
                                 
                                 log.info("Extracted {} characters from document, {} pages", 
                                         parseResult.getText().length(), parseResult.getPageCount());
@@ -179,6 +204,9 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                                             // Step 4: Build processed document DTO
                                             ProcessedDocumentDto processedDoc = buildProcessedDocument(
                                                     document, parseResult, augmentedChunks, startTime);
+                                            
+                                            // Encrypt sensitive data in processed document before saving to S3
+                                            encryptProcessedDocumentDto(processedDoc, document.getTeamId());
                                             
                                             // Step 5: Save processed JSON to S3
                                             return saveProcessedJsonToS3(document, processedDoc)
@@ -813,24 +841,35 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             List<ChunkingService.ChunkResult> chunkResults) {
         
         // Convert ChunkResult to KnowledgeHubChunk entities
+        // Encrypt chunk text before storing
+        String currentKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
         List<org.lite.gateway.entity.KnowledgeHubChunk> chunks = chunkResults.stream()
-                .map(chunk -> org.lite.gateway.entity.KnowledgeHubChunk.builder()
-                        .chunkId(UUID.randomUUID().toString())
-                        .documentId(document.getDocumentId())
-                        .teamId(document.getTeamId())
-                        .chunkIndex(chunk.getChunkIndex())
-                        .text(chunk.getText())
-                        .tokenCount(chunk.getTokenCount())
-                        .startPosition(chunk.getStartPosition())
-                        .endPosition(chunk.getEndPosition())
-                        .pageNumbers(chunk.getPageNumbers())
-                        .containsTable(looksLikeTable(chunk.getText()))
-                        .language("en")
-                        .qualityScore(calculateQualityScore(chunk))
-                        .metadataOnly(Boolean.TRUE.equals(chunk.getMetadataOnly()))
-                        .createdAt(System.currentTimeMillis())
-                        .chunkStrategy(document.getChunkStrategy())
-                        .build())
+                .map(chunk -> {
+                    // Encrypt chunk text with current key version
+                    String encryptedText = chunkEncryptionService.encryptChunkText(
+                        chunk.getText(), 
+                        document.getTeamId()
+                    );
+                    
+                    return org.lite.gateway.entity.KnowledgeHubChunk.builder()
+                            .chunkId(UUID.randomUUID().toString())
+                            .documentId(document.getDocumentId())
+                            .teamId(document.getTeamId())
+                            .chunkIndex(chunk.getChunkIndex())
+                            .text(encryptedText) // Store encrypted text
+                            .encryptionKeyVersion(currentKeyVersion) // Store key version for decryption
+                            .tokenCount(chunk.getTokenCount())
+                            .startPosition(chunk.getStartPosition())
+                            .endPosition(chunk.getEndPosition())
+                            .pageNumbers(chunk.getPageNumbers())
+                            .containsTable(looksLikeTable(chunk.getText())) // Use plaintext for table detection
+                            .language("en")
+                            .qualityScore(calculateQualityScore(chunk))
+                            .metadataOnly(Boolean.TRUE.equals(chunk.getMetadataOnly()))
+                            .createdAt(System.currentTimeMillis())
+                            .chunkStrategy(document.getChunkStrategy())
+                            .build();
+                })
                 .toList();
         
         // Bulk save all chunks
@@ -902,6 +941,88 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         } catch (Exception e) {
             log.error("Error publishing document status update via WebSocket for document: {}", 
                     document.getDocumentId(), e);
+        }
+    }
+    
+    /**
+     * Encrypt sensitive fields in ProcessedDocumentDto before saving to S3.
+     * Encrypts chunk text and metadata fields.
+     * 
+     * @param processedDoc The processed document DTO to encrypt
+     * @param teamId The team ID for key derivation
+     */
+    private void encryptProcessedDocumentDto(ProcessedDocumentDto processedDoc, String teamId) {
+        if (processedDoc == null) {
+            return;
+        }
+        
+        String encryptionKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
+        processedDoc.setEncryptionKeyVersion(encryptionKeyVersion);
+        
+        try {
+            // Encrypt chunk text
+            if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
+                for (ProcessedDocumentDto.ChunkDto chunk : processedDoc.getChunks()) {
+                    if (chunk.getText() != null && !chunk.getText().isEmpty()) {
+                        String encryptedText = chunkEncryptionService.encryptChunkText(
+                            chunk.getText(), 
+                            teamId, 
+                            encryptionKeyVersion
+                        );
+                        chunk.setText(encryptedText);
+                    }
+                }
+            }
+            
+            // Encrypt sensitive metadata fields
+            if (processedDoc.getExtractedMetadata() != null) {
+                ProcessedDocumentDto.ExtractedMetadata metadata = processedDoc.getExtractedMetadata();
+                
+                if (metadata.getTitle() != null && !metadata.getTitle().isEmpty()) {
+                    metadata.setTitle(chunkEncryptionService.encryptChunkText(metadata.getTitle(), teamId, encryptionKeyVersion));
+                }
+                if (metadata.getAuthor() != null && !metadata.getAuthor().isEmpty()) {
+                    metadata.setAuthor(chunkEncryptionService.encryptChunkText(metadata.getAuthor(), teamId, encryptionKeyVersion));
+                }
+                if (metadata.getSubject() != null && !metadata.getSubject().isEmpty()) {
+                    metadata.setSubject(chunkEncryptionService.encryptChunkText(metadata.getSubject(), teamId, encryptionKeyVersion));
+                }
+                if (metadata.getKeywords() != null && !metadata.getKeywords().isEmpty()) {
+                    metadata.setKeywords(chunkEncryptionService.encryptChunkText(metadata.getKeywords(), teamId, encryptionKeyVersion));
+                }
+                if (metadata.getCreator() != null && !metadata.getCreator().isEmpty()) {
+                    metadata.setCreator(chunkEncryptionService.encryptChunkText(metadata.getCreator(), teamId, encryptionKeyVersion));
+                }
+                if (metadata.getProducer() != null && !metadata.getProducer().isEmpty()) {
+                    metadata.setProducer(chunkEncryptionService.encryptChunkText(metadata.getProducer(), teamId, encryptionKeyVersion));
+                }
+                if (metadata.getFormTitle() != null && !metadata.getFormTitle().isEmpty()) {
+                    metadata.setFormTitle(chunkEncryptionService.encryptChunkText(metadata.getFormTitle(), teamId, encryptionKeyVersion));
+                }
+                if (metadata.getFormNumber() != null && !metadata.getFormNumber().isEmpty()) {
+                    metadata.setFormNumber(chunkEncryptionService.encryptChunkText(metadata.getFormNumber(), teamId, encryptionKeyVersion));
+                }
+            }
+            
+            // Encrypt form field values
+            if (processedDoc.getFormFields() != null && !processedDoc.getFormFields().isEmpty()) {
+                for (ProcessedDocumentDto.FormField field : processedDoc.getFormFields()) {
+                    if (field.getValue() != null && !field.getValue().isEmpty()) {
+                        field.setValue(chunkEncryptionService.encryptChunkText(field.getValue(), teamId, encryptionKeyVersion));
+                    }
+                    // Encrypt field name if it contains sensitive information
+                    if (field.getName() != null && !field.getName().isEmpty()) {
+                        // Field names are usually not sensitive, but encrypt if needed
+                        // field.setName(chunkEncryptionService.encryptChunkText(field.getName(), teamId, encryptionKeyVersion));
+                    }
+                }
+            }
+            
+            log.debug("Encrypted processed document DTO for team {} with key version {}", teamId, encryptionKeyVersion);
+            
+        } catch (Exception e) {
+            log.warn("Failed to encrypt some fields in processed document DTO for team {}: {}. Some fields may remain unencrypted.", 
+                teamId, e.getMessage());
         }
     }
 }

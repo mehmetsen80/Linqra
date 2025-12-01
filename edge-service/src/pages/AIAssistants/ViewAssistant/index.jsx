@@ -240,7 +240,6 @@ function ViewAssistant() {
                 throw new Error(error || 'Failed to generate download URL');
             }
             window.open(data.downloadUrl, '_blank');
-            showSuccessToast(`Download started${label ? ` for ${label}` : ''}`);
         } catch (err) {
             console.error('Error downloading Knowledge Hub document:', err);
             showErrorToast(err.response?.data?.error || err.message || 'Failed to download document');
@@ -723,15 +722,13 @@ function ViewAssistant() {
                                                                             <Table striped bordered hover size="sm" className="mb-0">
                                                                                 <thead>
                                                                                     <tr>
-                                                                                        <th style={{ width: '50%' }}>Form Name</th>
-                                                                                        <th style={{ width: '30%' }}>File Name</th>
-                                                                                        <th style={{ width: '20%' }}>Action</th>
+                                                                                        <th style={{ width: '70%' }}>File Name</th>
+                                                                                        <th style={{ width: '30%' }}>Action</th>
                                                                                     </tr>
                                                                                 </thead>
                                                                                 <tbody>
                                                                                     {docs.map(doc => (
                                                                                         <tr key={doc.documentId}>
-                                                                                            <td>{doc.formName || doc.title || 'N/A'}</td>
                                                                                             <td>
                                                                                                 <code className="small">{doc.fileName || 'N/A'}</code>
                                                                                             </td>
@@ -739,7 +736,7 @@ function ViewAssistant() {
                                                                                                 <Button
                                                                                                     variant="outline-primary"
                                                                                                     size="sm"
-                                                                                                    onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.title || doc.fileName)}
+                                                                                                    onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.fileName)}
                                                                                                 >
                                                                                                     <HiDownload className="me-1" />
                                                                                                     Download
@@ -758,7 +755,7 @@ function ViewAssistant() {
                                                                                         variant="link"
                                                                                         size="sm"
                                                                                         className="p-0 me-3 knowledge-doc-link d-inline-flex align-items-center"
-                                                                                        onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.title || doc.fileName)}
+                                                                                        onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.fileName)}
                                                                                     >
                                                                                         <HiDownload className="me-1" />
                                                                                         {doc.title || doc.fileName || 'Download document'}

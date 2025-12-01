@@ -13,6 +13,7 @@ import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentServiceImpl;
 import org.lite.gateway.service.impl.S3ServiceImpl;
 import org.lite.gateway.service.LinqMilvusStoreService;
+import org.lite.gateway.service.ChunkEncryptionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationEventPublisher;
@@ -92,6 +93,9 @@ class DocumentServiceImplIntegrationTest {
         // Setup real S3 service
         setupRealS3Service();
         
+        // Create no-op encryption service for tests
+        ChunkEncryptionService chunkEncryptionService = createNoOpEncryptionService();
+        
         // Create KnowledgeHubDocumentServiceImpl
         this.documentService = new KnowledgeHubDocumentServiceImpl(
                 documentRepository,
@@ -99,6 +103,7 @@ class DocumentServiceImplIntegrationTest {
                 eventPublisher,
                 s3Service,
                 s3Properties,
+                chunkEncryptionService,
                 chunkRepository,
                 metadataRepository,
                 collectionRepository,
@@ -106,6 +111,45 @@ class DocumentServiceImplIntegrationTest {
                 neo4jGraphService,
                 graphExtractionJobRepository
         );
+    }
+    
+    private ChunkEncryptionService createNoOpEncryptionService() {
+        return new ChunkEncryptionService() {
+            @Override
+            public String encryptChunkText(String plaintext, String teamId) {
+                return plaintext; // No encryption for tests
+            }
+            
+            @Override
+            public String encryptChunkText(String plaintext, String teamId, String keyVersion) {
+                return plaintext; // No encryption for tests
+            }
+            
+            @Override
+            public String decryptChunkText(String encryptedText, String teamId, String keyVersion) {
+                return encryptedText; // No decryption for tests (assumes already plaintext)
+            }
+            
+            @Override
+            public String getCurrentKeyVersion() {
+                return "v1"; // Default version
+            }
+            
+            @Override
+            public byte[] encryptFile(byte[] fileBytes, String teamId) {
+                return fileBytes; // No encryption for tests
+            }
+            
+            @Override
+            public byte[] encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
+                return fileBytes; // No encryption for tests
+            }
+            
+            @Override
+            public byte[] decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
+                return encryptedBytes; // No decryption for tests (assumes already plaintext)
+            }
+        };
     }
     
     @Test

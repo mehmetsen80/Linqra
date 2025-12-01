@@ -44,6 +44,7 @@ import ExecutionMonitoring from '../pages/ExecutionMonitoring';
 import KnowledgeHub from '../pages/KnowledgeHub';
 import ViewCollection from '../pages/KnowledgeHub/ViewCollection';
 import ViewDocument from '../pages/KnowledgeHub/ViewCollection/ViewDocument';
+import ExportCollection from '../pages/KnowledgeHub/ExportCollection';
 import Rag from '../pages/Rag';
 import ViewRag from '../pages/Rag/ViewRag';
 
@@ -100,6 +101,14 @@ const AppRoutes = () => {
         <Route path="/knowledge-hub" element={<KnowledgeHub />} />
         <Route path="/knowledge-hub/collection/:collectionId" element={<ViewCollection />} />
         <Route path="/knowledge-hub/document/:documentId" element={<ViewDocument />} />
+        <Route 
+          path="/knowledge-hub/export" 
+          element={
+            <AdminGuard>
+              <ExportCollection />
+            </AdminGuard>
+          } 
+        />
         <Route path="/rag" element={<Rag />} />
         <Route path="/rag/view/:collectionName" element={<ViewRag />} />
         

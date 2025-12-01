@@ -8,8 +8,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.service.GraphExtractionJobService;
 import org.lite.gateway.service.Neo4jGraphService;
 import org.lite.gateway.service.TeamContextService;
+import org.lite.gateway.service.TeamService;
+import org.lite.gateway.service.UserContextService;
+import org.lite.gateway.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
@@ -26,8 +30,11 @@ public class KnowledgeHubGraphController {
 
     private final Neo4jGraphService graphService;
     private final TeamContextService teamContextService;
-
     private final GraphExtractionJobService graphExtractionJobService;
+    private final UserContextService userContextService;
+    private final UserService userService;
+    private final TeamService teamService;
+    private final org.lite.gateway.service.ChunkEncryptionService chunkEncryptionService;
 
     @PostMapping("/entities/{entityType}")
     @Operation(summary = "Create or update an entity", description = "Creates or updates an entity node in the knowledge graph")
@@ -91,6 +98,8 @@ public class KnowledgeHubGraphController {
             ServerWebExchange exchange) {
         log.info("Finding entities of type {} with filters: {}", entityType, filters);
         return teamContextService.getTeamFromContext(exchange)
+                .doOnNext(teamId -> log.debug("Extracted teamId {} for finding entities of type {}", teamId, entityType))
+                .switchIfEmpty(Mono.error(new RuntimeException("Failed to extract teamId from authentication context")))
                 .flatMapMany(teamId -> graphService.findEntities(entityType, filters != null ? filters : Map.of(), teamId))
                 .doOnError(error -> log.error("Error finding entities {}: {}", entityType, error.getMessage()));
     }
@@ -149,6 +158,54 @@ public class KnowledgeHubGraphController {
                 .doOnError(error -> log.error("Error deleting entity {}:{}: {}", entityType, entityId, error.getMessage()));
     }
 
+    @DeleteMapping("/entities/{entityType}")
+    @Operation(summary = "Delete all entities of a type", description = "Deletes all entities of a specific type for the current team (ADMIN or SUPER_ADMIN only)")
+    public Mono<ResponseEntity<Map<String, Object>>> deleteAllEntitiesByType(
+            @PathVariable String entityType,
+            ServerWebExchange exchange) {
+        log.info("Deleting all entities of type: {}", entityType);
+        return teamContextService.getTeamFromContext(exchange)
+                .flatMap(teamId -> userContextService.getCurrentUsername(exchange)
+                        .flatMap(userService::findByUsername)
+                        .flatMap(user -> {
+                            // Check authorization: SUPER_ADMIN or team ADMIN
+                            if (user.getRoles().contains("SUPER_ADMIN")) {
+                                log.debug("User {} authorized as SUPER_ADMIN to delete all entities of type {}", user.getUsername(), entityType);
+                                return graphService.deleteAllEntitiesByType(entityType, teamId);
+                            }
+                            
+                            // For non-SUPER_ADMIN users, check team ADMIN role
+                            return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                    .filter(hasRole -> hasRole)
+                                    .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                            "Only team administrators or SUPER_ADMIN can delete all entities")))
+                                    .flatMap(hasRole -> {
+                                        log.debug("User {} authorized as team ADMIN to delete all entities of type {}", user.getUsername(), entityType);
+                                        return graphService.deleteAllEntitiesByType(entityType, teamId);
+                                    });
+                        })
+                        .map(deletedCount -> {
+                            Map<String, Object> response = Map.of(
+                                    "entityType", entityType,
+                                    "deletedCount", deletedCount,
+                                    "success", true
+                            );
+                            log.info("Successfully deleted {} entities of type {} for team {}", deletedCount, entityType, teamId);
+                            return ResponseEntity.ok(response);
+                        }))
+                .doOnError(error -> log.error("Error deleting all entities of type {}: {}", entityType, error.getMessage()))
+                .onErrorResume(error -> {
+                    HttpStatus status = error instanceof AccessDeniedException 
+                            ? HttpStatus.FORBIDDEN 
+                            : HttpStatus.INTERNAL_SERVER_ERROR;
+                    Map<String, Object> errorResponse = Map.of(
+                            "success", false,
+                            "error", error.getMessage() != null ? error.getMessage() : "Failed to delete entities"
+                    );
+                    return Mono.just(ResponseEntity.status(status).body(errorResponse));
+                });
+    }
+
     @GetMapping("/statistics")
     @Operation(summary = "Get graph statistics", description = "Gets statistics about the knowledge graph for the current team")
     public Mono<ResponseEntity<Map<String, Object>>> getGraphStatistics(ServerWebExchange exchange) {
@@ -157,6 +214,71 @@ public class KnowledgeHubGraphController {
                 .flatMap(graphService::getGraphStatistics)
                 .map(ResponseEntity::ok)
                 .doOnError(error -> log.error("Error getting graph statistics: {}", error.getMessage()));
+    }
+
+    @GetMapping("/encryption/version")
+    @Operation(summary = "Get current encryption key version", description = "Gets the current encryption key version being used for new encryptions")
+    public Mono<ResponseEntity<Map<String, Object>>> getCurrentEncryptionKeyVersion(ServerWebExchange exchange) {
+        log.debug("Getting current encryption key version");
+        try {
+            String currentVersion = chunkEncryptionService.getCurrentKeyVersion();
+            Map<String, Object> response = Map.of(
+                    "currentKeyVersion", currentVersion,
+                    "success", true
+            );
+            return Mono.just(ResponseEntity.ok(response));
+        } catch (Exception e) {
+            log.error("Error getting current encryption key version: {}", e.getMessage(), e);
+            Map<String, Object> errorResponse = Map.of(
+                    "success", false,
+                    "error", e.getMessage() != null ? e.getMessage() : "Failed to get encryption key version"
+            );
+            return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse));
+        }
+    }
+
+    @PostMapping("/properties/decrypt")
+    @Operation(summary = "Decrypt properties", description = "Decrypts sensitive properties in a properties map (ADMIN or SUPER_ADMIN only)")
+    public Mono<ResponseEntity<Map<String, Object>>> decryptProperties(
+            @RequestBody Map<String, Object> request,
+            ServerWebExchange exchange) {
+        log.info("Decrypting properties for admin user");
+        
+        @SuppressWarnings("unchecked")
+        Map<String, Object> properties = (Map<String, Object>) request.getOrDefault("properties", Map.of());
+        
+        return teamContextService.getTeamFromContext(exchange)
+                .flatMap(teamId -> userContextService.getCurrentUsername(exchange)
+                        .flatMap(userService::findByUsername)
+                        .flatMap(user -> {
+                            // Check authorization: SUPER_ADMIN or team ADMIN
+                            if (user.getRoles().contains("SUPER_ADMIN")) {
+                                log.debug("User {} authorized as SUPER_ADMIN to decrypt properties", user.getUsername());
+                                return graphService.decryptProperties(properties, teamId);
+                            }
+                            
+                            // For non-SUPER_ADMIN users, check team ADMIN role
+                            return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                    .filter(hasRole -> hasRole)
+                                    .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                            "Only team administrators or SUPER_ADMIN can decrypt properties")))
+                                    .flatMap(hasRole -> {
+                                        log.debug("User {} authorized as team ADMIN to decrypt properties", user.getUsername());
+                                        return graphService.decryptProperties(properties, teamId);
+                                    });
+                        })
+                        .map(decryptedProperties -> ResponseEntity.ok(decryptedProperties)))
+                .doOnError(error -> log.error("Error decrypting properties: {}", error.getMessage()))
+                .onErrorResume(error -> {
+                    HttpStatus status = error instanceof AccessDeniedException 
+                            ? HttpStatus.FORBIDDEN 
+                            : HttpStatus.INTERNAL_SERVER_ERROR;
+                    Map<String, Object> errorResponse = Map.of(
+                            "success", false,
+                            "error", error.getMessage() != null ? error.getMessage() : "Failed to decrypt properties"
+                    );
+                    return Mono.just(ResponseEntity.status(status).body(errorResponse));
+                });
     }
 
     @PostMapping("/documents/{documentId}/extract-entities")

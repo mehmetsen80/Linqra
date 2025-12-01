@@ -11,6 +11,7 @@ import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.LlmModelRepository;
+import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.service.S3Service;
@@ -63,6 +64,7 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     private final ObjectMapper objectMapper;
     private final RedisTemplate<String, String> redisTemplate;
     private final LlmModelRepository llmModelRepository;
+    private final ChunkEncryptionService chunkEncryptionService;
     @Qualifier("executionMessageChannel")
     private final MessageChannel executionMessageChannel;
 
@@ -134,6 +136,25 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
         return (int) Math.ceil(text.length() / 4.0);
     }
 
+    /**
+     * Enforces the text field length limit, accounting for encryption overhead.
+     * 
+     * Encryption adds overhead (IV + GCM tag + Base64 encoding), so we need to
+     * truncate the plaintext to a smaller size to ensure the encrypted text fits
+     * within the Milvus field limit.
+     * 
+     * Calculation for encryption overhead:
+     * - Plaintext bytes → AES-GCM encryption adds 16 bytes (GCM tag)
+     * - IV (12 bytes) is prepended before Base64 encoding
+     * - Total overhead: 28 bytes before Base64 encoding
+     * - Base64 encoding: (plaintext_bytes + 28) * 4/3 characters
+     * 
+     * For ASCII text (1 byte/char): plaintext_length + 28 bytes → Base64 ≈ (plaintext_length + 28) * 4/3
+     * For UTF-8 text (avg 1-2 bytes/char): more conservative limit needed
+     * 
+     * We use a conservative approach: reserve space for multi-byte UTF-8 characters
+     * and encryption overhead. For maxLength=5000, we truncate to ~3000 chars to be safe.
+     */
     private String enforceTextFieldLimit(String text,
                                          MilvusCollectionSchemaInfo schemaInfo,
                                          String textFieldName,
@@ -143,14 +164,31 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
             return text;
         }
         int maxLength = schemaInfo.getTextFieldMaxLength();
-        if (maxLength <= 0 || text.length() <= maxLength) {
+        if (maxLength <= 0) {
             return text;
         }
-        String truncated = text.substring(0, maxLength);
-        log.warn("Truncated text for document {} chunk {} to {} characters to satisfy Milvus field '{}' max_length {}",
+        
+        // Calculate maximum plaintext length accounting for encryption overhead
+        // Formula: (maxLength * 3/4) - 28 bytes for overhead, then divide by bytes per char
+        // For safety with multi-byte UTF-8, assume ~1.5 bytes per char on average
+        // Conservative calculation: use ~60% of maxLength for plaintext
+        int maxPlaintextLength = (int) Math.floor(maxLength * 0.60);
+        
+        // Ensure minimum reasonable size (at least 100 chars)
+        if (maxPlaintextLength < 100) {
+            maxPlaintextLength = Math.max(100, (int) Math.floor(maxLength * 0.50));
+        }
+        
+        if (text.length() <= maxPlaintextLength) {
+            return text;
+        }
+        
+        String truncated = text.substring(0, maxPlaintextLength);
+        log.warn("Truncated text for document {} chunk {} to {} characters (from {} chars) to satisfy Milvus field '{}' max_length {} after encryption overhead",
                 documentId,
                 StringUtils.hasText(chunkId) ? chunkId : "unknown",
-                maxLength,
+                maxPlaintextLength,
+                text.length(),
                 textFieldName,
                 maxLength);
         return truncated;
@@ -261,7 +299,10 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
         return s3Service.downloadFileContent(document.getProcessedS3Key())
                 .map(bytes -> {
                     try {
-                        return objectMapper.readValue(new String(bytes, StandardCharsets.UTF_8), ProcessedDocumentDto.class);
+                        ProcessedDocumentDto processedDoc = objectMapper.readValue(new String(bytes, StandardCharsets.UTF_8), ProcessedDocumentDto.class);
+                        // Decrypt sensitive fields in processed document after reading from S3
+                        decryptProcessedDocumentDto(processedDoc, document.getTeamId());
+                        return processedDoc;
                     } catch (Exception e) {
                         throw new RuntimeException("Failed to parse processed document JSON: " + e.getMessage(), e);
                     }
@@ -531,7 +572,16 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
                 : "KNOWLEDGE_HUB";
 
         Map<String, Object> record = new HashMap<>();
-        record.put(textFieldName, enforceTextFieldLimit(chunk.getText(), schemaInfo, textFieldName, document.getDocumentId(), chunk.getChunkId()));
+        
+        // Encrypt chunk text before storing in Milvus
+        String plaintext = enforceTextFieldLimit(chunk.getText(), schemaInfo, textFieldName, document.getDocumentId(), chunk.getChunkId());
+        String currentKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
+        String encryptedText = chunkEncryptionService.encryptChunkText(plaintext, document.getTeamId(), currentKeyVersion);
+        
+        record.put(textFieldName, encryptedText);
+        
+        // Store encryption key version for decryption later
+        putIfAllowed(record, allowedFields, "encryptionKeyVersion", currentKeyVersion);
         putIfAllowed(record, allowedFields, "chunkId", Optional.ofNullable(chunk.getChunkId()).orElse(UUID.randomUUID().toString()));
         Integer effectiveChunkIndex = chunk.getChunkIndex();
         if (effectiveChunkIndex == null || effectiveChunkIndex < 0) {
@@ -909,6 +959,101 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
             suffix = String.valueOf(Math.abs(Objects.hash(chunk.getText())));
         }
         return EMBEDDING_CACHE_PREFIX + documentId + ":" + modelName + ":" + suffix;
+    }
+    
+    /**
+     * Decrypt sensitive fields in ProcessedDocumentDto after reading from S3.
+     * Decrypts chunk text and metadata fields.
+     * 
+     * @param processedDoc The processed document DTO to decrypt
+     * @param teamId The team ID for key derivation
+     */
+    private void decryptProcessedDocumentDto(ProcessedDocumentDto processedDoc, String teamId) {
+        if (processedDoc == null) {
+            return;
+        }
+        
+        String keyVersion = processedDoc.getEncryptionKeyVersion();
+        if (keyVersion == null || keyVersion.isEmpty()) {
+            keyVersion = "v1"; // Default to v1 for legacy data
+        }
+        
+        try {
+            // Decrypt chunk text
+            if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
+                for (ProcessedDocumentDto.ChunkDto chunk : processedDoc.getChunks()) {
+                    if (chunk.getText() != null && !chunk.getText().isEmpty()) {
+                        try {
+                            String decryptedText = chunkEncryptionService.decryptChunkText(
+                                chunk.getText(), 
+                                teamId, 
+                                keyVersion
+                            );
+                            chunk.setText(decryptedText);
+                        } catch (Exception e) {
+                            log.warn("Failed to decrypt chunk text for team {} with key version {}: {}. Keeping encrypted value.", 
+                                teamId, keyVersion, e.getMessage());
+                            // Keep encrypted if decryption fails (might be legacy unencrypted data)
+                        }
+                    }
+                }
+            }
+            
+            // Decrypt sensitive metadata fields
+            if (processedDoc.getExtractedMetadata() != null) {
+                ProcessedDocumentDto.ExtractedMetadata metadata = processedDoc.getExtractedMetadata();
+                
+                try {
+                    if (metadata.getTitle() != null && !metadata.getTitle().isEmpty()) {
+                        metadata.setTitle(chunkEncryptionService.decryptChunkText(metadata.getTitle(), teamId, keyVersion));
+                    }
+                    if (metadata.getAuthor() != null && !metadata.getAuthor().isEmpty()) {
+                        metadata.setAuthor(chunkEncryptionService.decryptChunkText(metadata.getAuthor(), teamId, keyVersion));
+                    }
+                    if (metadata.getSubject() != null && !metadata.getSubject().isEmpty()) {
+                        metadata.setSubject(chunkEncryptionService.decryptChunkText(metadata.getSubject(), teamId, keyVersion));
+                    }
+                    if (metadata.getKeywords() != null && !metadata.getKeywords().isEmpty()) {
+                        metadata.setKeywords(chunkEncryptionService.decryptChunkText(metadata.getKeywords(), teamId, keyVersion));
+                    }
+                    if (metadata.getCreator() != null && !metadata.getCreator().isEmpty()) {
+                        metadata.setCreator(chunkEncryptionService.decryptChunkText(metadata.getCreator(), teamId, keyVersion));
+                    }
+                    if (metadata.getProducer() != null && !metadata.getProducer().isEmpty()) {
+                        metadata.setProducer(chunkEncryptionService.decryptChunkText(metadata.getProducer(), teamId, keyVersion));
+                    }
+                    if (metadata.getFormTitle() != null && !metadata.getFormTitle().isEmpty()) {
+                        metadata.setFormTitle(chunkEncryptionService.decryptChunkText(metadata.getFormTitle(), teamId, keyVersion));
+                    }
+                    if (metadata.getFormNumber() != null && !metadata.getFormNumber().isEmpty()) {
+                        metadata.setFormNumber(chunkEncryptionService.decryptChunkText(metadata.getFormNumber(), teamId, keyVersion));
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to decrypt metadata fields for team {} with key version {}: {}. Some fields may remain encrypted.", 
+                        teamId, keyVersion, e.getMessage());
+                }
+            }
+            
+            // Decrypt form field values
+            if (processedDoc.getFormFields() != null && !processedDoc.getFormFields().isEmpty()) {
+                for (ProcessedDocumentDto.FormField field : processedDoc.getFormFields()) {
+                    if (field.getValue() != null && !field.getValue().isEmpty()) {
+                        try {
+                            field.setValue(chunkEncryptionService.decryptChunkText(field.getValue(), teamId, keyVersion));
+                        } catch (Exception e) {
+                            log.debug("Failed to decrypt form field value for team {}: {}. Keeping encrypted value.", 
+                                teamId, e.getMessage());
+                        }
+                    }
+                }
+            }
+            
+            log.debug("Decrypted processed document DTO for team {} with key version {}", teamId, keyVersion);
+            
+        } catch (Exception e) {
+            log.warn("Failed to decrypt some fields in processed document DTO for team {}: {}. Some fields may remain encrypted.", 
+                teamId, e.getMessage());
+        }
     }
 }
 

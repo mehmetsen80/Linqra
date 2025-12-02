@@ -1558,38 +1558,32 @@ function ViewDocument() {
                   <span className="text-muted h6">Encryption Key Version</span>
                   <div className="d-flex align-items-center gap-2">
                     {document.encryptionKeyVersion ? (
-                      <>
+                      currentEncryptionKeyVersion && 
+                      compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={
+                            <Tooltip>
+                              This file is encrypted with an older key version ({document.encryptionKeyVersion}). 
+                              Current version is {currentEncryptionKeyVersion}. Re-upload the file to encrypt with the latest version.
+                            </Tooltip>
+                          }
+                        >
+                          <Badge 
+                            bg="warning"
+                            style={{ cursor: 'help' }}
+                          >
+                            {document.encryptionKeyVersion}
+                          </Badge>
+                        </OverlayTrigger>
+                      ) : (
                         <Badge 
-                          bg={
-                            currentEncryptionKeyVersion && 
-                            compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion)
-                              ? "warning" 
-                              : "info"
-                          }
-                          title={
-                            currentEncryptionKeyVersion && 
-                            compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion)
-                              ? `File encrypted with ${document.encryptionKeyVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`
-                              : `File encrypted with key version ${document.encryptionKeyVersion}`
-                          }
+                          bg="info"
+                          title={`File encrypted with key version ${document.encryptionKeyVersion}`}
                         >
                           {document.encryptionKeyVersion}
                         </Badge>
-                        {currentEncryptionKeyVersion && 
-                         compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion) && (
-                          <OverlayTrigger
-                            placement="top"
-                            overlay={
-                              <Tooltip>
-                                This file is encrypted with an older key version ({document.encryptionKeyVersion}). 
-                                Current version is {currentEncryptionKeyVersion}. Re-upload the file to encrypt with the latest version.
-                              </Tooltip>
-                            }
-                          >
-                            <span><HiInformationCircle className="text-warning" size={16} /></span>
-                          </OverlayTrigger>
-                        )}
-                      </>
+                      )
                     ) : (
                       <Badge bg="secondary" title="Legacy encrypted file - encryption key version not tracked">
                         Unknown
@@ -1835,24 +1829,8 @@ function ViewDocument() {
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <span className="text-muted h6">Encryption Key Version</span>
                         <div className="d-flex align-items-center gap-2">
-                          <Badge 
-                            bg={
-                              currentEncryptionKeyVersion && 
-                              compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion)
-                                ? "warning" 
-                                : "info"
-                            }
-                            title={
-                              currentEncryptionKeyVersion && 
-                              compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion)
-                                ? `Processed data encrypted with ${chunkStats.encryptionKeyVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`
-                                : `Processed data encrypted with key version ${chunkStats.encryptionKeyVersion}`
-                            }
-                          >
-                            {chunkStats.encryptionKeyVersion}
-                          </Badge>
                           {currentEncryptionKeyVersion && 
-                           compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion) && (
+                           compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
                             <OverlayTrigger
                               placement="top"
                               overlay={
@@ -1862,8 +1840,20 @@ function ViewDocument() {
                                 </Tooltip>
                               }
                             >
-                              <span><HiInformationCircle className="text-warning" size={16} /></span>
+                              <Badge 
+                                bg="warning"
+                                style={{ cursor: 'help' }}
+                              >
+                                {chunkStats.encryptionKeyVersion}
+                              </Badge>
                             </OverlayTrigger>
+                          ) : (
+                            <Badge 
+                              bg="info"
+                              title={`Processed data encrypted with key version ${chunkStats.encryptionKeyVersion}`}
+                            >
+                              {chunkStats.encryptionKeyVersion}
+                            </Badge>
                           )}
                         </div>
                       </div>
@@ -2018,24 +2008,8 @@ function ViewDocument() {
                       <div className="d-flex justify-content-between align-items-center">
                         <span className="text-muted h6">Encryption Key Version</span>
                         <div className="d-flex align-items-center gap-2">
-                          <Badge 
-                            bg={
-                              currentEncryptionKeyVersion && 
-                              compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion)
-                                ? "warning" 
-                                : "info"
-                            }
-                            title={
-                              currentEncryptionKeyVersion && 
-                              compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion)
-                                ? `Metadata encrypted with ${metadata.encryptionKeyVersion}, but current version is ${currentEncryptionKeyVersion}. Needs re-encryption.`
-                                : `Metadata encrypted with key version ${metadata.encryptionKeyVersion}`
-                            }
-                          >
-                            {metadata.encryptionKeyVersion}
-                          </Badge>
                           {currentEncryptionKeyVersion && 
-                           compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion) && (
+                           compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
                             <OverlayTrigger
                               placement="top"
                               overlay={
@@ -2045,8 +2019,20 @@ function ViewDocument() {
                                 </Tooltip>
                               }
                             >
-                              <span><HiInformationCircle className="text-warning" size={16} /></span>
+                              <Badge 
+                                bg="warning"
+                                style={{ cursor: 'help' }}
+                              >
+                                {metadata.encryptionKeyVersion}
+                              </Badge>
                             </OverlayTrigger>
+                          ) : (
+                            <Badge 
+                              bg="info"
+                              title={`Metadata encrypted with key version ${metadata.encryptionKeyVersion}`}
+                            >
+                              {metadata.encryptionKeyVersion}
+                            </Badge>
                           )}
                         </div>
                       </div>

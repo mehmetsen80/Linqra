@@ -9,6 +9,7 @@ import { knowledgeHubCollectionService } from '../../services/knowledgeHubCollec
 import { milvusService } from '../../services/milvusService';
 import { llmModelService } from '../../services/llmModelService';
 import { knowledgeHubGraphService } from '../../services/knowledgeHubGraphService';
+import vaultHealthService from '../../services/vaultHealthService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import ConfirmationModalWithVerification from '../../components/common/ConfirmationModalWithVerification';
@@ -77,6 +78,7 @@ function KnowledgeHub() {
   const [showDeleteAllEntitiesModal, setShowDeleteAllEntitiesModal] = useState(false);
   const [deletingAllEntities, setDeletingAllEntities] = useState(false);
   const [currentEncryptionKeyVersion, setCurrentEncryptionKeyVersion] = useState(null);
+  const [vaultHealth, setVaultHealth] = useState({ healthy: true, checked: false, message: null });
 
   // Helper function to truncate encrypted names for display
   const truncateEncryptedName = (name, maxLength = 60) => {
@@ -243,6 +245,29 @@ function KnowledgeHub() {
       fetchCurrentEncryptionVersion();
     }
   }, [currentTeam?.id]);
+
+  // Check vault health on component mount
+  useEffect(() => {
+    const checkVaultHealth = async () => {
+      try {
+        const result = await vaultHealthService.checkVaultHealth();
+        setVaultHealth({
+          healthy: result.data?.healthy ?? false,
+          checked: true,
+          message: result.data?.message || null
+        });
+      } catch (err) {
+        console.error('Error checking vault health:', err);
+        setVaultHealth({
+          healthy: false,
+          checked: true,
+          message: 'Failed to check vault health. The VAULT_MASTER_KEY may have changed.'
+        });
+      }
+    };
+    
+    checkVaultHealth();
+  }, []);
 
   useEffect(() => {
     if (currentTeam?.id) {
@@ -635,6 +660,27 @@ function KnowledgeHub() {
 
   return (
     <Container fluid className="knowledge-hub-container">
+      {/* Vault Health Warning Banner */}
+      {vaultHealth.checked && !vaultHealth.healthy && (
+        <EncryptionVersionWarningBanner
+          show={true}
+          variant="danger"
+          heading="Vault Decryption Failed"
+          message={
+            <>
+              <strong>Warning:</strong> The vault file cannot be decrypted. This usually means the <code>VAULT_MASTER_KEY</code> has changed. 
+              The vault file needs to be re-encrypted with the new key. Until this is fixed, secrets cannot be read from the vault and many features may not work.
+              <br /><br />
+              <strong>To fix:</strong>
+              <ol style={{ marginBottom: 0, paddingLeft: '20px' }}>
+                <li>Re-encrypt the vault file using the vault-reader CLI with the new <code>VAULT_MASTER_KEY</code></li>
+                <li><strong>Restart the api-gateway-service</strong> so it picks up the newly encrypted vault file</li>
+              </ol>
+            </>
+          }
+        />
+      )}
+      
       {/* Breadcrumb */}
       <Card className="breadcrumb-card mb-3">
         <Card.Body>
@@ -996,9 +1042,31 @@ function KnowledgeHub() {
 
                 {(() => {
                   const outdatedCount = graphEntities.filter(e => isOutdatedEncryption(e)).length;
+                  const shouldShow = outdatedCount > 0 && currentEncryptionKeyVersion;
+                  
+                  // Debug logging
+                  if (graphEntities.length > 0 || currentEncryptionKeyVersion) {
+                    console.log('[Encryption Version Banner] Debug:', {
+                      totalEntities: graphEntities.length,
+                      outdatedCount,
+                      currentEncryptionKeyVersion,
+                      shouldShow,
+                      sampleEntity: graphEntities[0] ? {
+                        name: graphEntities[0].name,
+                        encryptionKeyVersion: graphEntities[0].encryptionKeyVersion,
+                        name_encryption_version: graphEntities[0].name_encryption_version,
+                        isOutdated: isOutdatedEncryption(graphEntities[0])
+                      } : null,
+                      allEntityVersions: graphEntities.slice(0, 5).map(e => ({
+                        version: getEntityEncryptionVersion(e),
+                        isOutdated: isOutdatedEncryption(e)
+                      }))
+                    });
+                  }
+                  
                   return (
                     <EncryptionVersionWarningBanner
-                      show={outdatedCount > 0 && currentEncryptionKeyVersion}
+                      show={shouldShow}
                       variant="warning"
                       heading={
                         <>

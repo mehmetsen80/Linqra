@@ -443,7 +443,15 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
         return metadataRepository.findTopByDocumentIdAndTeamIdOrderByExtractedAtDesc(documentId, teamId)
                 .map(metadata -> {
                     // Decrypt sensitive metadata fields before returning
+                    log.info("Retrieved metadata for document {} from MongoDB, decrypting fields...", documentId);
+                    log.info("Metadata before decryption - Title: {}, Author: {}, encryptionKeyVersion: {}", 
+                        metadata.getTitle() != null ? metadata.getTitle().substring(0, Math.min(50, metadata.getTitle().length())) : "null",
+                        metadata.getAuthor() != null ? metadata.getAuthor().substring(0, Math.min(50, metadata.getAuthor().length())) : "null",
+                        metadata.getEncryptionKeyVersion());
                     decryptMetadataFields(metadata, teamId);
+                    log.info("Metadata after decryption - Title: {}, Author: {}", 
+                        metadata.getTitle() != null ? metadata.getTitle().substring(0, Math.min(50, metadata.getTitle().length())) : "null",
+                        metadata.getAuthor() != null ? metadata.getAuthor().substring(0, Math.min(50, metadata.getAuthor().length())) : "null");
                     return metadata;
                 })
                 .switchIfEmpty(documentRepository.findByDocumentId(documentId)
@@ -586,36 +594,96 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
             keyVersion = "v1"; // Default to v1 for legacy data
         }
         
+        log.info("Decrypting metadata fields for document {} (team {}, key version {})", 
+            metadata.getDocumentId(), teamId, keyVersion);
+        
         try {
-            // Decrypt sensitive string fields
+            // Decrypt sensitive string fields - wrap each in try-catch to handle individual failures
             if (metadata.getTitle() != null && !metadata.getTitle().isEmpty()) {
-                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getTitle(), teamId, keyVersion);
-                metadata.setTitle(decrypted);
+                try {
+                    String originalValue = metadata.getTitle();
+                    log.info("Attempting to decrypt title for document {}: encrypted length = {}", 
+                        metadata.getDocumentId(), originalValue.length());
+                    String decrypted = chunkEncryptionService.decryptChunkText(originalValue, teamId, keyVersion);
+                    metadata.setTitle(decrypted);
+                    log.info("Successfully decrypted metadata title for document {}: encrypted length {} -> decrypted length {}", 
+                        metadata.getDocumentId(), originalValue.length(), decrypted.length());
+                } catch (Exception e) {
+                    log.error("Failed to decrypt metadata title for document {} (team {}, key version {}): {}", 
+                        metadata.getDocumentId(), teamId, keyVersion, e.getMessage(), e);
+                    // Keep original value if decryption fails (might be plaintext or invalid encrypted data)
+                }
             }
             
             if (metadata.getAuthor() != null && !metadata.getAuthor().isEmpty()) {
-                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getAuthor(), teamId, keyVersion);
-                metadata.setAuthor(decrypted);
+                try {
+                    String originalValue = metadata.getAuthor();
+                    log.info("Attempting to decrypt author for document {}: encrypted length = {}", 
+                        metadata.getDocumentId(), originalValue.length());
+                    String decrypted = chunkEncryptionService.decryptChunkText(originalValue, teamId, keyVersion);
+                    metadata.setAuthor(decrypted);
+                    log.info("Successfully decrypted metadata author for document {}", metadata.getDocumentId());
+                } catch (Exception e) {
+                    log.error("Failed to decrypt metadata author for document {} (team {}, key version {}): {}", 
+                        metadata.getDocumentId(), teamId, keyVersion, e.getMessage(), e);
+                    // Keep original value if decryption fails
+                }
             }
             
             if (metadata.getSubject() != null && !metadata.getSubject().isEmpty()) {
-                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getSubject(), teamId, keyVersion);
-                metadata.setSubject(decrypted);
+                try {
+                    String originalValue = metadata.getSubject();
+                    log.info("Attempting to decrypt subject for document {}: encrypted length = {}", 
+                        metadata.getDocumentId(), originalValue.length());
+                    String decrypted = chunkEncryptionService.decryptChunkText(originalValue, teamId, keyVersion);
+                    metadata.setSubject(decrypted);
+                    log.info("Successfully decrypted metadata subject for document {}", metadata.getDocumentId());
+                } catch (Exception e) {
+                    log.error("Failed to decrypt metadata subject for document {} (team {}, key version {}): {}", 
+                        metadata.getDocumentId(), teamId, keyVersion, e.getMessage(), e);
+                    // Keep original value if decryption fails
+                }
             }
             
             if (metadata.getKeywords() != null && !metadata.getKeywords().isEmpty()) {
-                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getKeywords(), teamId, keyVersion);
-                metadata.setKeywords(decrypted);
+                try {
+                    String originalValue = metadata.getKeywords();
+                    log.info("Attempting to decrypt keywords for document {}: encrypted length = {}", 
+                        metadata.getDocumentId(), originalValue.length());
+                    String decrypted = chunkEncryptionService.decryptChunkText(originalValue, teamId, keyVersion);
+                    metadata.setKeywords(decrypted);
+                    log.info("Successfully decrypted metadata keywords for document {}", metadata.getDocumentId());
+                } catch (Exception e) {
+                    log.error("Failed to decrypt metadata keywords for document {} (team {}, key version {}): {}", 
+                        metadata.getDocumentId(), teamId, keyVersion, e.getMessage(), e);
+                    // Keep original value if decryption fails
+                }
             }
             
             if (metadata.getCreator() != null && !metadata.getCreator().isEmpty()) {
-                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getCreator(), teamId, keyVersion);
-                metadata.setCreator(decrypted);
+                try {
+                    String originalValue = metadata.getCreator();
+                    String decrypted = chunkEncryptionService.decryptChunkText(originalValue, teamId, keyVersion);
+                    metadata.setCreator(decrypted);
+                    log.info("Successfully decrypted metadata creator for document {}", metadata.getDocumentId());
+                } catch (Exception e) {
+                    log.error("Failed to decrypt metadata creator for document {} (team {}, key version {}): {}", 
+                        metadata.getDocumentId(), teamId, keyVersion, e.getMessage(), e);
+                    // Keep original value if decryption fails
+                }
             }
             
             if (metadata.getProducer() != null && !metadata.getProducer().isEmpty()) {
-                String decrypted = chunkEncryptionService.decryptChunkText(metadata.getProducer(), teamId, keyVersion);
-                metadata.setProducer(decrypted);
+                try {
+                    String originalValue = metadata.getProducer();
+                    String decrypted = chunkEncryptionService.decryptChunkText(originalValue, teamId, keyVersion);
+                    metadata.setProducer(decrypted);
+                    log.info("Successfully decrypted metadata producer for document {}", metadata.getDocumentId());
+                } catch (Exception e) {
+                    log.error("Failed to decrypt metadata producer for document {} (team {}, key version {}): {}", 
+                        metadata.getDocumentId(), teamId, keyVersion, e.getMessage(), e);
+                    // Keep original value if decryption fails
+                }
             }
             
             // Decrypt string values in customMetadata Map

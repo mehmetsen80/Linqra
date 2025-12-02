@@ -33,6 +33,11 @@
 #   source ./scripts/bootstrap-vault.sh --export
 #   # Or with environment:
 #   VAULT_ENVIRONMENT=dev-docker source ./scripts/bootstrap-vault.sh --export
+#
+#   # Rotate chunk encryption key (adds new version while keeping old key)
+#   ./scripts/bootstrap-vault.sh --rotate-chunk-key [environment]
+#   # Example:
+#   ./scripts/bootstrap-vault.sh --rotate-chunk-key dev
 
 set -e
 
@@ -63,7 +68,15 @@ fi
 # Parse arguments
 # Check for --export flag (load secrets as environment variables)
 EXPORT_MODE=false
-if [[ "$1" == "--export" ]] || [[ "$2" == "--export" ]] || [[ "$3" == "--export" ]]; then
+ROTATE_CHUNK_KEY_MODE=false
+
+# Check for --rotate-chunk-key flag
+if [[ "$1" == "--rotate-chunk-key" ]]; then
+    ROTATE_CHUNK_KEY_MODE=true
+    # Remove --rotate-chunk-key from arguments, environment is next arg or defaults to dev
+    ENVIRONMENT="${2:-${VAULT_ENVIRONMENT:-dev}}"
+    # Skip to rotation logic at the end
+elif [[ "$1" == "--export" ]] || [[ "$2" == "--export" ]] || [[ "$3" == "--export" ]]; then
     EXPORT_MODE=true
     # Remove --export from arguments
     ARGS=()
@@ -196,6 +209,9 @@ if [ "$EXPORT_MODE" = true ]; then
     fi
     
     # Skip directly to export section at the end
+    SKIP_BOOTSTRAP=true
+elif [ "$ROTATE_CHUNK_KEY_MODE" = true ]; then
+    # Rotation mode - skip bootstrap and handle rotation at the end
     SKIP_BOOTSTRAP=true
 else
     SKIP_BOOTSTRAP=false
@@ -462,6 +478,165 @@ if [ "$EXPORT_MODE" = true ]; then
     echo "Note: Variables exported to shell for docker-compose."
     echo "      Run: docker-compose -f docker-compose-dev.yml up"
     echo ""
+elif [ "$ROTATE_CHUNK_KEY_MODE" = true ]; then
+    # Rotation mode: Add new chunk encryption key version
+    echo -e "${BLUE}=== Chunk Encryption Key Rotation ===${NC}"
+    echo ""
+    
+    # Check if vault-reader JAR exists, build if needed
+    if [ ! -f "$VAULT_READER_JAR" ]; then
+        echo -e "${YELLOW}vault-reader JAR not found. Building it...${NC}"
+        if ! command -v mvn &> /dev/null; then
+            echo -e "${RED}ERROR: Maven is required to build vault-reader${NC}"
+            exit 1
+        fi
+        cd "$VAULT_READER_DIR"
+        mvn clean package -q
+        cd "$PROJECT_ROOT"
+        if [ ! -f "$VAULT_READER_JAR" ]; then
+            echo -e "${RED}ERROR: Failed to build vault-reader JAR${NC}"
+            exit 1
+        fi
+        echo -e "${GREEN}   ✓ vault-reader built successfully${NC}"
+        echo ""
+    fi
+    
+    # Step 1: Check if vault file exists
+    if [ ! -f "$VAULT_FILE" ]; then
+        echo -e "${RED}ERROR: Vault file not found: $VAULT_FILE${NC}"
+        echo "Please bootstrap the vault first: ./scripts/bootstrap-vault.sh ./secrets/secrets.json"
+        exit 1
+    fi
+    
+    # Step 2: Check if base key exists
+    echo -e "${GREEN}Step 1: Checking base key (chunk.encryption.master.key)...${NC}"
+    if ! java -jar "$VAULT_READER_JAR" \
+        --operation read \
+        --file "$VAULT_FILE" \
+        --master-key "$VAULT_MASTER_KEY" \
+        --environment "$ENVIRONMENT" \
+        --key chunk.encryption.master.key > /dev/null 2>&1; then
+        echo -e "${RED}   ✗ ERROR: Base key (chunk.encryption.master.key) not found!${NC}"
+        echo ""
+        echo "   The base key is required. Please add it to your secrets.json file or use vault-reader:"
+        echo "     java -jar $VAULT_READER_JAR \\"
+        echo "       --operation write \\"
+        echo "       --file $VAULT_FILE \\"
+        echo "       --master-key \"\$VAULT_MASTER_KEY\" \\"
+        echo "       --environment $ENVIRONMENT \\"
+        echo "       --key chunk.encryption.master.key \\"
+        echo "       --value \"<your-key>\""
+        exit 1
+    fi
+    echo -e "${GREEN}   ✓ Base key exists (will be kept as v1)${NC}"
+    echo ""
+    
+    # Step 3: Find next version number
+    echo -e "${GREEN}Step 2: Checking existing key versions...${NC}"
+    NEXT_VERSION=2
+    while true; do
+        KEY_NAME="chunk.encryption.master.key.v${NEXT_VERSION}"
+        if java -jar "$VAULT_READER_JAR" \
+            --operation read \
+            --file "$VAULT_FILE" \
+            --master-key "$VAULT_MASTER_KEY" \
+            --environment "$ENVIRONMENT" \
+            --key "$KEY_NAME" > /dev/null 2>&1; then
+            echo -e "${YELLOW}   ⚠ Version v${NEXT_VERSION} already exists${NC}"
+            NEXT_VERSION=$((NEXT_VERSION + 1))
+        else
+            break
+        fi
+    done
+    echo -e "${GREEN}   ✓ Next version to add: v${NEXT_VERSION}${NC}"
+    echo ""
+    
+    # Step 4: Generate new key
+    echo -e "${GREEN}Step 3: Generating new encryption key...${NC}"
+    NEW_KEY=$(openssl rand -base64 32)
+    echo -e "${GREEN}   ✓ New key generated${NC}"
+    echo ""
+    
+    # Step 5: Confirm before adding
+    echo -e "${YELLOW}Ready to add new key version:${NC}"
+    echo "   Environment: $ENVIRONMENT"
+    echo "   New version: v${NEXT_VERSION}"
+    echo "   Key name: chunk.encryption.master.key.v${NEXT_VERSION}"
+    echo ""
+    echo -e "${YELLOW}⚠️  Important:${NC}"
+    echo "   • The old key (chunk.encryption.master.key) will remain as v1"
+    echo "   • The new key will be added as v${NEXT_VERSION}"
+    echo "   • Existing data encrypted with v1 will still be decryptable"
+    echo "   • New data will be encrypted with v${NEXT_VERSION}"
+    echo ""
+    read -p "Continue? (y/N): " -n 1 -r
+    echo ""
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+    
+    # Step 6: Add new key version
+    echo ""
+    echo -e "${GREEN}Step 4: Adding new key version to vault...${NC}"
+    if java -jar "$VAULT_READER_JAR" \
+        --operation write \
+        --file "$VAULT_FILE" \
+        --master-key "$VAULT_MASTER_KEY" \
+        --environment "$ENVIRONMENT" \
+        --key "chunk.encryption.master.key.v${NEXT_VERSION}" \
+        --value "$NEW_KEY" 2>&1; then
+        echo -e "${GREEN}   ✓ New key version v${NEXT_VERSION} added successfully${NC}"
+    else
+        echo -e "${RED}   ✗ Failed to add new key version${NC}"
+        exit 1
+    fi
+    echo ""
+    
+    # Step 7: Verify the key was added
+    echo -e "${GREEN}Step 5: Verifying key was added...${NC}"
+    if java -jar "$VAULT_READER_JAR" \
+        --operation read \
+        --file "$VAULT_FILE" \
+        --master-key "$VAULT_MASTER_KEY" \
+        --environment "$ENVIRONMENT" \
+        --key "chunk.encryption.master.key.v${NEXT_VERSION}" > /dev/null 2>&1; then
+        echo -e "${GREEN}   ✓ Key v${NEXT_VERSION} verified in vault${NC}"
+    else
+        echo -e "${RED}   ✗ ERROR: Key verification failed${NC}"
+        exit 1
+    fi
+    echo ""
+    
+    # Step 8: Success message with next steps
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}✅ Key Rotation Setup Complete!${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "${BLUE}Next Steps:${NC}"
+    echo ""
+    echo "1. ${YELLOW}Restart your api-gateway-service${NC}"
+    echo "   The service will detect the new key version on startup"
+    echo ""
+    echo "2. ${YELLOW}Check the service logs${NC}"
+    echo "   You should see:"
+    echo "     Loaded encryption key version v1"
+    echo "     Loaded encryption key version v${NEXT_VERSION}"
+    echo "     Current encryption key version: v${NEXT_VERSION}"
+    echo ""
+    echo "3. ${YELLOW}Verify version warnings appear${NC}"
+    echo "   • Navigate to KnowledgeHub pages"
+    echo "   • You should see warnings for entities encrypted with v1"
+    echo "   • New documents will be encrypted with v${NEXT_VERSION}"
+    echo ""
+    echo "4. ${YELLOW}Migrate old data (optional)${NC}"
+    echo "   • Use 'Hard Delete All Entities' in KnowledgeHub to remove old data"
+    echo "   • Re-upload documents - they will be encrypted with v${NEXT_VERSION}"
+    echo ""
+    echo -e "${BLUE}Current Key Status:${NC}"
+    echo "   • v1 (base): chunk.encryption.master.key ✓"
+    echo "   • v${NEXT_VERSION} (new): chunk.encryption.master.key.v${NEXT_VERSION} ✓"
+    echo ""
 else
     echo ""
     echo -e "${BLUE}=== Setup Complete ===${NC}"
@@ -473,6 +648,9 @@ else
     echo ""
     echo "  2. Or export vault secrets as environment variables for docker-compose:"
     echo "     source ./scripts/bootstrap-vault.sh --export"
+    echo ""
+    echo "  3. To rotate chunk encryption key:"
+    echo "     ./scripts/bootstrap-vault.sh --rotate-chunk-key [environment]"
     echo ""
     echo "Note: The vault file (vault.encrypted) is binary/encrypted, so it won't"
     echo "      display in text editors. This is normal and expected! ✅"

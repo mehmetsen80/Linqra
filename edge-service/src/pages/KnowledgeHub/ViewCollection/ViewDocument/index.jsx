@@ -9,6 +9,7 @@ import { knowledgeHubCollectionService } from '../../../../services/knowledgeHub
 import { knowledgeHubWebSocketService } from '../../../../services/knowledgeHubWebSocketService';
 import { knowledgeHubGraphService } from '../../../../services/knowledgeHubGraphService';
 import { knowledgeHubGraphWebSocketService } from '../../../../services/knowledgeHubGraphWebSocketService';
+import vaultHealthService from '../../../../services/vaultHealthService';
 import { isSuperAdmin, hasAdminAccess } from '../../../../utils/roleUtils';
 import Button from '../../../../components/common/Button';
 import { showSuccessToast, showErrorToast } from '../../../../utils/toastConfig';
@@ -76,6 +77,7 @@ function ViewDocument() {
     loading: false
   });
   const [currentEncryptionKeyVersion, setCurrentEncryptionKeyVersion] = useState(null);
+  const [vaultHealth, setVaultHealth] = useState({ healthy: true, checked: false });
 
   // Helper function to truncate encrypted names for display
   const truncateEncryptedName = (name, maxLength = 60) => {
@@ -413,6 +415,29 @@ function ViewDocument() {
     }
   }, [currentTeam?.id]);
 
+  // Check vault health on component mount
+  useEffect(() => {
+    const checkVaultHealth = async () => {
+      try {
+        const result = await vaultHealthService.checkVaultHealth();
+        setVaultHealth({
+          healthy: result.data?.healthy ?? false,
+          checked: true,
+          message: result.data?.message || null
+        });
+      } catch (err) {
+        console.error('Error checking vault health:', err);
+        setVaultHealth({
+          healthy: false,
+          checked: true,
+          message: 'Failed to check vault health. The VAULT_MASTER_KEY may have changed.'
+        });
+      }
+    };
+    
+    checkVaultHealth();
+  }, []);
+
   // Fetch document entities when entity type selection changes
   useEffect(() => {
     if (currentTeam?.id && documentId && document && 
@@ -536,6 +561,14 @@ function ViewDocument() {
       if (error) throw new Error(error);
       
       if (data) {
+        // Debug: Log metadata to check if it's encrypted
+        console.log('Metadata received from API:', {
+          title: data.title?.substring(0, 50),
+          author: data.author?.substring(0, 50),
+          subject: data.subject?.substring(0, 50),
+          keywords: data.keywords?.substring(0, 50),
+          encryptionKeyVersion: data.encryptionKeyVersion
+        });
         setMetadata(data);
       }
     } catch (err) {
@@ -1265,6 +1298,27 @@ function ViewDocument() {
 
   return (
     <div className="view-document-container">
+      {/* Vault Health Warning Banner */}
+      {vaultHealth.checked && !vaultHealth.healthy && (
+        <EncryptionVersionWarningBanner
+          show={true}
+          variant="danger"
+          heading="Vault Decryption Failed"
+          message={
+            <>
+              <strong>Warning:</strong> The vault file cannot be decrypted. This usually means the <code>VAULT_MASTER_KEY</code> has changed. 
+              The vault file needs to be re-encrypted with the new key. Until this is fixed, secrets cannot be read from the vault and many features may not work.
+              <br /><br />
+              <strong>To fix:</strong>
+              <ol style={{ marginBottom: 0, paddingLeft: '20px' }}>
+                <li>Re-encrypt the vault file using the vault-reader CLI with the new <code>VAULT_MASTER_KEY</code></li>
+                <li><strong>Restart the api-gateway-service</strong> so it picks up the newly encrypted vault file</li>
+              </ol>
+            </>
+          }
+        />
+      )}
+      
       {/* Header */}
       <Card className="mb-4 border-0">
         <Card.Body>
@@ -1532,7 +1586,7 @@ function ViewDocument() {
                               </Tooltip>
                             }
                           >
-                            <HiInformationCircle className="text-warning" size={16} />
+                            <span><HiInformationCircle className="text-warning" size={16} /></span>
                           </OverlayTrigger>
                         )}
                       </>
@@ -1808,7 +1862,7 @@ function ViewDocument() {
                                 </Tooltip>
                               }
                             >
-                              <HiInformationCircle className="text-warning" size={16} />
+                              <span><HiInformationCircle className="text-warning" size={16} /></span>
                             </OverlayTrigger>
                           )}
                         </div>
@@ -1991,7 +2045,7 @@ function ViewDocument() {
                                 </Tooltip>
                               }
                             >
-                              <HiInformationCircle className="text-warning" size={16} />
+                              <span><HiInformationCircle className="text-warning" size={16} /></span>
                             </OverlayTrigger>
                           )}
                         </div>

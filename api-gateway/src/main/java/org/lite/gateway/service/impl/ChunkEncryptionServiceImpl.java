@@ -170,10 +170,26 @@ public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
         } catch (IllegalStateException e) {
             // Re-throw IllegalStateException (version not found)
             throw e;
+        } catch (IllegalArgumentException e) {
+            // Re-throw IllegalArgumentException (invalid data format)
+            throw e;
+        } catch (javax.crypto.AEADBadTagException e) {
+            // Wrong key or corrupted data - most common decryption failure
+            String errorMsg = String.format(
+                "Decryption authentication failed for team: %s, version: %s. " +
+                "This usually means: 1) Wrong encryption key, 2) Data was encrypted with a different key version, " +
+                "or 3) Corrupted encrypted data. Error: %s",
+                teamId, keyVersion, e.getMessage()
+            );
+            log.error(errorMsg, e);
+            throw new RuntimeException(errorMsg, e);
         } catch (Exception e) {
-            log.error("Failed to decrypt chunk text for team: {}, version: {}", teamId, keyVersion, e);
-            throw new RuntimeException("Failed to decrypt chunk text for team: " + teamId + 
-                " with key version: " + keyVersion, e);
+            String errorDetails = String.format(
+                "Failed to decrypt chunk text for team: %s, version: %s. Error type: %s, Message: %s",
+                teamId, keyVersion, e.getClass().getSimpleName(), e.getMessage()
+            );
+            log.error(errorDetails, e);
+            throw new RuntimeException(errorDetails, e);
         }
     }
     

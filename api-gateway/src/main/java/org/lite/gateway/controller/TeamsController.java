@@ -3,8 +3,12 @@ package org.lite.gateway.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.annotation.AuditLog;
 import org.lite.gateway.dto.*;
 import org.lite.gateway.entity.Team;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.enums.UserRole;
 import org.lite.gateway.exception.InvalidAuthenticationException;
 import org.lite.gateway.exception.ResourceNotFoundException;
@@ -61,6 +65,12 @@ public class TeamsController {
     }
 
     @PostMapping
+    @AuditLog(
+        eventType = AuditEventType.TEAM_CREATED,
+        action = AuditActionType.CREATE,
+        resourceType = AuditResourceType.TEAM,
+        reason = "Team creation"
+    )
     public Mono<ResponseEntity<?>> createTeam(
             @Valid @RequestBody Team team,
             ServerWebExchange exchange) {
@@ -89,6 +99,13 @@ public class TeamsController {
     }
 
     @PutMapping("/{id}")
+    @AuditLog(
+        eventType = AuditEventType.TEAM_UPDATED,
+        action = AuditActionType.UPDATE,
+        resourceType = AuditResourceType.TEAM,
+        resourceIdParam = "id",
+        reason = "Team updated"
+    )
     public Mono<ResponseEntity<?>> updateTeam(
             @PathVariable String id,
             @Valid @RequestBody Team team,
@@ -121,7 +138,16 @@ public class TeamsController {
     }
 
     @DeleteMapping("/{id}")
-    public Mono<ResponseEntity<?>> deleteTeam(@PathVariable String id) {
+    @AuditLog(
+        eventType = AuditEventType.TEAM_DELETED,
+        action = AuditActionType.DELETE,
+        resourceType = AuditResourceType.TEAM,
+        resourceIdParam = "id",
+        reason = "Team deleted"
+    )
+    public Mono<ResponseEntity<?>> deleteTeam(
+            @PathVariable String id,
+            ServerWebExchange exchange) {
         return teamService.deleteTeam(id)
             .<ResponseEntity<?>>thenReturn(ResponseEntity.noContent().build())
             .onErrorResume(TeamOperationException.class, e -> {

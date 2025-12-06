@@ -1801,17 +1801,53 @@ function ViewDocument() {
                 )}
                 {loadingChunkStats ? (
                   <div className="d-flex justify-content-between align-items-center">
-                    <span className="text-muted h6">Avg Quality Score</span>
+                    <OverlayTrigger
+                      placement="top"
+                      overlay={
+                        <Tooltip>
+                          Average Quality Score (0-100%): A composite metric evaluating chunk quality based on length (ideal token count), lexical richness (vocabulary diversity), text density (alphanumeric content), and penalties for metadata-only chunks, tables, or formatting issues. Higher scores indicate better quality chunks for semantic search and RAG.
+                        </Tooltip>
+                      }
+                    >
+                      <span className="text-muted h6 d-flex align-items-center gap-1">
+                        Avg Quality Score
+                        <HiInformationCircle size={16} />
+                      </span>
+                    </OverlayTrigger>
                     <Spinner animation="border" size="sm" />
                   </div>
                 ) : chunkStats?.avgQualityScore !== null && chunkStats?.avgQualityScore !== undefined ? (
                   <div className="d-flex justify-content-between align-items-center">
-                    <span className="text-muted h6">Avg Quality Score</span>
+                    <OverlayTrigger
+                      placement="top"
+                      overlay={
+                        <Tooltip>
+                          Average Quality Score (0-100%): A composite metric evaluating chunk quality based on length (ideal token count), lexical richness (vocabulary diversity), text density (alphanumeric content), and penalties for metadata-only chunks, tables, or formatting issues. Higher scores indicate better quality chunks for semantic search and RAG.
+                        </Tooltip>
+                      }
+                    >
+                      <span className="text-muted h6 d-flex align-items-center gap-1">
+                        Avg Quality Score
+                        <HiInformationCircle size={16} />
+                      </span>
+                    </OverlayTrigger>
                     <span className="text-secondary">{(chunkStats.avgQualityScore * 100).toFixed(1)}%</span>
                   </div>
                 ) : (
                   <div className="d-flex justify-content-between align-items-center">
-                    <span className="text-muted h6">Avg Quality Score</span>
+                    <OverlayTrigger
+                      placement="top"
+                      overlay={
+                        <Tooltip>
+                          Average Quality Score (0-100%): A composite metric evaluating chunk quality based on length (ideal token count), lexical richness (vocabulary diversity), text density (alphanumeric content), and penalties for metadata-only chunks, tables, or formatting issues. Higher scores indicate better quality chunks for semantic search and RAG.
+                        </Tooltip>
+                      }
+                    >
+                      <span className="text-muted h6 d-flex align-items-center gap-1">
+                        Avg Quality Score
+                        <HiInformationCircle size={16} />
+                      </span>
+                    </OverlayTrigger>
                     <span className="text-secondary">N/A</span>
                   </div>
                 )}

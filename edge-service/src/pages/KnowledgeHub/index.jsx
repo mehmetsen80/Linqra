@@ -278,15 +278,11 @@ function KnowledgeHub() {
 
   const fetchCollections = async () => {
     if (!currentTeam?.id) return;
-    
-    console.log('currentTeam', currentTeam);
 
     try {
       setLoading(true);
       const { data, error } = await knowledgeHubCollectionService.getAllCollections();
       if (error) throw new Error(error);
-
-      console.log('data', data);
       setCollections(data || []);
       setLoading(false);
     } catch (err) {
@@ -1045,24 +1041,24 @@ function KnowledgeHub() {
                   const shouldShow = outdatedCount > 0 && currentEncryptionKeyVersion;
                   
                   // Debug logging
-                  if (graphEntities.length > 0 || currentEncryptionKeyVersion) {
-                    console.log('[Encryption Version Banner] Debug:', {
-                      totalEntities: graphEntities.length,
-                      outdatedCount,
-                      currentEncryptionKeyVersion,
-                      shouldShow,
-                      sampleEntity: graphEntities[0] ? {
-                        name: graphEntities[0].name,
-                        encryptionKeyVersion: graphEntities[0].encryptionKeyVersion,
-                        name_encryption_version: graphEntities[0].name_encryption_version,
-                        isOutdated: isOutdatedEncryption(graphEntities[0])
-                      } : null,
-                      allEntityVersions: graphEntities.slice(0, 5).map(e => ({
-                        version: getEntityEncryptionVersion(e),
-                        isOutdated: isOutdatedEncryption(e)
-                      }))
-                    });
-                  }
+                  // if (graphEntities.length > 0 || currentEncryptionKeyVersion) {
+                  //   console.log('[Encryption Version Banner] Debug:', {
+                  //     totalEntities: graphEntities.length,
+                  //     outdatedCount,
+                  //     currentEncryptionKeyVersion,
+                  //     shouldShow,
+                  //     sampleEntity: graphEntities[0] ? {
+                  //       name: graphEntities[0].name,
+                  //       encryptionKeyVersion: graphEntities[0].encryptionKeyVersion,
+                  //       name_encryption_version: graphEntities[0].name_encryption_version,
+                  //       isOutdated: isOutdatedEncryption(graphEntities[0])
+                  //     } : null,
+                  //     allEntityVersions: graphEntities.slice(0, 5).map(e => ({
+                  //       version: getEntityEncryptionVersion(e),
+                  //       isOutdated: isOutdatedEncryption(e)
+                  //     }))
+                  //   });
+                  // }
                   
                   return (
                     <EncryptionVersionWarningBanner

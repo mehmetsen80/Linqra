@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.lite.gateway.enums.DocumentStatus;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
@@ -46,7 +47,7 @@ public class KnowledgeHubDocument {
     private String s3Key; // S3 key for the raw document
     
     @Indexed
-    private String status; // PENDING_UPLOAD, UPLOADED, PARSING, PROCESSED, METADATA_EXTRACTION, EMBEDDING, AI_READY, FAILED
+    private DocumentStatus status;
     
     @CreatedDate
     private LocalDateTime createdAt;

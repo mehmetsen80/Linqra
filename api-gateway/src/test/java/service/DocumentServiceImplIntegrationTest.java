@@ -20,7 +20,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.test.context.ActiveProfiles;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import org.lite.gateway.enums.AuditResultType;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -29,13 +31,17 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 /**
  * Integration tests for DocumentService using real MongoDB and S3
  * 
- * WARNING: This test uses real AWS credentials and will upload to real S3 bucket!
+ * WARNING: This test uses real AWS credentials and will upload to real S3
+ * bucket!
  * Make sure to delete credentials after testing!
  */
 @SpringBootTest(classes = org.lite.gateway.ApiGatewayApplication.class, webEnvironment = org.springframework.boot.test.context.SpringBootTest.WebEnvironment.MOCK)
@@ -48,19 +54,19 @@ class DocumentServiceImplIntegrationTest {
     private static final String AWS_REGION = "us-west-2";
     private static final String BUCKET_NAME = "linqra-knowledge-hub-test";
     private static final String TEST_TEAM_ID = "67d0aeb17172416c411d419e";
-    
+
     @Autowired
     private KnowledgeHubDocumentRepository documentRepository;
-    
+
     @Autowired
     private TeamRepository teamRepository;
-    
+
     @Autowired
     private ApplicationEventPublisher eventPublisher;
-    
+
     @Autowired
     private KnowledgeHubChunkRepository chunkRepository;
-    
+
     @Autowired
     private KnowledgeHubDocumentMetaDataRepository metadataRepository;
 
@@ -72,14 +78,17 @@ class DocumentServiceImplIntegrationTest {
 
     @Autowired(required = false)
     private org.lite.gateway.service.Neo4jGraphService neo4jGraphService;
-    
+
     @Autowired(required = false)
     private org.lite.gateway.repository.GraphExtractionJobRepository graphExtractionJobRepository;
+
+    @Autowired(required = false)
+    private org.lite.gateway.util.AuditLogHelper auditLogHelper;
 
     private KnowledgeHubDocumentServiceImpl documentService;
     private S3ServiceImpl s3Service;
     private S3Properties s3Properties;
-    
+
     @BeforeEach
     void setUp() {
         // Setup S3Properties
@@ -89,13 +98,19 @@ class DocumentServiceImplIntegrationTest {
         this.s3Properties.setProcessedPrefix("processed");
         this.s3Properties.setPresignedUrlExpiration(Duration.ofMinutes(15));
         this.s3Properties.setMaxFileSize(52428800L);
-        
+
         // Setup real S3 service
         setupRealS3Service();
-        
+
         // Create no-op encryption service for tests
         ChunkEncryptionService chunkEncryptionService = createNoOpEncryptionService();
-        
+
+        // Create a no-op AuditLogHelper for testing (audit logging not needed in
+        // integration tests)
+        org.lite.gateway.util.AuditLogHelper mockAuditLogHelper = auditLogHelper != null
+                ? auditLogHelper
+                : createNoOpAuditLogHelper();
+
         // Create KnowledgeHubDocumentServiceImpl
         this.documentService = new KnowledgeHubDocumentServiceImpl(
                 documentRepository,
@@ -109,58 +124,99 @@ class DocumentServiceImplIntegrationTest {
                 collectionRepository,
                 milvusStoreService,
                 neo4jGraphService,
-                graphExtractionJobRepository
-        );
+                graphExtractionJobRepository,
+                mockAuditLogHelper);
     }
-    
+
     private ChunkEncryptionService createNoOpEncryptionService() {
         return new ChunkEncryptionService() {
+            private final java.util.concurrent.atomic.AtomicInteger versionCounter = new java.util.concurrent.atomic.AtomicInteger(
+                    1);
+
             @Override
-            public String encryptChunkText(String plaintext, String teamId) {
-                return plaintext; // No encryption for tests
+            public Mono<String> encryptChunkText(String plaintext, String teamId) {
+                return Mono.just(plaintext); // No encryption for tests
             }
-            
+
             @Override
-            public String encryptChunkText(String plaintext, String teamId, String keyVersion) {
-                return plaintext; // No encryption for tests
+            public Mono<String> encryptChunkText(String plaintext, String teamId, String keyVersion) {
+                return Mono.just(plaintext); // No encryption for tests
             }
-            
+
             @Override
-            public String decryptChunkText(String encryptedText, String teamId, String keyVersion) {
-                return encryptedText; // No decryption for tests (assumes already plaintext)
+            public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion) {
+                return Mono.just(encryptedText); // No decryption for tests (assumes already plaintext)
             }
-            
+
             @Override
-            public String getCurrentKeyVersion() {
-                return "v1"; // Default version
+            public Mono<String> getCurrentKeyVersion(String teamId) {
+                return Mono.just("v1"); // Default version
             }
-            
+
             @Override
-            public byte[] encryptFile(byte[] fileBytes, String teamId) {
-                return fileBytes; // No encryption for tests
+            public Mono<byte[]> encryptFile(byte[] fileBytes, String teamId) {
+                return Mono.just(fileBytes); // No encryption for tests
             }
-            
+
             @Override
-            public byte[] encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
-                return fileBytes; // No encryption for tests
+            public Mono<byte[]> encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
+                return Mono.just(fileBytes); // No encryption for tests
             }
-            
+
             @Override
-            public byte[] decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
-                return encryptedBytes; // No decryption for tests (assumes already plaintext)
+            public Mono<byte[]> decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
+                return Mono.just(encryptedBytes); // No decryption for tests (assumes already plaintext)
+            }
+
+            @Override
+            public Mono<String> rotateKey(String teamId) {
+                return Mono.just("v" + versionCounter.incrementAndGet());
             }
         };
     }
-    
+
+    /**
+     * Create a no-op AuditLogHelper for testing that returns empty Mono for all
+     * audit logging operations.
+     * This allows tests to run without requiring audit service setup.
+     */
+    private org.lite.gateway.util.AuditLogHelper createNoOpAuditLogHelper() {
+        org.lite.gateway.util.AuditLogHelper mockHelper = mock(org.lite.gateway.util.AuditLogHelper.class);
+
+        // Mock all logDetailedEvent methods to return empty Mono
+        when(mockHelper.logDetailedEvent(
+                any(org.lite.gateway.enums.AuditEventType.class),
+                any(org.lite.gateway.enums.AuditActionType.class),
+                any(org.lite.gateway.enums.AuditResourceType.class),
+                anyString(),
+                anyString(),
+                any(Map.class),
+                anyString(),
+                anyString(),
+                any(AuditResultType.class))).thenReturn(reactor.core.publisher.Mono.empty());
+
+        when(mockHelper.logDetailedEvent(
+                any(org.lite.gateway.enums.AuditEventType.class),
+                any(org.lite.gateway.enums.AuditActionType.class),
+                any(org.lite.gateway.enums.AuditResourceType.class),
+                anyString(),
+                anyString(),
+                any(Map.class),
+                anyString(),
+                anyString())).thenReturn(reactor.core.publisher.Mono.empty());
+
+        return mockHelper;
+    }
+
     @Test
     void testInitiateDocumentUpload_RealIntegration() {
         // SKIP THIS TEST IF CREDENTIALS ARE NOT SET
-        if ("YOUR_AWS_ACCESS_KEY".equals(AWS_ACCESS_KEY) || 
-            "YOUR_AWS_SECRET_KEY".equals(AWS_SECRET_KEY)) {
+        if ("YOUR_AWS_ACCESS_KEY".equals(AWS_ACCESS_KEY) ||
+                "YOUR_AWS_SECRET_KEY".equals(AWS_SECRET_KEY)) {
             System.out.println("⚠️  Skipping integration test - AWS credentials not set");
             return;
         }
-        
+
         // Given
         UploadInitiateRequest request = new UploadInitiateRequest();
         request.setFileName("test-document.txt");
@@ -170,15 +226,15 @@ class DocumentServiceImplIntegrationTest {
         request.setChunkSize(400);
         request.setOverlapTokens(50);
         request.setChunkStrategy("sentence");
-        
+
         System.out.println("📝 Initiating document upload in MongoDB...");
-        
+
         // When & Then
         StepVerifier.create(documentService.initiateDocumentUpload(request, TEST_TEAM_ID))
                 .expectNextMatches(result -> {
                     var document = result.document();
                     var presignedUrl = result.presignedUrl();
-                    
+
                     assertNotNull(document.getId());
                     assertNotNull(document.getDocumentId());
                     assertEquals("test-document.txt", document.getFileName());
@@ -192,74 +248,75 @@ class DocumentServiceImplIntegrationTest {
                     assertEquals(50, document.getOverlapTokens());
                     assertEquals("sentence", document.getChunkStrategy());
                     assertNotNull(document.getCreatedAt());
-                    
+
                     // Verify presigned URL
                     assertNotNull(presignedUrl);
                     assertNotNull(presignedUrl.getUploadUrl());
                     assertTrue(presignedUrl.getUploadUrl().startsWith("https://"));
                     assertNotNull(presignedUrl.getRequiredHeaders());
-                    
+
                     System.out.println("✅ Document created with ID: " + document.getId());
-                    System.out.println("✅ Presigned URL generated: " + presignedUrl.getUploadUrl().substring(0, 80) + "...");
+                    System.out.println(
+                            "✅ Presigned URL generated: " + presignedUrl.getUploadUrl().substring(0, 80) + "...");
                     return true;
                 })
                 .verifyComplete();
-        
+
         System.out.println("✅ Document upload initiation successful!");
     }
-    
+
     @Test
     void testCreateAndCompleteUpload_RealIntegration() {
         // SKIP THIS TEST IF CREDENTIALS ARE NOT SET
-        if ("YOUR_AWS_ACCESS_KEY".equals(AWS_ACCESS_KEY) || 
-            "YOUR_AWS_SECRET_KEY".equals(AWS_SECRET_KEY)) {
+        if ("YOUR_AWS_ACCESS_KEY".equals(AWS_ACCESS_KEY) ||
+                "YOUR_AWS_SECRET_KEY".equals(AWS_SECRET_KEY)) {
             System.out.println("⚠️  Skipping integration test - AWS credentials not set");
             return;
         }
-        
+
         // Step 1: Initiate document upload (generates document ID and presigned URL)
         UploadInitiateRequest request = new UploadInitiateRequest();
         request.setFileName("integration-test-document.txt");
         request.setCollectionId("test-collection");
         request.setFileSize(200L);
         request.setContentType("text/plain");
-        
+
         System.out.println("📝 Step 1: Initiating document upload...");
-        
+
         var result = documentService.initiateDocumentUpload(request, TEST_TEAM_ID).block();
         assertNotNull(result);
         KnowledgeHubDocument createdDocument = result.document();
         String s3Key = createdDocument.getS3Key();
         String documentId = createdDocument.getDocumentId();
-        
+
         System.out.println("✅ Document created with documentId: " + documentId);
-        
+
         // Step 2: Upload file to S3
         System.out.println("📤 Step 2: Uploading file to S3...");
-        
+
         String testContent = "This is a test document for integration testing.\n" +
-                            "Uploaded at: " + java.time.Instant.now();
+                "Uploaded at: " + java.time.Instant.now();
         byte[] testData = testContent.getBytes(StandardCharsets.UTF_8);
         long fileSize = testData.length;
-        
+
         var dataBuffer = new DefaultDataBufferFactory().wrap(testData);
         Flux<org.springframework.core.io.buffer.DataBuffer> content = Flux.just(dataBuffer);
-        
+
         StepVerifier.create(s3Service.uploadFile(s3Key, content, "text/plain", fileSize))
                 .verifyComplete();
-        
+
         System.out.println("✅ File uploaded to S3!");
-        
+
         // Step 3: Verify file exists in S3
         StepVerifier.create(s3Service.fileExists(s3Key))
                 .expectNext(true)
                 .verifyComplete();
-        
+
         System.out.println("✅ Verified file exists in S3!");
-        
+
         // Step 4: Complete upload (marks as UPLOADED and publishes event)
         System.out.println("✅ Step 3: Completing upload...");
-        
+
         StepVerifier.create(documentService.completeUpload(documentId, s3Key))
                 .expectNextMatches(document -> {
                     assertEquals("UPLOADED", document.getStatus());
@@ -268,17 +325,17 @@ class DocumentServiceImplIntegrationTest {
                     return true;
                 })
                 .verifyComplete();
-        
+
         System.out.println("✅ Upload completed successfully!");
         System.out.println("✅ KnowledgeHubDocumentProcessingEvent published (verified via logs)!");
-        
+
         // Cleanup: Delete file from S3
         System.out.println("🧹 Cleaning up S3 file...");
         s3Service.deleteFile(s3Key).block();
-        
+
         System.out.println("🎉 Full integration test passed!");
     }
-    
+
     @Test
     void testGetDocumentById_WithAccessControl() {
         // Given - Create a document
@@ -287,15 +344,16 @@ class DocumentServiceImplIntegrationTest {
         request.setCollectionId("test-collection");
         request.setFileSize(50L);
         request.setContentType("text/plain");
-        
+
         String documentId = java.util.UUID.randomUUID().toString();
         String s3Key = "raw/" + TEST_TEAM_ID + "/test-collection/" + documentId + "_access-test.txt";
-        
-        KnowledgeHubDocument createdDocument = documentService.createDocument(request, s3Key, documentId, TEST_TEAM_ID).block();
+
+        KnowledgeHubDocument createdDocument = documentService.createDocument(request, s3Key, documentId, TEST_TEAM_ID)
+                .block();
         assertNotNull(createdDocument);
-        
+
         System.out.println("📝 Created document with documentId: " + documentId);
-        
+
         // When & Then - Get document by ID (should pass team access control)
         StepVerifier.create(documentService.getDocumentById(documentId, TEST_TEAM_ID))
                 .expectNextMatches(document -> {
@@ -306,7 +364,7 @@ class DocumentServiceImplIntegrationTest {
                 })
                 .verifyComplete();
     }
-    
+
     @Test
     void testGetDocumentById_AccessDenied() {
         // Given - Create a document for a different team
@@ -316,16 +374,17 @@ class DocumentServiceImplIntegrationTest {
         request.setCollectionId("other-collection");
         request.setFileSize(30L);
         request.setContentType("text/plain");
-        
+
         String documentId = java.util.UUID.randomUUID().toString();
         String s3Key = "raw/" + otherTeamId + "/other-collection/" + documentId + "_denied-access.txt";
-        
+
         // Create document for other team
-        KnowledgeHubDocument otherTeamDoc = documentService.createDocument(request, s3Key, documentId, otherTeamId).block();
+        KnowledgeHubDocument otherTeamDoc = documentService.createDocument(request, s3Key, documentId, otherTeamId)
+                .block();
         assertNotNull(otherTeamDoc);
-        
+
         System.out.println("📝 Created document for other team with documentId: " + documentId);
-        
+
         // When & Then - Try to get document with current team's ID (should fail)
         StepVerifier.create(documentService.getDocumentById(documentId, TEST_TEAM_ID))
                 .expectErrorMatches(throwable -> {
@@ -336,7 +395,7 @@ class DocumentServiceImplIntegrationTest {
                 })
                 .verify();
     }
-    
+
     @Test
     void testUpdateDocumentStatus() {
         // Given - Create a document
@@ -345,16 +404,17 @@ class DocumentServiceImplIntegrationTest {
         request.setCollectionId("test-collection");
         request.setFileSize(50L);
         request.setContentType("text/plain");
-        
+
         String documentId = java.util.UUID.randomUUID().toString();
         String s3Key = "raw/" + TEST_TEAM_ID + "/test-collection/" + documentId + "_status-test.txt";
-        
+
         // Create document
-        KnowledgeHubDocument createdDoc = documentService.createDocument(request, s3Key, documentId, TEST_TEAM_ID).block();
+        KnowledgeHubDocument createdDoc = documentService.createDocument(request, s3Key, documentId, TEST_TEAM_ID)
+                .block();
         assertNotNull(createdDoc);
-        
+
         System.out.println("📝 Created document with documentId: " + documentId);
-        
+
         // When - Update status to READY
         StepVerifier.create(documentService.updateStatus(documentId, "READY", null))
                 .expectNextMatches(document -> {
@@ -364,7 +424,7 @@ class DocumentServiceImplIntegrationTest {
                     return true;
                 })
                 .verifyComplete();
-        
+
         // When - Update status to FAILED with error message
         StepVerifier.create(documentService.updateStatus(documentId, "FAILED", "Test error message"))
                 .expectNextMatches(document -> {
@@ -375,25 +435,24 @@ class DocumentServiceImplIntegrationTest {
                 })
                 .verifyComplete();
     }
-    
+
     private void setupRealS3Service() {
         // Create real AWS credentials
         var credentials = AwsBasicCredentials.create(AWS_ACCESS_KEY, AWS_SECRET_KEY);
         var credentialsProvider = StaticCredentialsProvider.create(credentials);
-        
+
         // Create real S3 clients
         S3AsyncClient s3AsyncClient = S3AsyncClient.builder()
                 .region(Region.of(AWS_REGION))
                 .credentialsProvider(credentialsProvider)
                 .build();
-        
+
         S3Presigner s3Presigner = S3Presigner.builder()
                 .region(Region.of(AWS_REGION))
                 .credentialsProvider(credentialsProvider)
                 .build();
-        
+
         // Create real S3Service
         s3Service = new S3ServiceImpl(s3AsyncClient, s3Presigner, s3Properties);
     }
 }
-

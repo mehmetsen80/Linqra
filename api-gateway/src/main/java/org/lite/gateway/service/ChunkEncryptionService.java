@@ -1,5 +1,7 @@
 package org.lite.gateway.service;
 
+import reactor.core.publisher.Mono;
+
 /**
  * Service for encrypting and decrypting chunk text and entity properties.
  * 
@@ -7,70 +9,81 @@ package org.lite.gateway.service;
  * Supports multiple encryption key versions for key rotation.
  */
 public interface ChunkEncryptionService {
-    
+
     /**
      * Encrypt chunk text using team-specific key and current key version.
      * 
      * @param plaintext The plaintext to encrypt
-     * @param teamId The team ID for key derivation
-     * @return Base64-encoded encrypted text
+     * @param teamId    The team ID for key derivation
+     * @return Mono emitting Base64-encoded encrypted text
      */
-    String encryptChunkText(String plaintext, String teamId);
-    
+    Mono<String> encryptChunkText(String plaintext, String teamId);
+
     /**
      * Encrypt chunk text using team-specific key and specific key version.
      * 
-     * @param plaintext The plaintext to encrypt
-     * @param teamId The team ID for key derivation
+     * @param plaintext  The plaintext to encrypt
+     * @param teamId     The team ID for key derivation
      * @param keyVersion The encryption key version (e.g., "v1", "v2")
-     * @return Base64-encoded encrypted text
+     * @return Mono emitting Base64-encoded encrypted text
      */
-    String encryptChunkText(String plaintext, String teamId, String keyVersion);
-    
+    Mono<String> encryptChunkText(String plaintext, String teamId, String keyVersion);
+
     /**
      * Decrypt chunk text using team-specific key and key version.
      * 
      * @param encryptedText The Base64-encoded encrypted text
-     * @param teamId The team ID for key derivation
-     * @param keyVersion The encryption key version used to encrypt (e.g., "v1", "v2")
-     * @return Decrypted plaintext
+     * @param teamId        The team ID for key derivation
+     * @param keyVersion    The encryption key version used to encrypt (e.g., "v1",
+     *                      "v2")
+     * @return Mono emitting Decrypted plaintext
      */
-    String decryptChunkText(String encryptedText, String teamId, String keyVersion);
-    
+    Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion);
+
     /**
      * Get the current encryption key version (for new encryptions).
      * 
-     * @return Current key version (e.g., "v1", "v2")
+     * @return Mono emitting Current key version (e.g., "v1", "v2")
      */
-    String getCurrentKeyVersion();
-    
+    Mono<String> getCurrentKeyVersion(String teamId);
+
     /**
      * Encrypt binary file data using team-specific key and current key version.
      * 
      * @param fileBytes The file bytes to encrypt
-     * @param teamId The team ID for key derivation
-     * @return Encrypted file bytes (with IV prepended)
+     * @param teamId    The team ID for key derivation
+     * @return Mono emitting Encrypted file bytes (with IV prepended)
      */
-    byte[] encryptFile(byte[] fileBytes, String teamId);
-    
+    Mono<byte[]> encryptFile(byte[] fileBytes, String teamId);
+
     /**
      * Encrypt binary file data using team-specific key and specific key version.
      * 
-     * @param fileBytes The file bytes to encrypt
-     * @param teamId The team ID for key derivation
+     * @param fileBytes  The file bytes to encrypt
+     * @param teamId     The team ID for key derivation
      * @param keyVersion The encryption key version (e.g., "v1", "v2")
-     * @return Encrypted file bytes (with IV prepended)
+     * @return Mono emitting Encrypted file bytes (with IV prepended)
      */
-    byte[] encryptFile(byte[] fileBytes, String teamId, String keyVersion);
-    
+    Mono<byte[]> encryptFile(byte[] fileBytes, String teamId, String keyVersion);
+
     /**
      * Decrypt binary file data using team-specific key and key version.
      * 
      * @param encryptedBytes The encrypted file bytes (with IV prepended)
-     * @param teamId The team ID for key derivation
-     * @param keyVersion The encryption key version used to encrypt (e.g., "v1", "v2")
-     * @return Decrypted file bytes
+     * @param teamId         The team ID for key derivation
+     * @param keyVersion     The encryption key version used to encrypt (e.g., "v1",
+     *                       "v2")
+     * @return Mono emitting Decrypted file bytes
      */
-    byte[] decryptFile(byte[] encryptedBytes, String teamId, String keyVersion);
-}
+    Mono<byte[]> decryptFile(byte[] encryptedBytes, String teamId, String keyVersion);
 
+    /**
+     * Rotate encryption key for a team.
+     * Generates a new random key, encrypts it with Global Master Key, and saves as
+     * new version.
+     * 
+     * @param teamId The team ID
+     * @return Mono emitting the new key version (e.g., "v2")
+     */
+    Mono<String> rotateKey(String teamId);
+}

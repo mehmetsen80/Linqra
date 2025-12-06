@@ -157,9 +157,11 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl implements Knowl
                                         log.debug("Processing relationship batch {}/{} with {} entities", 
                                                 batchIndex + 1, batches.size(), batch.size());
                                         
-                                        // Add a small delay between batches to respect rate limits (except for first batch)
+                                        // Add delay between batches to respect rate limits and prevent hitting API rate limits
+                                        // Use longer delay to prevent rate limit errors (3 seconds between batches)
+                                        // This ensures we don't overwhelm the LLM API with rapid requests
                                         Mono<RelationshipExtractionResult> extractionMono = batchIndex > 0 
-                                                ? Mono.delay(Duration.ofSeconds(1))
+                                                ? Mono.delay(Duration.ofSeconds(3))
                                                         .then(extractRelationshipsFromEntitiesWithCostTracking(batch, documentId, teamId))
                                                 : extractRelationshipsFromEntitiesWithCostTracking(batch, documentId, teamId);
                                         
@@ -467,11 +469,95 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl implements Knowl
                     // - Network/API failures (temporary issues)
                     // - Model-specific errors (API down, invalid response)
                     // - Any other transient failures
-                    String errorMsg = error.getMessage();
-                    log.warn("Model {} failed with error: {}. Trying next available model...", category, errorMsg);
                     
-                    // Try next model in the list
-                    return tryRelationshipExtractionWithModels(entities, prompt, documentId, teamId, categories, startIndex + 1);
+                    // Robust rate limit detection: check exception type and message format
+                    boolean isRateLimit = false;
+                    
+                    // Check 1: WebClientResponseException with status 429
+                    if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException webClientEx) {
+                        if (webClientEx.getStatusCode() != null && webClientEx.getStatusCode().value() == 429) {
+                            isRateLimit = true;
+                        }
+                    }
+                    
+                    // Check 2: Parse error message for HTTP status code format (fallback)
+                    // Error messages from LinqLlmModelServiceImpl follow format: "HTTP {statusCode}: {errorMessage}"
+                    // But errors from other sources may have different formats
+                    if (!isRateLimit) {
+                        String errorMsg = error.getMessage();
+                        if (errorMsg != null) {
+                            // Check if message contains "HTTP 429" anywhere (not just at start)
+                            if (errorMsg.contains("HTTP 429") || errorMsg.contains("HTTP 429:")) {
+                                isRateLimit = true;
+                            } else {
+                                // Try to parse status code from "HTTP {statusCode}: ..." format if present
+                                try {
+                                    int httpIndex = errorMsg.indexOf("HTTP ");
+                                    if (httpIndex >= 0) {
+                                        String afterHttp = errorMsg.substring(httpIndex + 5).trim();
+                                        int colonIndex = afterHttp.indexOf(':');
+                                        if (colonIndex > 0) {
+                                            int statusCode = Integer.parseInt(afterHttp.substring(0, colonIndex).trim());
+                                            if (statusCode == 429) {
+                                                isRateLimit = true;
+                                            }
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    // If parsing fails, not a rate limit error - continue normally
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Parse retry-after time from error message if available (e.g., "Please retry in 46.912382516s")
+                    Duration delay = Duration.ofSeconds(3); // Default delay for non-rate-limit errors
+                    if (isRateLimit) {
+                        String errorMsg = error.getMessage();
+                        if (errorMsg != null) {
+                            // Try to extract retry time from message like "Please retry in 46.912382516s"
+                            try {
+                                int retryIndex = errorMsg.indexOf("Please retry in");
+                                if (retryIndex >= 0) {
+                                    String afterRetry = errorMsg.substring(retryIndex + "Please retry in".length()).trim();
+                                    // Find the number and 's' (seconds)
+                                    StringBuilder secondsStr = new StringBuilder();
+                                    for (int i = 0; i < afterRetry.length(); i++) {
+                                        char c = afterRetry.charAt(i);
+                                        if (Character.isDigit(c) || c == '.') {
+                                            secondsStr.append(c);
+                                        } else if (c == 's' || c == 'S') {
+                                            break;
+                                        } else if (secondsStr.length() > 0) {
+                                            break; // End of number
+                                        }
+                                    }
+                                    if (secondsStr.length() > 0) {
+                                        double seconds = Double.parseDouble(secondsStr.toString());
+                                        // Add 1 second buffer and round up to nearest second
+                                        long delaySeconds = Math.max(5, (long) Math.ceil(seconds + 1));
+                                        delay = Duration.ofSeconds(delaySeconds);
+                                        log.warn("⚠️ Rate limit detected for model {} (HTTP 429). Parsed retry-after: {}s. Waiting {} seconds before trying next model...", 
+                                                category, seconds, delaySeconds);
+                                    }
+                                }
+                            } catch (Exception e) {
+                                log.debug("Could not parse retry-after time from error message: {}", errorMsg);
+                            }
+                        }
+                        
+                        if (delay.getSeconds() == 3) {
+                            // Fallback if parsing failed - use default 5 seconds
+                            delay = Duration.ofSeconds(5);
+                            log.warn("⚠️ Rate limit detected for model {} (HTTP 429). Waiting 5 seconds before trying next model...", category);
+                        }
+                    } else {
+                        log.warn("Model {} failed with error: {}. Waiting 3 seconds before trying next available model...", category, error.getMessage());
+                    }
+                    
+                    // Try next model in the list after delay
+                    return Mono.delay(delay)
+                            .then(tryRelationshipExtractionWithModels(entities, prompt, documentId, teamId, categories, startIndex + 1));
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     // No model found for this category, try next
@@ -515,7 +601,14 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl implements Knowl
         llmConfig.setModel(llmModel.getModelName());
         Map<String, Object> settings = new HashMap<>();
         settings.put("temperature", 0.3);
-        settings.put("max_tokens", 2000);
+        
+        // Adjust max_tokens based on model category to respect model limits
+        // Cohere models have a max output of 4096 tokens
+        int maxTokensForModel = 2000;
+        if ("cohere-chat".equals(llmModel.getModelCategory())) {
+            maxTokensForModel = Math.min(2000, 4096); // Cohere max output limit
+        }
+        settings.put("max_tokens", maxTokensForModel);
         llmConfig.setSettings(settings);
         query.setLlmConfig(llmConfig);
         
@@ -667,17 +760,43 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl implements Knowl
                     }
                 }
                 
-                // Claude format: { "content": [ { "text": "..." } ] }
+                // Claude format: { "content": [ { "text": "..." } ] } or { "content": "..." } (direct string)
+                // Also handles cases where result itself is a message object with content field
                 if (resultMap.containsKey("content")) {
                     Object contentObj = resultMap.get("content");
-                    if (contentObj instanceof List) {
-                        List<Map<String, Object>> content = (List<Map<String, Object>>) contentObj;
-                        if (!content.isEmpty() && content.get(0).containsKey("text")) {
-                            String text = (String) content.get(0).get("text");
-                            if (text != null) {
-                                return cleanJsonText(text);
+                    if (contentObj == null) {
+                        log.warn("Content field exists but is null in response with keys: {}", resultMap.keySet());
+                    } else if (contentObj instanceof String) {
+                        // Content is a direct string
+                        String contentStr = (String) contentObj;
+                        if (!contentStr.trim().isEmpty()) {
+                            return cleanJsonText(contentStr);
+                        }
+                    } else if (contentObj instanceof List) {
+                        // Content is an array of objects with text field
+                        @SuppressWarnings("unchecked")
+                        List<?> contentList = (List<?>) contentObj;
+                        if (!contentList.isEmpty()) {
+                            Object firstItem = contentList.get(0);
+                            if (firstItem instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> firstContent = (Map<String, Object>) firstItem;
+                                if (firstContent.containsKey("text")) {
+                                    String text = (String) firstContent.get("text");
+                                    if (text != null && !text.trim().isEmpty()) {
+                                        return cleanJsonText(text);
+                                    }
+                                }
+                            } else if (firstItem instanceof String) {
+                                // Content is a list of strings
+                                String text = (String) firstItem;
+                                if (!text.trim().isEmpty()) {
+                                    return cleanJsonText(text);
+                                }
                             }
                         }
+                    } else {
+                        log.debug("Content field exists but has unexpected type: {} in response", contentObj.getClass().getName());
                     }
                 }
                 
@@ -736,6 +855,26 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl implements Knowl
                         Object textObj = simpleMap.get("text");
                         if (textObj instanceof String) {
                             return cleanJsonText((String) textObj);
+                        }
+                    }
+                    // Try content field (could be String or List) - Claude/Anthropic format
+                    if (simpleMap.containsKey("content")) {
+                        Object contentObj = simpleMap.get("content");
+                        if (contentObj instanceof String) {
+                            return cleanJsonText((String) contentObj);
+                        } else if (contentObj instanceof List) {
+                            @SuppressWarnings("unchecked")
+                            List<?> contentList = (List<?>) contentObj;
+                            if (!contentList.isEmpty() && contentList.get(0) instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> firstContent = (Map<String, Object>) contentList.get(0);
+                                if (firstContent.containsKey("text")) {
+                                    String text = (String) firstContent.get("text");
+                                    if (text != null) {
+                                        return cleanJsonText(text);
+                                    }
+                                }
+                            }
                         }
                     }
                     // Log the structure for debugging

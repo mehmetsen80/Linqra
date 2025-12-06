@@ -173,9 +173,11 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                                                                 log.info("Processing batch {}/{} with {} chunks ({} chars)",
                                                                         batchIndex + 1, batches.size(), batch.size(), batchText.length());
                                                                 
-                                                                // Add a small delay between batches to respect rate limits (except for first batch)
+                                                                // Add delay between batches to respect rate limits and prevent hitting API rate limits
+                                                                // Use longer delay to prevent rate limit errors (3 seconds between batches)
+                                                                // This ensures we don't overwhelm the LLM API with rapid requests
                                                                 Mono<EntityExtractionResult> extractionMono = batchIndex > 0 
-                                                                        ? Mono.delay(Duration.ofSeconds(1))
+                                                                        ? Mono.delay(Duration.ofSeconds(3))
                                                                                 .then(extractEntitiesFromTextWithCostTracking(batchText, documentId, teamId))
                                                                         : extractEntitiesFromTextWithCostTracking(batchText, documentId, teamId);
                                                                 
@@ -333,7 +335,14 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                     llmConfig.setModel(llmModel.getModelName());
                     Map<String, Object> settings = new HashMap<>();
                     settings.put("temperature", TEMPERATURE); // Lower temperature for consistent extraction
-                    settings.put("max_tokens", MAX_TOKENS); // Configurable max tokens for cost optimization
+                    
+                    // Adjust max_tokens based on model category to respect model limits
+                    // Cohere models have a max output of 4096 tokens
+                    int maxTokensForModel = MAX_TOKENS;
+                    if ("cohere-chat".equals(llmModel.getModelCategory())) {
+                        maxTokensForModel = Math.min(MAX_TOKENS, 4096); // Cohere max output limit
+                    }
+                    settings.put("max_tokens", maxTokensForModel);
                     llmConfig.setSettings(settings);
                     query.setLlmConfig(llmConfig);
                     
@@ -565,10 +574,21 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
             if (result instanceof Map) {
                 Map<String, Object> resultMap = (Map<String, Object>) result;
                 
-                // Check if this is an error response
+                // Check if this is an error response (structured error from LinqLlmModelServiceImpl)
                 if (resultMap.containsKey("error")) {
                     Object errorObj = resultMap.get("error");
                     String errorMessage = "LLM API returned an error";
+                    boolean isRateLimit = false;
+                    
+                    // Check for HTTP status code in the result map (structured error from LinqLlmModelServiceImpl)
+                    if (resultMap.containsKey("httpStatus")) {
+                        Integer httpStatus = (Integer) resultMap.get("httpStatus");
+                        if (httpStatus != null && httpStatus == 429) {
+                            isRateLimit = true;
+                        }
+                    }
+                    
+                    // Extract error message from structured error object
                     if (errorObj instanceof Map) {
                         @SuppressWarnings("unchecked")
                         Map<String, Object> errorMap = (Map<String, Object>) errorObj;
@@ -577,11 +597,30 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                         } else if (errorMap.containsKey("type")) {
                             errorMessage = (String) errorMap.get("type");
                         }
+                        // Check for rate limit indicators in error message
+                        if (!isRateLimit && errorMessage != null) {
+                            String errorLower = errorMessage.toLowerCase();
+                            isRateLimit = errorLower.contains("rate limit") || 
+                                         errorLower.contains("too many requests");
+                        }
                     } else if (errorObj instanceof String) {
+                        // Fallback: error is a plain string
                         errorMessage = (String) errorObj;
+                        String errorLower = errorMessage.toLowerCase();
+                        isRateLimit = errorLower.contains("rate limit") || 
+                                     errorLower.contains("too many requests") ||
+                                     errorLower.contains("429");
                     }
-                    log.error("LLM API error response: {}", errorMessage);
-                    throw new RuntimeException("LLM API error: " + errorMessage);
+                    
+                    // Throw appropriate error - the fallback mechanism in tryExtractionWithModels
+                    // will automatically try the next available model on ANY error
+                    if (isRateLimit) {
+                        log.warn("⚠️ Rate limit detected for LLM service. Will fallback to alternative model. Error: {}", errorMessage);
+                        throw new RuntimeException("Rate limit exceeded: " + errorMessage);
+                    } else {
+                        log.error("LLM API error response: {}. Will fallback to alternative model.", errorMessage);
+                        throw new RuntimeException("LLM API error: " + errorMessage);
+                    }
                 }
                 
                 // OpenAI/Chat format: result is a Map with "choices" array
@@ -600,14 +639,43 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                     }
                 }
                 
-                // Claude format: { "content": [ { "text": "..." } ] }
+                // Claude format: { "content": [ { "text": "..." } ] } or { "content": "..." } (direct string)
+                // Also handles cases where result itself is a message object with content field
                 if (resultMap.containsKey("content")) {
-                    List<Map<String, Object>> content = (List<Map<String, Object>>) resultMap.get("content");
-                    if (!content.isEmpty() && content.get(0).containsKey("text")) {
-                        String text = (String) content.get(0).get("text");
-                        if (text != null) {
-                            return cleanJsonText(text);
+                    Object contentObj = resultMap.get("content");
+                    if (contentObj == null) {
+                        log.warn("Content field exists but is null in response with keys: {}", resultMap.keySet());
+                    } else if (contentObj instanceof String) {
+                        // Content is a direct string
+                        String contentStr = (String) contentObj;
+                        if (!contentStr.trim().isEmpty()) {
+                            return cleanJsonText(contentStr);
                         }
+                    } else if (contentObj instanceof List) {
+                        // Content is an array of objects with text field
+                        @SuppressWarnings("unchecked")
+                        List<?> contentList = (List<?>) contentObj;
+                        if (!contentList.isEmpty()) {
+                            Object firstItem = contentList.get(0);
+                            if (firstItem instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> firstContent = (Map<String, Object>) firstItem;
+                                if (firstContent.containsKey("text")) {
+                                    String text = (String) firstContent.get("text");
+                                    if (text != null && !text.trim().isEmpty()) {
+                                        return cleanJsonText(text);
+                                    }
+                                }
+                            } else if (firstItem instanceof String) {
+                                // Content is a list of strings
+                                String text = (String) firstItem;
+                                if (!text.trim().isEmpty()) {
+                                    return cleanJsonText(text);
+                                }
+                            }
+                        }
+                    } else {
+                        log.debug("Content field exists but has unexpected type: {} in response", contentObj.getClass().getName());
                     }
                 }
                 
@@ -672,12 +740,39 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                             return cleanJsonText((String) textObj);
                         }
                     }
+                    // Try content field (could be String or List)
+                    if (simpleMap.containsKey("content")) {
+                        Object contentObj = simpleMap.get("content");
+                        if (contentObj instanceof String) {
+                            return cleanJsonText((String) contentObj);
+                        } else if (contentObj instanceof List) {
+                            @SuppressWarnings("unchecked")
+                            List<Map<String, Object>> contentList = (List<Map<String, Object>>) contentObj;
+                            if (!contentList.isEmpty() && contentList.get(0) != null && contentList.get(0).containsKey("text")) {
+                                String text = (String) contentList.get(0).get("text");
+                                if (text != null) {
+                                    return cleanJsonText(text);
+                                }
+                            }
+                        }
+                    }
                     // Log the structure for debugging
                     log.warn("Unexpected response structure: {} with keys: {}", result.getClass().getName(), simpleMap.keySet());
                 }
             }
             
             throw new RuntimeException("Unsupported response format: " + result.getClass().getName());
+        } catch (RuntimeException e) {
+            // Re-throw API errors directly without wrapping
+            if (e.getMessage() != null && e.getMessage().startsWith("LLM API error:")) {
+                throw e;
+            }
+            // Re-throw if it's already a clear error
+            if (e.getMessage() != null && (e.getMessage().contains("HTTP") || e.getMessage().contains("rate limit"))) {
+                throw e;
+            }
+            log.error("Error extracting text from response: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to extract text from LLM response", e);
         } catch (Exception e) {
             log.error("Error extracting text from response: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to extract text from LLM response", e);
@@ -890,11 +985,110 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                     // - Network/API failures (temporary issues)
                     // - Model-specific errors (API down, invalid response)
                     // - Any other transient failures
-                    String errorMsg = error.getMessage();
-                    log.warn("Model {} failed with error: {}. Trying next available model...", category, errorMsg);
+                    // Robust rate limit detection: check exception type and message format
+                    boolean isRateLimit = false;
                     
-                    // Try next model in the list
-                    return tryExtractionWithModels(text, prompt, documentId, teamId, categories, startIndex + 1);
+                    // Check 1: WebClientResponseException with status 429
+                    if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException webClientEx) {
+                        if (webClientEx.getStatusCode() != null && webClientEx.getStatusCode().value() == 429) {
+                            isRateLimit = true;
+                        }
+                    }
+                    
+                    // Check 2: Parse error message for HTTP status code format (fallback)
+                    // Error messages from LinqLlmModelServiceImpl follow format: "HTTP {statusCode}: {errorMessage}"
+                    // But errors from other sources may have different formats
+                    if (!isRateLimit) {
+                        String errorMsg = error.getMessage();
+                        if (errorMsg != null) {
+                            // Check if message contains "HTTP 429" anywhere (not just at start)
+                            if (errorMsg.contains("HTTP 429") || errorMsg.contains("HTTP 429:")) {
+                                isRateLimit = true;
+                            } else {
+                                // Try to parse status code from "HTTP {statusCode}: ..." format if present
+                                try {
+                                    int httpIndex = errorMsg.indexOf("HTTP ");
+                                    if (httpIndex >= 0) {
+                                        String afterHttp = errorMsg.substring(httpIndex + 5).trim();
+                                        int colonIndex = afterHttp.indexOf(':');
+                                        if (colonIndex > 0) {
+                                            int statusCode = Integer.parseInt(afterHttp.substring(0, colonIndex).trim());
+                                            if (statusCode == 429) {
+                                                isRateLimit = true;
+                                            }
+                                        }
+                                    }
+                                } catch (Exception e) {
+                                    // If parsing fails, not a rate limit error - continue normally
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Parse retry-after time from error message if available (e.g., "Please retry in 46.912382516s")
+                    Duration delay = Duration.ofSeconds(3); // Default delay for non-rate-limit errors
+                    // Check if this is an HTTP 400 error due to invalid max_tokens configuration
+                    boolean isMaxTokensError = false;
+                    String errorMsg = error.getMessage();
+                    if (errorMsg != null && errorMsg.contains("HTTP 400")) {
+                        // Check if it's a max_tokens error
+                        if (errorMsg.contains("too many tokens") || 
+                            errorMsg.contains("max tokens must be less than") ||
+                            errorMsg.contains("maximum output length")) {
+                            isMaxTokensError = true;
+                            log.warn("⚠️ Invalid max_tokens configuration for model {} (HTTP 400). Error: {}. Skipping this model and trying next...", 
+                                    category, errorMsg);
+                        }
+                    }
+                    
+                    if (isRateLimit) {
+                        if (errorMsg == null) {
+                            errorMsg = error.getMessage();
+                        }
+                        if (errorMsg != null) {
+                            // Try to extract retry time from message like "Please retry in 46.912382516s"
+                            try {
+                                int retryIndex = errorMsg.indexOf("Please retry in");
+                                if (retryIndex >= 0) {
+                                    String afterRetry = errorMsg.substring(retryIndex + "Please retry in".length()).trim();
+                                    // Find the number and 's' (seconds)
+                                    StringBuilder secondsStr = new StringBuilder();
+                                    for (int i = 0; i < afterRetry.length(); i++) {
+                                        char c = afterRetry.charAt(i);
+                                        if (Character.isDigit(c) || c == '.') {
+                                            secondsStr.append(c);
+                                        } else if (c == 's' || c == 'S') {
+                                            break;
+                                        } else if (secondsStr.length() > 0) {
+                                            break; // End of number
+                                        }
+                                    }
+                                    if (secondsStr.length() > 0) {
+                                        double seconds = Double.parseDouble(secondsStr.toString());
+                                        // Add 1 second buffer and round up to nearest second
+                                        long delaySeconds = Math.max(5, (long) Math.ceil(seconds + 1));
+                                        delay = Duration.ofSeconds(delaySeconds);
+                                        log.warn("⚠️ Rate limit detected for model {} (HTTP 429). Parsed retry-after: {}s. Waiting {} seconds before trying next model...", 
+                                                category, seconds, delaySeconds);
+                                    }
+                                }
+                            } catch (Exception e) {
+                                log.debug("Could not parse retry-after time from error message: {}", errorMsg);
+                            }
+                        }
+                        
+                        if (delay.getSeconds() == 3) {
+                            // Fallback if parsing failed - use default 5 seconds
+                            delay = Duration.ofSeconds(5);
+                            log.warn("⚠️ Rate limit detected for model {} (HTTP 429). Waiting 5 seconds before trying next model...", category);
+                        }
+                    } else {
+                        log.warn("Model {} failed with error: {}. Waiting 3 seconds before trying next available model...", category, error.getMessage());
+                    }
+                    
+                    // Try next model in the list after delay
+                    return Mono.delay(delay)
+                            .then(tryExtractionWithModels(text, prompt, documentId, teamId, categories, startIndex + 1));
                 })
                 .switchIfEmpty(Mono.defer(() -> {
                     // No model found for this category, try next
@@ -938,7 +1132,14 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
         llmConfig.setModel(llmModel.getModelName());
         Map<String, Object> settings = new HashMap<>();
         settings.put("temperature", TEMPERATURE); // Lower temperature for consistent extraction
-        settings.put("max_tokens", MAX_TOKENS); // Configurable max tokens for cost optimization
+        
+        // Adjust max_tokens based on model category to respect model limits
+        // Cohere models have a max output of 4096 tokens
+        int maxTokensForModel = MAX_TOKENS;
+        if ("cohere-chat".equals(llmModel.getModelCategory())) {
+            maxTokensForModel = Math.min(MAX_TOKENS, 4096); // Cohere max output limit
+        }
+        settings.put("max_tokens", maxTokensForModel);
         llmConfig.setSettings(settings);
         query.setLlmConfig(llmConfig);
         

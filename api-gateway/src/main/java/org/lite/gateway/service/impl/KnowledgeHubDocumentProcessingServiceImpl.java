@@ -6,9 +6,15 @@ import org.lite.gateway.config.S3Properties;
 import org.lite.gateway.dto.ProcessedDocumentDto;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.event.KnowledgeHubDocumentMetaDataEvent;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditResourceType;
+import org.lite.gateway.enums.AuditResultType;
+import org.lite.gateway.enums.DocumentStatus;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.service.*;
+import org.lite.gateway.util.AuditLogHelper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -41,13 +47,13 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDocumentProcessingService {
-    
+
     private static final Pattern TABLE_LIKE_PATTERN = Pattern.compile("(\\S+\\s{2,}){2,}\\S+");
     private static final Pattern WORD_PATTERN = Pattern.compile("\\p{L}[\\p{L}\\p{Nd}'-]*");
     private static final int IDEAL_CHUNK_TOKENS = 350;
     private static final int SOFT_MIN_TOKENS = 60;
     private static final int SOFT_MAX_TOKENS = 520;
-    
+
     private final KnowledgeHubDocumentRepository documentRepository;
     private final KnowledgeHubChunkRepository chunkRepository;
     private final S3Service s3Service;
@@ -57,9 +63,10 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ApplicationEventPublisher eventPublisher;
     private final ChunkEncryptionService chunkEncryptionService;
-    
+    private final AuditLogHelper auditLogHelper;
+
     private final MessageChannel executionMessageChannel;
-    
+
     // Constructor with @Qualifier for MessageChannel
     public KnowledgeHubDocumentProcessingServiceImpl(
             KnowledgeHubDocumentRepository documentRepository,
@@ -70,6 +77,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             S3Properties s3Properties,
             ApplicationEventPublisher eventPublisher,
             ChunkEncryptionService chunkEncryptionService,
+            AuditLogHelper auditLogHelper,
             @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel) {
         this.documentRepository = documentRepository;
         this.chunkRepository = chunkRepository;
@@ -79,58 +87,105 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         this.s3Properties = s3Properties;
         this.eventPublisher = eventPublisher;
         this.chunkEncryptionService = chunkEncryptionService;
+        this.auditLogHelper = auditLogHelper;
         this.executionMessageChannel = executionMessageChannel;
     }
-    
+
     @Override
     public Mono<Void> processDocument(String documentId, String teamId) {
         log.info("Starting document processing for document: {}", documentId);
-        
+
+        LocalDateTime startTime = LocalDateTime.now();
+
         return documentRepository.findByDocumentId(documentId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)))
                 .filter(document -> document.getTeamId().equals(teamId))
                 .switchIfEmpty(Mono.error(new RuntimeException("Document access denied")))
                 .flatMap(document -> {
+                    // Capture document details for audit
+                    String fileName = document.getFileName();
+                    String collectionId = document.getCollectionId();
+                    String contentType = document.getContentType();
+
                     // Check if chunks already exist - validate they match current chunking strategy
                     return chunkRepository.countByDocumentId(documentId)
                             .flatMap(chunkCount -> {
                                 if (chunkCount != null && chunkCount > 0) {
                                     // Chunks exist - validate they match current chunking strategy
-                                    String currentStrategy = document.getChunkStrategy() != null 
-                                            ? document.getChunkStrategy() 
+                                    String currentStrategy = document.getChunkStrategy() != null
+                                            ? document.getChunkStrategy()
                                             : "sentence";
-                                    
+
                                     // Sample first chunk to check strategy (efficient - only fetch one)
-                                    // Note: We only validate chunk strategy, not chunk size, since KnowledgeHubChunk
+                                    // Note: We only validate chunk strategy, not chunk size, since
+                                    // KnowledgeHubChunk
                                     // doesn't store chunkSize/overlapTokens (only stores chunkStrategy)
                                     return chunkRepository.findByDocumentId(documentId)
                                             .next()
                                             .flatMap(sampleChunk -> {
                                                 String existingStrategy = sampleChunk.getChunkStrategy();
-                                                
+
                                                 // Check if chunking strategy matches
-                                                if (existingStrategy != null && existingStrategy.equals(currentStrategy)) {
-                                                    log.info("Document {} already has {} chunks with matching strategy '{}'. Skipping reprocessing.", 
+                                                if (existingStrategy != null
+                                                        && existingStrategy.equals(currentStrategy)) {
+                                                    log.info(
+                                                            "Document {} already has {} chunks with matching strategy '{}'. Skipping reprocessing.",
                                                             documentId, chunkCount, currentStrategy);
+
+                                                    // Log skipped processing
+                                                    Map<String, Object> skipContext = new HashMap<>();
+                                                    skipContext.put("fileName", fileName);
+                                                    skipContext.put("teamId", document.getTeamId());
+                                                    skipContext.put("collectionId", collectionId);
+                                                    skipContext.put("contentType", contentType);
+                                                    skipContext.put("chunkStrategy", currentStrategy);
+                                                    skipContext.put("existingChunkCount", chunkCount);
+                                                    skipContext.put("reason",
+                                                            "Chunks already exist with matching strategy");
+
                                                     // Ensure status is PROCESSED if chunks exist
-                                                    if (!"PROCESSED".equals(document.getStatus())) {
-                                                        document.setStatus("PROCESSED");
-                                                        return documentRepository.save(document)
+                                                    Mono<Void> statusUpdate = Mono.empty();
+                                                    if (document.getStatus() != DocumentStatus.PROCESSED) {
+                                                        document.setStatus(DocumentStatus.PROCESSED);
+                                                        statusUpdate = documentRepository.save(document)
                                                                 .doOnSuccess(doc -> publishDocumentStatusUpdate(doc))
-                                                                .then(Mono.<KnowledgeHubDocument>empty());
+                                                                .then();
                                                     }
-                                                    // Return empty to skip processing
-                                                    return Mono.<KnowledgeHubDocument>empty();
+
+                                                    // Chain audit logging before returning empty
+                                                    return auditLogHelper.logDetailedEvent(
+                                                            AuditEventType.DOCUMENT_PROCESSING_SKIPPED,
+                                                            AuditActionType.READ,
+                                                            AuditResourceType.DOCUMENT,
+                                                            documentId,
+                                                            String.format(
+                                                                    "Document processing skipped for '%s' - %d chunks already exist with strategy '%s'",
+                                                                    fileName, chunkCount, currentStrategy),
+                                                            skipContext,
+                                                            documentId,
+                                                            collectionId)
+                                                            .doOnError(auditError -> log.error(
+                                                                    "Failed to log audit event (processing skipped): {}",
+                                                                    auditError.getMessage(), auditError))
+                                                            .onErrorResume(auditError -> Mono.empty()) // Don't fail if
+                                                                                                       // audit logging
+                                                                                                       // fails
+                                                            .then(statusUpdate)
+                                                            .then(Mono.<KnowledgeHubDocument>empty());
                                                 } else {
                                                     // Strategy mismatch - existing chunks use different strategy
-                                                    log.warn("Document {} has {} chunks with strategy '{}', but document settings require '{}'. " +
-                                                            "Consider deleting chunks and reprocessing. Skipping for now. " +
-                                                            "(Future: UI option to force reprocessing will be available.)", 
+                                                    log.warn(
+                                                            "Document {} has {} chunks with strategy '{}', but document settings require '{}'. "
+                                                                    +
+                                                                    "Consider deleting chunks and reprocessing. Skipping for now. "
+                                                                    +
+                                                                    "(Future: UI option to force reprocessing will be available.)",
                                                             documentId, chunkCount, existingStrategy, currentStrategy);
                                                     // For now, skip processing to avoid duplicate chunks
-                                                    // TODO: Add force reprocess option in UI/API to delete old chunks and reprocess
-                                                    if (!"PROCESSED".equals(document.getStatus())) {
-                                                        document.setStatus("PROCESSED");
+                                                    // TODO: Add force reprocess option in UI/API to delete old chunks
+                                                    // and reprocess
+                                                    if (document.getStatus() != DocumentStatus.PROCESSED) {
+                                                        document.setStatus(DocumentStatus.PROCESSED);
                                                         return documentRepository.save(document)
                                                                 .doOnSuccess(doc -> publishDocumentStatusUpdate(doc))
                                                                 .then(Mono.<KnowledgeHubDocument>empty());
@@ -139,18 +194,21 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                                                 }
                                             })
                                             .switchIfEmpty(Mono.defer(() -> {
-                                                // No chunks found (shouldn't happen if count > 0, but handle gracefully)
-                                                log.warn("Document {} chunk count is {} but no chunks found. Proceeding with processing.", 
+                                                // No chunks found (shouldn't happen if count > 0, but handle
+                                                // gracefully)
+                                                log.warn(
+                                                        "Document {} chunk count is {} but no chunks found. Proceeding with processing.",
                                                         documentId, chunkCount);
-                                                document.setStatus("PARSING");
+                                                document.setStatus(DocumentStatus.PARSING);
                                                 return documentRepository.save(document)
                                                         .doOnSuccess(doc -> publishDocumentStatusUpdate(doc));
                                             }));
                                 }
-                                
+
                                 // No chunks exist, proceed with processing
-                                log.debug("No existing chunks found for document {}. Proceeding with processing.", documentId);
-                                document.setStatus("PARSING");
+                                log.debug("No existing chunks found for document {}. Proceeding with processing.",
+                                        documentId);
+                                document.setStatus(DocumentStatus.PARSING);
                                 return documentRepository.save(document)
                                         .doOnSuccess(doc -> publishDocumentStatusUpdate(doc));
                             });
@@ -161,86 +219,259 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                     return Mono.<KnowledgeHubDocument>empty();
                 }))
                 .flatMap(document -> {
-                    long startTime = System.currentTimeMillis();
-                    
+                    long startTimeMillis = System.currentTimeMillis();
+
+                    // Capture document details for audit (re-capture in case document changed)
+                    String fileName = document.getFileName();
+                    String collectionId = document.getCollectionId();
+                    String contentType = document.getContentType();
+                    String chunkStrategy = document.getChunkStrategy() != null ? document.getChunkStrategy()
+                            : "sentence";
+                    Boolean isEncrypted = document.getEncrypted();
+                    String encryptionKeyVersion = document.getEncryptionKeyVersion();
+
+                    // Step 1: Download file from S3
                     // Step 1: Download file from S3
                     return s3Service.downloadFileContent(document.getS3Key())
-                            .doOnSuccess(bytes -> log.info("Downloaded {} bytes for document: {}", bytes.length, documentId))
+                            .doOnSuccess(
+                                    bytes -> log.info("Downloaded {} bytes for document: {}", bytes.length, documentId))
                             .flatMap(bytes -> {
                                 // Check if file is encrypted and decrypt if needed
-                                byte[] fileBytes = bytes;
-                                if (document.getEncrypted() != null && document.getEncrypted() 
-                                        && document.getEncryptionKeyVersion() != null && !document.getEncryptionKeyVersion().isEmpty()) {
-                                    try {
-                                        log.info("Decrypting encrypted file for document: {} (key version: {})", 
-                                                documentId, document.getEncryptionKeyVersion());
-                                        fileBytes = chunkEncryptionService.decryptFile(
-                                                bytes, 
-                                                document.getTeamId(), 
-                                                document.getEncryptionKeyVersion()
-                                        );
-                                        log.info("Decrypted file for document {}: {} bytes -> {} bytes", 
-                                                documentId, bytes.length, fileBytes.length);
-                                    } catch (Exception e) {
-                                        log.error("Failed to decrypt file for document {}: {}", documentId, e.getMessage(), e);
-                                        return Mono.error(new RuntimeException("Failed to decrypt file: " + e.getMessage(), e));
-                                    }
+                                Mono<byte[]> fileBytesMono;
+                                if (document.getEncrypted() != null && document.getEncrypted()
+                                        && document.getEncryptionKeyVersion() != null
+                                        && !document.getEncryptionKeyVersion().isEmpty()) {
+                                    log.info("Decrypting encrypted file for document: {} (key version: {})",
+                                            documentId, document.getEncryptionKeyVersion());
+                                    fileBytesMono = chunkEncryptionService.decryptFile(
+                                            bytes,
+                                            document.getTeamId(),
+                                            document.getEncryptionKeyVersion())
+                                            .doOnSuccess(decrypted -> log.info(
+                                                    "Decrypted file for document {}: {} bytes -> {} bytes",
+                                                    documentId, bytes.length, decrypted.length))
+                                            .onErrorResume(e -> {
+                                                log.error("Failed to decrypt file for document {}: {}", documentId,
+                                                        e.getMessage(), e);
+                                                return Mono.error(
+                                                        new RuntimeException(
+                                                                "Failed to decrypt file: " + e.getMessage(), e));
+                                            });
                                 } else {
                                     log.debug("File for document {} is not encrypted (legacy file)", documentId);
+                                    fileBytesMono = Mono.just(bytes);
                                 }
-                                
-                                // Step 2: Parse document with Tika
-                                log.info("Parsing document with Tika: {}", documentId);
-                                TikaDocumentParser.ParseResult parseResult = 
-                                        tikaDocumentParser.parse(fileBytes, document.getContentType());
-                                
-                                log.info("Extracted {} characters from document, {} pages", 
-                                        parseResult.getText().length(), parseResult.getPageCount());
-                                
-                                // Step 3: Chunk the text
-                                return chunkText(document, parseResult.getText(), parseResult.getPageCount())
-                                        .flatMap(chunks -> {
-                                            List<ChunkingService.ChunkResult> augmentedChunks = addFormFieldsChunk(chunks, parseResult);
-                                            // Step 4: Build processed document DTO
-                                            ProcessedDocumentDto processedDoc = buildProcessedDocument(
-                                                    document, parseResult, augmentedChunks, startTime);
-                                            
-                                            // Encrypt sensitive data in processed document before saving to S3
-                                            encryptProcessedDocumentDto(processedDoc, document.getTeamId());
-                                            
-                                            // Step 5: Save processed JSON to S3
-                                            return saveProcessedJsonToS3(document, processedDoc)
-                                                    .flatMap(s3Key -> {
-                                                        // Step 6: Save chunks to MongoDB
-                                                        int chunkCount = augmentedChunks.size();
-                                                        int totalTokens = augmentedChunks.stream()
-                                                                .mapToInt(chunk -> chunk.getTokenCount() != null ? chunk.getTokenCount() : 0)
-                                                                .sum();
-                                                        return saveChunksToMongo(document, augmentedChunks)
-                                                                .then(updateDocumentStatus(document, s3Key, chunkCount, totalTokens))
-                                                                .doOnSuccess(v -> {
-                                                                    long processingTime = System.currentTimeMillis() - startTime;
-                                                                    log.info("Successfully processed document: {} in {} ms", 
-                                                                            documentId, processingTime);
-                                                                });
-                                                    });
-                                        });
+
+                                return fileBytesMono.flatMap(fileBytes -> {
+                                    // Step 2: Parse document with Tika
+                                    log.info("Parsing document with Tika: {}", documentId);
+                                    TikaDocumentParser.ParseResult parseResult = tikaDocumentParser.parse(fileBytes,
+                                            document.getContentType());
+
+                                    log.info("Extracted {} characters from document, {} pages",
+                                            parseResult.getText().length(), parseResult.getPageCount());
+
+                                    // Step 3: Chunk the text
+                                    return chunkText(document, parseResult.getText(), parseResult.getPageCount())
+                                            .flatMap(chunks -> {
+                                                List<ChunkingService.ChunkResult> augmentedChunks = addFormFieldsChunk(
+                                                        chunks, parseResult);
+                                                // Step 4: Build processed document DTO
+                                                ProcessedDocumentDto processedDoc = buildProcessedDocument(
+                                                        document, parseResult, augmentedChunks, startTimeMillis);
+
+                                                // Encrypt sensitive data in processed document before saving to S3
+                                                return encryptProcessedDocumentDto(processedDoc, document.getTeamId())
+                                                        .then(Mono.defer(() -> {
+                                                            // Step 5: Save processed JSON to S3
+                                                            return saveProcessedJsonToS3(document, processedDoc)
+                                                                    .flatMap(s3Key -> {
+                                                                        // Step 6: Save chunks to MongoDB
+                                                                        int chunkCount = augmentedChunks.size();
+                                                                        int totalTokens = augmentedChunks.stream()
+                                                                                .mapToInt(chunk -> chunk
+                                                                                        .getTokenCount() != null
+                                                                                                ? chunk.getTokenCount()
+                                                                                                : 0)
+                                                                                .sum();
+                                                                        return saveChunksToMongo(document,
+                                                                                augmentedChunks)
+                                                                                .then(updateDocumentStatus(document,
+                                                                                        s3Key, chunkCount,
+                                                                                        totalTokens))
+                                                                                .flatMap(v -> {
+                                                                                    long processingTime = System
+                                                                                            .currentTimeMillis()
+                                                                                            - startTimeMillis;
+                                                                                    long durationMs = java.time.Duration
+                                                                                            .between(startTime,
+                                                                                                    LocalDateTime.now())
+                                                                                            .toMillis();
+                                                                                    log.info(
+                                                                                            "Successfully processed document: {} in {} ms",
+                                                                                            documentId, processingTime);
+
+                                                                                    // Build audit context with
+                                                                                    // processing details
+                                                                                    Map<String, Object> auditContext = new HashMap<>();
+                                                                                    auditContext.put("fileName",
+                                                                                            fileName);
+                                                                                    auditContext.put("teamId",
+                                                                                            document.getTeamId());
+                                                                                    auditContext.put("collectionId",
+                                                                                            collectionId);
+                                                                                    auditContext.put("contentType",
+                                                                                            contentType);
+                                                                                    auditContext.put("chunkStrategy",
+                                                                                            chunkStrategy);
+                                                                                    auditContext.put("isEncrypted",
+                                                                                            isEncrypted != null
+                                                                                                    ? isEncrypted
+                                                                                                    : false);
+                                                                                    if (isEncrypted != null
+                                                                                            && isEncrypted
+                                                                                            && encryptionKeyVersion != null) {
+                                                                                        auditContext.put(
+                                                                                                "encryptionKeyVersion",
+                                                                                                encryptionKeyVersion);
+                                                                                    }
+                                                                                    auditContext.put("chunkCount",
+                                                                                            chunkCount);
+                                                                                    auditContext.put("totalTokens",
+                                                                                            totalTokens);
+                                                                                    auditContext.put("pageCount",
+                                                                                            parseResult.getPageCount());
+                                                                                    auditContext.put("characterCount",
+                                                                                            parseResult.getText()
+                                                                                                    .length());
+                                                                                    auditContext.put("fileSizeBytes",
+                                                                                            bytes.length);
+                                                                                    auditContext.put(
+                                                                                            "decryptedFileSizeBytes",
+                                                                                            fileBytes.length);
+                                                                                    auditContext.put("processingTimeMs",
+                                                                                            processingTime);
+                                                                                    auditContext.put("durationMs",
+                                                                                            durationMs);
+                                                                                    auditContext.put("processedS3Key",
+                                                                                            s3Key);
+                                                                                    auditContext.put(
+                                                                                            "processingTimestamp",
+                                                                                            LocalDateTime.now()
+                                                                                                    .toString());
+
+                                                                                    // Capture extracted metadata if
+                                                                                    // available
+                                                                                    if (parseResult
+                                                                                            .getMetadata() != null) {
+                                                                                        org.apache.tika.metadata.Metadata tikaMetadata = parseResult
+                                                                                                .getMetadata();
+                                                                                        String title = getFirstAvailable(
+                                                                                                tikaMetadata,
+                                                                                                "title", "dc:title",
+                                                                                                "xmp:Title",
+                                                                                                "Title");
+                                                                                        String author = getFirstAvailable(
+                                                                                                tikaMetadata,
+                                                                                                "Author", "author",
+                                                                                                "dc:creator",
+                                                                                                "creator",
+                                                                                                "xmp:Creator");
+                                                                                        if (title != null) {
+                                                                                            auditContext.put("title",
+                                                                                                    title);
+                                                                                        }
+                                                                                        if (author != null) {
+                                                                                            auditContext.put("author",
+                                                                                                    author);
+                                                                                        }
+                                                                                    }
+
+                                                                                    String auditReason = String.format(
+                                                                                            "Document '%s' processed successfully - %d chunks, %d tokens, %d pages using strategy '%s'",
+                                                                                            fileName, chunkCount,
+                                                                                            totalTokens,
+                                                                                            parseResult.getPageCount(),
+                                                                                            chunkStrategy);
+
+                                                                                    // Log successful document
+                                                                                    // processing
+                                                                                    return auditLogHelper
+                                                                                            .logDetailedEvent(
+                                                                                                    AuditEventType.DOCUMENT_PROCESSING_COMPLETED,
+                                                                                                    AuditActionType.CREATE,
+                                                                                                    AuditResourceType.DOCUMENT,
+                                                                                                    documentId,
+                                                                                                    auditReason,
+                                                                                                    auditContext,
+                                                                                                    documentId,
+                                                                                                    collectionId)
+                                                                                            .thenReturn(v);
+                                                                                });
+                                                                    });
+                                                        }));
+                                            });
+                                });
                             });
                 })
                 .onErrorResume(error -> {
                     log.error("Error processing document: {}", documentId, error);
+
+                    // Log failed document processing and update document status
+                    // Use flatMap to transform Mono<KnowledgeHubDocument> to Mono<Void> for error
+                    // handler
                     return documentRepository.findByDocumentId(documentId)
                             .flatMap(document -> {
-                                document.setStatus("FAILED");
+                                long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
+
+                                Map<String, Object> errorContext = new HashMap<>();
+                                errorContext.put("fileName", document.getFileName());
+                                errorContext.put("teamId", document.getTeamId());
+                                errorContext.put("collectionId", document.getCollectionId());
+                                errorContext.put("contentType", document.getContentType());
+                                errorContext.put("chunkStrategy",
+                                        document.getChunkStrategy() != null ? document.getChunkStrategy() : "sentence");
+                                errorContext.put("isEncrypted",
+                                        document.getEncrypted() != null ? document.getEncrypted() : false);
+                                errorContext.put("error", error.getMessage());
+                                errorContext.put("errorType", error.getClass().getSimpleName());
+                                errorContext.put("durationMs", durationMs);
+                                errorContext.put("failureTimestamp", LocalDateTime.now().toString());
+
+                                document.setStatus(DocumentStatus.FAILED);
                                 document.setErrorMessage(error.getMessage());
-                                return documentRepository.save(document)
-                                        .doOnSuccess(doc -> publishDocumentStatusUpdate(doc));
+
+                                // Chain audit logging and save operations, then return saved document to match
+                                // chain type
+                                return auditLogHelper.logDetailedEvent(
+                                        AuditEventType.DOCUMENT_PROCESSING_FAILED,
+                                        AuditActionType.CREATE,
+                                        AuditResourceType.DOCUMENT,
+                                        documentId,
+                                        String.format("Document processing failed for '%s': %s", document.getFileName(),
+                                                error.getMessage()),
+                                        errorContext,
+                                        documentId,
+                                        document.getCollectionId(),
+                                        AuditResultType.FAILED // Result: FAILED
+                                )
+                                        .doOnError(auditError -> log.error(
+                                                "Failed to log audit event (document processing failed): {}",
+                                                auditError.getMessage(), auditError))
+                                        .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                                        .then(documentRepository.save(document)) // Save returns
+                                                                                 // Mono<KnowledgeHubDocument>
+                                        .doOnSuccess(doc -> publishDocumentStatusUpdate(doc)); // Return saved document
+                                                                                               // to match chain type
+                                                                                               // (Mono<KnowledgeHubDocument>)
                             })
-                            .then(Mono.error(error));
+                            .switchIfEmpty(Mono.empty()) // If document not found, return empty
+                            .then(Mono.error(error)); // Return error - this will be converted to Mono<Void> by final
+                                                      // .then()
                 })
-                .then();
+                .then(); // Convert Mono<KnowledgeHubDocument> to Mono<Void>
     }
-    
+
     /**
      * Chunk the extracted text based on the document's chunking strategy
      */
@@ -249,7 +480,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         String strategy = document.getChunkStrategy() != null ? document.getChunkStrategy() : "sentence";
         int chunkSize = document.getChunkSize() != null ? document.getChunkSize() : 400;
         int overlap = document.getOverlapTokens() != null ? document.getOverlapTokens() : 50;
-        
+
         List<ChunkingService.ChunkResult> chunks = switch (strategy.toLowerCase()) {
             case "paragraph" -> chunkingService.chunkByParagraphs(text, chunkSize);
             case "token" -> chunkingService.chunkByTokens(text, chunkSize, overlap);
@@ -258,10 +489,10 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
 
         // Calculate page numbers for each chunk
         chunks = assignPageNumbers(chunks, pageCount, text);
-        
+
         return Mono.just(chunks);
     }
-    
+
     /**
      * Assign page numbers to chunks based on their position in the document
      */
@@ -274,7 +505,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
 
         List<Integer> pageBoundaries = computePageBoundaries(text, pageCount);
         int searchIndex = 0;
-        
+
         for (ChunkingService.ChunkResult chunk : chunks) {
             String chunkText = chunk.getText();
             if (!StringUtils.hasText(chunkText)) {
@@ -396,18 +627,18 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         }
         return boundaries.size() - 1;
     }
-    
+
     /**
      * Build the processed document DTO
      */
     private ProcessedDocumentDto buildProcessedDocument(
-            KnowledgeHubDocument document, 
+            KnowledgeHubDocument document,
             TikaDocumentParser.ParseResult parseResult,
             List<ChunkingService.ChunkResult> chunks,
             long startTime) {
-        
+
         long processingTime = System.currentTimeMillis() - startTime;
-        
+
         return ProcessedDocumentDto.builder()
                 .processingMetadata(ProcessedDocumentDto.ProcessingMetadata.builder()
                         .documentId(document.getDocumentId())
@@ -445,8 +676,8 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                         .metadataOnly(Boolean.TRUE.equals(chunk.getMetadataOnly()))
                         .build()).toList())
                 .statistics(buildStatistics(parseResult, chunks))
-                .formFields(parseResult.getFormFields() == null ? null :
-                        parseResult.getFormFields().stream()
+                .formFields(parseResult.getFormFields() == null ? null
+                        : parseResult.getFormFields().stream()
                                 .map(field -> ProcessedDocumentDto.FormField.builder()
                                         .name(field.getName())
                                         .type(field.getType())
@@ -454,7 +685,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                                         .options(field.getOptions())
                                         .pageNumber(field.getPageNumber())
                                         .required(field.getRequired())
-                        .build())
+                                        .build())
                                 .toList())
                 .qualityChecks(ProcessedDocumentDto.QualityChecks.builder()
                         .allChunksValid(true)
@@ -463,66 +694,70 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                         .build())
                 .build();
     }
-    
+
     /**
      * Build extracted metadata from Tika parse result
      */
     private ProcessedDocumentDto.ExtractedMetadata buildExtractedMetadata(TikaDocumentParser.ParseResult parseResult) {
         org.apache.tika.metadata.Metadata tikaMetadata = parseResult.getMetadata();
-        
-        ProcessedDocumentDto.ExtractedMetadata.ExtractedMetadataBuilder builder = ProcessedDocumentDto.ExtractedMetadata.builder()
+
+        ProcessedDocumentDto.ExtractedMetadata.ExtractedMetadataBuilder builder = ProcessedDocumentDto.ExtractedMetadata
+                .builder()
                 .pageCount(parseResult.getPageCount());
-        
+
         // Extract Tika metadata fields (check multiple possible keys for each field)
         // PDFs may use different metadata keys depending on how they were created
         if (tikaMetadata != null) {
             // Title: check multiple possible keys (PDFs may use different metadata keys)
-            String title = getFirstAvailable(tikaMetadata, 
+            String title = getFirstAvailable(tikaMetadata,
                     "title", "dc:title", "xmp:Title", "Title");
             builder.title(title);
-            
+
             // Author: check multiple possible keys
             String author = getFirstAvailable(tikaMetadata,
                     "Author", "author", "dc:creator", "creator", "xmp:Creator");
             builder.author(author);
-            
+
             // Subject: check multiple possible keys
             String subject = getFirstAvailable(tikaMetadata,
                     "subject", "Subject", "dc:subject", "xmp:Subject");
             builder.subject(subject);
-            
+
             // Keywords: check multiple possible keys
             String keywords = getFirstAvailable(tikaMetadata,
                     "Keywords", "keywords", "xmp:Keywords", "meta:keyword");
             builder.keywords(keywords);
-            
+
             // Creator and Producer (PDF-specific metadata)
             builder.creator(getFirstAvailable(tikaMetadata, "creator", "Creator", "xmp:CreatorTool"))
                     .producer(getFirstAvailable(tikaMetadata, "producer", "Producer", "xmp:Producer"))
-                    .creationDate(getFirstAvailable(tikaMetadata, "Creation-Date", "creation-date", "xmp:CreateDate", "dcterms:created"))
-                    .modificationDate(getFirstAvailable(tikaMetadata, "Last-Modified", "last-modified", "xmp:ModifyDate", "dcterms:modified"));
-            
+                    .creationDate(getFirstAvailable(tikaMetadata, "Creation-Date", "creation-date", "xmp:CreateDate",
+                            "dcterms:created"))
+                    .modificationDate(getFirstAvailable(tikaMetadata, "Last-Modified", "last-modified",
+                            "xmp:ModifyDate", "dcterms:modified"));
+
             // Detect language from metadata or default to "en"
             String language = tikaMetadata.get("language");
             if (language == null || language.isEmpty()) {
                 language = "en"; // Default to English
             }
             builder.language(language);
-            
+
             // Log what metadata was found (for debugging)
             if (log.isDebugEnabled()) {
-                log.debug("Extracted metadata - Title: {}, Author: {}, Subject: {}, Keywords: {}", 
+                log.debug("Extracted metadata - Title: {}, Author: {}, Subject: {}, Keywords: {}",
                         title, author, subject, keywords);
             }
         } else {
             builder.language("en"); // Default if metadata is null
         }
-        
+
         return builder.build();
     }
-    
+
     /**
-     * Helper method to get the first available value from metadata using multiple possible keys
+     * Helper method to get the first available value from metadata using multiple
+     * possible keys
      */
     private String getFirstAvailable(org.apache.tika.metadata.Metadata metadata, String... keys) {
         for (String key : keys) {
@@ -533,35 +768,37 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         }
         return null;
     }
-    
+
     /**
      * Build statistics from parse result and chunks
      */
     private ProcessedDocumentDto.Statistics buildStatistics(
-            TikaDocumentParser.ParseResult parseResult, 
+            TikaDocumentParser.ParseResult parseResult,
             List<ChunkingService.ChunkResult> chunks) {
-        
+
         String text = parseResult.getText();
-        int wordCount = text != null && !text.isEmpty() 
-                ? text.trim().split("\\s+").length 
+        int wordCount = text != null && !text.isEmpty()
+                ? text.trim().split("\\s+").length
                 : 0;
         int characterCount = text != null ? text.length() : 0;
-        
+
         org.apache.tika.metadata.Metadata tikaMetadata = parseResult.getMetadata();
-        String language = tikaMetadata != null 
-                ? tikaMetadata.get("language") 
+        String language = tikaMetadata != null
+                ? tikaMetadata.get("language")
                 : null;
         if (language == null || language.isEmpty()) {
             language = "en"; // Default to English
         }
-        
+
         return ProcessedDocumentDto.Statistics.builder()
                 .totalChunks(chunks.size())
-                .totalTokens(chunks.stream().mapToInt(chunk -> chunk.getTokenCount() != null ? chunk.getTokenCount() : 0).sum())
-                .avgTokensPerChunk(chunks.isEmpty() ? 0 :
-                        chunks.stream().mapToInt(chunk -> chunk.getTokenCount() != null ? chunk.getTokenCount() : 0).sum() / chunks.size())
-                .avgQualityScore(chunks.isEmpty() ? 0.0 :
-                        chunks.stream().mapToDouble(this::calculateQualityScore).average().orElse(0.0))
+                .totalTokens(chunks.stream()
+                        .mapToInt(chunk -> chunk.getTokenCount() != null ? chunk.getTokenCount() : 0).sum())
+                .avgTokensPerChunk(chunks.isEmpty() ? 0
+                        : chunks.stream().mapToInt(chunk -> chunk.getTokenCount() != null ? chunk.getTokenCount() : 0)
+                                .sum() / chunks.size())
+                .avgQualityScore(chunks.isEmpty() ? 0.0
+                        : chunks.stream().mapToDouble(this::calculateQualityScore).average().orElse(0.0))
                 .chunksWithLessThan50Tokens((int) chunks.stream()
                         .filter(chunk -> chunk.getTokenCount() != null && chunk.getTokenCount() < 50)
                         .count())
@@ -576,7 +813,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
     }
 
     private List<ChunkingService.ChunkResult> addFormFieldsChunk(List<ChunkingService.ChunkResult> chunks,
-                                                                 TikaDocumentParser.ParseResult parseResult) {
+            TikaDocumentParser.ParseResult parseResult) {
         if (parseResult == null || parseResult.getFormFields() == null || parseResult.getFormFields().isEmpty()) {
             return chunks;
         }
@@ -639,7 +876,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         }
         return summary.toString();
     }
-    
+
     private boolean looksLikeTable(String text) {
         if (!StringUtils.hasText(text)) {
             return false;
@@ -681,7 +918,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             default -> chunkingService.getSentenceTokenizerDescription();
         };
     }
-    
+
     private double calculateQualityScore(ChunkingService.ChunkResult chunk) {
         String text = chunk.getText();
         if (!StringUtils.hasText(text)) {
@@ -803,7 +1040,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
     private double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
     }
-    
+
     /**
      * Save processed JSON to S3
      */
@@ -813,88 +1050,95 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             String jsonContent = objectMapper.writerWithDefaultPrettyPrinter()
                     .writeValueAsString(processedDoc);
             byte[] jsonBytes = jsonContent.getBytes();
-            
+
             // Build S3 key for processed document
             String s3Key = s3Properties.buildProcessedKey(
-                    document.getTeamId(), 
-                    document.getCollectionId(), 
-                    document.getDocumentId()
-            );
-            
+                    document.getTeamId(),
+                    document.getCollectionId(),
+                    document.getDocumentId());
+
             DataBufferFactory factory = org.springframework.core.io.buffer.DefaultDataBufferFactory.sharedInstance;
             Flux<DataBuffer> flux = Flux.just(factory.wrap(jsonBytes));
-            
+
             return s3Service.uploadFile(s3Key, flux, "application/json", jsonBytes.length)
                     .thenReturn(s3Key);
-                    
+
         } catch (Exception e) {
             log.error("Error serializing processed document to JSON", e);
             return Mono.error(new RuntimeException("Failed to save processed document to S3", e));
         }
     }
-    
+
+    /**
+     * Save chunks to MongoDB
+     */
     /**
      * Save chunks to MongoDB
      */
     private Mono<Void> saveChunksToMongo(
-            KnowledgeHubDocument document, 
+            KnowledgeHubDocument document,
             List<ChunkingService.ChunkResult> chunkResults) {
-        
-        // Convert ChunkResult to KnowledgeHubChunk entities
-        // Encrypt chunk text before storing
-        String currentKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
-        List<org.lite.gateway.entity.KnowledgeHubChunk> chunks = chunkResults.stream()
-                .map(chunk -> {
-                    // Encrypt chunk text with current key version
-                    String encryptedText = chunkEncryptionService.encryptChunkText(
-                        chunk.getText(), 
-                        document.getTeamId()
-                    );
-                    
-                    return org.lite.gateway.entity.KnowledgeHubChunk.builder()
-                            .chunkId(UUID.randomUUID().toString())
-                            .documentId(document.getDocumentId())
-                            .teamId(document.getTeamId())
-                            .chunkIndex(chunk.getChunkIndex())
-                            .text(encryptedText) // Store encrypted text
-                            .encryptionKeyVersion(currentKeyVersion) // Store key version for decryption
-                            .tokenCount(chunk.getTokenCount())
-                            .startPosition(chunk.getStartPosition())
-                            .endPosition(chunk.getEndPosition())
-                            .pageNumbers(chunk.getPageNumbers())
-                            .containsTable(looksLikeTable(chunk.getText())) // Use plaintext for table detection
-                            .language("en")
-                            .qualityScore(calculateQualityScore(chunk))
-                            .metadataOnly(Boolean.TRUE.equals(chunk.getMetadataOnly()))
-                            .createdAt(System.currentTimeMillis())
-                            .chunkStrategy(document.getChunkStrategy())
-                            .build();
-                })
-                .toList();
-        
-        // Bulk save all chunks
-        return chunkRepository.saveAll(chunks)
-                .doOnComplete(() -> log.info("Saved {} chunks to MongoDB for document: {}", 
-                        chunks.size(), document.getDocumentId()))
-                .then();
+
+        // Get current key version first
+        return chunkEncryptionService.getCurrentKeyVersion(document.getTeamId())
+                .flatMap(currentKeyVersion -> {
+                    // Process chunks reactively
+                    return Flux.fromIterable(chunkResults)
+                            .flatMap(chunk -> {
+                                // Encrypt chunk text with current key version
+                                return chunkEncryptionService.encryptChunkText(
+                                        chunk.getText(),
+                                        document.getTeamId(),
+                                        currentKeyVersion)
+                                        .map(encryptedText -> org.lite.gateway.entity.KnowledgeHubChunk.builder()
+                                                .chunkId(UUID.randomUUID().toString())
+                                                .documentId(document.getDocumentId())
+                                                .teamId(document.getTeamId())
+                                                .chunkIndex(chunk.getChunkIndex())
+                                                .text(encryptedText) // Store encrypted text
+                                                .encryptionKeyVersion(currentKeyVersion) // Store key version for
+                                                                                         // decryption
+                                                .tokenCount(chunk.getTokenCount())
+                                                .startPosition(chunk.getStartPosition())
+                                                .endPosition(chunk.getEndPosition())
+                                                .pageNumbers(chunk.getPageNumbers())
+                                                .containsTable(looksLikeTable(chunk.getText())) // Use plaintext for
+                                                                                                // table detection
+                                                .language("en")
+                                                .qualityScore(calculateQualityScore(chunk))
+                                                .metadataOnly(Boolean.TRUE.equals(chunk.getMetadataOnly()))
+                                                .createdAt(System.currentTimeMillis())
+                                                .chunkStrategy(document.getChunkStrategy())
+                                                .build());
+                            })
+                            .collectList()
+                            .flatMap(chunks -> {
+                                // Bulk save all chunks
+                                return chunkRepository.saveAll(chunks)
+                                        .doOnComplete(() -> log.info("Saved {} chunks to MongoDB for document: {}",
+                                                chunks.size(), document.getDocumentId()))
+                                        .then();
+                            });
+                });
     }
-    
+
     /**
      * Update document status to PROCESSED
-     * Status flow: PENDING_UPLOAD -> UPLOADED -> PARSING -> PROCESSED -> METADATA_EXTRACTION -> EMBEDDING -> AI_READY
+     * Status flow: PENDING_UPLOAD -> UPLOADED -> PARSING -> PROCESSED ->
+     * METADATA_EXTRACTION -> EMBEDDING -> AI_READY
      */
     private Mono<KnowledgeHubDocument> updateDocumentStatus(
             KnowledgeHubDocument document, String processedS3Key, int chunkCount, int totalTokens) {
-        document.setStatus("PROCESSED");
+        document.setStatus(DocumentStatus.PROCESSED);
         document.setProcessedAt(LocalDateTime.now());
         document.setProcessedS3Key(processedS3Key);
         document.setTotalChunks(chunkCount);
         document.setTotalTokens(totalTokens > 0 ? (long) totalTokens : null);
-        
+
         return documentRepository.save(document)
                 .doOnSuccess(savedDoc -> {
                     publishDocumentStatusUpdate(savedDoc);
-                    
+
                     // Publish metadata extraction event after document processing is complete
                     KnowledgeHubDocumentMetaDataEvent event = KnowledgeHubDocumentMetaDataEvent.builder()
                             .documentId(savedDoc.getDocumentId())
@@ -904,12 +1148,12 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                             .fileName(savedDoc.getFileName())
                             .contentType(savedDoc.getContentType())
                             .build();
-                    
+
                     eventPublisher.publishEvent(event);
                     log.info("Published document metadata extraction event for: {}", savedDoc.getDocumentId());
                 });
     }
-    
+
     /**
      * Publish document status update via WebSocket
      */
@@ -918,7 +1162,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             Map<String, Object> statusUpdate = new HashMap<>();
             statusUpdate.put("type", "DOCUMENT_STATUS_UPDATE");
             statusUpdate.put("documentId", document.getDocumentId());
-            statusUpdate.put("status", document.getStatus());
+            statusUpdate.put("status", document.getStatus() != null ? document.getStatus().name() : null);
             statusUpdate.put("teamId", document.getTeamId());
             statusUpdate.put("collectionId", document.getCollectionId());
             statusUpdate.put("fileName", document.getFileName());
@@ -927,103 +1171,136 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             statusUpdate.put("totalTokens", document.getTotalTokens());
             statusUpdate.put("processedS3Key", document.getProcessedS3Key());
             statusUpdate.put("errorMessage", document.getErrorMessage());
-            
+
             if (executionMessageChannel != null) {
                 boolean sent = executionMessageChannel.send(MessageBuilder.withPayload(statusUpdate).build());
                 if (sent) {
-                    log.debug("Published document status update via WebSocket for document: {} with status: {}", 
+                    log.debug("Published document status update via WebSocket for document: {} with status: {}",
                             document.getDocumentId(), document.getStatus());
                 } else {
-                    log.warn("Failed to publish document status update via WebSocket for document: {}", 
+                    log.warn("Failed to publish document status update via WebSocket for document: {}",
                             document.getDocumentId());
                 }
             }
         } catch (Exception e) {
-            log.error("Error publishing document status update via WebSocket for document: {}", 
+            log.error("Error publishing document status update via WebSocket for document: {}",
                     document.getDocumentId(), e);
         }
     }
-    
+
     /**
      * Encrypt sensitive fields in ProcessedDocumentDto before saving to S3.
      * Encrypts chunk text and metadata fields.
      * 
      * @param processedDoc The processed document DTO to encrypt
-     * @param teamId The team ID for key derivation
+     * @param teamId       The team ID for key derivation
      */
-    private void encryptProcessedDocumentDto(ProcessedDocumentDto processedDoc, String teamId) {
+    /**
+     * Encrypt sensitive fields in ProcessedDocumentDto before saving to S3.
+     * Encrypts chunk text and metadata fields.
+     *
+     * @param processedDoc The processed document DTO to encrypt
+     * @param teamId       The team ID for key derivation
+     * @return Mono<Void> when encryption is complete
+     */
+    private Mono<Void> encryptProcessedDocumentDto(ProcessedDocumentDto processedDoc, String teamId) {
         if (processedDoc == null) {
-            return;
+            return Mono.empty();
         }
-        
-        String encryptionKeyVersion = chunkEncryptionService.getCurrentKeyVersion();
-        processedDoc.setEncryptionKeyVersion(encryptionKeyVersion);
-        
-        try {
-            // Encrypt chunk text
-            if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
-                for (ProcessedDocumentDto.ChunkDto chunk : processedDoc.getChunks()) {
-                    if (chunk.getText() != null && !chunk.getText().isEmpty()) {
-                        String encryptedText = chunkEncryptionService.encryptChunkText(
-                            chunk.getText(), 
-                            teamId, 
-                            encryptionKeyVersion
-                        );
-                        chunk.setText(encryptedText);
+
+        return chunkEncryptionService.getCurrentKeyVersion(teamId)
+                .flatMap(encryptionKeyVersion -> {
+                    processedDoc.setEncryptionKeyVersion(encryptionKeyVersion);
+                    List<Mono<Void>> encryptionTasks = new ArrayList<>();
+
+                    // Encrypt chunk text
+                    if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
+                        for (ProcessedDocumentDto.ChunkDto chunk : processedDoc.getChunks()) {
+                            if (chunk.getText() != null && !chunk.getText().isEmpty()) {
+                                encryptionTasks.add(chunkEncryptionService.encryptChunkText(
+                                        chunk.getText(),
+                                        teamId,
+                                        encryptionKeyVersion)
+                                        .doOnNext(chunk::setText)
+                                        .then());
+                            }
+                        }
                     }
-                }
-            }
-            
-            // Encrypt sensitive metadata fields
-            if (processedDoc.getExtractedMetadata() != null) {
-                ProcessedDocumentDto.ExtractedMetadata metadata = processedDoc.getExtractedMetadata();
-                
-                if (metadata.getTitle() != null && !metadata.getTitle().isEmpty()) {
-                    metadata.setTitle(chunkEncryptionService.encryptChunkText(metadata.getTitle(), teamId, encryptionKeyVersion));
-                }
-                if (metadata.getAuthor() != null && !metadata.getAuthor().isEmpty()) {
-                    metadata.setAuthor(chunkEncryptionService.encryptChunkText(metadata.getAuthor(), teamId, encryptionKeyVersion));
-                }
-                if (metadata.getSubject() != null && !metadata.getSubject().isEmpty()) {
-                    metadata.setSubject(chunkEncryptionService.encryptChunkText(metadata.getSubject(), teamId, encryptionKeyVersion));
-                }
-                if (metadata.getKeywords() != null && !metadata.getKeywords().isEmpty()) {
-                    metadata.setKeywords(chunkEncryptionService.encryptChunkText(metadata.getKeywords(), teamId, encryptionKeyVersion));
-                }
-                if (metadata.getCreator() != null && !metadata.getCreator().isEmpty()) {
-                    metadata.setCreator(chunkEncryptionService.encryptChunkText(metadata.getCreator(), teamId, encryptionKeyVersion));
-                }
-                if (metadata.getProducer() != null && !metadata.getProducer().isEmpty()) {
-                    metadata.setProducer(chunkEncryptionService.encryptChunkText(metadata.getProducer(), teamId, encryptionKeyVersion));
-                }
-                if (metadata.getFormTitle() != null && !metadata.getFormTitle().isEmpty()) {
-                    metadata.setFormTitle(chunkEncryptionService.encryptChunkText(metadata.getFormTitle(), teamId, encryptionKeyVersion));
-                }
-                if (metadata.getFormNumber() != null && !metadata.getFormNumber().isEmpty()) {
-                    metadata.setFormNumber(chunkEncryptionService.encryptChunkText(metadata.getFormNumber(), teamId, encryptionKeyVersion));
-                }
-            }
-            
-            // Encrypt form field values
-            if (processedDoc.getFormFields() != null && !processedDoc.getFormFields().isEmpty()) {
-                for (ProcessedDocumentDto.FormField field : processedDoc.getFormFields()) {
-                    if (field.getValue() != null && !field.getValue().isEmpty()) {
-                        field.setValue(chunkEncryptionService.encryptChunkText(field.getValue(), teamId, encryptionKeyVersion));
+
+                    // Encrypt sensitive metadata fields
+                    if (processedDoc.getExtractedMetadata() != null) {
+                        ProcessedDocumentDto.ExtractedMetadata metadata = processedDoc.getExtractedMetadata();
+
+                        if (metadata.getTitle() != null && !metadata.getTitle().isEmpty()) {
+                            encryptionTasks.add(chunkEncryptionService
+                                    .encryptChunkText(metadata.getTitle(), teamId, encryptionKeyVersion)
+                                    .doOnNext(metadata::setTitle)
+                                    .then());
+                        }
+                        if (metadata.getAuthor() != null && !metadata.getAuthor().isEmpty()) {
+                            encryptionTasks.add(chunkEncryptionService
+                                    .encryptChunkText(metadata.getAuthor(), teamId, encryptionKeyVersion)
+                                    .doOnNext(metadata::setAuthor)
+                                    .then());
+                        }
+                        if (metadata.getSubject() != null && !metadata.getSubject().isEmpty()) {
+                            encryptionTasks.add(chunkEncryptionService
+                                    .encryptChunkText(metadata.getSubject(), teamId, encryptionKeyVersion)
+                                    .doOnNext(metadata::setSubject)
+                                    .then());
+                        }
+                        if (metadata.getKeywords() != null && !metadata.getKeywords().isEmpty()) {
+                            encryptionTasks.add(chunkEncryptionService
+                                    .encryptChunkText(metadata.getKeywords(), teamId, encryptionKeyVersion)
+                                    .doOnNext(metadata::setKeywords)
+                                    .then());
+                        }
+                        if (metadata.getCreator() != null && !metadata.getCreator().isEmpty()) {
+                            encryptionTasks.add(chunkEncryptionService
+                                    .encryptChunkText(metadata.getCreator(), teamId, encryptionKeyVersion)
+                                    .doOnNext(metadata::setCreator)
+                                    .then());
+                        }
+                        if (metadata.getProducer() != null && !metadata.getProducer().isEmpty()) {
+                            encryptionTasks.add(chunkEncryptionService
+                                    .encryptChunkText(metadata.getProducer(), teamId, encryptionKeyVersion)
+                                    .doOnNext(metadata::setProducer)
+                                    .then());
+                        }
+                        if (metadata.getFormTitle() != null && !metadata.getFormTitle().isEmpty()) {
+                            encryptionTasks.add(chunkEncryptionService
+                                    .encryptChunkText(metadata.getFormTitle(), teamId, encryptionKeyVersion)
+                                    .doOnNext(metadata::setFormTitle)
+                                    .then());
+                        }
+                        if (metadata.getFormNumber() != null && !metadata.getFormNumber().isEmpty()) {
+                            encryptionTasks.add(chunkEncryptionService
+                                    .encryptChunkText(metadata.getFormNumber(), teamId, encryptionKeyVersion)
+                                    .doOnNext(metadata::setFormNumber)
+                                    .then());
+                        }
                     }
-                    // Encrypt field name if it contains sensitive information
-                    if (field.getName() != null && !field.getName().isEmpty()) {
-                        // Field names are usually not sensitive, but encrypt if needed
-                        // field.setName(chunkEncryptionService.encryptChunkText(field.getName(), teamId, encryptionKeyVersion));
+
+                    // Encrypt form field values
+                    if (processedDoc.getFormFields() != null && !processedDoc.getFormFields().isEmpty()) {
+                        for (ProcessedDocumentDto.FormField field : processedDoc.getFormFields()) {
+                            if (field.getValue() != null && !field.getValue().isEmpty()) {
+                                encryptionTasks.add(chunkEncryptionService.encryptChunkText(field.getValue(), teamId,
+                                        encryptionKeyVersion)
+                                        .doOnNext(field::setValue)
+                                        .then());
+                            }
+                        }
                     }
-                }
-            }
-            
-            log.debug("Encrypted processed document DTO for team {} with key version {}", teamId, encryptionKeyVersion);
-            
-        } catch (Exception e) {
-            log.warn("Failed to encrypt some fields in processed document DTO for team {}: {}. Some fields may remain unencrypted.", 
-                teamId, e.getMessage());
-        }
+
+                    return Flux.merge(encryptionTasks)
+                            .then()
+                            .onErrorResume(e -> {
+                                log.warn(
+                                        "Failed to encrypt some fields in processed document DTO for team {}: {}. Some fields may remain unencrypted.",
+                                        teamId, e.getMessage());
+                                return Mono.empty();
+                            });
+                });
     }
 }
-

@@ -17,12 +17,12 @@ const Header = () => {
 
   const handleNavClick = (path, e) => {
     if (e) e.preventDefault();
-    console.log('Navigation clicked:', path);
-    console.log('Current location:', window.location.pathname);
-    console.log('User state:', user);
-    console.log('Navigate function:', typeof navigate);
+    // console.log('Navigation clicked:', path);
+    // console.log('Current location:', window.location.pathname);
+    // console.log('User state:', user);
+    // console.log('Navigate function:', typeof navigate);
     navigate(path);
-    console.log('Navigation attempted');
+    // console.log('Navigation attempted');
   };
 
   // Check if we're on the ViewToken page

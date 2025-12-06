@@ -54,10 +54,10 @@ const AgentStats = ({ agentId = null }) => {
         if (!agentId || !currentTeam) return;
         
         try {
-            console.log('Fetching agent info for agentId:', agentId, 'teamId:', currentTeam.id);
+            // console.log('Fetching agent info for agentId:', agentId, 'teamId:', currentTeam.id);
             const agentResult = await agentService.getAgent(currentTeam.id, agentId);
             if (agentResult.success) {
-                console.log('Agent info loaded:', agentResult.data);
+                // console.log('Agent info loaded:', agentResult.data);
                 setAgentInfo(agentResult.data);
             } else {
                 console.error('Failed to fetch agent info:', agentResult.error);
@@ -71,13 +71,12 @@ const AgentStats = ({ agentId = null }) => {
         try {
             setLoading(true);
             setError(null);
-            console.log('🔍 AgentStats: Fetching stats for team:', currentTeam.id, 'agentId:', agentId);
             // Always use getTeamExecutionStats, but pass agentId if provided
             const result = await agentMonitoringService.getTeamExecutionStats(currentTeam.id, null, null, agentId);
             
             if (result.success) {
-                console.log('Agent stats data:', result.data);
-                console.log('Hourly executions data:', result.data.hourlyExecutions);
+                // console.log('Agent stats data:', result.data);
+                // console.log('Hourly executions data:', result.data.hourlyExecutions);
                 setStats(result.data);
             } else {
                 // Show the actual error message from the backend

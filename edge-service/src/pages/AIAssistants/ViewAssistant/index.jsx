@@ -13,7 +13,8 @@ import {
   Col,
   OverlayTrigger,
   Tooltip,
-  Table
+  Table,
+  Accordion
 } from 'react-bootstrap';
 import { HiArrowLeft, HiChatAlt, HiCode, HiClipboardCopy, HiCheck, HiPlus, HiDownload } from 'react-icons/hi';
 import Button from '../../../components/common/Button';
@@ -29,6 +30,7 @@ import { Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { formatDate } from '../../../utils/dateUtils';
 import { chatWebSocketService } from '../../../services/chatWebSocketService';
+import { executionMonitoringWebSocket } from '../../../services/executionMonitoringService';
 import { HiX } from 'react-icons/hi';
 import './styles.css';
 
@@ -54,9 +56,12 @@ function ViewAssistant() {
     const [streamingMessageId, setStreamingMessageId] = useState(null);
     const [streamingContent, setStreamingContent] = useState('');
     const [isCancelling, setIsCancelling] = useState(false);
-    const [statusMessage, setStatusMessage] = useState('');
+    const [statusMessages, setStatusMessages] = useState([]); // Array of status messages to show multiple lines
+    const isMonitoringExecutionsRef = useRef(false); // Track if we're monitoring executions
+    const isLoadingOlderMessagesRef = useRef(false); // Track if we're loading older messages (to prevent auto-scroll)
     const [deleteModal, setDeleteModal] = useState({ show: false, conversation: null });
     const [hasAutoSelectedConversation, setHasAutoSelectedConversation] = useState(false);
+    const [visibleMessageCount, setVisibleMessageCount] = useState(10); // Number of messages to display (starting from latest)
 
     useEffect(() => {
         if (assistantId && currentTeam) {
@@ -66,8 +71,28 @@ function ViewAssistant() {
     }, [assistantId, currentTeam]);
 
     useEffect(() => {
-        scrollToBottom();
-    }, [messages, streamingContent]);
+        // Skip auto-scroll and auto-expand if we're loading older messages
+        if (isLoadingOlderMessagesRef.current) {
+            isLoadingOlderMessagesRef.current = false; // Reset flag after skip
+            return;
+        }
+        
+        // When new messages arrive, ensure they're visible by expanding visibleMessageCount if needed
+        // This ensures new/streaming messages are always shown
+        if (messages.length > visibleMessageCount) {
+            const previousLength = messages.length - 1;
+            // If we were already showing all messages before, or if a new message was just added, show it
+            if (previousLength <= visibleMessageCount || messages.some(m => m.streaming)) {
+                setVisibleMessageCount(messages.length);
+            }
+        }
+        
+        // Auto-scroll to bottom when new messages arrive or streaming content updates
+        // Only if we're showing the latest messages (not scrolled up to view older ones)
+        if (visibleMessageCount >= messages.length || messages.length <= 10) {
+            scrollToBottom();
+        }
+    }, [messages, streamingContent, visibleMessageCount]);
 
     // Subscribe to WebSocket chat updates
     useEffect(() => {
@@ -78,9 +103,8 @@ function ViewAssistant() {
             
             switch (update.type) {
                 case 'LLM_RESPONSE_STREAMING_STARTED':
-                    // Create a placeholder message for streaming
-                    // but guard against multiple START events to avoid duplicate messages
-                    setStatusMessage('Generating answer...');
+                    // Clear all status messages - answer is about to arrive
+                    setStatusMessages([]);
                     setMessages(prev => {
                         const alreadyStreaming = prev.some(msg => msg.streaming === true);
                         if (alreadyStreaming) {
@@ -126,7 +150,8 @@ function ViewAssistant() {
                     ));
                     setIsCancelling(false);
                     setSending(false); // Mark sending as complete
-                    setStatusMessage('');
+                    setStatusMessages([]); // Clear all status messages - answer is complete
+                    isMonitoringExecutionsRef.current = false; // Stop monitoring executions
                     break;
                     
                 case 'LLM_RESPONSE_STREAMING_CANCELLED':
@@ -136,7 +161,8 @@ function ViewAssistant() {
                     setMessages(prev => prev.filter(msg => msg.streaming !== true));
                     setIsCancelling(false);
                     setSending(false); // Mark sending as complete
-                    setStatusMessage('');
+                    setStatusMessages([]); // Clear all status messages
+                    isMonitoringExecutionsRef.current = false; // Stop monitoring executions
                     showErrorToast('Message generation cancelled');
                     break;
                     
@@ -146,14 +172,24 @@ function ViewAssistant() {
                     break;
                     
                 case 'AGENT_TASKS_EXECUTING':
-                    // Show agent tasks executing indicator
-                    setStatusMessage('Running agent tasks...');
+                    // Initialize status messages array - start tracking execution progress
+                    setStatusMessages(['Starting agent tasks...']);
+                    isMonitoringExecutionsRef.current = true; // Start monitoring executions
                     console.log('🤖 Agent tasks executing:', update.taskIds);
                     break;
                     
                 case 'AGENT_TASKS_COMPLETED':
-                    // Hide agent tasks indicator (we’ll switch to LLM status on streaming)
-                    setStatusMessage('Preparing answer...');
+                    // Add completion message and prepare for answer (avoid duplicates)
+                    setStatusMessages(prev => {
+                        const completionMessage = 'Agent tasks completed. Preparing answer...';
+                        const lastMessage = prev.length > 0 ? prev[prev.length - 1] : '';
+                        // Only add if different from last message to prevent duplicates
+                        if (completionMessage !== lastMessage) {
+                            return [...prev, completionMessage];
+                        }
+                        return prev;
+                    });
+                    isMonitoringExecutionsRef.current = false; // Stop monitoring executions
                     console.log('✅ Agent tasks completed:', update.executedTasks);
                     break;
                     
@@ -171,6 +207,124 @@ function ViewAssistant() {
             unsubscribe();
         };
     }, [conversationId]); // Only depend on conversationId to avoid recreating subscription
+
+    // Subscribe to execution monitoring WebSocket for step-by-step progress updates
+    useEffect(() => {
+        if (!conversationId || !currentTeam) return;
+
+        let executionUnsubscribe = null;
+        const executionStartTime = Date.now(); // Track when we started monitoring
+
+        // Connect execution monitoring WebSocket if not connected
+        if (!executionMonitoringWebSocket.connected) {
+            executionMonitoringWebSocket.connect();
+        }
+
+        // Subscribe to execution updates - we'll filter based on monitoring flag
+        executionUnsubscribe = executionMonitoringWebSocket.subscribe(data => {
+            try {
+                // Only process if we're actively monitoring
+                if (!isMonitoringExecutionsRef.current) {
+                    return;
+                }
+
+                // Filter out health messages and invalid data
+                if (Array.isArray(data) || !data?.executionId) {
+                    return;
+                }
+
+                // Only process updates for our team
+                if (data.teamId !== currentTeam?.id) {
+                    return;
+                }
+
+                // Only track executions that started after we began monitoring (within last 2 minutes)
+                // This prevents showing updates from old executions
+                const executionStart = data.startedAt ? new Date(data.startedAt).getTime() : 0;
+                if (executionStart > 0 && executionStart < executionStartTime - 120000) { // 2 minutes before
+                    return;
+                }
+
+                // Build user-friendly status message from execution progress
+                const stepDescription = formatStepDescription(
+                    data.currentStepTarget,
+                    data.currentStepAction,
+                    data.currentStepName,
+                    data.currentStep || 0,
+                    data.totalSteps || 0
+                );
+
+                // Update status messages - add new one if different from last
+                setStatusMessages(prev => {
+                    // Avoid duplicates - don't add if last message is the same
+                    const lastMessage = prev.length > 0 ? prev[prev.length - 1] : '';
+                    
+                    // Format the message with step progress if available
+                    let newMessage = stepDescription;
+                    if (data.status === 'STARTED') {
+                        newMessage = 'Starting task execution...';
+                    } else if (data.status === 'RUNNING' && data.currentStep > 0) {
+                        newMessage = stepDescription;
+                    } else if (data.status === 'COMPLETED') {
+                        newMessage = 'Task execution completed.';
+                    } else if (data.status === 'FAILED') {
+                        newMessage = `Task execution failed: ${data.errorMessage || 'Unknown error'}`;
+                    }
+
+                    // Only add if different from last message
+                    if (newMessage && newMessage !== lastMessage) {
+                        return [...prev, newMessage];
+                    }
+                    return prev;
+                });
+            } catch (error) {
+                console.error('Error processing execution update:', error);
+            }
+        });
+
+        return () => {
+            if (executionUnsubscribe) {
+                executionUnsubscribe();
+            }
+        };
+    }, [conversationId, currentTeam]); // Only depend on conversationId and currentTeam
+
+    // Helper function to format user-friendly step description
+    const formatStepDescription = (stepTarget, stepAction, stepDescription, currentStep, totalSteps) => {
+        // Use description if available, otherwise build from target/action
+        if (stepDescription) {
+            return `${stepDescription}`;
+        }
+        
+        // Build user-friendly description from target and action
+        let description = '';
+        
+        // Handle Milvus operations
+        if (stepTarget === 'api-gateway' && stepAction === 'create') {
+            description = 'Searching knowledge base for relevant information...';
+        } else if (stepTarget?.includes('milvus') || stepTarget === 'api-gateway') {
+            if (stepAction === 'create' || stepAction === 'search') {
+                description = 'Searching knowledge base...';
+            } else {
+                description = 'Processing knowledge base data...';
+            }
+        } else if (stepTarget?.includes('openai') || stepTarget?.includes('gemini') || 
+                   stepTarget?.includes('claude') || stepTarget?.includes('cohere')) {
+            description = 'Generating answer using AI...';
+        } else {
+            // Generic fallback
+            const targetName = stepTarget?.replace(/-/g, ' ') || 'service';
+            const actionName = stepAction || 'processing';
+            description = `${actionName.charAt(0).toUpperCase() + actionName.slice(1)} ${targetName}...`;
+        }
+        
+        // Add step progress if available
+        if (totalSteps > 0) {
+            description = `Step ${currentStep} of ${totalSteps}: ${description}`;
+        }
+        
+        return description;
+    };
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -251,6 +405,7 @@ function ViewAssistant() {
             setSelectedConversationId(convId);
             setConversationId(convId);
             setMessages([]);
+            setVisibleMessageCount(10); // Reset to show latest 10 messages
             
             // Load messages for this conversation
             const messagesResponse = await conversationService.getMessages(convId);
@@ -275,11 +430,51 @@ function ViewAssistant() {
             showErrorToast('Failed to load conversation');
         }
     };
+    
+    const loadOlderMessages = () => {
+        // Set flag to prevent auto-scroll
+        isLoadingOlderMessagesRef.current = true;
+        
+        // Get the container and save current scroll metrics
+        const messagesContainer = document.querySelector('.chat-messages-container');
+        if (!messagesContainer) {
+            isLoadingOlderMessagesRef.current = false;
+            return;
+        }
+        
+        const previousScrollHeight = messagesContainer.scrollHeight;
+        const previousScrollTop = messagesContainer.scrollTop;
+        
+        // Show 10 more messages (increase visible count)
+        setVisibleMessageCount(prev => {
+            const newCount = Math.min(prev + 10, messages.length);
+            
+            // After DOM updates, adjust scroll position to maintain view at the top where new messages appear
+            // Use requestAnimationFrame to ensure DOM has updated
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    if (messagesContainer) {
+                        const newScrollHeight = messagesContainer.scrollHeight;
+                        const heightDifference = newScrollHeight - previousScrollHeight;
+                        
+                        // Scroll to maintain the same content position
+                        // Add the height difference to keep the same content visible at the top
+                        messagesContainer.scrollTop = previousScrollTop + heightDifference;
+                    }
+                    // Reset flag after scroll adjustment
+                    isLoadingOlderMessagesRef.current = false;
+                }, 50); // Small delay to ensure DOM is fully updated
+            });
+            
+            return newCount;
+        });
+    };
 
     const startNewConversation = () => {
         setSelectedConversationId(null);
         setConversationId(null);
         setMessages([]);
+        setVisibleMessageCount(10); // Reset to show latest 10 messages
         setInputMessage('');
         // Don't reset hasAutoSelectedConversation - we still want to prevent auto-selection after user manually starts new
     };
@@ -612,7 +807,7 @@ function ViewAssistant() {
                                     </Button>
                                 </div>
                             )}
-                            <Card class="p-0">
+                            <Card className="p-0">
                                 <Card.Body className="p-0">
                                     {/* Messages Area */}
                                     <div className="chat-messages-container">
@@ -626,7 +821,20 @@ function ViewAssistant() {
                                     </div>
                                 ) : (
                                     <div className="chat-messages">
-                                        {messages.map((message) => {
+                                        {/* Load older messages button - show when there are more messages than visible */}
+                                        {messages.length > visibleMessageCount && (
+                                            <div className="text-center my-3">
+                                                <Button
+                                                    variant="outline-secondary"
+                                                    size="sm"
+                                                    onClick={loadOlderMessages}
+                                                >
+                                                    Load older messages ({messages.length - visibleMessageCount} more)
+                                                </Button>
+                                            </div>
+                                        )}
+                                        {/* Show only the last N messages (latest messages at the end of array) */}
+                                        {messages.slice(-visibleMessageCount).map((message) => {
                                             // Treat any message with streaming === true as actively streaming
                                             const isStreaming = message.streaming === true;
                                             return (
@@ -662,122 +870,232 @@ function ViewAssistant() {
                                                     <div className="message-timestamp">
                                                         {formatDate(message.createdAt, 'HH:mm')}
                                                     </div>
-                                                    {/* Knowledge Hub document links derived from Agent Task results */}
-                                                    {message.role === 'assistant' && message.metadata?.taskResults && (
-                                                        <div className="mt-1">
-                                                            {(() => {
-                                                                const docsMap = new Map();
-                                                                const taskResults = message.metadata.taskResults;
-                                                                Object.values(taskResults || {}).forEach(result => {
-                                                                    if (!result) return;
+                                                    {/* Knowledge Hub document links - show when available from task results */}
+                                                    {message.role === 'assistant' && message.metadata?.taskResults && (() => {
+                                                        // Collect and deduplicate documents
+                                                        // CRITICAL: Deduplicate by documentId FIRST - one documentId = one document
+                                                        // Knowledge Graph may extract multiple form entities from the same document,
+                                                        // but they all reference the same documentId/fileName
+                                                        const docsMapByDocId = new Map(); // Primary dedup by documentId
+                                                        const docsMapByFileName = new Map(); // Secondary dedup by fileName
+                                                        const taskResults = message.metadata.taskResults;
+                                                        
+                                                        Object.values(taskResults || {}).forEach(result => {
+                                                            if (!result) return;
 
-                                                                    // If result has a nested 'documents' array, use that
-                                                                    if (result && typeof result === 'object' && Array.isArray(result.documents)) {
-                                                                        result.documents.forEach(doc => {
-                                                                            if (doc && typeof doc === 'object') {
-                                                                                const docId = doc.documentId || doc.knowledgeHubDocumentId;
-                                                                                if (docId && !docsMap.has(docId)) {
-                                                                                    docsMap.set(docId, {
-                                                                                        documentId: docId,
-                                                                                        title: doc.title,
-                                                                                        fileName: doc.fileName,
-                                                                                        formName: doc.formName || doc.title
-                                                                                    });
-                                                                                }
-                                                                            }
-                                                                        });
-                                                                    }
-
-                                                                    // Also support the older shape where result itself (or elements) are document objects
-                                                                    const items = Array.isArray(result) ? result : [result];
-                                                                    items.forEach(item => {
-                                                                        if (item && typeof item === 'object') {
-                                                                            const docId = item.documentId || item.knowledgeHubDocumentId;
-                                                                            if (docId && !docsMap.has(docId)) {
-                                                                                docsMap.set(docId, {
+                                                            // If result has a nested 'documents' array, use that
+                                                            if (result && typeof result === 'object' && Array.isArray(result.documents)) {
+                                                                result.documents.forEach(doc => {
+                                                                    if (doc && typeof doc === 'object') {
+                                                                        // Handle RAG results structure (from Milvus search)
+                                                                        // RAG results have documentId and fileName as direct fields or in metadata
+                                                                        const docId = doc.documentId || doc.knowledgeHubDocumentId || 
+                                                                                     (doc.metadata && doc.metadata.documentId) ||
+                                                                                     (doc.metadatas && doc.metadatas.documentId);
+                                                                        const fileName = doc.fileName || doc.title || 
+                                                                                        (doc.metadata && doc.metadata.fileName) ||
+                                                                                        (doc.metadatas && doc.metadatas.fileName);
+                                                                        
+                                                                        // PRIMARY: Deduplicate by documentId (one documentId = one document)
+                                                                        if (docId) {
+                                                                            if (!docsMapByDocId.has(docId)) {
+                                                                                docsMapByDocId.set(docId, {
                                                                                     documentId: docId,
-                                                                                    title: item.title,
-                                                                                    fileName: item.fileName,
-                                                                                    formName: item.formName || item.title
+                                                                                    title: doc.title || fileName,
+                                                                                    fileName: fileName,
+                                                                                    // Don't store formName - Knowledge Graph joins all entities which causes duplicates
+                                                                                    // We'll use fileName for display instead
+                                                                                });
+                                                                            }
+                                                                        } else if (fileName) {
+                                                                            // Fallback: deduplicate by fileName if no documentId
+                                                                            const fileNameKey = fileName.toLowerCase();
+                                                                            if (!docsMapByFileName.has(fileNameKey)) {
+                                                                                docsMapByFileName.set(fileNameKey, {
+                                                                                    documentId: docId,
+                                                                                    title: doc.title || fileName,
+                                                                                    fileName: fileName,
                                                                                 });
                                                                             }
                                                                         }
-                                                                    });
+                                                                    }
                                                                 });
-                                                                const docs = Array.from(docsMap.values());
-                                                                if (!docs.length) return null;
-                                                                
-                                                                // Check if we have form names (from Knowledge Graph)
-                                                                const hasFormNames = docs.some(doc => doc.formName || (doc.title && doc.title !== doc.fileName));
-                                                                
-                                                                return (
-                                                                    <div className="knowledge-doc-links mt-2">
-                                                                        <div className="text-muted small mb-2">
-                                                                            {docs.length === 1
-                                                                                ? 'Related Knowledge Hub document'
-                                                                                : 'Related Knowledge Hub documents'}
-                                                                        </div>
-                                                                        {hasFormNames && docs.length > 1 ? (
-                                                                            // Table format for multiple documents with form names
-                                                                            <Table striped bordered hover size="sm" className="mb-0">
-                                                                                <thead>
-                                                                                    <tr>
-                                                                                        <th style={{ width: '70%' }}>File Name</th>
-                                                                                        <th style={{ width: '30%' }}>Action</th>
-                                                                                    </tr>
-                                                                                </thead>
-                                                                                <tbody>
-                                                                                    {docs.map(doc => (
-                                                                                        <tr key={doc.documentId}>
-                                                                                            <td>
-                                                                                                <code className="small">{doc.fileName || 'N/A'}</code>
-                                                                                            </td>
-                                                                                            <td>
-                                                                                                <Button
-                                                                                                    variant="outline-primary"
-                                                                                                    size="sm"
-                                                                                                    onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.fileName)}
-                                                                                                >
-                                                                                                    <HiDownload className="me-1" />
-                                                                                                    Download
-                                                                                                </Button>
-                                                                                            </td>
+                                                            }
+                                                            
+                                                            // Also check for 'results' array (RAG search results structure)
+                                                            if (result && typeof result === 'object' && Array.isArray(result.results)) {
+                                                                result.results.forEach(record => {
+                                                                    if (record && typeof record === 'object') {
+                                                                        // RAG results from Milvus have documentId and fileName as direct fields
+                                                                        const docId = record.documentId || 
+                                                                                     (record.metadata && record.metadata.documentId);
+                                                                        const fileName = record.fileName || 
+                                                                                        (record.metadata && record.metadata.fileName);
+                                                                        
+                                                                        if (docId || fileName) {
+                                                                            if (docId && !docsMapByDocId.has(docId)) {
+                                                                                docsMapByDocId.set(docId, {
+                                                                                    documentId: docId,
+                                                                                    title: fileName,
+                                                                                    fileName: fileName,
+                                                                                });
+                                                                            } else if (fileName && !docId) {
+                                                                                const fileNameKey = fileName.toLowerCase();
+                                                                                if (!docsMapByFileName.has(fileNameKey)) {
+                                                                                    docsMapByFileName.set(fileNameKey, {
+                                                                                        documentId: docId,
+                                                                                        title: fileName,
+                                                                                        fileName: fileName,
+                                                                                    });
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                });
+                                                            }
+
+                                                            // Also support the older shape where result itself (or elements) are document objects
+                                                            const items = Array.isArray(result) ? result : [result];
+                                                            items.forEach(item => {
+                                                                if (item && typeof item === 'object') {
+                                                                    const docId = item.documentId || item.knowledgeHubDocumentId;
+                                                                    const fileName = item.fileName || item.title;
+                                                                    
+                                                                    // PRIMARY: Deduplicate by documentId (one documentId = one document)
+                                                                    if (docId) {
+                                                                        if (!docsMapByDocId.has(docId)) {
+                                                                            docsMapByDocId.set(docId, {
+                                                                                documentId: docId,
+                                                                                title: item.title,
+                                                                                fileName: fileName,
+                                                                            });
+                                                                        }
+                                                                    } else if (fileName) {
+                                                                        // Fallback: deduplicate by fileName if no documentId
+                                                                        const fileNameKey = fileName.toLowerCase();
+                                                                        if (!docsMapByFileName.has(fileNameKey)) {
+                                                                            docsMapByFileName.set(fileNameKey, {
+                                                                                documentId: docId,
+                                                                                title: item.title,
+                                                                                fileName: fileName,
+                                                                            });
+                                                                        }
+                                                                    }
+                                                                }
+                                                            });
+                                                        });
+                                                        
+                                                        // Merge both maps (documentId takes precedence)
+                                                        const allDocs = Array.from(docsMapByDocId.values());
+                                                        docsMapByFileName.forEach((doc, fileNameKey) => {
+                                                            // Only add if not already present by documentId
+                                                            if (!allDocs.some(d => d.documentId === doc.documentId || 
+                                                                                   (doc.documentId && d.documentId === doc.documentId))) {
+                                                                allDocs.push(doc);
+                                                            }
+                                                        });
+                                                        
+                                                        const docs = allDocs;
+                                                        if (!docs.length) return null;
+                                                        
+                                                        // Show documents when available - they're already filtered for relevance by agent tasks
+                                                        // Documents in taskResults come from Knowledge Graph or RAG searches that matched the query
+                                                        
+                                                        const accordionKey = `docs-${message.id}`;
+                                                        
+                                                        return (
+                                                            <div className="knowledge-doc-links mt-2">
+                                                                <Accordion defaultActiveKey="">
+                                                                    <Accordion.Item eventKey={accordionKey}>
+                                                                        <Accordion.Header className="text-start">
+                                                                            <span className="text-muted small">
+                                                                                {docs.length === 1
+                                                                                    ? `Related Knowledge Hub document (${docs.length})`
+                                                                                    : `Related Knowledge Hub documents (${docs.length})`}
+                                                                            </span>
+                                                                        </Accordion.Header>
+                                                                        <Accordion.Body>
+                                                                            {docs.length > 1 ? (
+                                                                                // Table format for multiple documents
+                                                                                <Table striped bordered hover size="sm" className="mb-0">
+                                                                                    <thead>
+                                                                                        <tr>
+                                                                                            <th style={{ width: '70%' }}>File Name</th>
+                                                                                            <th style={{ width: '30%' }}>Action</th>
                                                                                         </tr>
+                                                                                    </thead>
+                                                                                    <tbody>
+                                                                                        {docs.map(doc => (
+                                                                                            <tr key={doc.documentId || doc.fileName}>
+                                                                                                <td>
+                                                                                                    <code className="small">{doc.fileName || doc.title || 'N/A'}</code>
+                                                                                                </td>
+                                                                                                <td>
+                                                                                                    <Button
+                                                                                                        variant="outline-primary"
+                                                                                                        size="sm"
+                                                                                                        onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.fileName)}
+                                                                                                    >
+                                                                                                        <HiDownload className="me-1" />
+                                                                                                        Download
+                                                                                                    </Button>
+                                                                                                </td>
+                                                                                            </tr>
+                                                                                        ))}
+                                                                                    </tbody>
+                                                                                </Table>
+                                                                            ) : (
+                                                                                // Button link for single document - use fileName, not formName
+                                                                                <div>
+                                                                                    {docs.map(doc => (
+                                                                                        <Button
+                                                                                            key={doc.documentId || doc.fileName}
+                                                                                            variant="link"
+                                                                                            size="sm"
+                                                                                            className="p-0 me-3 knowledge-doc-link d-inline-flex align-items-center"
+                                                                                            onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.fileName)}
+                                                                                        >
+                                                                                            <HiDownload className="me-1" />
+                                                                                            {doc.fileName || doc.title || 'Download document'}
+                                                                                        </Button>
                                                                                     ))}
-                                                                                </tbody>
-                                                                            </Table>
-                                                                        ) : (
-                                                                            // Button links for single document or when no form names
-                                                                            <div>
-                                                                                {docs.map(doc => (
-                                                                                    <Button
-                                                                                        key={doc.documentId}
-                                                                                        variant="link"
-                                                                                        size="sm"
-                                                                                        className="p-0 me-3 knowledge-doc-link d-inline-flex align-items-center"
-                                                                                        onClick={() => handleDownloadKnowledgeDocument(doc.documentId, doc.fileName)}
-                                                                                    >
-                                                                                        <HiDownload className="me-1" />
-                                                                                        {doc.title || doc.fileName || 'Download document'}
-                                                                                    </Button>
-                                                                                ))}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                );
-                                                            })()}
-                                                        </div>
-                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </Accordion.Body>
+                                                                    </Accordion.Item>
+                                                                </Accordion>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             );
                                         })}
                                         {sending && !messages.some(msg => msg.role === 'assistant' && (msg.streaming || msg.id === streamingMessageId)) && (
                                             <div className="chat-message assistant-message">
                                                 <div className="message-content">
-                                                    <Spinner size="sm" className="me-2" />
-                                                    <span className="text-muted">
-                                                        {statusMessage || 'Thinking...'}
-                                                    </span>
+                                                    {statusMessages.length > 0 ? (
+                                                        <div>
+                                                            {statusMessages.map((statusMsg, index) => (
+                                                                <div key={index} className="d-flex align-items-center mb-1">
+                                                                    {index === statusMessages.length - 1 ? (
+                                                                        <Spinner size="sm" className="me-2" />
+                                                                    ) : (
+                                                                        <span className="me-2 text-success" style={{ fontSize: '0.875rem' }}>
+                                                                            ✓
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="text-muted" style={{ fontSize: '0.875rem' }}>
+                                                                        {statusMsg}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="d-flex align-items-center">
+                                                            <Spinner size="sm" className="me-2" />
+                                                            <span className="text-muted">Thinking...</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -867,7 +1185,7 @@ function ViewAssistant() {
                             <HiCode className="me-1" /> Widget Embedding
                         </span>
                     }>
-                        <Card class="p-0">
+                        <Card className="p-0">
                             <Card.Header>
                                 <h5 className="mb-0">Embed Widget on Your Website</h5>
                             </Card.Header>

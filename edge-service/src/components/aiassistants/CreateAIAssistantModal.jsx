@@ -500,7 +500,7 @@ const CreateAIAssistantModal = ({
                     onChange={handleInputChange}
                   />
                   <Form.Text className="text-muted">
-                    Detect and log personally identifiable information
+                    Detect and automatically redact personally identifiable information in messages
                   </Form.Text>
                 </Form.Group>
                 <Form.Group className="mb-3">

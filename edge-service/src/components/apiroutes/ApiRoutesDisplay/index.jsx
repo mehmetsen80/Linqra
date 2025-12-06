@@ -64,7 +64,7 @@ export const ApiRoutesDisplay = () => {
         response = await apiRouteService.getAllRoutes();
       } else if (currentTeam?.id) {
         // Team selected - fetch team-specific routes
-        console.log('currentTeam', currentTeam);
+        // console.log('currentTeam', currentTeam);
         response = await apiRouteService.getAllRoutes(currentTeam.id);
       } else {
         setRoutes([]);

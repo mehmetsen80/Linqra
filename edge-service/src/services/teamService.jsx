@@ -247,6 +247,40 @@ export const teamService = {
     }
   },
 
+  // Get active encryption key version
+  getActiveEncryptionKeyVersion: async (teamId) => {
+    try {
+      const response = await axiosInstance.get(`/api/v1/teams/${teamId}/encryption/keys/active`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error fetching active encryption key:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to fetch active encryption key'
+      };
+    }
+  },
+
+  // Rotate encryption key
+  rotateEncryptionKey: async (teamId) => {
+    try {
+      const response = await axiosInstance.post(`/api/v1/teams/${teamId}/encryption/keys/rotate`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error rotating encryption key:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to rotate encryption key'
+      };
+    }
+  },
+
   // Update member's last active timestamp when switching teams
   updateLastActiveAt: async (teamId) => {
     try {

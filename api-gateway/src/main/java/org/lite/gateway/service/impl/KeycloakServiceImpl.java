@@ -16,6 +16,11 @@ import org.lite.gateway.service.CodeCacheService;
 import org.lite.gateway.service.JwtService;
 import org.lite.gateway.service.KeycloakService;
 import org.lite.gateway.service.UserContextService;
+import org.lite.gateway.util.AuditLogHelper;
+import org.lite.gateway.enums.AuditResultType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditResourceType;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -26,7 +31,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
-
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +45,7 @@ public class KeycloakServiceImpl implements KeycloakService {
     private final UserContextService userContextService;
     private final UserRepository userRepository;
     private final TransactionalOperator transactionalOperator;
+    private final AuditLogHelper auditLogHelper;
 
     @Override
     public Mono<AuthResponse> handleCallback(String code) {
@@ -48,31 +53,30 @@ public class KeycloakServiceImpl implements KeycloakService {
         log.info("=== [Timing] SSO callback started at {} ===", start);
 
         return codeCacheService.isCodeUsed(code)
-            .flatMap(isUsed -> {
-                if (isUsed) {
-                    log.debug("Code already used, checking for existing session");
-                    return exchangeCodeForToken(code)
-                        .flatMap(this::validateAndCreateSession)
-                        .onErrorResume(error -> {
-                            log.error("Error processing used code:", error);
-                            return Mono.<AuthResponse>error(new InvalidAuthenticationException(
-                                "Code already in use"
-                            ));
-                        });
-                }
-                return codeCacheService.markCodeAsUsed(code)
-                    .flatMap(marked -> {
-                        if (!marked) {
-                            log.warn("Failed to mark code as used (race condition): {}", code);
-                            return Mono.<AuthResponse>error(new InvalidAuthenticationException(
-                                "Code already in use"
-                            ));
-                        }
+                .flatMap(isUsed -> {
+                    if (isUsed) {
+                        log.debug("Code already used, checking for existing session");
                         return exchangeCodeForToken(code)
-                            .flatMap(this::validateAndCreateSession);
-                    });
-            })
-            .doOnSuccess(response -> log.info("=== [Timing] SSO callback finished in {} ms ===", System.currentTimeMillis() - start));
+                                .flatMap(this::validateAndCreateSession)
+                                .onErrorResume(error -> {
+                                    log.error("Error processing used code:", error);
+                                    return Mono.<AuthResponse>error(new InvalidAuthenticationException(
+                                            "Code already in use"));
+                                });
+                    }
+                    return codeCacheService.markCodeAsUsed(code)
+                            .flatMap(marked -> {
+                                if (!marked) {
+                                    log.warn("Failed to mark code as used (race condition): {}", code);
+                                    return Mono.<AuthResponse>error(new InvalidAuthenticationException(
+                                            "Code already in use"));
+                                }
+                                return exchangeCodeForToken(code)
+                                        .flatMap(this::validateAndCreateSession);
+                            });
+                })
+                .doOnSuccess(response -> log.info("=== [Timing] SSO callback finished in {} ms ===",
+                        System.currentTimeMillis() - start));
     }
 
     private Mono<KeycloakTokenResponse> exchangeCodeForToken(String code) {
@@ -80,87 +84,90 @@ public class KeycloakServiceImpl implements KeycloakService {
         log.info("=== [Timing] Token exchange started at {} ===", start);
 
         return Mono.zip(
-            keycloakProperties.getTokenUrl()
-                .doOnError(e -> log.error("Failed to get token URL: {}", e.getMessage())),
-            keycloakProperties.getClientId()
-                .doOnError(e -> log.error("Failed to get client ID: {}", e.getMessage())),
-            keycloakProperties.getClientSecret()
-                .doOnError(e -> log.error("Failed to get client secret: {}", e.getMessage())),
-            keycloakProperties.getRedirectUri()
-                .doOnError(e -> log.error("Failed to get redirect URI: {}", e.getMessage()))
-        )
-        .doOnError(error -> log.error("Failed to get OAuth2 properties: {}", error.getMessage()))
-        .flatMap(tuple -> {
-            String tokenUrl = tuple.getT1();
-            String clientId = tuple.getT2();
-            String clientSecret = tuple.getT3();
-            String redirectUri = tuple.getT4();
-            
-            log.info("Using redirect URI for token exchange: {}", redirectUri);
+                keycloakProperties.getTokenUrl()
+                        .doOnError(e -> log.error("Failed to get token URL: {}", e.getMessage())),
+                keycloakProperties.getClientId()
+                        .doOnError(e -> log.error("Failed to get client ID: {}", e.getMessage())),
+                keycloakProperties.getClientSecret()
+                        .doOnError(e -> log.error("Failed to get client secret: {}", e.getMessage())),
+                keycloakProperties.getRedirectUri()
+                        .doOnError(e -> log.error("Failed to get redirect URI: {}", e.getMessage())))
+                .doOnError(error -> log.error("Failed to get OAuth2 properties: {}", error.getMessage()))
+                .flatMap(tuple -> {
+                    String tokenUrl = tuple.getT1();
+                    String clientId = tuple.getT2();
+                    String clientSecret = tuple.getT3();
+                    String redirectUri = tuple.getT4();
 
-            log.info("\n=== OAuth Configuration ===\n" +
-                "Token URL: {}\n" +
-                "Client ID: {}\n" +
-                "Client Secret (first 4 chars): {}\n" +
-                "Redirect URI: {}", 
-                tokenUrl,
-                clientId,
-                clientSecret.substring(0, Math.min(4, clientSecret.length())),
-                redirectUri);
+                    log.info("Using redirect URI for token exchange: {}", redirectUri);
 
-            MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-            formData.add("grant_type", "authorization_code");
-            formData.add("code", code);
-            formData.add("client_id", clientId);
-            formData.add("client_secret", clientSecret);
-            formData.add("redirect_uri", redirectUri);
-            
-            return webClientBuilder.build().post()
-                .uri(tokenUrl)
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("Accept", "application/json")
-                .bodyValue(formData)
-                .exchangeToMono(response -> {
-                    if (response.statusCode().is4xxClientError()) {
-                        return response.bodyToMono(String.class)
-                            .flatMap(error -> {
-                                log.error("\n=== Token Request Failed ===\n" +
-                                    "Status: {}\n" +
-                                    "Error: {}\n" +
-                                    "Headers: {}\n" +
-                                    "Request Details:\n" +
-                                    "  URL: {}\n" +
-                                    "  Client ID: {}\n" +
-                                    "  Redirect URI: {}\n" +
-                                    "  Code Length: {}", 
-                                    response.statusCode(), 
-                                    error,
-                                    response.headers().asHttpHeaders(),
-                                    tokenUrl,
-                                    clientId,
-                                    redirectUri,
-                                    code.length());
-                                return Mono.error(new RuntimeException("Token request failed: " + error));
-                            });
-                    }
-                    log.info("Token request successful");
-                    return response.bodyToMono(String.class)
-                        .doOnNext(json -> log.info("Raw token response: {}", json))
-                        .flatMap(json -> {
-                            try {
-                                KeycloakTokenResponse tokenResponse = objectMapper.readValue(json, KeycloakTokenResponse.class);
-                                log.info("Parsed token response - Has id_token: {}", tokenResponse.getIdToken() != null);
-                                return Mono.just(tokenResponse);
-                            } catch (Exception e) {
-                                log.error("Failed to parse token response", e);
-                                return Mono.error(e);
-                            }
-                        });
-                })
-                .doOnNext(response -> log.info("Successfully received token response"))
-                .doOnError(error -> log.error("Error exchanging code for token", error))
-                .doFinally(signal -> log.info("=== [Timing] Token exchange finished in {} ms ===", System.currentTimeMillis() - start));
-        });
+                    log.info("\n=== OAuth Configuration ===\n" +
+                            "Token URL: {}\n" +
+                            "Client ID: {}\n" +
+                            "Client Secret (first 4 chars): {}\n" +
+                            "Redirect URI: {}",
+                            tokenUrl,
+                            clientId,
+                            clientSecret.substring(0, Math.min(4, clientSecret.length())),
+                            redirectUri);
+
+                    MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+                    formData.add("grant_type", "authorization_code");
+                    formData.add("code", code);
+                    formData.add("client_id", clientId);
+                    formData.add("client_secret", clientSecret);
+                    formData.add("redirect_uri", redirectUri);
+
+                    return webClientBuilder.build().post()
+                            .uri(tokenUrl)
+                            .header("Content-Type", "application/x-www-form-urlencoded")
+                            .header("Accept", "application/json")
+                            .bodyValue(formData)
+                            .exchangeToMono(response -> {
+                                if (response.statusCode().is4xxClientError()) {
+                                    return response.bodyToMono(String.class)
+                                            .flatMap(error -> {
+                                                log.error("\n=== Token Request Failed ===\n" +
+                                                        "Status: {}\n" +
+                                                        "Error: {}\n" +
+                                                        "Headers: {}\n" +
+                                                        "Request Details:\n" +
+                                                        "  URL: {}\n" +
+                                                        "  Client ID: {}\n" +
+                                                        "  Redirect URI: {}\n" +
+                                                        "  Code Length: {}",
+                                                        response.statusCode(),
+                                                        error,
+                                                        response.headers().asHttpHeaders(),
+                                                        tokenUrl,
+                                                        clientId,
+                                                        redirectUri,
+                                                        code.length());
+                                                return Mono
+                                                        .error(new RuntimeException("Token request failed: " + error));
+                                            });
+                                }
+                                log.info("Token request successful");
+                                return response.bodyToMono(String.class)
+                                        .doOnNext(json -> log.info("Raw token response: {}", json))
+                                        .flatMap(json -> {
+                                            try {
+                                                KeycloakTokenResponse tokenResponse = objectMapper.readValue(json,
+                                                        KeycloakTokenResponse.class);
+                                                log.info("Parsed token response - Has id_token: {}",
+                                                        tokenResponse.getIdToken() != null);
+                                                return Mono.just(tokenResponse);
+                                            } catch (Exception e) {
+                                                log.error("Failed to parse token response", e);
+                                                return Mono.error(e);
+                                            }
+                                        });
+                            })
+                            .doOnNext(response -> log.info("Successfully received token response"))
+                            .doOnError(error -> log.error("Error exchanging code for token", error))
+                            .doFinally(signal -> log.info("=== [Timing] Token exchange finished in {} ms ===",
+                                    System.currentTimeMillis() - start));
+                });
     }
 
     private Mono<AuthResponse> validateAndCreateSession(KeycloakTokenResponse tokenResponse) {
@@ -169,81 +176,106 @@ public class KeycloakServiceImpl implements KeycloakService {
         log.info("Token response contains id_token: {}", tokenResponse.getIdToken() != null);
 
         return jwtService.extractClaims(tokenResponse.getAccessToken())
-            .flatMap(claims -> {
-                String username = claims.get("preferred_username", String.class);
-                String email = claims.get("email", String.class);
-                
-                //The roles are in the realm_access.roles claim and we
-//                List<String> roles = claims.get("realm_access", Map.class) != null ?
-//                    ((Map<String, List<String>>) claims.get("realm_access", Map.class)).get("roles") :
-//                    new ArrayList<>();
+                .flatMap(claims -> {
+                    String username = claims.get("preferred_username", String.class);
+                    String email = claims.get("email", String.class);
 
-                // Try to find user by username first, then by email
-                Mono<User> userMono = userRepository.findByUsername(username)
-                    .switchIfEmpty(userRepository.findByEmail(email));
-                
-                Mono<AuthResponse> authResponseMono = userMono
-                    .flatMap(existingUser -> {
-                        // Case 2: User exists, create AuthResponse
-                        Map<String, Object> userMap = new HashMap<>();
-                        userMap.put("username", existingUser.getUsername());
-                        userMap.put("email", existingUser.getEmail());
-                        userMap.put("roles", existingUser.getRoles());
-                        userMap.put("id", existingUser.getId());
-                        userMap.put("authType", "SSO");
+                    // The roles are in the realm_access.roles claim and we
+                    // List<String> roles = claims.get("realm_access", Map.class) != null ?
+                    // ((Map<String, List<String>>) claims.get("realm_access",
+                    // Map.class)).get("roles") :
+                    // new ArrayList<>();
 
-                        AuthResponse response = AuthResponse.builder()
-                            .token(tokenResponse.getAccessToken())
-                            .refreshToken(tokenResponse.getRefreshToken())
-                            .idToken(tokenResponse.getIdToken())
-                            .user(userMap)
-                            .message("Login successful")
-                            .success(true)
-                            .build();
-                        
-                        log.info("Created AuthResponse with id_token: {}", response.getIdToken() != null);
-                        return Mono.just(response);
-                    })
-                    .switchIfEmpty(
-                        // Case 1: User doesn't exist, create and save new user
-                        Mono.just(new User())
-                            .map(newUser -> {
-                                newUser.setUsername(username);
-                                newUser.setEmail(email);
-                                newUser.setActive(true);
-                                newUser.setRoles(Set.of("USER"));
-                                newUser.setPassword(""); // Empty password for SSO users
-                                return newUser;
-                            })
-                            .flatMap(userRepository::save)
-                            .map(savedUser -> {
+                    // Try to find user by username first, then by email
+                    Mono<User> userMono = userRepository.findByUsername(username)
+                            .switchIfEmpty(userRepository.findByEmail(email));
+
+                    Mono<AuthResponse> authResponseMono = userMono
+                            .flatMap(existingUser -> {
+                                // Case 2: User exists, create AuthResponse
                                 Map<String, Object> userMap = new HashMap<>();
-                                userMap.put("username", savedUser.getUsername());
-                                userMap.put("email", savedUser.getEmail());
-                                userMap.put("roles", savedUser.getRoles());
-                                userMap.put("id", savedUser.getId());
+                                userMap.put("username", existingUser.getUsername());
+                                userMap.put("email", existingUser.getEmail());
+                                userMap.put("roles", existingUser.getRoles());
+                                userMap.put("id", existingUser.getId());
                                 userMap.put("authType", "SSO");
 
                                 AuthResponse response = AuthResponse.builder()
-                                    .token(tokenResponse.getAccessToken())
-                                    .refreshToken(tokenResponse.getRefreshToken())
-                                    .idToken(tokenResponse.getIdToken())
-                                    .user(userMap)
-                                    .message("User created and logged in successfully")
-                                    .success(true)
-                                    .build();
-                                
-                                log.info("Created AuthResponse with id_token: {}", response.getIdToken() != null);
-                                return response;
-                            })
-                    );
+                                        .token(tokenResponse.getAccessToken())
+                                        .refreshToken(tokenResponse.getRefreshToken())
+                                        .idToken(tokenResponse.getIdToken())
+                                        .user(userMap)
+                                        .message("Login successful")
+                                        .success(true)
+                                        .build();
 
-                return transactionalOperator.execute(status -> authResponseMono)
-                    .single()
-                    .doOnSuccess(response -> log.info("SSO transaction completed successfully"))
-                    .doOnError(e -> log.error("SSO transaction failed: {}", e.getMessage()));
-            })
-            .doFinally(signal -> log.info("=== [Timing] validateAndCreateSession finished in {} ms ===", System.currentTimeMillis() - start));
+                                log.info("Created AuthResponse with id_token: {}", response.getIdToken() != null);
+                                return Mono.just(response);
+                            })
+                            .switchIfEmpty(
+                                    // Case 1: User doesn't exist, create and save new user
+                                    Mono.just(new User())
+                                            .map(newUser -> {
+                                                newUser.setUsername(username);
+                                                newUser.setEmail(email);
+                                                newUser.setActive(true);
+                                                newUser.setRoles(Set.of("USER"));
+                                                newUser.setPassword(""); // Empty password for SSO users
+                                                return newUser;
+                                            })
+                                            .flatMap(userRepository::save)
+                                            .map(savedUser -> {
+                                                Map<String, Object> userMap = new HashMap<>();
+                                                userMap.put("username", savedUser.getUsername());
+                                                userMap.put("email", savedUser.getEmail());
+                                                userMap.put("roles", savedUser.getRoles());
+                                                userMap.put("id", savedUser.getId());
+                                                userMap.put("authType", "SSO");
+
+                                                AuthResponse response = AuthResponse.builder()
+                                                        .token(tokenResponse.getAccessToken())
+                                                        .refreshToken(tokenResponse.getRefreshToken())
+                                                        .idToken(tokenResponse.getIdToken())
+                                                        .user(userMap)
+                                                        .message("User created and logged in successfully")
+                                                        .success(true)
+                                                        .build();
+
+                                                log.info("Created AuthResponse with id_token: {}",
+                                                        response.getIdToken() != null);
+                                                return response;
+                                            }));
+
+                    return transactionalOperator.execute(status -> authResponseMono)
+                            .single()
+                            .flatMap(response -> {
+                                // Log audit event for successful SSO login
+                                Map<String, Object> userMap = response.getUser();
+                                String finalUsername = (String) userMap.get("username");
+                                String finalUserId = (String) userMap.get("id");
+
+                                log.debug("Logging audit event for SSO login: username={}, userId={}", finalUsername,
+                                        finalUserId);
+
+                                return auditLogHelper.logDetailedEvent(
+                                        AuditEventType.USER_LOGIN,
+                                        AuditActionType.READ,
+                                        AuditResourceType.AUTH,
+                                        finalUserId,
+                                        String.format("SSO Login successful for user: %s", finalUsername),
+                                        Map.of("authType", "SSO", "provider", "Keycloak"),
+                                        null,
+                                        null,
+                                        AuditResultType.SUCCESS)
+                                        .doOnError(e -> log.error("Failed to log SSO audit event", e))
+                                        .onErrorResume(e -> Mono.empty()) // Don't fail the login if audit logs fail
+                                        .thenReturn(response);
+                            })
+                            .doOnSuccess(response -> log.info("SSO transaction completed successfully"))
+                            .doOnError(e -> log.error("SSO transaction failed: {}", e.getMessage()));
+                })
+                .doFinally(signal -> log.info("=== [Timing] validateAndCreateSession finished in {} ms ===",
+                        System.currentTimeMillis() - start));
     }
 
     private String extractEmailFromToken(String token) {
@@ -258,11 +290,10 @@ public class KeycloakServiceImpl implements KeycloakService {
         }
     }
 
-
     @Override
     public Mono<AuthResponse> refreshToken(String refreshToken) {
         log.info("Attempting to refresh token with Keycloak");
-        
+
         if (refreshToken == null || refreshToken.trim().isEmpty()) {
             return Mono.error(new IllegalArgumentException("Refresh token is required"));
         }
@@ -271,113 +302,124 @@ public class KeycloakServiceImpl implements KeycloakService {
         if (!userContextService.isRefreshToken(refreshToken)) {
             log.error("Invalid token type - expected refresh token");
             return Mono.just(AuthResponse.builder()
-                .message("Invalid token type - expected refresh token")
-                .success(false)
-                .build());
+                    .message("Invalid token type - expected refresh token")
+                    .success(false)
+                    .build());
         }
 
         return Mono.zip(
-            keycloakProperties.getClientId(),
-            keycloakProperties.getClientSecret(),
-            keycloakProperties.getTokenUrl()
-        ).flatMap(tuple -> {
-            String clientId = tuple.getT1();
-            String clientSecret = tuple.getT2();
-            String tokenUrl = tuple.getT3();
-            
-            MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-            formData.add("grant_type", "refresh_token");
-            formData.add("client_id", clientId);
-            formData.add("client_secret", clientSecret);
-            formData.add("refresh_token", refreshToken);
+                keycloakProperties.getClientId(),
+                keycloakProperties.getClientSecret(),
+                keycloakProperties.getTokenUrl()).flatMap(tuple -> {
+                    String clientId = tuple.getT1();
+                    String clientSecret = tuple.getT2();
+                    String tokenUrl = tuple.getT3();
 
-            return webClientBuilder.build()
-                .post()
-                .uri(tokenUrl)
-                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                .body(BodyInserters.fromFormData(formData))
-                .retrieve()
-                .onStatus(
-                    status -> status.is4xxClientError() || status.is5xxServerError(),
-                    response -> response.bodyToMono(String.class)
-                        .flatMap(error -> {
-                            log.error("Keycloak refresh token error: {}", error);
-                            if (error.contains("Token is not active")) {
-                                return Mono.error(new TokenExpiredException("Refresh token has expired"));
-                            }
-                            return Mono.error(new RuntimeException("Token refresh failed: " + error));
-                        })
-                )
-                .bodyToMono(KeycloakTokenResponse.class)
-                .flatMap(response -> {
-                    // Extract claims from the token
-                    return jwtService.extractClaims(response.getAccessToken())
-                        .flatMap(claims -> {
-                            String username = claims.get("preferred_username", String.class);
-                            String email = claims.get("email", String.class);
-                            
-                            // Try to find user by username first, then by email
-                            Mono<User> userMono = userRepository.findByUsername(username)
-                                .switchIfEmpty(userRepository.findByEmail(email));
-                            
-                            return userMono
-                                .map(existingUser -> {
-                                    Map<String, Object> user = new HashMap<>();
-                                    user.put("username", existingUser.getUsername());
-                                    user.put("email", existingUser.getEmail());
-                                    user.put("roles", existingUser.getRoles()); // Use application roles
-                                    user.put("id", existingUser.getId());
-                                    user.put("authType", "SSO"); // Add missing authType
+                    MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+                    formData.add("grant_type", "refresh_token");
+                    formData.add("client_id", clientId);
+                    formData.add("client_secret", clientSecret);
+                    formData.add("refresh_token", refreshToken);
 
-                                    return AuthResponse.builder()
-                                        .token(response.getAccessToken())
-                                        .refreshToken(response.getRefreshToken())
-                                        .idToken(response.getIdToken())
-                                        .user(user)
-                                        .success(true)
-                                        .build();
-                                })
-                                .switchIfEmpty(Mono.error(new RuntimeException("User not found during token refresh")));
-                        });
-                })
-                .onErrorResume(e -> {
-                    if (e instanceof TokenExpiredException) {
-                        return Mono.just(AuthResponse.builder()
-                            .message("Session expired. Please login again.")
-                            .success(false)
-                            .expired(true)
-                            .build());
-                    }
-                    log.error("Token refresh failed", e);
-                    return Mono.just(AuthResponse.builder()
-                        .message(e.getMessage())
-                        .success(false)
-                        .build());
+                    return webClientBuilder.build()
+                            .post()
+                            .uri(tokenUrl)
+                            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                            .body(BodyInserters.fromFormData(formData))
+                            .retrieve()
+                            .onStatus(
+                                    status -> status.is4xxClientError() || status.is5xxServerError(),
+                                    response -> response.bodyToMono(String.class)
+                                            .flatMap(error -> {
+                                                log.error("Keycloak refresh token error: {}", error);
+                                                if (error.contains("Token is not active")) {
+                                                    return Mono.error(
+                                                            new TokenExpiredException("Refresh token has expired"));
+                                                }
+                                                return Mono
+                                                        .error(new RuntimeException("Token refresh failed: " + error));
+                                            }))
+                            .bodyToMono(KeycloakTokenResponse.class)
+                            .flatMap(response -> {
+                                // Extract claims from the token
+                                return jwtService.extractClaims(response.getAccessToken())
+                                        .flatMap(claims -> {
+                                            String username = claims.get("preferred_username", String.class);
+                                            String email = claims.get("email", String.class);
+
+                                            // Try to find user by username first, then by email
+                                            Mono<User> userMono = userRepository.findByUsername(username)
+                                                    .switchIfEmpty(userRepository.findByEmail(email));
+
+                                            return userMono
+                                                    .map(existingUser -> {
+                                                        Map<String, Object> user = new HashMap<>();
+                                                        user.put("username", existingUser.getUsername());
+                                                        user.put("email", existingUser.getEmail());
+                                                        user.put("roles", existingUser.getRoles()); // Use application
+                                                                                                    // roles
+                                                        user.put("id", existingUser.getId());
+                                                        user.put("authType", "SSO"); // Add missing authType
+
+                                                        return AuthResponse.builder()
+                                                                .token(response.getAccessToken())
+                                                                .refreshToken(response.getRefreshToken())
+                                                                .idToken(response.getIdToken())
+                                                                .user(user)
+                                                                .success(true)
+                                                                .build();
+                                                    })
+                                                    .switchIfEmpty(Mono.error(new RuntimeException(
+                                                            "User not found during token refresh")));
+                                        });
+                            })
+                            .onErrorResume(e -> {
+                                if (e instanceof TokenExpiredException) {
+                                    return Mono.just(AuthResponse.builder()
+                                            .message("Session expired. Please login again.")
+                                            .success(false)
+                                            .expired(true)
+                                            .build());
+                                }
+                                log.error("Token refresh failed", e);
+                                return Mono.just(AuthResponse.builder()
+                                        .message(e.getMessage())
+                                        .success(false)
+                                        .build());
+                            });
                 });
-        });
     }
 }
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 record KeycloakTokenResponse(
-    String accessToken,
-    String refreshToken,
-    String idToken,
-    String tokenType,
-    Integer expiresIn
-) {
+        String accessToken,
+        String refreshToken,
+        String idToken,
+        String tokenType,
+        Integer expiresIn) {
     @JsonProperty("access_token")
-    public String getAccessToken() { return accessToken; }
-    
+    public String getAccessToken() {
+        return accessToken;
+    }
+
     @JsonProperty("refresh_token")
-    public String getRefreshToken() { return refreshToken; }
-    
+    public String getRefreshToken() {
+        return refreshToken;
+    }
+
     @JsonProperty("id_token")
-    public String getIdToken() { return idToken; }
-    
+    public String getIdToken() {
+        return idToken;
+    }
+
     @JsonProperty("token_type")
-    public String getTokenType() { return tokenType; }
-    
+    public String getTokenType() {
+        return tokenType;
+    }
+
     @JsonProperty("expires_in")
-    public Integer getExpiresIn() { return expiresIn; }
-} 
+    public Integer getExpiresIn() {
+        return expiresIn;
+    }
+}

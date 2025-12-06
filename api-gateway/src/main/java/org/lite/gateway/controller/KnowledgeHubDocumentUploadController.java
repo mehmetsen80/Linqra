@@ -3,9 +3,13 @@ package org.lite.gateway.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.annotation.AuditLog;
 import org.lite.gateway.config.S3Properties;
 import org.lite.gateway.dto.*;
 import org.lite.gateway.entity.KnowledgeHubDocument;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
 import org.lite.gateway.service.S3Service;
@@ -161,6 +165,14 @@ public class KnowledgeHubDocumentUploadController {
      * Client confirms upload completion and triggers processing
      */
     @PostMapping("/upload/{documentId}/complete")
+    @AuditLog(
+        eventType = AuditEventType.DOCUMENT_UPLOADED,
+        action = AuditActionType.CREATE,
+        resourceType = AuditResourceType.DOCUMENT,
+        resourceIdParam = "documentId",
+        documentIdParam = "documentId",
+        reason = "Document upload completed and processing queued"
+    )
     public Mono<ResponseEntity<UploadResponse>> completeUpload(
             @PathVariable String documentId,
             @Valid @RequestBody UploadCompleteRequest request,
@@ -271,6 +283,14 @@ public class KnowledgeHubDocumentUploadController {
      * Note: This must come before the regular delete endpoint to ensure proper route matching
      */
     @DeleteMapping("/{documentId}/hard")
+    @AuditLog(
+        eventType = AuditEventType.DOCUMENT_HARD_DELETED,
+        action = AuditActionType.DELETE,
+        resourceType = AuditResourceType.DOCUMENT,
+        resourceIdParam = "documentId",
+        documentIdParam = "documentId",
+        reason = "Hard delete removes all data including S3 files, chunks, metadata, and graph entities"
+    )
     public Mono<ResponseEntity<Object>> hardDeleteDocument(@PathVariable String documentId, ServerWebExchange exchange) {
         log.info("Hard deleting document (including S3 files): {}", documentId);
         

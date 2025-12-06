@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.AIAssistant;
 import org.lite.gateway.repository.AIAssistantRepository;
+import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.service.AIAssistantService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -18,6 +19,7 @@ import java.util.UUID;
 public class AIAssistantServiceImpl implements AIAssistantService {
     
     private final AIAssistantRepository aiAssistantRepository;
+    private final LinqLlmModelRepository linqLlmModelRepository;
     
     @Override
     public Mono<AIAssistant> createAssistant(AIAssistant assistant, String teamId, String createdBy) {
@@ -73,7 +75,59 @@ public class AIAssistantServiceImpl implements AIAssistantService {
                         existingAssistant.setStatus(assistantUpdates.getStatus());
                     }
                     if (assistantUpdates.getDefaultModel() != null) {
-                        existingAssistant.setDefaultModel(assistantUpdates.getDefaultModel());
+                        AIAssistant.ModelConfig modelConfig = assistantUpdates.getDefaultModel();
+                        String modelName = modelConfig.getModelName();
+                        String provider = modelConfig.getProvider();
+                        String teamId = existingAssistant.getTeamId();
+                        
+                        // Ensure modelCategory is set - look it up from MongoDB if missing
+                        if (modelConfig.getModelCategory() == null || modelConfig.getModelCategory().isEmpty()) {
+                            // Try to find modelCategory from linq_llm_models collection
+                            Mono<String> modelCategoryMono;
+                            if (provider != null && !provider.isEmpty()) {
+                                // More specific lookup with provider
+                                modelCategoryMono = linqLlmModelRepository
+                                        .findByModelNameAndProviderAndTeamId(modelName, provider, teamId)
+                                        .map(org.lite.gateway.entity.LinqLlmModel::getModelCategory)
+                                        .switchIfEmpty(Mono.empty());
+                            } else {
+                                // Fallback: find by modelName and teamId, take first result
+                                modelCategoryMono = linqLlmModelRepository
+                                        .findByModelNameAndTeamId(modelName, teamId)
+                                        .next()
+                                        .map(org.lite.gateway.entity.LinqLlmModel::getModelCategory)
+                                        .switchIfEmpty(Mono.empty());
+                            }
+                            
+                            return modelCategoryMono
+                                    .flatMap(modelCategory -> {
+                                        modelConfig.setModelCategory(modelCategory);
+                                        log.info("Found modelCategory '{}' from MongoDB for modelName '{}', provider '{}', teamId '{}'", 
+                                                modelCategory, modelName, provider, teamId);
+                                        existingAssistant.setDefaultModel(modelConfig);
+                                        // Continue with rest of updates
+                                        return continueWithUpdates(existingAssistant, assistantUpdates, updatedBy);
+                                    })
+                                    .switchIfEmpty(Mono.defer(() -> {
+                                        // Fallback to derivation if not found in MongoDB
+                                        String derivedCategory = deriveModelCategory(modelName, provider);
+                                        if (derivedCategory != null) {
+                                            modelConfig.setModelCategory(derivedCategory);
+                                            log.warn("Could not find modelCategory in MongoDB for modelName '{}', provider '{}', teamId '{}'. " +
+                                                    "Derived modelCategory '{}' as fallback.", 
+                                                    modelName, provider, teamId, derivedCategory);
+                                        } else {
+                                            log.error("Could not find or derive modelCategory for modelName '{}', provider '{}', teamId '{}'. " +
+                                                    "ModelCategory must be set explicitly or model must exist in linq_llm_models collection.", 
+                                                    modelName, provider, teamId);
+                                        }
+                                        existingAssistant.setDefaultModel(modelConfig);
+                                        // Continue with rest of updates
+                                        return continueWithUpdates(existingAssistant, assistantUpdates, updatedBy);
+                                    }));
+                        } else {
+                            existingAssistant.setDefaultModel(modelConfig);
+                        }
                     }
                     if (assistantUpdates.getSystemPrompt() != null) {
                         existingAssistant.setSystemPrompt(assistantUpdates.getSystemPrompt());
@@ -252,6 +306,105 @@ public class AIAssistantServiceImpl implements AIAssistantService {
     private String generateUniqueApiKey() {
         // Generate a unique API key format: linqra_pub_{uuid}
         return "linqra_pub_" + UUID.randomUUID().toString().replace("-", "");
+    }
+    
+    /**
+     * Continue with the rest of the update logic after setting defaultModel
+     */
+    private Mono<AIAssistant> continueWithUpdates(AIAssistant existingAssistant, AIAssistant assistantUpdates, String updatedBy) {
+        // Update remaining fields
+        if (assistantUpdates.getSystemPrompt() != null) {
+            existingAssistant.setSystemPrompt(assistantUpdates.getSystemPrompt());
+        }
+        if (assistantUpdates.getSelectedTasks() != null) {
+            existingAssistant.setSelectedTasks(assistantUpdates.getSelectedTasks());
+        }
+        if (assistantUpdates.getContextManagement() != null) {
+            existingAssistant.setContextManagement(assistantUpdates.getContextManagement());
+        }
+        if (assistantUpdates.getGuardrails() != null) {
+            existingAssistant.setGuardrails(assistantUpdates.getGuardrails());
+        }
+        // Allow updating access control (e.g., PRIVATE -> PUBLIC) from the main update endpoint
+        if (assistantUpdates.getAccessControl() != null) {
+            AIAssistant.AccessControl updates = assistantUpdates.getAccessControl();
+            AIAssistant.AccessControl current = existingAssistant.getAccessControl();
+            if (current == null) {
+                current = AIAssistant.AccessControl.builder().build();
+            }
+            
+            // Update basic access control fields
+            if (updates.getType() != null) {
+                current.setType(updates.getType());
+            }
+            if (updates.getAllowedDomains() != null) {
+                current.setAllowedDomains(updates.getAllowedDomains());
+            }
+            if (updates.getAllowAnonymousAccess() != null) {
+                current.setAllowAnonymousAccess(updates.getAllowAnonymousAccess());
+            }
+            
+            // If switching to PUBLIC and no API key exists yet, generate one
+            if ("PUBLIC".equalsIgnoreCase(current.getType())
+                    && current.getPublicApiKey() == null) {
+                String apiKey = generateUniqueApiKey();
+                current.setPublicApiKey(apiKey);
+            }
+            
+            existingAssistant.setAccessControl(current);
+        }
+        
+        existingAssistant.setUpdatedBy(updatedBy);
+        
+        return aiAssistantRepository.save(existingAssistant);
+    }
+    
+    /**
+     * Derive modelCategory from modelName and provider
+     * 
+     * @param modelName The model name (e.g., "gemini-2.0-flash", "gpt-4o")
+     * @param provider The provider (e.g., "gemini", "openai")
+     * @return The derived modelCategory (e.g., "gemini-chat", "openai-chat") or null if cannot be derived
+     */
+    private String deriveModelCategory(String modelName, String provider) {
+        if (modelName == null || modelName.isEmpty()) {
+            return null;
+        }
+        
+        String lowerModelName = modelName.toLowerCase();
+        String lowerProvider = provider != null ? provider.toLowerCase() : "";
+        
+        // Try to detect provider from modelName if provider is not provided
+        if (lowerProvider.isEmpty()) {
+            if (lowerModelName.startsWith("gemini") || lowerModelName.startsWith("embedding-001") || 
+                lowerModelName.startsWith("text-embedding-004")) {
+                lowerProvider = "gemini";
+            } else if (lowerModelName.startsWith("gpt-") || lowerModelName.startsWith("text-embedding")) {
+                lowerProvider = "openai";
+            } else if (lowerModelName.startsWith("claude")) {
+                lowerProvider = "anthropic";
+            } else if (lowerModelName.startsWith("command") || lowerModelName.startsWith("embed")) {
+                lowerProvider = "cohere";
+            }
+        }
+        
+        // Determine if it's an embedding model or chat model
+        boolean isEmbedding = lowerModelName.contains("embedding") || 
+                             lowerModelName.contains("embed") ||
+                             lowerModelName.startsWith("text-embedding");
+        
+        // Build modelCategory based on provider and type
+        if ("gemini".equals(lowerProvider)) {
+            return isEmbedding ? "gemini-embed" : "gemini-chat";
+        } else if ("openai".equals(lowerProvider)) {
+            return isEmbedding ? "openai-embed" : "openai-chat";
+        } else if ("anthropic".equals(lowerProvider)) {
+            return "claude-chat"; // Anthropic models are typically chat models
+        } else if ("cohere".equals(lowerProvider)) {
+            return isEmbedding ? "cohere-embed" : "cohere-chat";
+        }
+        
+        return null;
     }
 }
 

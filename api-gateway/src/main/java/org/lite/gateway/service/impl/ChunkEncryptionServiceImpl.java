@@ -2,10 +2,14 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.exception.SecretNotFoundException;
+import org.lite.gateway.entity.TeamChunkKey;
+import org.lite.gateway.repository.TeamChunkKeyRepository;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.LinqraVaultService;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
 
 import jakarta.annotation.PostConstruct;
 import javax.crypto.Cipher;
@@ -16,7 +20,6 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -29,281 +32,368 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
-    
+
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int GCM_IV_LENGTH = 12; // 96 bits for GCM
     private static final int GCM_TAG_LENGTH = 16; // 128 bits
-    
+
     private final LinqraVaultService vaultService;
-    
-    private String currentKeyVersion = "v1"; // Default version
-    private final Map<String, String> keyVersions = new HashMap<>(); // version -> base64 key
-    
+    private final TeamChunkKeyRepository teamChunkKeyRepository;
+
+    private String globalMasterKey; // The Global Master Key (v1) acts as KEK
+
+    // Cache for team keys: key="teamId:version", value=SecretKey
+    private final Map<String, Mono<SecretKey>> keyCache = new java.util.concurrent.ConcurrentHashMap<>();
+    // Cache for active versions: key="teamId", value=version
+    private final Map<String, Mono<String>> activeVersionCache = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final Duration CACHE_TTL = Duration.ofMinutes(15);
+
     @PostConstruct
     public void init() {
         try {
-            // Load current master key (default version)
-            String masterKey = vaultService.getSecret("chunk.encryption.master.key");
-            keyVersions.put("v1", masterKey);
-            log.info("Loaded encryption key version v1");
-            
-            // Check for newer key versions (e.g., v2, v3)
-            // Format: chunk.encryption.master.key.v2, chunk.encryption.master.key.v3
-            int version = 2;
-            while (true) {
-                String keyName = "chunk.encryption.master.key.v" + version;
-                try {
-                    String versionedKey = vaultService.getSecret(keyName);
-                    if (versionedKey != null && !versionedKey.isEmpty()) {
-                        keyVersions.put("v" + version, versionedKey);
-                        currentKeyVersion = "v" + version; // Update to latest version
-                        log.info("Loaded encryption key version v{}", version);
-                        version++;
-                    } else {
-                        break;
-                    }
-                } catch (SecretNotFoundException e) {
-                    // No more versions found
-                    break;
-                }
+            // Load global master key (v1) - this acts as the KEK for Team Keys
+            // And also the base for legacy v1 team key derivation
+            globalMasterKey = vaultService.getSecret("chunk.encryption.master.key");
+
+            if (globalMasterKey == null || globalMasterKey.isEmpty()) {
+                throw new IllegalStateException("chunk.encryption.master.key not found in vault");
             }
-            
-            log.info("Loaded encryption key versions: {}", keyVersions.keySet());
-            log.info("Current encryption key version: {}", currentKeyVersion);
-            
+            log.info("Global Master Key loaded successfully");
+
         } catch (Exception e) {
             log.error("Failed to initialize ChunkEncryptionService. " +
-                "chunk.encryption.master.key not found in vault. " +
-                "Add it using: vault-reader --operation write --key chunk.encryption.master.key --value <base64-key>", e);
+                    "chunk.encryption.master.key not found in vault. " +
+                    "Add it using: vault-reader --operation write --key chunk.encryption.master.key --value <base64-key>",
+                    e);
             throw new IllegalStateException("chunk.encryption.master.key not found in vault. " +
-                "Add it using vault-reader CLI or bootstrap script.", e);
+                    "Add it using vault-reader CLI or bootstrap script.", e);
         }
     }
-    
+
     @Override
-    public String getCurrentKeyVersion() {
-        return currentKeyVersion;
+    public Mono<String> getCurrentKeyVersion(String teamId) {
+        return activeVersionCache.computeIfAbsent(teamId, tid -> teamChunkKeyRepository.findByTeamIdAndIsActiveTrue(tid)
+                .map(TeamChunkKey::getVersion)
+                .defaultIfEmpty("v1") // Default to v1 (legacy) if no active key found
+                .cache(CACHE_TTL));
     }
-    
+
     @Override
-    public String encryptChunkText(String plaintext, String teamId) {
-        return encryptChunkText(plaintext, teamId, currentKeyVersion);
+    public Mono<String> encryptChunkText(String plaintext, String teamId) {
+        return getCurrentKeyVersion(teamId)
+                .flatMap(version -> encryptChunkText(plaintext, teamId, version));
     }
-    
+
     @Override
-    public String encryptChunkText(String plaintext, String teamId, String keyVersion) {
+    public Mono<String> encryptChunkText(String plaintext, String teamId, String keyVersion) {
         if (plaintext == null || plaintext.isEmpty()) {
-            return plaintext;
+            return Mono.just(plaintext);
         }
-        
-        try {
-            String masterKeyBase64 = keyVersions.get(keyVersion);
-            if (masterKeyBase64 == null) {
-                throw new IllegalStateException("Encryption key version not found: " + keyVersion);
-            }
-            
-            // Derive team-specific key
-            SecretKey teamKey = deriveTeamKey(teamId, masterKeyBase64);
-            
-            // Initialize cipher
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.ENCRYPT_MODE, teamKey);
-            
-            // Encrypt
-            byte[] encryptedBytes = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
-            byte[] iv = cipher.getIV();
-            
-            // Combine IV + encrypted data (GCM includes tag)
-            byte[] combined = new byte[iv.length + encryptedBytes.length];
-            System.arraycopy(iv, 0, combined, 0, iv.length);
-            System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
-            
-            // Return Base64 encoded
-            return Base64.getEncoder().encodeToString(combined);
-            
-        } catch (Exception e) {
-            log.error("Failed to encrypt chunk text for team: {}, version: {}", teamId, keyVersion, e);
-            throw new RuntimeException("Failed to encrypt chunk text", e);
-        }
+
+        return getTeamKey(teamId, keyVersion)
+                .map(secretKey -> {
+                    try {
+                        // Initialize cipher
+                        Cipher cipher = Cipher.getInstance(ALGORITHM);
+                        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+
+                        // Encrypt
+                        byte[] encryptedBytes = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+                        byte[] iv = cipher.getIV();
+
+                        // Combine IV + encrypted data (GCM includes tag)
+                        byte[] combined = new byte[iv.length + encryptedBytes.length];
+                        System.arraycopy(iv, 0, combined, 0, iv.length);
+                        System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
+
+                        // Return Base64 encoded
+                        return Base64.getEncoder().encodeToString(combined);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Encryption failed", e);
+                    }
+                })
+                .onErrorMap(e -> new RuntimeException("Failed to encrypt chunk text for team: " + teamId, e));
     }
-    
+
     @Override
-    public String decryptChunkText(String encryptedText, String teamId, String keyVersion) {
+    public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion) {
         if (encryptedText == null || encryptedText.isEmpty()) {
-            return encryptedText;
+            return Mono.just(encryptedText);
         }
-        
-        if (keyVersion == null || keyVersion.isEmpty()) {
-            keyVersion = "v1"; // Default to v1 for legacy data
+
+        // If no key version specified, assume it's unencrypted legacy data or v1
+        final String version = (keyVersion == null || keyVersion.isEmpty()) ? "v1" : keyVersion;
+
+        return getTeamKey(teamId, version)
+                .map(secretKey -> {
+                    try {
+                        // Decode Base64
+                        byte[] combined = Base64.getDecoder().decode(encryptedText);
+
+                        // Extract IV and encrypted data
+                        if (combined.length < GCM_IV_LENGTH) {
+                            throw new IllegalArgumentException("Invalid encrypted data: too short to contain IV");
+                        }
+
+                        byte[] iv = Arrays.copyOfRange(combined, 0, GCM_IV_LENGTH);
+                        byte[] encryptedBytes = Arrays.copyOfRange(combined, GCM_IV_LENGTH, combined.length);
+
+                        // Initialize cipher
+                        Cipher cipher = Cipher.getInstance(ALGORITHM);
+                        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
+                        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+
+                        // Decrypt
+                        byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
+                        return new String(decryptedBytes, StandardCharsets.UTF_8);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Decryption failed", e);
+                    }
+                })
+                .onErrorMap(e -> new RuntimeException("Failed to decrypt chunk text for team: " + teamId, e));
+    }
+
+    @Override
+    public Mono<byte[]> encryptFile(byte[] fileBytes, String teamId) {
+        return getCurrentKeyVersion(teamId)
+                .flatMap(version -> encryptFile(fileBytes, teamId, version));
+    }
+
+    @Override
+    public Mono<byte[]> encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
+        if (fileBytes == null || fileBytes.length == 0) {
+            return Mono.just(fileBytes);
         }
-        
+
+        return getTeamKey(teamId, keyVersion)
+                .map(secretKey -> {
+                    try {
+                        // Initialize cipher
+                        Cipher cipher = Cipher.getInstance(ALGORITHM);
+                        cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+
+                        // Encrypt file bytes
+                        byte[] encryptedBytes = cipher.doFinal(fileBytes);
+                        byte[] iv = cipher.getIV();
+
+                        // Combine IV + encrypted data
+                        byte[] combined = new byte[iv.length + encryptedBytes.length];
+                        System.arraycopy(iv, 0, combined, 0, iv.length);
+                        System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
+
+                        return combined;
+                    } catch (Exception e) {
+                        throw new RuntimeException("Encryption failed", e);
+                    }
+                });
+    }
+
+    @Override
+    public Mono<byte[]> decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
+        if (encryptedBytes == null || encryptedBytes.length == 0) {
+            return Mono.just(encryptedBytes);
+        }
+        final String version = (keyVersion == null || keyVersion.isEmpty()) ? "v1" : keyVersion;
+
+        return getTeamKey(teamId, version)
+                .map(secretKey -> {
+                    try {
+                        // Extract IV and encrypted data
+                        if (encryptedBytes.length < GCM_IV_LENGTH) {
+                            throw new IllegalArgumentException("Invalid encrypted file: too short to contain IV");
+                        }
+
+                        byte[] iv = Arrays.copyOfRange(encryptedBytes, 0, GCM_IV_LENGTH);
+                        byte[] encryptedData = Arrays.copyOfRange(encryptedBytes, GCM_IV_LENGTH, encryptedBytes.length);
+
+                        // Initialize cipher
+                        Cipher cipher = Cipher.getInstance(ALGORITHM);
+                        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
+                        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+
+                        // Decrypt file bytes
+                        return cipher.doFinal(encryptedData);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Decryption failed", e);
+                    }
+                });
+    }
+
+    private Mono<SecretKey> getTeamKey(String teamId, String version) {
+        String cacheKey = teamId + ":" + version;
+        return keyCache.computeIfAbsent(cacheKey, k -> fetchTeamKey(teamId, version).cache(CACHE_TTL));
+    }
+
+    private Mono<SecretKey> fetchTeamKey(String teamId, String version) {
+        if ("v1".equals(version)) {
+            return Mono.fromCallable(() -> deriveLegacyTeamKey(teamId));
+        }
+
+        // For v2+, fetch from DB and decrypt with Global Master Key
+        return teamChunkKeyRepository.findByTeamIdAndVersion(teamId, version)
+                .map(keyEntity -> {
+                    try {
+                        return decryptTeamKey(keyEntity.getEncryptedKey());
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to decrypt team key from storage", e);
+                    }
+                })
+                .switchIfEmpty(Mono.error(new IllegalStateException("Encryption key not found: " + version)));
+    }
+
+    private SecretKey deriveLegacyTeamKey(String teamId) {
+        return deriveTeamKeyHmac(teamId, globalMasterKey);
+    }
+
+    private SecretKey decryptTeamKey(String encryptedTeamKeyBase64) {
+        // Here we assume the stored key is just the raw bytes of the key,
+        // encrypted by the Global Master Key.
+        // BUT, we need to know HOW it was encrypted (IV etc).
+        // For simplicity, let's assume the Global Master Key is used to AES-decrypt the
+        // stored key.
+        // Wait, the detailed plan said "Encrypt [new random AES key] with Global Master
+        // Key".
+        // It implies we need a decrypt method.
+        // Similar to decryptChunkText but using GlobalMasterKey as the key.
+
         try {
-            String masterKeyBase64 = keyVersions.get(keyVersion);
-            if (masterKeyBase64 == null) {
-                throw new IllegalStateException("Encryption key version not found: " + keyVersion + 
-                    ". Cannot decrypt chunk. Key may have been rotated. Available versions: " + keyVersions.keySet());
-            }
-            
             // Decode Base64
-            byte[] combined = Base64.getDecoder().decode(encryptedText);
-            
+            byte[] combined = Base64.getDecoder().decode(encryptedTeamKeyBase64);
+
             // Extract IV and encrypted data
-            if (combined.length < GCM_IV_LENGTH) {
-                throw new IllegalArgumentException("Invalid encrypted data: too short to contain IV");
-            }
-            
             byte[] iv = Arrays.copyOfRange(combined, 0, GCM_IV_LENGTH);
             byte[] encryptedBytes = Arrays.copyOfRange(combined, GCM_IV_LENGTH, combined.length);
-            
-            // Derive team-specific key
-            SecretKey teamKey = deriveTeamKey(teamId, masterKeyBase64);
-            
-            // Initialize cipher
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
-            cipher.init(Cipher.DECRYPT_MODE, teamKey, spec);
-            
+
+            // Prepare Master Key
+            byte[] masterKeyBytes = Base64.getDecoder().decode(globalMasterKey);
+            SecretKeySpec masterKeySpec = new SecretKeySpec(masterKeyBytes, "AES");
+
             // Decrypt
-            byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
-            return new String(decryptedBytes, StandardCharsets.UTF_8);
-            
-        } catch (IllegalStateException e) {
-            // Re-throw IllegalStateException (version not found)
-            throw e;
-        } catch (IllegalArgumentException e) {
-            // Re-throw IllegalArgumentException (invalid data format)
-            throw e;
-        } catch (javax.crypto.AEADBadTagException e) {
-            // Wrong key or corrupted data - most common decryption failure
-            String errorMsg = String.format(
-                "Decryption authentication failed for team: %s, version: %s. " +
-                "This usually means: 1) Wrong encryption key, 2) Data was encrypted with a different key version, " +
-                "or 3) Corrupted encrypted data. Error: %s",
-                teamId, keyVersion, e.getMessage()
-            );
-            log.error(errorMsg, e);
-            throw new RuntimeException(errorMsg, e);
-        } catch (Exception e) {
-            String errorDetails = String.format(
-                "Failed to decrypt chunk text for team: %s, version: %s. Error type: %s, Message: %s",
-                teamId, keyVersion, e.getClass().getSimpleName(), e.getMessage()
-            );
-            log.error(errorDetails, e);
-            throw new RuntimeException(errorDetails, e);
-        }
-    }
-    
-    @Override
-    public byte[] encryptFile(byte[] fileBytes, String teamId) {
-        return encryptFile(fileBytes, teamId, currentKeyVersion);
-    }
-    
-    @Override
-    public byte[] encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
-        if (fileBytes == null || fileBytes.length == 0) {
-            return fileBytes;
-        }
-        
-        try {
-            String masterKeyBase64 = keyVersions.get(keyVersion);
-            if (masterKeyBase64 == null) {
-                throw new IllegalStateException("Encryption key version not found: " + keyVersion);
-            }
-            
-            // Derive team-specific key
-            SecretKey teamKey = deriveTeamKey(teamId, masterKeyBase64);
-            
-            // Initialize cipher
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.ENCRYPT_MODE, teamKey);
-            
-            // Encrypt file bytes
-            byte[] encryptedBytes = cipher.doFinal(fileBytes);
-            byte[] iv = cipher.getIV();
-            
-            // Combine IV + encrypted data (GCM includes tag)
-            byte[] combined = new byte[iv.length + encryptedBytes.length];
-            System.arraycopy(iv, 0, combined, 0, iv.length);
-            System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
-            
-            return combined;
-            
-        } catch (Exception e) {
-            log.error("Failed to encrypt file for team: {}, version: {}", teamId, keyVersion, e);
-            throw new RuntimeException("Failed to encrypt file", e);
-        }
-    }
-    
-    @Override
-    public byte[] decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
-        if (encryptedBytes == null || encryptedBytes.length == 0) {
-            return encryptedBytes;
-        }
-        
-        if (keyVersion == null || keyVersion.isEmpty()) {
-            keyVersion = "v1"; // Default to v1 for legacy data
-        }
-        
-        try {
-            String masterKeyBase64 = keyVersions.get(keyVersion);
-            if (masterKeyBase64 == null) {
-                throw new IllegalStateException("Encryption key version not found: " + keyVersion + 
-                    ". Cannot decrypt file. Key may have been rotated. Available versions: " + keyVersions.keySet());
-            }
-            
-            // Extract IV and encrypted data
-            if (encryptedBytes.length < GCM_IV_LENGTH) {
-                throw new IllegalArgumentException("Invalid encrypted file: too short to contain IV");
-            }
-            
-            byte[] iv = Arrays.copyOfRange(encryptedBytes, 0, GCM_IV_LENGTH);
-            byte[] encryptedData = Arrays.copyOfRange(encryptedBytes, GCM_IV_LENGTH, encryptedBytes.length);
-            
-            // Derive team-specific key
-            SecretKey teamKey = deriveTeamKey(teamId, masterKeyBase64);
-            
-            // Initialize cipher
             Cipher cipher = Cipher.getInstance(ALGORITHM);
             GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
-            cipher.init(Cipher.DECRYPT_MODE, teamKey, spec);
-            
-            // Decrypt file bytes
-            return cipher.doFinal(encryptedData);
-            
-        } catch (IllegalStateException e) {
-            // Re-throw IllegalStateException (version not found)
-            throw e;
+            cipher.init(Cipher.DECRYPT_MODE, masterKeySpec, spec);
+
+            byte[] decryptedKeyBytes = cipher.doFinal(encryptedBytes);
+            return new SecretKeySpec(decryptedKeyBytes, "AES");
+
         } catch (Exception e) {
-            log.error("Failed to decrypt file for team: {}, version: {}", teamId, keyVersion, e);
-            throw new RuntimeException("Failed to decrypt file for team: " + teamId + 
-                " with key version: " + keyVersion, e);
+            throw new RuntimeException("Failed to decrypt team key", e);
         }
     }
-    
-    /**
-     * Derive team-specific encryption key from master key using HMAC-SHA256.
-     * 
-     * @param teamId The team ID
-     * @param masterKeyBase64 The base64-encoded master key
-     * @return SecretKey for AES encryption
-     */
-    private SecretKey deriveTeamKey(String teamId, String masterKeyBase64) {
+
+    private SecretKey deriveTeamKeyHmac(String teamId, String masterKeyBase64) {
         try {
             // Decode master key
             byte[] masterKey = Base64.getDecoder().decode(masterKeyBase64);
-            
+
             // Derive team key using HMAC-SHA256
             Mac hmac = Mac.getInstance("HmacSHA256");
             SecretKeySpec masterKeySpec = new SecretKeySpec(masterKey, "HmacSHA256");
             hmac.init(masterKeySpec);
             byte[] teamKeyBytes = hmac.doFinal(teamId.getBytes(StandardCharsets.UTF_8));
-            
+
             return new SecretKeySpec(teamKeyBytes, "AES");
-            
+
         } catch (Exception e) {
             log.error("Failed to derive team key for team: {}", teamId, e);
             throw new RuntimeException("Failed to derive team key", e);
         }
     }
-}
 
+    @Override
+    public Mono<String> rotateKey(String teamId) {
+        log.info("Initiating key rotation for team: {}", teamId);
+        return teamChunkKeyRepository.findAllByTeamId(teamId)
+                .collectList()
+                .flatMap(keys -> {
+                    // 1. Determine next version
+                    int maxVersion = keys.stream()
+                            .map(k -> parseVersion(k.getVersion()))
+                            .max(Integer::compareTo)
+                            .orElse(1); // Default to v1 (legacy) -> next is v2
+
+                    String nextVersion = "v" + (maxVersion + 1);
+                    log.info("Rotating key for team {} to version {}", teamId, nextVersion);
+
+                    // 2. Generate new key
+                    SecretKey newKey = generateNewKey();
+                    String encryptedKey = encryptTeamKey(newKey);
+
+                    // 3. Deactivate old keys
+                    java.util.List<TeamChunkKey> keysToUpdate = new java.util.ArrayList<>();
+                    keys.stream()
+                            .filter(TeamChunkKey::isActive)
+                            .forEach(k -> {
+                                k.setActive(false);
+                                keysToUpdate.add(k);
+                            });
+
+                    // 4. Create new key entity
+                    TeamChunkKey newEntity = new TeamChunkKey();
+                    newEntity.setTeamId(teamId);
+                    newEntity.setVersion(nextVersion);
+                    newEntity.setEncryptedKey(encryptedKey);
+                    newEntity.setActive(true);
+                    newEntity.setCreatedAt(java.time.LocalDateTime.now());
+
+                    // 5. Save all (Active last to ensure at least one active if possible, though
+                    // strict transactional not guaranteed here across multiple objects easily
+                    // without transactional operator)
+                    // We save inactive ones first, then active.
+                    return teamChunkKeyRepository.saveAll(keysToUpdate)
+                            .then(teamChunkKeyRepository.save(newEntity))
+                            .map(TeamChunkKey::getVersion)
+                            .doOnSuccess(v -> {
+                                // Invalidate cache
+                                activeVersionCache.remove(teamId);
+                                log.info("Key rotation completed for team {}. New version: {}", teamId, nextVersion);
+                            });
+                });
+    }
+
+    private int parseVersion(String version) {
+        try {
+            if (version == null || version.length() < 2)
+                return 1;
+            return Integer.parseInt(version.substring(1));
+        } catch (Exception e) {
+            return 1;
+        }
+    }
+
+    private SecretKey generateNewKey() {
+        try {
+            javax.crypto.KeyGenerator keyGen = javax.crypto.KeyGenerator.getInstance("AES");
+            keyGen.init(256);
+            return keyGen.generateKey();
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to generate new key", e);
+        }
+    }
+
+    private String encryptTeamKey(SecretKey teamKey) {
+        try {
+            // Prepare Master Key
+            byte[] masterKeyBytes = Base64.getDecoder().decode(globalMasterKey);
+            SecretKeySpec masterKeySpec = new SecretKeySpec(masterKeyBytes, "AES");
+
+            // Initialize cipher
+            Cipher cipher = Cipher.getInstance(ALGORITHM);
+            cipher.init(Cipher.ENCRYPT_MODE, masterKeySpec);
+
+            // Encrypt key bytes
+            byte[] encryptedBytes = cipher.doFinal(teamKey.getEncoded());
+            byte[] iv = cipher.getIV();
+
+            // Combine IV + encrypted data
+            byte[] combined = new byte[iv.length + encryptedBytes.length];
+            System.arraycopy(iv, 0, combined, 0, iv.length);
+            System.arraycopy(encryptedBytes, 0, combined, iv.length, encryptedBytes.length);
+
+            return Base64.getEncoder().encodeToString(combined);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to encrypt team key", e);
+        }
+    }
+}

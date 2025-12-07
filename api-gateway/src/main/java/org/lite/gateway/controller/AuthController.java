@@ -11,6 +11,7 @@ import org.lite.gateway.service.JwtService;
 import org.lite.gateway.service.KeycloakService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
+import org.lite.gateway.service.impl.AuditServiceImpl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,6 +34,7 @@ public class AuthController {
     private final KeycloakService keycloakService;
     private final JwtService jwtService;
     private final UserContextService userContextService;
+    private final AuditServiceImpl auditServiceImpl;
 
     @PostMapping("/login")
     @AuditLog(
@@ -45,7 +47,11 @@ public class AuthController {
     public Mono<ResponseEntity<AuthResponse>> login(
             @RequestBody LoginRequest request,
             ServerWebExchange exchange) {
-        return userService.login(request)
+        // Extract IP address and user agent from exchange
+        String ipAddress = auditServiceImpl.extractClientIpAddress(exchange);
+        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        
+        return userService.login(request, ipAddress, userAgent)
             .map(ResponseEntity::ok)
             .onErrorResume(e -> Mono.just(ResponseEntity.badRequest()
                 .body(AuthResponse.builder()
@@ -64,7 +70,11 @@ public class AuthController {
     public Mono<ResponseEntity<AuthResponse>> register(
             @RequestBody RegisterRequest request,
             ServerWebExchange exchange) {
-        return userService.register(request)
+        // Extract IP address and user agent from exchange
+        String ipAddress = auditServiceImpl.extractClientIpAddress(exchange);
+        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        
+        return userService.register(request, ipAddress, userAgent)
             .doOnSuccess(response -> log.info("Registration successful for user: {}", request.getUsername()))
             .doOnError(e -> log.error("Registration failed: {}", e.getMessage()))
             .map(ResponseEntity::ok)
@@ -80,11 +90,17 @@ public class AuthController {
     }
 
     @PostMapping("/sso/callback")
-    public Mono<ResponseEntity<Object>> handleCallback(@RequestBody KeycloakCallbackRequest request) {
+    public Mono<ResponseEntity<Object>> handleCallback(
+            @RequestBody KeycloakCallbackRequest request,
+            ServerWebExchange exchange) {
         log.info("=== SSO Callback Request Received ===");
         log.info("Request code: {}", request.code());
         
-        return keycloakService.handleCallback(request.code())
+        // Extract IP address and user agent from exchange
+        String ipAddress = auditServiceImpl.extractClientIpAddress(exchange);
+        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        
+        return keycloakService.handleCallback(request.code(), ipAddress, userAgent)
                 .doOnSubscribe(s -> log.info("Starting SSO callback processing"))
                 .doOnSuccess(response -> {
                     log.info("SSO callback successful");

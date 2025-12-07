@@ -1,11 +1,15 @@
 package org.lite.gateway.service.impl;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.entity.AuditLog;
 import org.lite.gateway.entity.TeamChunkKey;
+import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.repository.TeamChunkKeyRepository;
+import org.lite.gateway.service.AuditService;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.LinqraVaultService;
+import org.lite.gateway.service.TeamContextService;
+import org.lite.gateway.service.UserContextService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -30,7 +34,6 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
 
     private static final String ALGORITHM = "AES/GCM/NoPadding";
@@ -39,6 +42,22 @@ public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
 
     private final LinqraVaultService vaultService;
     private final TeamChunkKeyRepository teamChunkKeyRepository;
+    private final AuditService auditService;
+    private final UserContextService userContextService;
+    private final TeamContextService teamContextService;
+
+    public ChunkEncryptionServiceImpl(
+            LinqraVaultService vaultService,
+            TeamChunkKeyRepository teamChunkKeyRepository,
+            @org.springframework.context.annotation.Lazy AuditService auditService,
+            UserContextService userContextService,
+            TeamContextService teamContextService) {
+        this.vaultService = vaultService;
+        this.teamChunkKeyRepository = teamChunkKeyRepository;
+        this.auditService = auditService;
+        this.userContextService = userContextService;
+        this.teamContextService = teamContextService;
+    }
 
     private String globalMasterKey; // The Global Master Key (v1) acts as KEK
 
@@ -125,31 +144,104 @@ public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
         // If no key version specified, assume it's unencrypted legacy data or v1
         final String version = (keyVersion == null || keyVersion.isEmpty()) ? "v1" : keyVersion;
 
-        return getTeamKey(teamId, version)
-                .map(secretKey -> {
-                    try {
-                        // Decode Base64
-                        byte[] combined = Base64.getDecoder().decode(encryptedText);
+        // Extract user and team context for audit logging
+        Mono<String> usernameMono = userContextService.getCurrentUsername()
+                .defaultIfEmpty(UserContextService.SYSTEM_USER);
+        Mono<String> teamIdMono = teamContextService.getTeamFromContext()
+                .defaultIfEmpty(teamId != null ? teamId : null)
+                .onErrorResume(e -> Mono.just(teamId)); // Fallback to provided teamId
 
-                        // Extract IV and encrypted data
-                        if (combined.length < GCM_IV_LENGTH) {
-                            throw new IllegalArgumentException("Invalid encrypted data: too short to contain IV");
-                        }
+        return Mono.zip(usernameMono, teamIdMono)
+                .flatMap(tuple -> {
+                    String username = tuple.getT1();
+                    String effectiveTeamId = tuple.getT2() != null ? tuple.getT2() : teamId;
 
-                        byte[] iv = Arrays.copyOfRange(combined, 0, GCM_IV_LENGTH);
-                        byte[] encryptedBytes = Arrays.copyOfRange(combined, GCM_IV_LENGTH, combined.length);
+                    return getTeamKey(teamId, version)
+                            .map(secretKey -> {
+                                try {
+                                    // Decode Base64
+                                    byte[] combined = Base64.getDecoder().decode(encryptedText);
 
-                        // Initialize cipher
-                        Cipher cipher = Cipher.getInstance(ALGORITHM);
-                        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
-                        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+                                    // Extract IV and encrypted data
+                                    if (combined.length < GCM_IV_LENGTH) {
+                                        throw new IllegalArgumentException(
+                                                "Invalid encrypted data: too short to contain IV");
+                                    }
 
-                        // Decrypt
-                        byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
-                        return new String(decryptedBytes, StandardCharsets.UTF_8);
-                    } catch (Exception e) {
-                        throw new RuntimeException("Decryption failed", e);
-                    }
+                                    byte[] iv = Arrays.copyOfRange(combined, 0, GCM_IV_LENGTH);
+                                    byte[] encryptedBytes = Arrays.copyOfRange(combined, GCM_IV_LENGTH,
+                                            combined.length);
+
+                                    // Initialize cipher
+                                    Cipher cipher = Cipher.getInstance(ALGORITHM);
+                                    GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
+                                    cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+
+                                    // Decrypt
+                                    byte[] decryptedBytes = cipher.doFinal(encryptedBytes);
+                                    return new String(decryptedBytes, StandardCharsets.UTF_8);
+                                } catch (Exception e) {
+                                    throw new RuntimeException("Decryption failed", e);
+                                }
+                            })
+                            .flatMap(decrypted -> {
+                                // Log successful chunk decryption (as part of reactive chain)
+                                AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
+                                        .reason("Chunk text decrypted successfully for team: " + teamId
+                                                + " (key version: " + version + ")")
+                                        .build();
+
+                                return auditService.logEvent(
+                                        username,
+                                        username,
+                                        effectiveTeamId,
+                                        null, // ipAddress
+                                        null, // userAgent
+                                        AuditEventType.CHUNK_DECRYPTED,
+                                        "READ",
+                                        "CHUNK",
+                                        null, // resourceId (chunk ID not available here)
+                                        null, // documentId
+                                        null, // collectionId
+                                        "SUCCESS",
+                                        metadata,
+                                        null // complianceFlags
+                                )
+                                        .doOnError(error -> log.warn("Failed to log chunk decryption audit event: {}",
+                                                error.getMessage()))
+                                        .onErrorResume(error -> Mono.empty()) // Don't fail main operation if audit
+                                                                              // logging fails
+                                        .thenReturn(decrypted); // Return the decrypted text
+                            })
+                            .onErrorResume(error -> {
+                                // Log failed chunk decryption (as part of reactive chain)
+                                AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
+                                        .reason("Chunk text decryption failed for team: " + teamId + " (key version: "
+                                                + version + ") - " + error.getMessage())
+                                        .errorMessage(error.getMessage())
+                                        .build();
+
+                                return auditService.logEvent(
+                                        username,
+                                        username,
+                                        effectiveTeamId,
+                                        null, // ipAddress
+                                        null, // userAgent
+                                        AuditEventType.DECRYPTION_FAILED,
+                                        "READ",
+                                        "CHUNK",
+                                        null, // resourceId
+                                        null, // documentId
+                                        null, // collectionId
+                                        "FAILED",
+                                        metadata,
+                                        null // complianceFlags
+                                )
+                                        .doOnError(e -> log.warn("Failed to log decryption failure audit event: {}",
+                                                e.getMessage()))
+                                        .onErrorResume(e -> Mono.empty()) // Don't fail if audit logging fails
+                                        .then(Mono.error(error)); // Propagate the original error
+                            });
                 })
                 .onErrorMap(e -> new RuntimeException("Failed to decrypt chunk text for team: " + teamId, e));
     }
@@ -196,27 +288,102 @@ public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
         }
         final String version = (keyVersion == null || keyVersion.isEmpty()) ? "v1" : keyVersion;
 
-        return getTeamKey(teamId, version)
-                .map(secretKey -> {
-                    try {
-                        // Extract IV and encrypted data
-                        if (encryptedBytes.length < GCM_IV_LENGTH) {
-                            throw new IllegalArgumentException("Invalid encrypted file: too short to contain IV");
-                        }
+        // Extract user and team context for audit logging
+        Mono<String> usernameMono = userContextService.getCurrentUsername()
+                .defaultIfEmpty(UserContextService.SYSTEM_USER);
+        Mono<String> teamIdMono = teamContextService.getTeamFromContext()
+                .defaultIfEmpty(teamId != null ? teamId : null)
+                .onErrorResume(e -> Mono.just(teamId)); // Fallback to provided teamId
 
-                        byte[] iv = Arrays.copyOfRange(encryptedBytes, 0, GCM_IV_LENGTH);
-                        byte[] encryptedData = Arrays.copyOfRange(encryptedBytes, GCM_IV_LENGTH, encryptedBytes.length);
+        return Mono.zip(usernameMono, teamIdMono)
+                .flatMap(tuple -> {
+                    String username = tuple.getT1();
+                    String effectiveTeamId = tuple.getT2() != null ? tuple.getT2() : teamId;
 
-                        // Initialize cipher
-                        Cipher cipher = Cipher.getInstance(ALGORITHM);
-                        GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
-                        cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+                    return getTeamKey(teamId, version)
+                            .map(secretKey -> {
+                                try {
+                                    // Extract IV and encrypted data
+                                    if (encryptedBytes.length < GCM_IV_LENGTH) {
+                                        throw new IllegalArgumentException(
+                                                "Invalid encrypted file: too short to contain IV");
+                                    }
 
-                        // Decrypt file bytes
-                        return cipher.doFinal(encryptedData);
-                    } catch (Exception e) {
-                        throw new RuntimeException("Decryption failed", e);
-                    }
+                                    byte[] iv = Arrays.copyOfRange(encryptedBytes, 0, GCM_IV_LENGTH);
+                                    byte[] encryptedData = Arrays.copyOfRange(encryptedBytes, GCM_IV_LENGTH,
+                                            encryptedBytes.length);
+
+                                    // Initialize cipher
+                                    Cipher cipher = Cipher.getInstance(ALGORITHM);
+                                    GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH * 8, iv);
+                                    cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
+
+                                    // Decrypt file bytes
+                                    return cipher.doFinal(encryptedData);
+                                } catch (Exception e) {
+                                    throw new RuntimeException("Decryption failed", e);
+                                }
+                            })
+                            .flatMap(decrypted -> {
+                                // Log successful file decryption (as part of reactive chain)
+                                AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
+                                        .reason("File decrypted successfully for team: " + teamId + " (key version: "
+                                                + version + "), size: " + decrypted.length + " bytes")
+                                        .build();
+
+                                return auditService.logEvent(
+                                        username,
+                                        username,
+                                        effectiveTeamId,
+                                        null, // ipAddress
+                                        null, // userAgent
+                                        AuditEventType.CHUNK_DECRYPTED, // Using CHUNK_DECRYPTED for file decryption as
+                                                                        // well
+                                        "READ",
+                                        "FILE",
+                                        null, // resourceId (document ID not available here)
+                                        null, // documentId
+                                        null, // collectionId
+                                        "SUCCESS",
+                                        metadata,
+                                        null // complianceFlags
+                                )
+                                        .doOnError(error -> log.warn("Failed to log file decryption audit event: {}",
+                                                error.getMessage()))
+                                        .onErrorResume(error -> Mono.empty()) // Don't fail main operation if audit
+                                                                              // logging fails
+                                        .thenReturn(decrypted); // Return the decrypted bytes
+                            })
+                            .onErrorResume(error -> {
+                                // Log failed file decryption (as part of reactive chain)
+                                AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
+                                        .reason("File decryption failed for team: " + teamId + " (key version: "
+                                                + version + ") - " + error.getMessage())
+                                        .errorMessage(error.getMessage())
+                                        .build();
+
+                                return auditService.logEvent(
+                                        username,
+                                        username,
+                                        effectiveTeamId,
+                                        null, // ipAddress
+                                        null, // userAgent
+                                        AuditEventType.DECRYPTION_FAILED,
+                                        "READ",
+                                        "FILE",
+                                        null, // resourceId
+                                        null, // documentId
+                                        null, // collectionId
+                                        "FAILED",
+                                        metadata,
+                                        null // complianceFlags
+                                )
+                                        .doOnError(
+                                                e -> log.warn("Failed to log file decryption failure audit event: {}",
+                                                        e.getMessage()))
+                                        .onErrorResume(e -> Mono.empty()) // Don't fail if audit logging fails
+                                        .then(Mono.error(error)); // Propagate the original error
+                            });
                 });
     }
 

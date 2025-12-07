@@ -200,12 +200,16 @@ jobs:
         run: |
           mkdir -p secrets
           
-          # Generate VAULT_MASTER_KEY if not set
+          # Require VAULT_MASTER_KEY to be set in GitHub secrets
           if [ -z "$VAULT_MASTER_KEY" ]; then
-            echo "Generating new VAULT_MASTER_KEY..."
-            VAULT_MASTER_KEY=$(openssl rand -base64 32)
-            echo "Generated VAULT_MASTER_KEY (save this to GitHub secrets: VAULT_MASTER_KEY)"
-            echo "VAULT_MASTER_KEY=$VAULT_MASTER_KEY"
+            echo "❌ ERROR: VAULT_MASTER_KEY secret is not set in GitHub repository secrets"
+            echo ""
+            echo "Please add VAULT_MASTER_KEY to your GitHub repository secrets:"
+            echo "1. Go to: Settings → Secrets and variables → Actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Name: VAULT_MASTER_KEY"
+            echo "4. Value: Generate a key with: openssl rand -base64 32"
+            exit 1
           fi
           
           # Check if SECRETS_JSON secret is provided
@@ -250,11 +254,19 @@ jobs:
         env:
           VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
         run: |
-          # Generate VAULT_MASTER_KEY if not provided
+          # Require VAULT_MASTER_KEY to be set in GitHub secrets
           if [ -z "$VAULT_MASTER_KEY" ]; then
-            export VAULT_MASTER_KEY=$(openssl rand -base64 32)
-            echo "Generated VAULT_MASTER_KEY: $VAULT_MASTER_KEY"
-            echo "⚠️  IMPORTANT: Add this to GitHub secrets as VAULT_MASTER_KEY"
+            echo "❌ ERROR: VAULT_MASTER_KEY secret is not set in GitHub repository secrets"
+            echo ""
+            echo "Please add VAULT_MASTER_KEY to your GitHub repository secrets:"
+            echo "1. Go to: Settings → Secrets and variables → Actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Name: VAULT_MASTER_KEY"
+            echo "4. Value: Generate a key with: openssl rand -base64 32"
+            echo ""
+            echo "If this is your first run, you can generate a key:"
+            echo "  openssl rand -base64 32"
+            exit 1
           fi
           
           # Run bootstrap script to create vault
@@ -388,6 +400,11 @@ jobs:
               exit 1
             fi
 
+              # Create global .env file at project root (not stored in repo)
+              echo "VAULT_MASTER_KEY=${{ secrets.VAULT_MASTER_KEY }}" > /var/www/linqra/.env
+              echo "VAULT_ENVIRONMENT=ec2" >> /var/www/linqra/.env
+              sudo chmod 600 /var/www/linqra/.env
+              
               # Create edge-service .env on EC2 (not stored in repo)
               if [ ! -d /var/www/linqra/edge-service ]; then echo 'edge-service directory not found at /var/www/linqra/edge-service'; exit 1; fi
               echo "VITE_MONGODB_URI=${{ secrets.VITE_MONGODB_URI }}" > /var/www/linqra/edge-service/.env
@@ -488,17 +505,31 @@ jobs:
             echo 'Ensuring the Docker network exists'
             sudo docker network ls | grep -q linqra-network || sudo docker network create linqra-network
 
-            # Set VAULT_MASTER_KEY environment variable for docker-compose
-            echo 'Setting VAULT_MASTER_KEY from GitHub secrets'
-            export VAULT_MASTER_KEY=\"\${VAULT_MASTER_KEY}\"
-            export VAULT_ENVIRONMENT=\"\${VAULT_ENVIRONMENT:-ec2}\"
+            # Load VAULT_MASTER_KEY and VAULT_ENVIRONMENT from global .env file
+            echo 'Loading VAULT_MASTER_KEY and VAULT_ENVIRONMENT from .env file'
+            if [ -f /var/www/linqra/.env ]; then
+              set -a  # Automatically export all variables
+              source /var/www/linqra/.env
+              set +a  # Stop automatically exporting
+              echo '✓ Loaded variables from .env file'
+            else
+              echo 'ERROR: /var/www/linqra/.env file not found'
+              echo 'This file should have been created in the deployment step above'
+              exit 1
+            fi
             
             if [ -z \"\$VAULT_MASTER_KEY\" ]; then
-              echo 'ERROR: VAULT_MASTER_KEY not set. Please add VAULT_MASTER_KEY to GitHub repository secrets.'
+              echo 'ERROR: VAULT_MASTER_KEY not set in .env file'
               exit 1
+            fi
+            
+            if [ -z \"\$VAULT_ENVIRONMENT\" ]; then
+              echo 'WARNING: VAULT_ENVIRONMENT not set in .env, defaulting to ec2'
+              export VAULT_ENVIRONMENT=ec2
             fi
 
             # Build and start containers
+            # docker-compose automatically loads .env file from the directory where it's run
             echo 'Building and starting containers'
             sudo -E docker compose -f docker-compose.yml -p linqra up -d --build
 

@@ -32,9 +32,9 @@ const Header = () => {
     <Navbar expand="lg" className="app-header">
       <Container fluid>
         <Navbar.Brand as={Link} to="/">
-          <img 
-            src="/images/color_logo_no_background.png" 
-            alt="Linqra Logo" 
+          <img
+            src="/images/color_logo_no_background.png"
+            alt="Linqra Logo"
             className="header-logo"
           />
         </Navbar.Brand>
@@ -73,6 +73,8 @@ const Header = () => {
             <Nav.Link as={NavLink} to="/execution-monitoring">Executions</Nav.Link>
             <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/knowledge-hub">Knowledge Hub</Nav.Link>
+            <span className="nav-separator"> | </span>
+            <Nav.Link as={NavLink} to="/audits">Audits</Nav.Link>
             {/* <span className="nav-separator"> | </span>
             <Nav.Link as={NavLink} to="/rag">RAG</Nav.Link> */}
           </Nav>
@@ -86,7 +88,7 @@ const Header = () => {
               <Nav.Link href="#" onClick={(e) => handleNavClick('/login', e)}>Login</Nav.Link>
               <Nav.Link href="#" onClick={(e) => handleNavClick('/register', e)}>Register</Nav.Link>
               <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/protocol">Linq Protocol</Nav.Link>
+              <Nav.Link as={NavLink} to="/protocol">Linq Protocol</Nav.Link>
             </div>
           )}
         </Navbar.Collapse>

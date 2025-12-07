@@ -47,6 +47,7 @@ import ViewDocument from '../pages/KnowledgeHub/ViewCollection/ViewDocument';
 import ExportCollection from '../pages/KnowledgeHub/ExportCollection';
 import Rag from '../pages/Rag';
 import ViewRag from '../pages/Rag/ViewRag';
+import Audits from '../pages/Audits';
 
 const AppRoutes = () => {
   return (
@@ -58,7 +59,7 @@ const AppRoutes = () => {
       <Route path="/callback" element={<Callback />} />
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/terms-of-service" element={<TermsOfService />} />
-      
+
       {/* Linq Protocol Routes */}
       <Route path="/linq-protocol" element={<LinqProtocol />}>
         <Route index element={<Navigate to="/linq-protocol/basics" replace />} />
@@ -66,7 +67,7 @@ const AppRoutes = () => {
         <Route path="basics/request-structure" element={<RequestStructure />} />
         <Route path="basics/response-format" element={<ResponseFormat />} />
         <Route path="basics/error-handling" element={<ErrorHandling />} />
-        
+
         {/* Workflow Routes */}
         <Route path="workflow" element={<WorkflowOverview />} />
         <Route path="workflow/create" element={<WorkflowCreate />} />
@@ -101,50 +102,58 @@ const AppRoutes = () => {
         <Route path="/knowledge-hub" element={<KnowledgeHub />} />
         <Route path="/knowledge-hub/collection/:collectionId" element={<ViewCollection />} />
         <Route path="/knowledge-hub/document/:documentId" element={<ViewDocument />} />
-        <Route 
-          path="/knowledge-hub/export" 
+        <Route
+          path="/knowledge-hub/export"
           element={
             <AdminGuard>
               <ExportCollection />
             </AdminGuard>
-          } 
+          }
         />
         <Route path="/rag" element={<Rag />} />
         <Route path="/rag/view/:collectionName" element={<ViewRag />} />
-        
-        <Route 
-          path="/teams" 
+        <Route
+          path="/audits"
+          element={
+            <AdminGuard>
+              <Audits />
+            </AdminGuard>
+          }
+        />
+
+        <Route
+          path="/teams"
           element={
             <AdminGuard>
               <Teams />
             </AdminGuard>
-          } 
+          }
         />
-        <Route 
-          path="/teams/:teamId" 
+        <Route
+          path="/teams/:teamId"
           element={
             <AdminGuard>
               <ViewTeam />
             </AdminGuard>
-          } 
+          }
         />
-        <Route 
-          path="/organizations" 
+        <Route
+          path="/organizations"
           element={
             <AdminGuard>
               <Organizations />
             </AdminGuard>
-          } 
+          }
         />
         <Route path="/api-routes" element={<ApiRoutes />} />
         <Route path="/api-routes/:routeId" element={<ViewRoute />} />
-        <Route 
-          path="/view-token" 
+        <Route
+          path="/view-token"
           element={
             <NonProdGuard>
               <ViewToken />
             </NonProdGuard>
-          } 
+          }
         />
         <Route path="/404" element={<NotFound />} />
         <Route path="*" element={<Navigate to="/404" replace />} />

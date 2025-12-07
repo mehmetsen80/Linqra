@@ -478,31 +478,17 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         public Mono<Void> deleteDocument(String documentId, String teamId) {
                 return getDocumentById(documentId, teamId)
                                 .flatMap(document -> {
-                                        log.info("Checking if S3 file exists for document: {}", documentId);
+                                        log.info("Soft deleting (trashing) document: {}", documentId);
 
-                                        // Check if S3 file exists
-                                        if (document.getS3Key() != null && !document.getS3Key().isEmpty()) {
-                                                return s3Service.fileExists(document.getS3Key())
-                                                                .flatMap(exists -> {
-                                                                        if (exists) {
-                                                                                log.info("File exists in S3 for document: {}",
-                                                                                                documentId);
-                                                                                return Mono.error(new RuntimeException(
-                                                                                                "Cannot delete document with an active S3 file. Please delete the file from the document page first."));
-                                                                        } else {
-                                                                                log.info("File does not exist in S3 for document: {}",
-                                                                                                documentId);
-                                                                                // File doesn't exist, safe to delete
-                                                                                // chunks and then the record
-                                                                                return deleteDocumentAndChunks(document,
-                                                                                                documentId);
-                                                                        }
-                                                                });
-                                        } else {
-                                                log.info("No S3 key for document: {}, safe to delete", documentId);
-                                                // No S3 key, safe to delete chunks and then the record
-                                                return deleteDocumentAndChunks(document, documentId);
-                                        }
+                                        // Update status to DELETED and set deletedAt
+                                        document.setStatus(DocumentStatus.DELETED);
+                                        document.setDeletedAt(LocalDateTime.now());
+
+                                        return documentRepository.save(document)
+                                                        .doOnSuccess(saved -> log.info(
+                                                                        "Successfully soft deleted (trashed) document: {}",
+                                                                        documentId))
+                                                        .then();
                                 });
         }
 
@@ -510,22 +496,6 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
          * Delete all chunks associated with the document and then delete the document
          * record
          */
-        private Mono<Void> deleteDocumentAndChunks(KnowledgeHubDocument document, String documentId) {
-                // First, delete all chunks associated with this document
-                return chunkRepository.deleteAllByDocumentId(documentId)
-                                .doOnSuccess(v -> log.info("Deleted all chunks for document: {}", documentId))
-                                .doOnError(
-                                                error -> log.warn("Error deleting chunks for document {}: {}",
-                                                                documentId, error.getMessage()))
-                                .onErrorResume(error -> {
-                                        // Log warning but continue with document deletion even if chunk deletion fails
-                                        log.warn("Failed to delete chunks for document {}, continuing with document deletion: {}",
-                                                        documentId, error.getMessage());
-                                        return Mono.empty();
-                                })
-                                .then(documentRepository.deleteById(document.getId()))
-                                .doOnSuccess(success -> log.info("Successfully deleted document: {}", documentId));
-        }
 
         @Override
         public Mono<Void> hardDeleteDocument(String documentId, String teamId) {
@@ -783,6 +753,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                         "Successfully hard deleted document: {}",
                                                                         documentId));
                                 });
+
         }
 
         @Override

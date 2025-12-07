@@ -42,7 +42,13 @@ public class UserServiceImpl implements UserService {
     private final TransactionalOperator transactionalOperator;
     private final AuditService auditService;
 
+    @Override
     public Mono<AuthResponse> login(LoginRequest request) {
+        return login(request, null, null);
+    }
+    
+    @Override
+    public Mono<AuthResponse> login(LoginRequest request, String ipAddress, String userAgent) {
         log.info("Login attempt for: {}", request.getUsername());
         
         // Try both username and email
@@ -66,8 +72,8 @@ public class UserServiceImpl implements UserService {
                         null, // userId - user doesn't exist
                         request.getUsername(), // username - from request
                         null, // teamId
-                        null, // ipAddress
-                        null, // userAgent
+                        ipAddress,
+                        userAgent,
                         AuditEventType.LOGIN_FAILED,
                         AuditActionType.READ.name(),
                         AuditResourceType.AUTH.name(),
@@ -109,9 +115,9 @@ public class UserServiceImpl implements UserService {
                             user.getId(),
                             user.getUsername(),
                             null, // teamId - not available at login
-                            null, // ipAddress - can be added later from controller
-                            null, // userAgent - can be added later from controller
-                            AuditEventType.USER_LOGIN,
+                            ipAddress,
+                            userAgent,
+                        AuditEventType.USER_LOGIN,
                             AuditActionType.READ.name(),
                             AuditResourceType.AUTH.name(),
                             user.getId(), // resourceId - user ID
@@ -137,8 +143,8 @@ public class UserServiceImpl implements UserService {
                         user.getId(),
                         user.getUsername(),
                         null, // teamId
-                        null, // ipAddress
-                        null, // userAgent
+                        ipAddress,
+                        userAgent,
                         AuditEventType.LOGIN_FAILED,
                         AuditActionType.READ.name(),
                         AuditResourceType.AUTH.name(),
@@ -156,7 +162,13 @@ public class UserServiceImpl implements UserService {
             .doOnError(e -> log.error("Login error: ", e));
     }
 
+    @Override
     public Mono<AuthResponse> register(RegisterRequest request) {
+        return register(request, null, null);
+    }
+    
+    @Override
+    public Mono<AuthResponse> register(RegisterRequest request, String ipAddress, String userAgent) {
         try {
             UserValidationUtil.validateRegistration(request);
         } catch (ValidationException e) {
@@ -176,8 +188,8 @@ public class UserServiceImpl implements UserService {
                             null, // userId - user doesn't exist yet
                             request.getUsername(), // username - from request
                             null, // teamId
-                            null, // ipAddress
-                            null, // userAgent
+                            ipAddress,
+                            userAgent,
                             AuditEventType.USER_CREATED,
                             AuditActionType.CREATE.name(),
                             AuditResourceType.USER.name(),
@@ -208,8 +220,8 @@ public class UserServiceImpl implements UserService {
                             null, // userId - user doesn't exist yet
                             request.getUsername(), // username - from request
                             null, // teamId
-                            null, // ipAddress
-                            null, // userAgent
+                            ipAddress,
+                            userAgent,
                             AuditEventType.USER_CREATED,
                             AuditActionType.CREATE.name(),
                             AuditResourceType.USER.name(),
@@ -262,9 +274,9 @@ public class UserServiceImpl implements UserService {
                                 savedUser.getId(),
                                 savedUser.getUsername(),
                                 null, // teamId - not assigned at registration
-                                null, // ipAddress - can be added later from controller
-                                null, // userAgent - can be added later from controller
-                                AuditEventType.USER_CREATED,
+                                ipAddress,
+                                userAgent,
+                            AuditEventType.USER_CREATED,
                                 AuditActionType.CREATE.name(),
                                 AuditResourceType.USER.name(),
                                 savedUser.getId(), // resourceId - user ID

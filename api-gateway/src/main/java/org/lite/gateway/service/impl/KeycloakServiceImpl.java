@@ -12,12 +12,11 @@ import org.lite.gateway.entity.User;
 import org.lite.gateway.exception.InvalidAuthenticationException;
 import org.lite.gateway.exception.TokenExpiredException;
 import org.lite.gateway.repository.UserRepository;
+import org.lite.gateway.service.AuditService;
 import org.lite.gateway.service.CodeCacheService;
 import org.lite.gateway.service.JwtService;
 import org.lite.gateway.service.KeycloakService;
 import org.lite.gateway.service.UserContextService;
-import org.lite.gateway.util.AuditLogHelper;
-import org.lite.gateway.enums.AuditResultType;
 import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditResourceType;
@@ -45,10 +44,15 @@ public class KeycloakServiceImpl implements KeycloakService {
     private final UserContextService userContextService;
     private final UserRepository userRepository;
     private final TransactionalOperator transactionalOperator;
-    private final AuditLogHelper auditLogHelper;
+    private final AuditService auditService;
 
     @Override
     public Mono<AuthResponse> handleCallback(String code) {
+        return handleCallback(code, null, null);
+    }
+    
+    @Override
+    public Mono<AuthResponse> handleCallback(String code, String ipAddress, String userAgent) {
         long start = System.currentTimeMillis();
         log.info("=== [Timing] SSO callback started at {} ===", start);
 
@@ -57,7 +61,7 @@ public class KeycloakServiceImpl implements KeycloakService {
                     if (isUsed) {
                         log.debug("Code already used, checking for existing session");
                         return exchangeCodeForToken(code)
-                                .flatMap(this::validateAndCreateSession)
+                                .flatMap(tokenResponse -> validateAndCreateSession(tokenResponse, ipAddress, userAgent))
                                 .onErrorResume(error -> {
                                     log.error("Error processing used code:", error);
                                     return Mono.<AuthResponse>error(new InvalidAuthenticationException(
@@ -72,7 +76,7 @@ public class KeycloakServiceImpl implements KeycloakService {
                                             "Code already in use"));
                                 }
                                 return exchangeCodeForToken(code)
-                                        .flatMap(this::validateAndCreateSession);
+                                        .flatMap(tokenResponse -> validateAndCreateSession(tokenResponse, ipAddress, userAgent));
                             });
                 })
                 .doOnSuccess(response -> log.info("=== [Timing] SSO callback finished in {} ms ===",
@@ -170,7 +174,7 @@ public class KeycloakServiceImpl implements KeycloakService {
                 });
     }
 
-    private Mono<AuthResponse> validateAndCreateSession(KeycloakTokenResponse tokenResponse) {
+    private Mono<AuthResponse> validateAndCreateSession(KeycloakTokenResponse tokenResponse, String ipAddress, String userAgent) {
         long start = System.currentTimeMillis();
         log.info("=== [Timing] validateAndCreateSession started at {} ===", start);
         log.info("Token response contains id_token: {}", tokenResponse.getIdToken() != null);
@@ -257,16 +261,29 @@ public class KeycloakServiceImpl implements KeycloakService {
                                 log.debug("Logging audit event for SSO login: username={}, userId={}", finalUsername,
                                         finalUserId);
 
-                                return auditLogHelper.logDetailedEvent(
-                                        AuditEventType.USER_LOGIN,
-                                        AuditActionType.READ,
-                                        AuditResourceType.AUTH,
+                                // Use AuditService directly to include IP address and user agent
+                                org.lite.gateway.entity.AuditLog.AuditMetadata loginMetadata = 
+                                        org.lite.gateway.entity.AuditLog.AuditMetadata.builder()
+                                                .reason(String.format("SSO Login successful for user: %s", finalUsername))
+                                                .context(Map.of("authType", "SSO", "provider", "Keycloak"))
+                                                .build();
+
+                                return auditService.logEvent(
                                         finalUserId,
-                                        String.format("SSO Login successful for user: %s", finalUsername),
-                                        Map.of("authType", "SSO", "provider", "Keycloak"),
-                                        null,
-                                        null,
-                                        AuditResultType.SUCCESS)
+                                        finalUsername,
+                                        null, // teamId - not available at SSO login
+                                        ipAddress,
+                                        userAgent,
+                                        AuditEventType.USER_LOGIN,
+                                        AuditActionType.READ.name(),
+                                        AuditResourceType.AUTH.name(),
+                                        finalUserId,
+                                        null, // documentId
+                                        null, // collectionId
+                                        "SUCCESS",
+                                        loginMetadata,
+                                        null // complianceFlags
+                                )
                                         .doOnError(e -> log.error("Failed to log SSO audit event", e))
                                         .onErrorResume(e -> Mono.empty()) // Don't fail the login if audit logs fail
                                         .thenReturn(response);

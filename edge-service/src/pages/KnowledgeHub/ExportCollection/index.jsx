@@ -45,11 +45,11 @@ function ExportCollection() {
     if (hasAccess) {
       fetchCollections();
       fetchExportJobs();
-      
+
       // Connect to WebSocket for progress updates
       collectionExportWebSocketService.connect();
       const unsubscribe = collectionExportWebSocketService.subscribe(handleExportUpdate);
-      
+
       return () => {
         unsubscribe();
         collectionExportWebSocketService.disconnect();
@@ -128,7 +128,7 @@ function ExportCollection() {
   const handleExportConfirm = async () => {
     setShowExportModal(false);
     setExporting(true);
-    
+
     try {
       const result = await collectionExportService.queueExport(Array.from(selectedCollections));
       if (result.success) {
@@ -153,7 +153,7 @@ function ExportCollection() {
 
   const handleCancelConfirm = async () => {
     if (!showCancelModal) return;
-    
+
     setCancellingJob(showCancelModal);
     try {
       const result = await collectionExportService.cancelExportJob(showCancelModal);
@@ -200,13 +200,13 @@ function ExportCollection() {
               <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/dashboard' }}>
                 Home
               </Breadcrumb.Item>
-              <Breadcrumb.Item 
+              <Breadcrumb.Item
                 onClick={() => navigate(`/teams/${currentTeam?.id}`)}
                 style={{ cursor: 'pointer' }}
               >
                 {currentTeam?.name || 'Team'}
               </Breadcrumb.Item>
-              <Breadcrumb.Item 
+              <Breadcrumb.Item
                 onClick={() => navigate('/knowledge-hub')}
                 style={{ cursor: 'pointer' }}
               >
@@ -239,13 +239,13 @@ function ExportCollection() {
               <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/dashboard' }}>
                 Home
               </Breadcrumb.Item>
-              <Breadcrumb.Item 
+              <Breadcrumb.Item
                 onClick={() => navigate(`/teams/${currentTeam?.id}`)}
                 style={{ cursor: 'pointer' }}
               >
                 {currentTeam?.name || 'Team'}
               </Breadcrumb.Item>
-              <Breadcrumb.Item 
+              <Breadcrumb.Item
                 onClick={() => navigate('/knowledge-hub')}
                 style={{ cursor: 'pointer' }}
               >
@@ -267,7 +267,7 @@ function ExportCollection() {
                 <h4 className="mb-0">Export Collections</h4>
               </div>
               <div className="ms-auto">
-                <Button 
+                <Button
                   variant="secondary"
                   onClick={() => navigate('/knowledge-hub')}
                 >
@@ -301,189 +301,189 @@ function ExportCollection() {
                   </Button>
                 </div>
               </div>
-            {loading ? (
-              <div className="text-center py-5">
-                <Spinner animation="border" role="status">
-                  <span className="visually-hidden">Loading collections...</span>
-                </Spinner>
-              </div>
-            ) : collections.length === 0 ? (
-              <div className="text-center py-4 text-muted">
-                No collections found. Create a collection first.
-              </div>
-            ) : (
-              <Table responsive hover>
-                <thead>
-                  <tr>
-                    <th style={{ width: '50px' }}></th>
-                    <th style={{ width: '30%' }}>Collection Name</th>
-                    <th>Description</th>
-                    <th>Milvus Collection</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {collections.map((collection) => (
-                    <tr key={collection.id}>
-                      <td>
-                        <Form.Check
-                          type="checkbox"
-                          checked={selectedCollections.has(collection.id)}
-                          onChange={() => handleCollectionToggle(collection.id)}
-                        />
-                      </td>
-                      <td>
-                        <Link to={`/knowledge-hub/collection/${collection.id}`} className="collection-link">
-                          {collection.name}
-                        </Link>
-                      </td>
-                      <td>{collection.description || 'N/A'}</td>
-                      <td>
-                        {collection.milvusCollectionName ? (
-                          <Badge bg="success">{collection.milvusCollectionName}</Badge>
-                        ) : (
-                          <Badge bg="secondary">Not assigned</Badge>
-                        )}
-                      </td>
+              {loading ? (
+                <div className="text-center py-5">
+                  <Spinner animation="border" role="status">
+                    <span className="visually-hidden">Loading collections...</span>
+                  </Spinner>
+                </div>
+              ) : collections.length === 0 ? (
+                <div className="text-center py-4 text-muted">
+                  No collections found. Create a collection first.
+                </div>
+              ) : (
+                <Table responsive hover>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '50px' }}></th>
+                      <th style={{ width: '30%' }}>Collection Name</th>
+                      <th>Description</th>
+                      <th>Milvus Collection</th>
                     </tr>
-                  ))}
-                </tbody>
-              </Table>
-            )}
+                  </thead>
+                  <tbody>
+                    {collections.map((collection) => (
+                      <tr key={collection.id}>
+                        <td>
+                          <Form.Check
+                            type="checkbox"
+                            checked={selectedCollections.has(collection.id)}
+                            onChange={() => handleCollectionToggle(collection.id)}
+                          />
+                        </td>
+                        <td>
+                          <Link to={`/knowledge-hub/collection/${collection.id}`} className="collection-link">
+                            {collection.name}
+                          </Link>
+                        </td>
+                        <td>{collection.description || 'N/A'}</td>
+                        <td>
+                          {collection.milvusCollectionName ? (
+                            <Badge bg="success">{collection.milvusCollectionName}</Badge>
+                          ) : (
+                            <Badge bg="secondary">Not assigned</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              )}
             </div>
 
             {/* Export Jobs Table */}
             <div className="mt-5">
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h5>Export History</h5>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={fetchExportJobs}
-                disabled={loadingJobs}
-              >
-                {loadingJobs ? (
-                  <>
-                    <Spinner as="span" animation="border" size="sm" className="me-2" />
-                    Loading...
-                  </>
-                ) : (
-                  'Refresh'
-                )}
-              </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={fetchExportJobs}
+                  disabled={loadingJobs}
+                >
+                  {loadingJobs ? (
+                    <>
+                      <Spinner as="span" animation="border" size="sm" className="me-2" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Refresh'
+                  )}
+                </Button>
               </div>
-            {loadingJobs ? (
-              <div className="text-center py-5">
-                <Spinner animation="border" role="status">
-                  <span className="visually-hidden">Loading export jobs...</span>
-                </Spinner>
-              </div>
-            ) : exportJobs.length === 0 ? (
-              <div className="text-center py-4 text-muted">
-                No export jobs found.
-              </div>
-            ) : (
-              <div className="table-responsive">
-                <Table hover>
-                  <thead>
-                    <tr>
-                      <th>Job ID</th>
-                      <th>Status</th>
-                      <th>Collections</th>
-                      <th>Progress</th>
-                      <th>Exported By</th>
-                      <th>Created At</th>
-                      <th>Completed At</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {exportJobs.map((job) => {
-                      const StatusIcon = STATUS_CONFIG[job.status]?.icon || HiClock;
-                      const statusVariant = STATUS_CONFIG[job.status]?.variant || 'secondary';
-                      const statusLabel = STATUS_CONFIG[job.status]?.label || job.status;
-                      const progress = getJobProgress(job);
-                      
-                      return (
-                        <tr key={job.jobId}>
-                          <td>
-                            <code className="small">{job.jobId.substring(0, 8)}...</code>
-                          </td>
-                          <td>
-                            <Badge bg={statusVariant}>
-                              <StatusIcon className="me-1" />
-                              {statusLabel}
-                            </Badge>
-                          </td>
-                          <td>
-                            {job.collectionIds?.length || 0} collection{job.collectionIds?.length !== 1 ? 's' : ''}
-                          </td>
-                          <td>
-                            {job.status === 'RUNNING' && (
-                              <div>
-                                <ProgressBar
-                                  now={progress}
-                                  label={`${progress}%`}
-                                  variant="primary"
-                                  className="mb-1"
-                                />
-                                <small className="text-muted">
-                                  {job.processedDocuments || 0} / {job.totalDocuments || 0} documents
-                                </small>
+              {loadingJobs ? (
+                <div className="text-center py-5">
+                  <Spinner animation="border" role="status">
+                    <span className="visually-hidden">Loading export jobs...</span>
+                  </Spinner>
+                </div>
+              ) : exportJobs.length === 0 ? (
+                <div className="text-center py-4 text-muted">
+                  No export jobs found.
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <Table hover>
+                    <thead>
+                      <tr>
+                        <th>Job ID</th>
+                        <th>Status</th>
+                        <th>Collections</th>
+                        <th>Progress</th>
+                        <th>Exported By</th>
+                        <th>Created At</th>
+                        <th>Completed At</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {exportJobs.map((job) => {
+                        const StatusIcon = STATUS_CONFIG[job.status]?.icon || HiClock;
+                        const statusVariant = STATUS_CONFIG[job.status]?.variant || 'secondary';
+                        const statusLabel = STATUS_CONFIG[job.status]?.label || job.status;
+                        const progress = getJobProgress(job);
+
+                        return (
+                          <tr key={job.jobId}>
+                            <td>
+                              <code className="small">{job.jobId ? job.jobId.substring(0, 8) : 'N/A'}...</code>
+                            </td>
+                            <td>
+                              <Badge bg={statusVariant}>
+                                <StatusIcon className="me-1" />
+                                {statusLabel}
+                              </Badge>
+                            </td>
+                            <td>
+                              {job.collectionIds?.length || 0} collection{job.collectionIds?.length !== 1 ? 's' : ''}
+                            </td>
+                            <td>
+                              {job.status === 'RUNNING' && (
+                                <div>
+                                  <ProgressBar
+                                    now={progress}
+                                    label={`${progress}%`}
+                                    variant="primary"
+                                    className="mb-1"
+                                  />
+                                  <small className="text-muted">
+                                    {job.processedDocuments || 0} / {job.totalDocuments || 0} documents
+                                  </small>
+                                </div>
+                              )}
+                              {job.status === 'COMPLETED' && (
+                                <Badge bg="success">100%</Badge>
+                              )}
+                              {!['RUNNING', 'COMPLETED'].includes(job.status) && (
+                                <span className="text-muted">-</span>
+                              )}
+                            </td>
+                            <td>{job.exportedBy || 'N/A'}</td>
+                            <td>{job.createdAt ? formatDateTime(job.createdAt) : 'N/A'}</td>
+                            <td>{job.completedAt ? formatDateTime(job.completedAt) : 'N/A'}</td>
+                            <td>
+                              <div className="d-flex gap-2">
+                                {job.status === 'COMPLETED' && job.exportResults && job.exportResults.length > 0 && (
+                                  <>
+                                    {job.exportResults.map((result, idx) => (
+                                      <Button
+                                        key={idx}
+                                        variant="outline-primary"
+                                        size="sm"
+                                        onClick={() => {
+                                          if (result.downloadUrl) {
+                                            window.open(result.downloadUrl, '_blank');
+                                          }
+                                        }}
+                                        disabled={!result.downloadUrl}
+                                        title={`Download ${result.collectionName || result.collectionId}`}
+                                      >
+                                        <HiDownload className="me-1" />
+                                        {result.collectionName || result.collectionId}
+                                      </Button>
+                                    ))}
+                                  </>
+                                )}
+                                {canCancelJob(job) && (
+                                  <Button
+                                    variant="outline-danger"
+                                    size="sm"
+                                    onClick={() => handleCancelJob(job.jobId)}
+                                    disabled={cancellingJob === job.jobId}
+                                  >
+                                    <HiXCircle className="me-1" />
+                                    Cancel
+                                  </Button>
+                                )}
                               </div>
-                            )}
-                            {job.status === 'COMPLETED' && (
-                              <Badge bg="success">100%</Badge>
-                            )}
-                            {!['RUNNING', 'COMPLETED'].includes(job.status) && (
-                              <span className="text-muted">-</span>
-                            )}
-                          </td>
-                          <td>{job.exportedBy || 'N/A'}</td>
-                          <td>{job.createdAt ? formatDateTime(job.createdAt) : 'N/A'}</td>
-                          <td>{job.completedAt ? formatDateTime(job.completedAt) : 'N/A'}</td>
-                          <td>
-                            <div className="d-flex gap-2">
-                              {job.status === 'COMPLETED' && job.exportResults && job.exportResults.length > 0 && (
-                                <>
-                                  {job.exportResults.map((result, idx) => (
-                                    <Button
-                                      key={idx}
-                                      variant="outline-primary"
-                                      size="sm"
-                                      onClick={() => {
-                                        if (result.downloadUrl) {
-                                          window.open(result.downloadUrl, '_blank');
-                                        }
-                                      }}
-                                      disabled={!result.downloadUrl}
-                                      title={`Download ${result.collectionName || result.collectionId}`}
-                                    >
-                                      <HiDownload className="me-1" />
-                                      {result.collectionName || result.collectionId}
-                                    </Button>
-                                  ))}
-                                </>
-                              )}
-                              {canCancelJob(job) && (
-                                <Button
-                                  variant="outline-danger"
-                                  size="sm"
-                                  onClick={() => handleCancelJob(job.jobId)}
-                                  disabled={cancellingJob === job.jobId}
-                                >
-                                  <HiXCircle className="me-1" />
-                                  Cancel
-                                </Button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </Table>
-              </div>
-            )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              )}
             </div>
           </Card.Body>
         </Card>
@@ -497,11 +497,11 @@ function ExportCollection() {
           message={
             <>
               <p>
-                <strong>Warning:</strong> You are about to export <strong>{selectedCollections.size}</strong> collection{selectedCollections.size !== 1 ? 's' : ''} 
+                <strong>Warning:</strong> You are about to export <strong>{selectedCollections.size}</strong> collection{selectedCollections.size !== 1 ? 's' : ''}
                 {' '}containing sensitive data.
               </p>
               <p className="mb-0">
-                The exported ZIP files will contain <strong>decrypted</strong> documents, processed JSON files, and knowledge graph data. 
+                The exported ZIP files will contain <strong>decrypted</strong> documents, processed JSON files, and knowledge graph data.
                 Each collection will be exported as a separate ZIP file. This action cannot be undone.
               </p>
             </>

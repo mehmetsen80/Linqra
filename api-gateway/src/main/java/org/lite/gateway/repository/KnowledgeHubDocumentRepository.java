@@ -9,21 +9,23 @@ import reactor.core.publisher.Mono;
 
 @Repository
 public interface KnowledgeHubDocumentRepository extends ReactiveMongoRepository<KnowledgeHubDocument, String> {
-    
-    Mono<KnowledgeHubDocument> findByDocumentId(String documentId);
-    
-    Flux<KnowledgeHubDocument> findByStatus(String status);
-    
-    Flux<KnowledgeHubDocument> findByTeamId(String teamId);
-    
-    Flux<KnowledgeHubDocument> findByTeamId(Sort sort, String teamId);
-    
-    Flux<KnowledgeHubDocument> findByCollectionId(String collectionId);
-    
-    Flux<KnowledgeHubDocument> findByTeamIdAndCollectionId(String teamId, String collectionId);
-    
-    Flux<KnowledgeHubDocument> findByTeamIdAndStatus(String teamId, String status);
-    
-    Flux<KnowledgeHubDocument> findByCollectionIdAndStatus(String collectionId, String status);
-}
 
+    Mono<KnowledgeHubDocument> findByDocumentId(String documentId);
+
+    Flux<KnowledgeHubDocument> findByStatus(String status);
+
+    Flux<KnowledgeHubDocument> findByTeamId(String teamId);
+
+    Flux<KnowledgeHubDocument> findByTeamId(Sort sort, String teamId);
+
+    Flux<KnowledgeHubDocument> findByCollectionId(String collectionId);
+
+    Flux<KnowledgeHubDocument> findByTeamIdAndCollectionId(String teamId, String collectionId);
+
+    Flux<KnowledgeHubDocument> findByTeamIdAndStatus(String teamId, String status);
+
+    Flux<KnowledgeHubDocument> findByCollectionIdAndStatus(String collectionId, String status);
+
+    Flux<KnowledgeHubDocument> findByStatusAndDeletedAtBefore(org.lite.gateway.enums.DocumentStatus status,
+            java.time.LocalDateTime threshold);
+}

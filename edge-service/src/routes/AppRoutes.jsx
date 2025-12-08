@@ -48,6 +48,9 @@ import ExportCollection from '../pages/KnowledgeHub/ExportCollection';
 import Rag from '../pages/Rag';
 import ViewRag from '../pages/Rag/ViewRag';
 import Audits from '../pages/Audits';
+import { LoadingSpinner } from '../components/common/LoadingSpinner';
+
+const SecurityIncidents = React.lazy(() => import('../pages/SecurityIncidents'));
 
 const AppRoutes = () => {
   return (
@@ -117,6 +120,16 @@ const AppRoutes = () => {
           element={
             <AdminGuard>
               <Audits />
+            </AdminGuard>
+          }
+        />
+        <Route
+          path="/security/incidents"
+          element={
+            <AdminGuard>
+              <React.Suspense fallback={<LoadingSpinner />}>
+                <SecurityIncidents />
+              </React.Suspense>
             </AdminGuard>
           }
         />

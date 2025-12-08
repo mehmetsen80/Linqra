@@ -161,12 +161,23 @@ public class AuditServiceImpl implements AuditService {
                                         .s3Key(null)
                                         .build();
 
+                        // Publish to stream for real-time monitoring
+                        auditSink.tryEmitNext(auditLog);
+
                         return auditLogRepository.save(auditLog)
                                         .doOnSuccess(logged -> log.debug("Audit event logged: {} - {} by {} in team {}",
                                                         eventType, action, username, teamId))
                                         .doOnError(e -> log.error("Failed to save audit log: {}", e.getMessage(), e))
                                         .then();
                 });
+        }
+
+        private final reactor.core.publisher.Sinks.Many<AuditLog> auditSink = reactor.core.publisher.Sinks.many()
+                        .multicast().onBackpressureBuffer();
+
+        @Override
+        public Flux<AuditLog> getAuditStream() {
+                return auditSink.asFlux();
         }
 
         @Override

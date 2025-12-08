@@ -204,7 +204,7 @@ if [ "$EXPORT_MODE" = true ]; then
     # Just need to validate vault file exists and export
     if [ ! -f "$VAULT_FILE" ]; then
         echo -e "${RED}ERROR: Vault file not found: $VAULT_FILE${NC}"
-        echo "Please bootstrap the vault first: ./scripts/bootstrap-vault.sh ./secrets/secrets..json"
+        echo "Please bootstrap the vault first: ./scripts/bootstrap-vault.sh ./secrets/secrets.json"
         exit 1
     fi
     
@@ -274,7 +274,7 @@ if [ -z "$JSON_FILE" ] || [ ! -f "$JSON_FILE" ]; then
     # Try to find secrets.json file automatically
     if [ -z "$JSON_FILE" ]; then
         # Try common filenames in order
-        for possible_file in "$SECRETS_DIR/secrets.json" "$SECRETS_DIR/secrets..json"; do
+        for possible_file in "$SECRETS_DIR/secrets.json"; do
             if [ -f "$possible_file" ]; then
                 JSON_FILE="$possible_file"
                 echo -e "${YELLOW}   Auto-detected: $JSON_FILE${NC}"
@@ -287,13 +287,6 @@ if [ -z "$JSON_FILE" ] || [ ! -f "$JSON_FILE" ]; then
         JSON_BASENAME="$(basename "$JSON_FILE")"
         
         # Try alternative filenames
-        if [[ "$JSON_BASENAME" == "secrets.json" ]] && [ -f "$JSON_DIR/secrets..json" ]; then
-            JSON_FILE="$JSON_DIR/secrets..json"
-            echo -e "${YELLOW}   Using: $JSON_FILE${NC}"
-        elif [[ "$JSON_BASENAME" == "secrets..json" ]] && [ -f "$JSON_DIR/secrets.json" ]; then
-            JSON_FILE="$JSON_DIR/secrets.json"
-            echo -e "${YELLOW}   Using: $JSON_FILE${NC}"
-        fi
     fi
 fi
 

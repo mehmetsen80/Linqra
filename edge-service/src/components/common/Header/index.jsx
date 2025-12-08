@@ -7,6 +7,53 @@ import UserTeamMenu from './UserTeamMenu';
 import { useTeam } from '../../../contexts/TeamContext';
 import TokenExpiryDisplay from './TokenExpiryDisplay';
 import { NavLink } from 'react-router-dom';
+import { HiOutlineBell } from 'react-icons/hi';
+import { securityIncidentService } from '../../../services/securityIncidentService';
+
+const SecurityBell = () => {
+  const [hasNewIncidents, setHasNewIncidents] = useState(false);
+  const navigate = useNavigate();
+
+  React.useEffect(() => {
+    const checkIncidents = async () => {
+      try {
+        const incidents = await securityIncidentService.getAllIncidents('OPEN');
+        // Check for HIGH or CRITICAL incidents
+        const critical = incidents.some(i => i.severity === 'HIGH' || i.severity === 'CRITICAL');
+        setHasNewIncidents(critical);
+      } catch (e) {
+        console.error("Failed to check security incidents", e);
+      }
+    };
+
+    checkIncidents();
+    const interval = setInterval(checkIncidents, 30000); // Poll every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div
+      className="security-bell-wrapper"
+      onClick={() => navigate('/security/incidents')}
+      style={{ cursor: 'pointer', position: 'relative', color: '#6b7280' }}
+      title="Security Incidents"
+    >
+      <HiOutlineBell size={20} />
+      {hasNewIncidents && (
+        <span style={{
+          position: 'absolute',
+          top: -2,
+          right: -2,
+          width: '8px',
+          height: '8px',
+          backgroundColor: '#ef4444',
+          borderRadius: '50%',
+          border: '1px solid white'
+        }} />
+      )}
+    </div>
+  );
+};
 
 const Header = () => {
   const { user, logout } = useAuth();
@@ -80,6 +127,9 @@ const Header = () => {
           </Nav>
           {user ? (
             <div className="d-flex align-items-center gap-3">
+              {user?.roles?.includes('ADMIN') && (
+                <SecurityBell />
+              )}
               {isViewTokenPage && <TokenExpiryDisplay />}
               <UserTeamMenu />
             </div>

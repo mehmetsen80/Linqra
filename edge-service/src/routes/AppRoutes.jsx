@@ -52,11 +52,56 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner';
 
 const SecurityIncidents = React.lazy(() => import('../pages/SecurityIncidents'));
 
+const FinanceSolution = React.lazy(() => import('../pages/Solutions/FinanceSolution'));
+const LegalSolution = React.lazy(() => import('../pages/Solutions/LegalSolution'));
+const HealthcareSolution = React.lazy(() => import('../pages/Solutions/HealthcareSolution'));
+
+const About = React.lazy(() => import('../pages/About'));
+const Careers = React.lazy(() => import('../pages/Careers'));
+const Contact = React.lazy(() => import('../pages/Contact'));
+
+const SecurityPolicy = React.lazy(() => import('../pages/SecurityPolicy'));
+
 const AppRoutes = () => {
   return (
     <Routes>
       {/* Public Routes */}
       <Route path="/" element={<Home />} />
+      <Route path="/solutions/finance" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <FinanceSolution />
+        </React.Suspense>
+      } />
+      <Route path="/solutions/legal" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <LegalSolution />
+        </React.Suspense>
+      } />
+      <Route path="/solutions/healthcare" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <HealthcareSolution />
+        </React.Suspense>
+      } />
+      <Route path="/about" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <About />
+        </React.Suspense>
+      } />
+      <Route path="/careers" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <Careers />
+        </React.Suspense>
+      } />
+      <Route path="/contact" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <Contact />
+        </React.Suspense>
+      } />
+      <Route path="/security-policy" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <SecurityPolicy />
+        </React.Suspense>
+      } />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/callback" element={<Callback />} />

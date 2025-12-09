@@ -43,6 +43,7 @@ import GeminiModal from '../../../components/teams/GeminiModal';
 import CohereModal from '../../../components/teams/CohereModal';
 import ClaudeModal from '../../../components/teams/ClaudeModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
+import Footer from '../../../components/common/Footer';
 import './styles.css';
 
 const PERMISSION_INFO = {
@@ -1179,6 +1180,7 @@ function ViewTeam() {
         message={confirmModal.message}
         variant={confirmModal.variant}
       />
+      <Footer />
     </div>
   );
 }

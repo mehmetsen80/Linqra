@@ -1,3 +1,4 @@
+import Footer from '../../components/common/Footer';
 import React from 'react';
 import { Link } from 'react-router-dom';
 import './styles.css';
@@ -13,6 +14,8 @@ function TermsOfService() {
         </div>
       </nav>
 
+      {/* ... keeping existing Hero and Content ... */}
+
       <div className="hero-section">
         <div className="hero-content">
           <h1>Terms of Service</h1>
@@ -24,8 +27,9 @@ function TermsOfService() {
 
       <div className="content-wrapper">
         <div className="terms-of-service-content">
+          {/* ... existing content ... */}
           <p className="last-updated">Last updated: January 2025</p>
-          
+
           <section>
             <h2>1. Acceptance of Terms</h2>
             <p>
@@ -178,6 +182,7 @@ function TermsOfService() {
           </div>
         </div>
       </div>
+      <Footer />
     </div>
   );
 }

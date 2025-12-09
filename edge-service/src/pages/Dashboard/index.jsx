@@ -13,6 +13,7 @@ import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin } from '../../utils/roleUtils';
 import { LoadingSpinner } from '../../components/common/LoadingSpinner';
+import Footer from '../../components/common/Footer';
 import './styles.css';
 
 function Dashboard() {
@@ -31,7 +32,7 @@ function Dashboard() {
         <Alert variant="info" className="no-team-alert">
           <Alert.Heading>No Team Access</Alert.Heading>
           <p>
-            You currently don't have access to any team. Please contact your administrator 
+            You currently don't have access to any team. Please contact your administrator
             to get assigned to a team to view the dashboard and access other features.
           </p>
         </Alert>
@@ -58,6 +59,7 @@ function Dashboard() {
         <ServiceUsagePie />
       </div>
       <ModulesSection />
+      <Footer />
     </div>
   );
 }

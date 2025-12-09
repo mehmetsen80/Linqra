@@ -10,6 +10,7 @@ import workflowService from '../../services/workflowService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTeam } from '../../contexts/TeamContext';
 import ExecutionDetailsModal from '../../components/workflows/ExecutionDetailsModal';
+import Footer from '../../components/common/Footer';
 import './styles.css';
 
 const ExecutionMonitoring = () => {
@@ -38,7 +39,7 @@ const ExecutionMonitoring = () => {
         try {
             setLoadingRecentExecutions(true);
             console.log('Loading recent executions...');
-            
+
             const response = await agentTaskService.getRecentExecutions(100);
             if (response.success) {
                 console.log('Loaded recent executions:', response.data);
@@ -88,7 +89,7 @@ const ExecutionMonitoring = () => {
                 }
                 return newTimers;
             });
-            
+
             // Clean up executions when countdown reaches 0 or they're completed and old
             setExecutions(prevExecutions => {
                 const newExecutions = new Map(prevExecutions);
@@ -114,7 +115,7 @@ const ExecutionMonitoring = () => {
                 }
                 return newExecutions;
             });
-            
+
             // Clean up timers for removed executions and closed executions
             setExecutionTimers(prevTimers => {
                 const newTimers = new Map();
@@ -158,13 +159,13 @@ const ExecutionMonitoring = () => {
         // Subscribe to execution updates
         const unsubscribeFromExecutionUpdates = executionMonitoringWebSocket.subscribe(data => {
             try {
-                
+
                 // Filter out health messages - only process execution messages
                 if (Array.isArray(data) || !data?.executionId) {
                     console.log('🔍 Skipping non-execution message (health or invalid data)');
                     return;
                 }
-                
+
                 const parsedTotalSteps = Number(data.totalSteps ?? 0);
                 const totalSteps = Number.isFinite(parsedTotalSteps) && parsedTotalSteps >= 0 ? parsedTotalSteps : 0;
                 const parsedCurrentStep = Number(data.currentStep ?? 0);
@@ -185,14 +186,14 @@ const ExecutionMonitoring = () => {
                 setExecutions(prevExecutions => {
                     const newExecutions = new Map(prevExecutions);
                     const currentTime = new Date().toISOString();
-                    
-                    
+
+
                     // Update the execution with new data
                     newExecutions.set(data.executionId, {
                         ...normalizedPayload,
                         lastUpdated: currentTime
                     });
-                    
+
                     // Start timer for new executions (30 seconds countdown)
                     if (!prevExecutions.has(data.executionId)) {
                         setExecutionTimers(prevTimers => {
@@ -203,7 +204,7 @@ const ExecutionMonitoring = () => {
                     }
                     return newExecutions;
                 });
-                
+
                 setRecentExecutions(prevRecent => {
                     const existingList = Array.isArray(prevRecent) ? [...prevRecent] : [];
                     const existingIndex = existingList.findIndex(exec => exec.executionId === data.executionId);
@@ -230,7 +231,7 @@ const ExecutionMonitoring = () => {
 
                     return [updatedExec, ...existingList].slice(0, 100);
                 });
-                
+
                 setError(null);
             } catch (err) {
                 setError('Failed to process execution data');
@@ -310,7 +311,7 @@ const ExecutionMonitoring = () => {
 
     const confirmCancelExecution = async () => {
         if (!executionToCancel) return;
-        
+
         setCancelling(true);
         try {
             await agentTaskService.cancelExecution(executionToCancel.executionId);
@@ -376,7 +377,7 @@ const ExecutionMonitoring = () => {
             durationMs: execution.durationMs || execution.executionDurationMs,
             memoryUsage: execution.memoryUsage
         };
-        
+
         setSelectedStepDetails(stepDetails);
         setStepDetailsModalOpen(true);
     };
@@ -421,7 +422,7 @@ const ExecutionMonitoring = () => {
     };
 
     return (
-        <Container fluid className="execution-monitoring-container" style={{ padding: 0 }}>
+        <Container fluid className="execution-monitoring-container">
             {/* Breadcrumb */}
             <Card className="breadcrumb-card mb-5">
                 <Card.Body className="p-2">
@@ -430,16 +431,16 @@ const ExecutionMonitoring = () => {
                             <i className="fas fa-home me-1"></i>
                             Home
                         </Breadcrumb.Item>
-                        <Breadcrumb.Item 
-                          linkAs={Link} 
-                          linkProps={{ to: '/organizations' }}
+                        <Breadcrumb.Item
+                            linkAs={Link}
+                            linkProps={{ to: '/organizations' }}
                         >
                             <i className="fas fa-building me-1"></i>
                             {currentTeam?.organization?.name || 'Organization'}
                         </Breadcrumb.Item>
-                        <Breadcrumb.Item 
-                          onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
-                          style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
+                        <Breadcrumb.Item
+                            onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
+                            style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
                         >
                             <i className="fas fa-users me-1"></i>
                             {currentTeam?.name || 'Team'}
@@ -456,12 +457,12 @@ const ExecutionMonitoring = () => {
                 <Typography variant="h5" component="h1" gutterBottom sx={{ textAlign: 'left' }}>
                     Execution Monitoring
                 </Typography>
-                
-                <Alert 
+
+                <Alert
                     severity={
                         connectionStatus === 'connected' ? 'success' :
-                        connectionStatus === 'connecting' ? 'info' :
-                        connectionStatus === 'disconnected' ? 'warning' : 'error'
+                            connectionStatus === 'connecting' ? 'info' :
+                                connectionStatus === 'disconnected' ? 'warning' : 'error'
                     }
                     sx={{ mb: 2 }}
                 >
@@ -470,7 +471,7 @@ const ExecutionMonitoring = () => {
                     {connectionStatus === 'disconnected' && 'Connection lost. Attempting to reconnect...'}
                     {connectionStatus === 'error' && 'Failed to connect to execution monitoring'}
                 </Alert>
-                
+
                 {error && (
                     <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
                 )}
@@ -485,172 +486,172 @@ const ExecutionMonitoring = () => {
                         }
                         // Only show executions that are still running or completed recently (within last 30 seconds)
                         const isRunning = execution.status === 'STARTED' || execution.status === 'RUNNING';
-                        const isRecentlyCompleted = (execution.status === 'COMPLETED' || execution.status === 'FAILED' || execution.status === 'CANCELLED') && 
+                        const isRecentlyCompleted = (execution.status === 'COMPLETED' || execution.status === 'FAILED' || execution.status === 'CANCELLED') &&
                             new Date().getTime() - new Date(execution.lastUpdated).getTime() < 30000; // 30 seconds
                         return isRunning || isRecentlyCompleted;
                     })
                     .map((execution) => {
                         const timer = executionTimers.get(execution.executionId) || 0;
                         return (
-                    <Grid2 xs={12} key={execution.executionId} sx={{ width: '100%' }}>
-                        <MuiCard className="execution-card" sx={{ width: '100%' }}>
-                            <CardContent>
-                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                        <Typography variant="h6" component="h2" noWrap>
-                                            {execution.taskName}
-                                        </Typography>
-                                        {timer > 0 && (
-                                            <Chip
-                                                label={`Auto-close in ${timer}s`}
-                                                size="small"
-                                                color={timer <= 5 ? 'error' : timer <= 10 ? 'warning' : 'default'}
-                                                variant="outlined"
-                                                className={`countdown-timer ${timer <= 5 ? 'error' : timer <= 10 ? 'warning' : ''}`}
-                                            />
-                                        )}
-                                    </Box>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Chip
-                                            icon={getStatusIcon(execution.status)}
-                                            label={execution.status}
-                                            color={getStatusColor(execution.status)}
-                                            size="small"
-                                        />
-                                        {(execution.status === 'STARTED' || execution.status === 'RUNNING') && (
-                                            <IconButton
-                                                size="small"
-                                                color="error"
-                                                onClick={() => handleCancelExecution(execution)}
-                                                title="Cancel Execution"
-                                            >
-                                                <Stop />
-                                            </IconButton>
-                                        )}
-                                        <IconButton
-                                            size="small"
-                                            onClick={() => handleCloseExecution(execution.executionId)}
-                                            title="Close Execution Box"
-                                            color="default"
-                                            className="close-button"
-                                        >
-                                            <Close />
-                                        </IconButton>
-                                    </Box>
-                                </Box>
-
-                                <Typography variant="body2" color="text.secondary" gutterBottom>
-                                    Agent: {execution.agentName || 'Unknown'}
-                                </Typography>
-
-                                <Typography variant="body2" color="text.secondary" gutterBottom>
-                                    Execution ID: {execution.executionId}
-                                </Typography>
-
-                                {/* Progress Bar */}
-                                <Box sx={{ mb: 2 }}>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                        <Typography variant="body2">
-                                            Step {execution.currentStep} of {execution.totalSteps}
-                                        </Typography>
-                                        <Typography variant="body2">
-                                            {formatProgress(execution.currentStep, execution.totalSteps).toFixed(0)}%
-                                        </Typography>
-                                    </Box>
-                                    <LinearProgress 
-                                        variant="determinate" 
-                                        value={formatProgress(execution.currentStep, execution.totalSteps)}
-                                        sx={{ height: 8, borderRadius: 4 }}
-                                    />
-                                </Box>
-
-                                {/* Current Step Info */}
-                                {execution.currentStepName && (
-                                    <Box sx={{ mb: 2 }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Current Step: {execution.currentStepName}
-                                        </Typography>
-                                        {execution.currentStepTarget && (
-                                            <Typography variant="body2" color="text.secondary">
-                                                Target: {execution.currentStepTarget}
-                                            </Typography>
-                                        )}
-                                    </Box>
-                                )}
-
-                                {/* All Steps Overview */}
-                                <Box sx={{ mb: 2 }}>
-                                    <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
-                                        Workflow Steps:
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                                        {Array.from({ length: execution.totalSteps || 1 }, (_, index) => {
-                                            const stepNumber = index + 1;
-                                            const isCurrentStep = stepNumber === execution.currentStep;
-                                            const isCompleted = stepNumber < execution.currentStep;
-                                            
-                                            return (
+                            <Grid2 xs={12} key={execution.executionId} sx={{ width: '100%' }}>
+                                <MuiCard className="execution-card" sx={{ width: '100%' }}>
+                                    <CardContent>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                                <Typography variant="h6" component="h2" noWrap>
+                                                    {execution.taskName}
+                                                </Typography>
+                                                {timer > 0 && (
+                                                    <Chip
+                                                        label={`Auto-close in ${timer}s`}
+                                                        size="small"
+                                                        color={timer <= 5 ? 'error' : timer <= 10 ? 'warning' : 'default'}
+                                                        variant="outlined"
+                                                        className={`countdown-timer ${timer <= 5 ? 'error' : timer <= 10 ? 'warning' : ''}`}
+                                                    />
+                                                )}
+                                            </Box>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                                 <Chip
-                                                    key={stepNumber}
-                                                    label={`Step ${stepNumber}`}
+                                                    icon={getStatusIcon(execution.status)}
+                                                    label={execution.status}
+                                                    color={getStatusColor(execution.status)}
                                                     size="small"
-                                                    color={isCurrentStep ? 'primary' : isCompleted ? 'success' : 'default'}
-                                                    variant={isCurrentStep ? 'filled' : 'outlined'}
-                                                    onClick={() => handleStepClick(stepNumber, execution)}
-                                                    sx={{ cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
                                                 />
-                                            );
-                                        })}
-                                    </Box>
-                                </Box>
-
-                                {/* Memory Usage */}
-                                {execution.memoryUsage && (
-                                    <Box sx={{ mb: 2 }}>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                            <Memory sx={{ mr: 1, fontSize: 16 }} />
-                                            <Typography variant="body2">
-                                                Memory Usage
-                                            </Typography>
+                                                {(execution.status === 'STARTED' || execution.status === 'RUNNING') && (
+                                                    <IconButton
+                                                        size="small"
+                                                        color="error"
+                                                        onClick={() => handleCancelExecution(execution)}
+                                                        title="Cancel Execution"
+                                                    >
+                                                        <Stop />
+                                                    </IconButton>
+                                                )}
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => handleCloseExecution(execution.executionId)}
+                                                    title="Close Execution Box"
+                                                    color="default"
+                                                    className="close-button"
+                                                >
+                                                    <Close />
+                                                </IconButton>
+                                            </Box>
                                         </Box>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Heap: {formatMemory(execution.memoryUsage.heapUsed)} / {formatMemory(execution.memoryUsage.heapMax)} ({execution.memoryUsage.heapUsagePercent.toFixed(1)}%)
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Non-Heap: {formatMemory(execution.memoryUsage.nonHeapUsed)} ({execution.memoryUsage.nonHeapUsagePercent.toFixed(1)}%)
-                                        </Typography>
-                                    </Box>
-                                )}
 
-                                {/* Timing Info */}
-                                <Box sx={{ mb: 2 }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                                        <Timer sx={{ mr: 1, fontSize: 16 }} />
-                                        <Typography variant="body2">
-                                            Execution Time
+                                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                                            Agent: {execution.agentName || 'Unknown'}
                                         </Typography>
-                                    </Box>
-                                    {execution.stepDurationMs && (
-                                        <Typography variant="body2" color="text.secondary">
-                                            Step Duration: {formatDuration(execution.stepDurationMs)}
+
+                                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                                            Execution ID: {execution.executionId}
                                         </Typography>
-                                    )}
-                                </Box>
 
-                                {/* Error Message */}
-                                {execution.errorMessage && (
-                                    <Alert severity="error" sx={{ mt: 2 }}>
-                                        {execution.errorMessage}
-                                    </Alert>
-                                )}
+                                        {/* Progress Bar */}
+                                        <Box sx={{ mb: 2 }}>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                                <Typography variant="body2">
+                                                    Step {execution.currentStep} of {execution.totalSteps}
+                                                </Typography>
+                                                <Typography variant="body2">
+                                                    {formatProgress(execution.currentStep, execution.totalSteps).toFixed(0)}%
+                                                </Typography>
+                                            </Box>
+                                            <LinearProgress
+                                                variant="determinate"
+                                                value={formatProgress(execution.currentStep, execution.totalSteps)}
+                                                sx={{ height: 8, borderRadius: 4 }}
+                                            />
+                                        </Box>
 
-                                {/* Last Updated */}
-                                <Typography variant="caption" color="text.secondary">
-                                    Last updated: {new Date(execution.lastUpdated).toLocaleString()}
-                                </Typography>
-                            </CardContent>
-                        </MuiCard>
-                    </Grid2>
+                                        {/* Current Step Info */}
+                                        {execution.currentStepName && (
+                                            <Box sx={{ mb: 2 }}>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    Current Step: {execution.currentStepName}
+                                                </Typography>
+                                                {execution.currentStepTarget && (
+                                                    <Typography variant="body2" color="text.secondary">
+                                                        Target: {execution.currentStepTarget}
+                                                    </Typography>
+                                                )}
+                                            </Box>
+                                        )}
+
+                                        {/* All Steps Overview */}
+                                        <Box sx={{ mb: 2 }}>
+                                            <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                                Workflow Steps:
+                                            </Typography>
+                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                                {Array.from({ length: execution.totalSteps || 1 }, (_, index) => {
+                                                    const stepNumber = index + 1;
+                                                    const isCurrentStep = stepNumber === execution.currentStep;
+                                                    const isCompleted = stepNumber < execution.currentStep;
+
+                                                    return (
+                                                        <Chip
+                                                            key={stepNumber}
+                                                            label={`Step ${stepNumber}`}
+                                                            size="small"
+                                                            color={isCurrentStep ? 'primary' : isCompleted ? 'success' : 'default'}
+                                                            variant={isCurrentStep ? 'filled' : 'outlined'}
+                                                            onClick={() => handleStepClick(stepNumber, execution)}
+                                                            sx={{ cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
+                                                        />
+                                                    );
+                                                })}
+                                            </Box>
+                                        </Box>
+
+                                        {/* Memory Usage */}
+                                        {execution.memoryUsage && (
+                                            <Box sx={{ mb: 2 }}>
+                                                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                                    <Memory sx={{ mr: 1, fontSize: 16 }} />
+                                                    <Typography variant="body2">
+                                                        Memory Usage
+                                                    </Typography>
+                                                </Box>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    Heap: {formatMemory(execution.memoryUsage.heapUsed)} / {formatMemory(execution.memoryUsage.heapMax)} ({execution.memoryUsage.heapUsagePercent.toFixed(1)}%)
+                                                </Typography>
+                                                <Typography variant="body2" color="text.secondary">
+                                                    Non-Heap: {formatMemory(execution.memoryUsage.nonHeapUsed)} ({execution.memoryUsage.nonHeapUsagePercent.toFixed(1)}%)
+                                                </Typography>
+                                            </Box>
+                                        )}
+
+                                        {/* Timing Info */}
+                                        <Box sx={{ mb: 2 }}>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                                <Timer sx={{ mr: 1, fontSize: 16 }} />
+                                                <Typography variant="body2">
+                                                    Execution Time
+                                                </Typography>
+                                            </Box>
+                                            {execution.stepDurationMs && (
+                                                <Typography variant="body2" color="text.secondary">
+                                                    Step Duration: {formatDuration(execution.stepDurationMs)}
+                                                </Typography>
+                                            )}
+                                        </Box>
+
+                                        {/* Error Message */}
+                                        {execution.errorMessage && (
+                                            <Alert severity="error" sx={{ mt: 2 }}>
+                                                {execution.errorMessage}
+                                            </Alert>
+                                        )}
+
+                                        {/* Last Updated */}
+                                        <Typography variant="caption" color="text.secondary">
+                                            Last updated: {new Date(execution.lastUpdated).toLocaleString()}
+                                        </Typography>
+                                    </CardContent>
+                                </MuiCard>
+                            </Grid2>
                         );
                     })}
             </Grid2>
@@ -697,7 +698,7 @@ const ExecutionMonitoring = () => {
                                 {queue.map((queueItem, index) => (
                                     <TableRow key={queueItem.executionId}>
                                         <TableCell>
-                                            <Chip 
+                                            <Chip
                                                 label={`#${queueItem.queuePosition || index + 1}`}
                                                 color={queueItem.status === 'STARTING' ? 'primary' : 'default'}
                                                 variant={queueItem.status === 'STARTING' ? 'filled' : 'outlined'}
@@ -706,18 +707,18 @@ const ExecutionMonitoring = () => {
                                         <TableCell>{queueItem.agentName}</TableCell>
                                         <TableCell>{queueItem.taskName}</TableCell>
                                         <TableCell>
-                                            <Chip 
+                                            <Chip
                                                 label={queueItem.status}
                                                 color={
                                                     queueItem.status === 'STARTING' ? 'primary' :
-                                                    queueItem.status === 'QUEUED' ? 'default' : 'secondary'
+                                                        queueItem.status === 'QUEUED' ? 'default' : 'secondary'
                                                 }
                                                 variant={queueItem.status === 'STARTING' ? 'filled' : 'outlined'}
                                                 icon={queueItem.status === 'STARTING' ? <PlayArrow /> : null}
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            {queueItem.queuedAt ? 
+                                            {queueItem.queuedAt ?
                                                 (() => {
                                                     try {
                                                         let date;
@@ -734,7 +735,7 @@ const ExecutionMonitoring = () => {
                                                         console.error('Queue date parsing error:', e, 'Value:', queueItem.queuedAt);
                                                         return 'Invalid Date';
                                                     }
-                                                })() 
+                                                })()
                                                 : 'Unknown'
                                             }
                                         </TableCell>
@@ -765,7 +766,7 @@ const ExecutionMonitoring = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     View and rerun your recent task executions
                 </Typography>
-                
+
                 {loadingRecentExecutions ? (
                     <Box sx={{ textAlign: 'center', py: 4 }}>
                         <Typography>Loading recent executions...</Typography>
@@ -791,10 +792,10 @@ const ExecutionMonitoring = () => {
                             </TableHead>
                             <TableBody>
                                 {recentExecutions.map((execution) => (
-                                    <TableRow 
+                                    <TableRow
                                         key={execution.executionId}
                                         onClick={() => handleRowClick(execution)}
-                                        sx={{ 
+                                        sx={{
                                             cursor: 'pointer',
                                             '&:hover': {
                                                 backgroundColor: 'rgba(0, 0, 0, 0.04)'
@@ -862,166 +863,167 @@ const ExecutionMonitoring = () => {
                     <Button onClick={handleCancelDialogClose} disabled={cancelling}>
                         Keep Running
                     </Button>
-                    <Button 
-                        onClick={confirmCancelExecution} 
-                        color="error" 
+                    <Button
+                        onClick={confirmCancelExecution}
+                        color="error"
                         disabled={cancelling}
                     >
                         {cancelling ? 'Cancelling...' : 'Cancel Execution'}
                     </Button>
                 </DialogActions>
-                    </Dialog>
+            </Dialog>
 
-                    {/* Step Details Modal */}
-                    <Dialog 
-                        open={stepDetailsModalOpen} 
-                        onClose={() => setStepDetailsModalOpen(false)}
-                        maxWidth="md"
-                        fullWidth
-                    >
-                        <DialogTitle>
-                            Step {selectedStepDetails?.stepNumber} Details
-                        </DialogTitle>
-                        <DialogContent>
-                            {selectedStepDetails && (
-                                <Box>
-                                    <Typography variant="h6" gutterBottom>
-                                        Execution Information
-                                    </Typography>
-                                    <Box sx={{ mb: 3 }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Task:</strong> {selectedStepDetails.taskName}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Agent:</strong> {selectedStepDetails.agentName || 'Unknown'}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Execution ID:</strong> {selectedStepDetails.executionId}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Status:</strong> {selectedStepDetails.status}
-                                        </Typography>
-                                    </Box>
+            {/* Step Details Modal */}
+            <Dialog
+                open={stepDetailsModalOpen}
+                onClose={() => setStepDetailsModalOpen(false)}
+                maxWidth="md"
+                fullWidth
+            >
+                <DialogTitle>
+                    Step {selectedStepDetails?.stepNumber} Details
+                </DialogTitle>
+                <DialogContent>
+                    {selectedStepDetails && (
+                        <Box>
+                            <Typography variant="h6" gutterBottom>
+                                Execution Information
+                            </Typography>
+                            <Box sx={{ mb: 3 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Task:</strong> {selectedStepDetails.taskName}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Agent:</strong> {selectedStepDetails.agentName || 'Unknown'}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Execution ID:</strong> {selectedStepDetails.executionId}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Status:</strong> {selectedStepDetails.status}
+                                </Typography>
+                            </Box>
 
-                                    <Typography variant="h6" gutterBottom>
-                                        Step Information
-                                    </Typography>
-                                    <Box sx={{ mb: 3 }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Step Number:</strong> {selectedStepDetails.stepNumber} of {selectedStepDetails.totalSteps}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Current Step:</strong> {selectedStepDetails.currentStep}
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Step Status:</strong> {
-                                                selectedStepDetails.isCurrentStep ? 'Currently Running' :
-                                                selectedStepDetails.isCompleted ? 'Completed' :
+                            <Typography variant="h6" gutterBottom>
+                                Step Information
+                            </Typography>
+                            <Box sx={{ mb: 3 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Step Number:</strong> {selectedStepDetails.stepNumber} of {selectedStepDetails.totalSteps}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Current Step:</strong> {selectedStepDetails.currentStep}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Step Status:</strong> {
+                                        selectedStepDetails.isCurrentStep ? 'Currently Running' :
+                                            selectedStepDetails.isCompleted ? 'Completed' :
                                                 selectedStepDetails.isFuture ? 'Pending' : 'Unknown'
-                                            }
-                                        </Typography>
-                                        {selectedStepDetails.currentStepName && (
-                                            <Typography variant="body2" color="text.secondary">
-                                                <strong>Step Name:</strong> {selectedStepDetails.currentStepName}
-                                            </Typography>
-                                        )}
-                                        {selectedStepDetails.currentStepTarget && (
-                                            <Typography variant="body2" color="text.secondary">
-                                                <strong>Target:</strong> {selectedStepDetails.currentStepTarget}
-                                            </Typography>
-                                        )}
-                                        {selectedStepDetails.currentStepAction && (
-                                            <Typography variant="body2" color="text.secondary">
-                                                <strong>Action:</strong> {selectedStepDetails.currentStepAction}
-                                            </Typography>
-                                        )}
-                                    </Box>
-
-                                    <Typography variant="h6" gutterBottom>
-                                        Progress Information
+                                    }
+                                </Typography>
+                                {selectedStepDetails.currentStepName && (
+                                    <Typography variant="body2" color="text.secondary">
+                                        <strong>Step Name:</strong> {selectedStepDetails.currentStepName}
                                     </Typography>
-                                    <Box sx={{ mb: 3 }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Overall Progress:</strong> {selectedStepDetails.currentStep} / {selectedStepDetails.totalSteps} steps
-                                        </Typography>
-                                        <LinearProgress 
-                                            variant="determinate" 
-                                            value={(selectedStepDetails.currentStep / selectedStepDetails.totalSteps) * 100}
-                                            sx={{ height: 8, borderRadius: 4, mt: 1 }}
-                                        />
-                                    </Box>
-
-                                    <Typography variant="h6" gutterBottom>
-                                        Timing Information
+                                )}
+                                {selectedStepDetails.currentStepTarget && (
+                                    <Typography variant="body2" color="text.secondary">
+                                        <strong>Target:</strong> {selectedStepDetails.currentStepTarget}
                                     </Typography>
-                                    <Box sx={{ mb: 3 }}>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Started At:</strong> {selectedStepDetails.startedAt ? 
-                                                (() => {
-                                                    try {
-                                                        let date;
-                                                        // Handle array format from LocalDateTime serialization
-                                                        if (Array.isArray(selectedStepDetails.startedAt)) {
-                                                            // Convert array [year, month, day, hour, minute, second, nano] to Date
-                                                            const [year, month, day, hour, minute, second, nano] = selectedStepDetails.startedAt;
-                                                            date = new Date(year, month - 1, day, hour, minute, second, Math.floor(nano / 1000000));
-                                                        } else {
-                                                            date = new Date(selectedStepDetails.startedAt);
-                                                        }
-                                                        return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString();
-                                                    } catch (e) {
-                                                        console.error('Date parsing error in modal:', e, 'Value:', selectedStepDetails.startedAt);
-                                                        return 'Invalid Date';
-                                                    }
-                                                })() 
-                                                : 'Unknown'
-                                            }
-                                        </Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            <strong>Duration:</strong> {formatDuration(
-                                                selectedStepDetails.executionDurationMs || 0
-                                            )}
-                                        </Typography>
-                                    </Box>
+                                )}
+                                {selectedStepDetails.currentStepAction && (
+                                    <Typography variant="body2" color="text.secondary">
+                                        <strong>Action:</strong> {selectedStepDetails.currentStepAction}
+                                    </Typography>
+                                )}
+                            </Box>
 
-                                    {selectedStepDetails.memoryUsage && (
-                                        <>
-                                            <Typography variant="h6" gutterBottom>
-                                                Memory Usage
-                                            </Typography>
-                                            <Box>
-                                                <Typography variant="body2" color="text.secondary">
-                                                    <strong>Heap:</strong> {formatMemory(selectedStepDetails.memoryUsage.heapUsed)} / {formatMemory(selectedStepDetails.memoryUsage.heapMax)} ({selectedStepDetails.memoryUsage.heapUsagePercent.toFixed(1)}%)
-                                                </Typography>
-                                                <Typography variant="body2" color="text.secondary">
-                                                    <strong>Non-Heap:</strong> {formatMemory(selectedStepDetails.memoryUsage.nonHeapUsed)} ({selectedStepDetails.memoryUsage.nonHeapUsagePercent.toFixed(1)}%)
-                                                </Typography>
-                                            </Box>
-                                        </>
+                            <Typography variant="h6" gutterBottom>
+                                Progress Information
+                            </Typography>
+                            <Box sx={{ mb: 3 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Overall Progress:</strong> {selectedStepDetails.currentStep} / {selectedStepDetails.totalSteps} steps
+                                </Typography>
+                                <LinearProgress
+                                    variant="determinate"
+                                    value={(selectedStepDetails.currentStep / selectedStepDetails.totalSteps) * 100}
+                                    sx={{ height: 8, borderRadius: 4, mt: 1 }}
+                                />
+                            </Box>
+
+                            <Typography variant="h6" gutterBottom>
+                                Timing Information
+                            </Typography>
+                            <Box sx={{ mb: 3 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Started At:</strong> {selectedStepDetails.startedAt ?
+                                        (() => {
+                                            try {
+                                                let date;
+                                                // Handle array format from LocalDateTime serialization
+                                                if (Array.isArray(selectedStepDetails.startedAt)) {
+                                                    // Convert array [year, month, day, hour, minute, second, nano] to Date
+                                                    const [year, month, day, hour, minute, second, nano] = selectedStepDetails.startedAt;
+                                                    date = new Date(year, month - 1, day, hour, minute, second, Math.floor(nano / 1000000));
+                                                } else {
+                                                    date = new Date(selectedStepDetails.startedAt);
+                                                }
+                                                return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString();
+                                            } catch (e) {
+                                                console.error('Date parsing error in modal:', e, 'Value:', selectedStepDetails.startedAt);
+                                                return 'Invalid Date';
+                                            }
+                                        })()
+                                        : 'Unknown'
+                                    }
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    <strong>Duration:</strong> {formatDuration(
+                                        selectedStepDetails.executionDurationMs || 0
                                     )}
-                                </Box>
-                            )}
-                        </DialogContent>
-                        <DialogActions>
-                            <Button onClick={() => setStepDetailsModalOpen(false)}>
-                                Close
-                            </Button>
-                        </DialogActions>
-                    </Dialog>
+                                </Typography>
+                            </Box>
 
-                    {/* Execution Details Modal */}
-                    <ExecutionDetailsModal
-                        show={showExecutionModal}
-                        onHide={() => {
-                            setShowExecutionModal(false);
-                            setSelectedExecution(null);
-                        }}
-                        execution={selectedExecution}
-                        formatDate={formatDate}
-                    />
+                            {selectedStepDetails.memoryUsage && (
+                                <>
+                                    <Typography variant="h6" gutterBottom>
+                                        Memory Usage
+                                    </Typography>
+                                    <Box>
+                                        <Typography variant="body2" color="text.secondary">
+                                            <strong>Heap:</strong> {formatMemory(selectedStepDetails.memoryUsage.heapUsed)} / {formatMemory(selectedStepDetails.memoryUsage.heapMax)} ({selectedStepDetails.memoryUsage.heapUsagePercent.toFixed(1)}%)
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            <strong>Non-Heap:</strong> {formatMemory(selectedStepDetails.memoryUsage.nonHeapUsed)} ({selectedStepDetails.memoryUsage.nonHeapUsagePercent.toFixed(1)}%)
+                                        </Typography>
+                                    </Box>
+                                </>
+                            )}
+                        </Box>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setStepDetailsModalOpen(false)}>
+                        Close
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Execution Details Modal */}
+            <ExecutionDetailsModal
+                show={showExecutionModal}
+                onHide={() => {
+                    setShowExecutionModal(false);
+                    setSelectedExecution(null);
+                }}
+                execution={selectedExecution}
+                formatDate={formatDate}
+            />
+            <Footer />
         </Container>
     );
 };
 
-        export default ExecutionMonitoring;
+export default ExecutionMonitoring;
 

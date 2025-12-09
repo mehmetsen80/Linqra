@@ -6,6 +6,7 @@ import { auditService, AUDIT_EVENT_TYPES, formatEventType, getEventTypeCategory 
 import { formatDateTime } from '../../utils/dateUtils';
 import { useTeam } from '../../contexts/TeamContext';
 import { HiSearchCircle, HiRefresh, HiFilter, HiEye, HiChevronLeft, HiChevronRight, HiDocumentReport, HiClock, HiDatabase, HiArchive } from 'react-icons/hi';
+import Footer from '../../components/common/Footer';
 import './styles.css';
 
 const Audits = () => {
@@ -185,6 +186,7 @@ const Audits = () => {
         return (
             <Container className="audits-container mt-4">
                 <Alert variant="warning">Please select a team to view audit logs.</Alert>
+                <Footer />
             </Container>
         );
     }
@@ -799,6 +801,7 @@ const Audits = () => {
                     </Button>
                 </Modal.Footer>
             </Modal>
+            <Footer />
         </Container >
     );
 };

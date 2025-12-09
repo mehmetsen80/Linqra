@@ -1,0 +1,163 @@
+/* Security Policy Styles */
+
+.security-hero-bg {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%) !important;
+}
+
+.security-content {
+    background: #f8fafc;
+    /* Light grey */
+    padding: 4rem 2rem;
+    min-height: 50vh;
+}
+
+.security-container {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* POLICY DOCUMENT TYPOGRAPHY */
+.policy-document {
+    background: #fff;
+    padding: 3rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    color: #334155;
+    line-height: 1.7;
+    font-size: 1rem;
+    text-align: left;
+}
+
+.policy-section {
+    margin-bottom: 3rem;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 2rem;
+}
+
+.policy-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.policy-section h2 {
+    color: #0f172a;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    letter-spacing: -0.025em;
+}
+
+.policy-section p {
+    margin-bottom: 1rem;
+}
+
+/* LISTS */
+.policy-list {
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.policy-list li {
+    margin-bottom: 0.5rem;
+    color: #475569;
+}
+
+.policy-list li strong {
+    color: #1e293b;
+    font-weight: 600;
+}
+
+/* TABLES */
+.table-wrapper {
+    overflow-x: auto;
+    margin-top: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+}
+
+.policy-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.policy-table th,
+.policy-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.policy-table th {
+    background: #f8fafc;
+    font-weight: 600;
+    color: #475569;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.policy-table td {
+    font-size: 0.95rem;
+}
+
+.policy-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* BADGES */
+.badge-level {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.badge-level.l4 {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+/* Red */
+.badge-level.l3 {
+    background: #ffedd5;
+    color: #9a3412;
+}
+
+/* Orange */
+.badge-level.l2 {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+/* Blue */
+.badge-level.l1 {
+    background: #f1f5f9;
+    color: #475569;
+}
+
+/* Slate */
+
+/* SIGNATURE */
+.policy-signature {
+    margin-top: 4rem;
+    border-top: 2px solid #e2e8f0;
+    padding-top: 2rem;
+    width: 300px;
+}
+
+.signature-title {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.signature-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    font-family: 'Dancing Script', cursive, sans-serif;
+    /* Fallback to standard if no script font */
+    color: #0f172a;
+}

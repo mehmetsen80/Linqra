@@ -1,0 +1,236 @@
+/* Visualizer Container */
+.ecosystem-container {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    height: 500px;
+    margin: 0 auto;
+    background: radial-gradient(circle at center, #1e293b 0%, #0f172a 70%);
+    border-radius: 24px;
+    border: 1px solid #334155;
+    box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.5), 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Central Core */
+.core-hub {
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    background: #ffffff;
+    border-radius: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    box-shadow: 0 0 30px rgba(79, 70, 229, 0.4);
+    border: 4px solid #4f46e5;
+    animation: pulse 3s infinite;
+}
+
+.core-logo {
+    width: 90px;
+    margin-bottom: 5px;
+}
+
+.core-label {
+    font-weight: 700;
+    font-size: 1.7rem;
+    color: #1e293b;
+    text-align: center;
+    line-height: 1.2;
+    font-family: 'Poppins', sans-serif;
+}
+
+.core-glow {
+    position: absolute;
+    width: 320px;
+    height: 320px;
+    background: radial-gradient(circle, rgba(79, 70, 229, 0.2) 0%, transparent 70%);
+    border-radius: 50%;
+    z-index: 1;
+    animation: spin 10s linear infinite;
+}
+
+/* Nodes */
+.node {
+    position: absolute;
+    width: 100px;
+    background: #1e293b;
+    border: 2px solid #334155;
+    border-radius: 12px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease, border-color 0.3s ease;
+}
+
+.node:hover {
+    transform: scale(1.1);
+    border-color: #6366f1;
+    cursor: default;
+}
+
+.node-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.node-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    text-align: center;
+}
+
+/* Specific Node Styling & Positioning */
+/* Left Side (Inputs) */
+.node-apps {
+    top: 25%;
+    left: 10%;
+    border-color: #3b82f6;
+    /* Blue */
+}
+
+.node-apps .node-icon {
+    color: #3b82f6;
+}
+
+.node-agents {
+    bottom: 25%;
+    left: 10%;
+    border-color: #a855f7;
+    /* Purple */
+}
+
+.node-agents .node-icon {
+    color: #a855f7;
+}
+
+/* Right Side (Value Adds) */
+.node-security {
+    top: 15%;
+    right: 10%;
+    border-color: #ef4444;
+    /* Red */
+}
+
+.node-security .node-icon {
+    color: #ef4444;
+}
+
+.node-resiliency {
+    top: 50%;
+    right: 5%;
+    transform: translateY(-50%);
+    border-color: #10b981;
+    /* Emerald */
+}
+
+.node-resiliency .node-icon {
+    color: #10b981;
+}
+
+.node-compliance {
+    bottom: 15%;
+    right: 10%;
+    border-color: #f59e0b;
+    /* Amber */
+}
+
+.node-compliance .node-icon {
+    color: #f59e0b;
+}
+
+
+/* Connecting Lines */
+.connections-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.connection-line {
+    stroke: #475569;
+    stroke-width: 2;
+    stroke-dasharray: 5, 5;
+    opacity: 0.6;
+    animation: dash 30s linear infinite;
+}
+
+/* Animations */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4);
+    }
+
+    70% {
+        box-shadow: 0 0 0 20px rgba(79, 70, 229, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(79, 70, 229, 0);
+    }
+}
+
+@keyframes spin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -1000;
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .ecosystem-container {
+        height: 600px;
+    }
+
+    .node {
+        width: 90px;
+        padding: 0.5rem;
+    }
+
+    /* Stack nodes vertically on mobile for safety? Or keep scaled down? */
+    /* Let's keep positions but adjust percentages slightly if needed */
+    .node-apps {
+        left: 5%;
+    }
+
+    .node-agents {
+        left: 5%;
+    }
+
+    .node-security {
+        right: 5%;
+    }
+
+    .node-resiliency {
+        right: 2%;
+    }
+
+    .node-compliance {
+        right: 5%;
+    }
+}

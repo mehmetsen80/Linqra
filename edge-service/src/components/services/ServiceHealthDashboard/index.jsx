@@ -4,6 +4,7 @@ import { apiGatewayService } from '../../../services/apiGatewayService';
 import ServiceStatusCard from '../ServiceStatusCard';
 import { Alert, Box, Grid } from '@mui/material';
 import AnalysisSummaryDialog from '../AnalysisSummaryDialog';
+import Footer from '../../common/Footer';
 import './styles.css';
 
 const ServiceHealthDashboard = () => {
@@ -31,14 +32,14 @@ const ServiceHealthDashboard = () => {
                 setError('Failed to fetch services from API Gateway');
             }
         };
-        
+
         fetchServices();
     }, []);
 
     // Function to ensure all expected services are shown
     const getAllServices = (activeServices) => {
         const servicesMap = new Map(activeServices.map(s => [s.serviceId, s]));
-        
+
         // Add placeholder for missing services
         expectedServices.forEach(serviceId => {
             if (!servicesMap.has(serviceId)) {
@@ -60,7 +61,7 @@ const ServiceHealthDashboard = () => {
                 });
             }
         });
-        
+
         // Transform active services to match expected structure
         return Array.from(servicesMap.values()).map(service => {
             if (typeof service.status === 'object') {
@@ -119,7 +120,7 @@ const ServiceHealthDashboard = () => {
     const handleAnalysisClick = async (serviceId) => {
         // Find the service by ID
         const service = services.find(s => s.serviceId === serviceId);
-        
+
         // If service is DOWN, just open dialog without making API call
         if (service?.status === 'DOWN') {
             setAnalysisData(null);
@@ -162,11 +163,11 @@ const ServiceHealthDashboard = () => {
     return (
         <div className="service-health-dashboard">
             <h1>Service Health Dashboard</h1>
-            <Alert 
+            <Alert
                 severity={
                     connectionStatus === 'connected' ? 'success' :
-                    connectionStatus === 'connecting' ? 'info' :
-                    connectionStatus === 'disconnected' ? 'warning' : 'error'
+                        connectionStatus === 'connecting' ? 'info' :
+                            connectionStatus === 'disconnected' ? 'warning' : 'error'
                 }
             >
                 {connectionStatus === 'connected' && 'Server connected successfully'}
@@ -202,6 +203,7 @@ const ServiceHealthDashboard = () => {
                     error={analysisError}
                 />
             )}
+            <Footer />
         </div>
     );
 };

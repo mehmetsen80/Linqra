@@ -8,12 +8,12 @@ const WorkflowQuotes = () => {
     return (
         <div className="workflow-quotes">
             <h2>Quotes Service Workflow</h2>
-            
+
             <div className="workflow-section">
                 <h3>Overview</h3>
                 <p>
-                    The Quotes Service Workflow demonstrates advanced workflow patterns including basic quote generation, 
-                    RAG (Retrieval-Augmented Generation), Milvus vector database integration, multi-step workflow orchestration, 
+                    The Quotes Service Workflow demonstrates advanced workflow patterns including basic quote generation,
+                    RAG (Retrieval-Augmented Generation), Milvus vector database integration, multi-step workflow orchestration,
                     and language detection with metadata tagging.
                 </p>
             </div>
@@ -57,13 +57,13 @@ const WorkflowQuotes = () => {
             <div className="workflow-section">
                 <h3>Documentation</h3>
                 <p>
-                    Explore the comprehensive guide covering workflow creation, execution, and advanced RAG patterns 
+                    Explore the comprehensive guide covering workflow creation, execution, and advanced RAG patterns
                     in our complete documentation.
                 </p>
                 <div className="documentation-link">
-                    <a 
-                        href="https://docs.linqra.com/linq-protocol/introduction" 
-                        target="_blank" 
+                    <a
+                        href="https://docs.linqra.com/linq-protocol/introduction"
+                        target="_blank"
                         rel="noopener noreferrer"
                         style={{
                             display: 'inline-flex',
@@ -80,7 +80,7 @@ const WorkflowQuotes = () => {
                             transition: 'all 0.2s ease'
                         }}
                         onMouseEnter={(e) => {
-                            e.target.style.backgroundColor = 'var(--primary-color-dark)';
+                            e.target.style.backgroundColor = 'var(--primary-dark)';
                             e.target.style.transform = 'translateY(-2px)';
                             e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
                         }}
@@ -104,8 +104,8 @@ const WorkflowQuotes = () => {
                         <h4>Basic Quote Generator</h4>
                         <p>Simple workflow that generates inspirational quotes from historical figures</p>
                         <div className="code-example">
-                            <SyntaxHighlighter 
-                                language="json" 
+                            <SyntaxHighlighter
+                                language="json"
                                 style={vscDarkPlus}
                                 showLineNumbers={true}
                                 wrapLines={true}
@@ -151,13 +151,13 @@ const WorkflowQuotes = () => {
                             </SyntaxHighlighter>
                         </div>
                     </div>
-                    
+
                     <div className="tab">
                         <h4>RAG Quote System</h4>
                         <p>Advanced workflow using retrieval-augmented generation for better quality quotes</p>
                         <div className="code-example">
-                            <SyntaxHighlighter 
-                                language="json" 
+                            <SyntaxHighlighter
+                                language="json"
                                 style={vscDarkPlus}
                                 showLineNumbers={true}
                                 wrapLines={true}

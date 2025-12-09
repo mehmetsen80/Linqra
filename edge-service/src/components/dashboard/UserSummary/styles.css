@@ -1,7 +1,7 @@
 .user-summary {
   border: none;
   background-color: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .user-summary h4 {
@@ -47,6 +47,8 @@
   color: var(--primary-color);
   background-color: #f8f9fa;
   text-decoration: none;
+  width: 200px;
+  justify-content: center;
   transition: all 0.2s ease;
 }
 
@@ -62,7 +64,7 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .user-summary .card-body > div {
+  .user-summary .card-body>div {
     flex-direction: column;
     gap: 1.5rem;
   }
@@ -110,4 +112,4 @@
 [data-environment="test"] .environment-badge {
   background-color: var(--warning-light, #fff3cd);
   color: var(--warning-dark, #856404);
-} 
+}

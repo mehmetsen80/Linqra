@@ -20,6 +20,7 @@ import Button from '../../components/common/Button';
 import CreateCollectionModal from '../../components/knowledgeHub/CreateCollectionModal';
 import EditCollectionModal from '../../components/knowledgeHub/EditCollectionModal';
 import MilvusAssignmentModal from '../../components/knowledgeHub/MilvusAssignmentModal';
+import Footer from '../../components/common/Footer';
 import './styles.css';
 
 const PROVIDER_LABELS = {
@@ -72,7 +73,7 @@ function KnowledgeHub() {
     show: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
     variant: 'danger'
   });
   const [showDeleteAllEntitiesModal, setShowDeleteAllEntitiesModal] = useState(false);
@@ -111,7 +112,7 @@ function KnowledgeHub() {
 
   const handleOpenPropertiesModal = async (title, entityType, entityName, properties, fromEntity = null, toEntity = null) => {
     const isAdmin = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
-    
+
     if (isAdmin) {
       // For admin users, decrypt properties and entity names before showing
       setPropertiesModal({
@@ -126,7 +127,7 @@ function KnowledgeHub() {
       try {
         // Build a combined properties map that includes entity names and encryption version markers for decryption
         const propertiesToDecrypt = { ...(properties || {}) };
-        
+
         // Build entity name properties with encryption version markers
         const fromEntityProps = {};
         if (fromEntity?.name) {
@@ -138,7 +139,7 @@ function KnowledgeHub() {
             fromEntityProps['encryptionKeyVersion'] = fromEntity.encryptionKeyVersion;
           }
         }
-        
+
         const toEntityProps = {};
         if (toEntity?.name) {
           toEntityProps['name'] = toEntity.name;
@@ -149,30 +150,30 @@ function KnowledgeHub() {
             toEntityProps['encryptionKeyVersion'] = toEntity.encryptionKeyVersion;
           }
         }
-        
+
         // Decrypt entity names separately if they exist
         let decryptedFromName = fromEntity?.name || fromEntity?.id || 'N/A';
         let decryptedToName = toEntity?.name || toEntity?.id || 'N/A';
-        
+
         if (Object.keys(fromEntityProps).length > 0) {
           const fromNameResult = await knowledgeHubGraphService.decryptProperties(fromEntityProps);
           if (fromNameResult.success && fromNameResult.data?.name) {
             decryptedFromName = fromNameResult.data.name;
           }
         }
-        
+
         if (Object.keys(toEntityProps).length > 0) {
           const toNameResult = await knowledgeHubGraphService.decryptProperties(toEntityProps);
           if (toNameResult.success && toNameResult.data?.name) {
             decryptedToName = toNameResult.data.name;
           }
         }
-        
+
         // Update subtitle with decrypted names
         const fromType = fromEntity?.type || 'Unknown';
         const toType = toEntity?.type || 'Unknown';
         const updatedEntityName = `${fromType}:${decryptedFromName} → ${toType}:${decryptedToName}`;
-        
+
         // Decrypt relationship properties if they exist
         if (Object.keys(propertiesToDecrypt).length > 0) {
           const result = await knowledgeHubGraphService.decryptProperties(propertiesToDecrypt);
@@ -230,7 +231,7 @@ function KnowledgeHub() {
       loadMilvusCollections();
       loadEmbeddingOptions();
       fetchGraphStatistics();
-      
+
       // Fetch current encryption key version
       const fetchCurrentEncryptionVersion = async () => {
         try {
@@ -265,7 +266,7 @@ function KnowledgeHub() {
         });
       }
     };
-    
+
     checkVaultHealth();
   }, []);
 
@@ -297,7 +298,7 @@ function KnowledgeHub() {
       setOperationLoading(true);
       const { data, error } = await knowledgeHubCollectionService.createCollection(collectionData);
       if (error) throw new Error(error);
-      
+
       await fetchCollections();
       setShowCreateModal(false);
       showSuccessToast(`Collection "${data.name}" created successfully`);
@@ -316,7 +317,7 @@ function KnowledgeHub() {
         collectionData
       );
       if (error) throw new Error(error);
-      
+
       await fetchCollections();
       setShowEditModal(false);
       showSuccessToast(`Collection "${data.name}" updated successfully`);
@@ -333,7 +334,7 @@ function KnowledgeHub() {
       setOperationLoading(true);
       const { error } = await knowledgeHubCollectionService.deleteCollection(collectionId);
       if (error) throw new Error(error);
-      
+
       setConfirmModal(prev => ({ ...prev, show: false }));
       await fetchCollections();
       showSuccessToast(`Collection "${collection.name}" deleted successfully`);
@@ -500,14 +501,14 @@ function KnowledgeHub() {
 
     try {
       setLoadingGraphEntities(true);
-      
+
       if (entityType === 'All') {
         // Fetch all entity types and combine them
         const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
-        const entityPromises = entityTypes.map(type => 
+        const entityPromises = entityTypes.map(type =>
           knowledgeHubGraphService.findEntities(type, { teamId: currentTeam.id })
         );
-        
+
         const entityResults = await Promise.all(entityPromises);
         const allEntities = entityResults.reduce((acc, result, index) => {
           if (result.success && Array.isArray(result.data)) {
@@ -521,7 +522,7 @@ function KnowledgeHub() {
           }
           return acc;
         }, []);
-        
+
         setGraphEntities(allEntities);
       } else {
         // Fetch entities for specific type - filtered by teamId only (no documentId)
@@ -550,7 +551,7 @@ function KnowledgeHub() {
 
   const handleDeleteAllEntitiesConfirm = async () => {
     setDeletingAllEntities(true);
-    
+
     try {
       const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
       let totalDeleted = 0;
@@ -575,7 +576,7 @@ function KnowledgeHub() {
       // Refresh entities and statistics
       await fetchGraphEntities(selectedEntityType);
       await fetchGraphStatistics();
-      
+
       setShowDeleteAllEntitiesModal(false);
     } catch (error) {
       console.error('Error deleting all entities:', error);
@@ -594,7 +595,7 @@ function KnowledgeHub() {
       if (relationshipType && relationshipType !== 'All') {
         filters.relationshipType = relationshipType;
       }
-      
+
       const { data, error } = await knowledgeHubGraphService.findRelationships(filters);
       if (error) throw new Error(error);
       setGraphRelationships(Array.isArray(data) ? data : []);
@@ -611,26 +612,26 @@ function KnowledgeHub() {
   const entityCounts = graphStatistics?.entityCounts || {};
   const totalEntities = graphStatistics?.totalEntities || 0;
   const totalRelationships = graphStatistics?.totalRelationships || 0;
-  
+
   // Extract unique relationship types from relationships
   const relationshipTypes = Array.from(new Set(graphRelationships.map(r => r.relationshipType).filter(Boolean))).sort();
 
   const formatDate = (dateInput) => {
     if (!dateInput) return 'N/A';
-    
+
     let date;
-    
+
     if (Array.isArray(dateInput)) {
       const [year, month, day, hour, minute, second] = dateInput;
       date = new Date(year, month - 1, day, hour, minute, second);
     } else {
       date = new Date(dateInput);
     }
-    
+
     if (isNaN(date.getTime())) {
       return 'Invalid Date';
     }
-    
+
     return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -642,7 +643,7 @@ function KnowledgeHub() {
 
   const getCategoryBadges = (categories) => {
     if (!categories || categories.length === 0) return null;
-    
+
     return (
       <div className="d-flex flex-wrap gap-1">
         {categories.map((category, idx) => (
@@ -664,7 +665,7 @@ function KnowledgeHub() {
           heading="Vault Decryption Failed"
           message={
             <>
-              <strong>Warning:</strong> The vault file cannot be decrypted. This usually means the <code>VAULT_MASTER_KEY</code> has changed. 
+              <strong>Warning:</strong> The vault file cannot be decrypted. This usually means the <code>VAULT_MASTER_KEY</code> has changed.
               The vault file needs to be re-encrypted with the new key. Until this is fixed, secrets cannot be read from the vault and many features may not work.
               <br /><br />
               <strong>To fix:</strong>
@@ -676,7 +677,7 @@ function KnowledgeHub() {
           }
         />
       )}
-      
+
       {/* Breadcrumb */}
       <Card className="breadcrumb-card mb-3">
         <Card.Body>
@@ -684,7 +685,7 @@ function KnowledgeHub() {
             <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/dashboard' }}>
               Home
             </Breadcrumb.Item>
-            <Breadcrumb.Item 
+            <Breadcrumb.Item
               onClick={() => navigate(`/teams/${currentTeam?.id}`)}
               style={{ cursor: 'pointer' }}
             >
@@ -711,7 +712,7 @@ function KnowledgeHub() {
               >
                 <HiCollection className="me-1" /> Manage RAG
               </Button>
-              <Button 
+              <Button
                 onClick={() => setShowCreateModal(true)}
                 disabled={operationLoading}
                 variant="primary"
@@ -744,7 +745,7 @@ function KnowledgeHub() {
               <HiFolder className="empty-state-icon" />
               <h5 className="mt-3">No Collections Yet</h5>
               <p className="text-muted">Create your first knowledge collection to get started.</p>
-              <Button 
+              <Button
                 variant="primary"
                 onClick={() => setShowCreateModal(true)}
               >
@@ -759,7 +760,7 @@ function KnowledgeHub() {
                   <th>Description</th>
                   <th>Categories</th>
                   <th>Files</th>
-            <th>RAG Collection</th>
+                  <th>RAG Collection</th>
                   <th>Created By</th>
                   <th>Created At</th>
                   <th className="text-end">Actions</th>
@@ -767,7 +768,7 @@ function KnowledgeHub() {
               </thead>
               <tbody>
                 {collections.map((collection) => (
-                  <tr 
+                  <tr
                     key={collection.id}
                     onClick={() => navigate(`/knowledge-hub/collection/${collection.id}`)}
                     style={{ cursor: 'pointer' }}
@@ -877,7 +878,7 @@ function KnowledgeHub() {
                         {collection.milvusCollectionName && (
                           <OverlayTrigger
                             placement="top"
-                          overlay={<Tooltip>Remove RAG Assignment</Tooltip>}
+                            overlay={<Tooltip>Remove RAG Assignment</Tooltip>}
                           >
                             <span>
                               <Button
@@ -895,7 +896,7 @@ function KnowledgeHub() {
                           placement="top"
                           overlay={
                             <Tooltip>
-                              {collection.documentCount > 0 
+                              {collection.documentCount > 0
                                 ? 'Delete all files in this collection before deleting it'
                                 : 'Delete Collection'
                               }
@@ -1039,7 +1040,7 @@ function KnowledgeHub() {
                 {(() => {
                   const outdatedCount = graphEntities.filter(e => isOutdatedEncryption(e)).length;
                   const shouldShow = outdatedCount > 0 && currentEncryptionKeyVersion;
-                  
+
                   // Debug logging
                   // if (graphEntities.length > 0 || currentEncryptionKeyVersion) {
                   //   console.log('[Encryption Version Banner] Debug:', {
@@ -1059,7 +1060,7 @@ function KnowledgeHub() {
                   //     }))
                   //   });
                   // }
-                  
+
                   return (
                     <EncryptionVersionWarningBanner
                       show={shouldShow}
@@ -1088,7 +1089,7 @@ function KnowledgeHub() {
                   </div>
                 ) : graphEntities.length === 0 ? (
                   <div className="text-center py-4 text-muted">
-                    {selectedEntityType === 'All' 
+                    {selectedEntityType === 'All'
                       ? 'No entities found'
                       : `No ${selectedEntityType} entities found`}
                   </div>
@@ -1116,9 +1117,9 @@ function KnowledgeHub() {
                               acc[key] = value;
                               return acc;
                             }, {});
-                          
+
                           return (
-                            <tr 
+                            <tr
                               key={entity.id || idx}
                               style={{ cursor: 'pointer' }}
                               onClick={() => handleOpenPropertiesModal(
@@ -1144,7 +1145,7 @@ function KnowledgeHub() {
                                   const entityVersion = getEntityEncryptionVersion(entity);
                                   const isOutdated = isOutdatedEncryption(entity);
                                   const displayVersion = entityVersion || 'none';
-                                  
+
                                   if (isOutdated && currentEncryptionKeyVersion) {
                                     return (
                                       <div>
@@ -1157,7 +1158,7 @@ function KnowledgeHub() {
                                       </div>
                                     );
                                   }
-                                  
+
                                   return (
                                     <Badge bg={entityVersion ? "success" : "secondary"} title={entityVersion ? `Encrypted with ${displayVersion}` : 'Not encrypted (legacy)'}>
                                       {displayVersion}
@@ -1243,7 +1244,7 @@ function KnowledgeHub() {
                   </div>
                 ) : graphRelationships.length === 0 ? (
                   <div className="text-center py-4 text-muted">
-                    {selectedRelationshipType === 'All' 
+                    {selectedRelationshipType === 'All'
                       ? 'No relationships found'
                       : `No ${selectedRelationshipType} relationships found`}
                   </div>
@@ -1269,9 +1270,9 @@ function KnowledgeHub() {
                           const toEntityName = relationship.toEntity?.name || relationship.toEntity?.id || 'N/A';
                           const relationshipTitle = `${relationship.relationshipType || 'Unknown'} Relationship`;
                           const relationshipSubtitle = `${relationship.fromEntity?.type || 'Unknown'}:${fromEntityName} → ${relationship.toEntity?.type || 'Unknown'}:${toEntityName}`;
-                          
+
                           return (
-                            <tr 
+                            <tr
                               key={idx}
                               style={{ cursor: 'pointer' }}
                               onClick={() => handleOpenPropertiesModal(
@@ -1299,7 +1300,7 @@ function KnowledgeHub() {
                                   const fromVersion = getEntityEncryptionVersion(relationship.fromEntity);
                                   const fromOutdated = relationship.fromEntity && isOutdatedEncryption(relationship.fromEntity);
                                   const fromDisplayVersion = fromVersion || 'none';
-                                  
+
                                   if (fromOutdated && currentEncryptionKeyVersion) {
                                     return (
                                       <div>
@@ -1310,7 +1311,7 @@ function KnowledgeHub() {
                                       </div>
                                     );
                                   }
-                                  
+
                                   return (
                                     <Badge bg={fromVersion ? "success" : "secondary"} title={fromVersion ? `Encrypted with ${fromDisplayVersion}` : 'Not encrypted (legacy)'}>
                                       {fromDisplayVersion}
@@ -1331,7 +1332,7 @@ function KnowledgeHub() {
                                   const toVersion = getEntityEncryptionVersion(relationship.toEntity);
                                   const toOutdated = relationship.toEntity && isOutdatedEncryption(relationship.toEntity);
                                   const toDisplayVersion = toVersion || 'none';
-                                  
+
                                   if (toOutdated && currentEncryptionKeyVersion) {
                                     return (
                                       <div>
@@ -1342,7 +1343,7 @@ function KnowledgeHub() {
                                       </div>
                                     );
                                   }
-                                  
+
                                   return (
                                     <Badge bg={toVersion ? "success" : "secondary"} title={toVersion ? `Encrypted with ${toDisplayVersion}` : 'Not encrypted (legacy)'}>
                                       {toDisplayVersion}
@@ -1454,6 +1455,7 @@ function KnowledgeHub() {
         entityName={relatedEntitiesModal.entityName}
         entity={relatedEntitiesModal.entity}
       />
+      <Footer />
     </Container>
   );
 }

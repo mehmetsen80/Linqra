@@ -13,6 +13,7 @@ import { formatDateTime } from '../../../utils/dateUtils';
 import ConfirmationModalWithVerification from '../../../components/common/ConfirmationModalWithVerification';
 import AdminGuard from '../../../components/guards/AdminGuard';
 import Button from '../../../components/common/Button';
+import Footer from '../../../components/common/Footer';
 import './styles.css';
 
 const STATUS_CONFIG = {
@@ -522,6 +523,7 @@ function ExportCollection() {
           confirmLabel="Cancel Export"
           loading={!!cancellingJob}
         />
+        <Footer />
       </Container>
     </AdminGuard>
   );

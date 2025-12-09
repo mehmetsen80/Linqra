@@ -15,6 +15,7 @@ import './styles.css';
 import CreateAIAssistantModal from '../../components/aiassistants/CreateAIAssistantModal';
 import EditAIAssistantModal from '../../components/aiassistants/EditAIAssistantModal';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
+import Footer from '../../components/common/Footer';
 
 function AIAssistants() {
     const { currentTeam, loading: teamLoading } = useTeam();
@@ -49,7 +50,7 @@ function AIAssistants() {
             const response = await aiAssistantService.getAllAssistants(currentTeam.id);
             if (response.success) {
                 setAssistants(response.data);
-                
+
                 // Fetch task counts for each assistant
                 const counts = {};
                 await Promise.all(
@@ -76,7 +77,7 @@ function AIAssistants() {
             const agentsResponse = await agentService.getAgentsByTeam(currentTeam.id);
             if (agentsResponse.success && agentsResponse.data) {
                 // Get tasks for each agent and flatten
-                const allTasksPromises = agentsResponse.data.map(agent => 
+                const allTasksPromises = agentsResponse.data.map(agent =>
                     agentService.getTasksByAgent(agent.id)
                         .then(response => {
                             if (response.success && response.data) {
@@ -94,7 +95,7 @@ function AIAssistants() {
                             return [];
                         })
                 );
-                
+
                 const allTasksArrays = await Promise.all(allTasksPromises);
                 const allTasks = allTasksArrays.flat();
                 setAvailableAgentTasks(allTasks);
@@ -174,7 +175,7 @@ function AIAssistants() {
                         <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/dashboard' }}>
                             Home
                         </Breadcrumb.Item>
-                        <Breadcrumb.Item 
+                        <Breadcrumb.Item
                             onClick={() => navigate(`/teams/${currentTeam?.id}`)}
                             style={{ cursor: 'pointer' }}
                         >
@@ -196,7 +197,7 @@ function AIAssistants() {
                     <div className="d-flex align-items-center justify-content-between">
                         <h5 className="mb-0">AI Assistants{currentTeam?.name ? ` - ${currentTeam.name}` : ''}</h5>
                         {canEditAssistant && (
-                            <Button 
+                            <Button
                                 variant="primary"
                                 onClick={() => setShowCreateModal(true)}
                             >
@@ -211,8 +212,8 @@ function AIAssistants() {
                             <HiChatAlt className="fa-3x text-muted mb-3" style={{ fontSize: '3rem' }} />
                             <h5 className="text-muted">No AI assistants found</h5>
                             <p className="text-muted">
-                                {canEditAssistant 
-                                    ? 'Create your first AI assistant to get started' 
+                                {canEditAssistant
+                                    ? 'Create your first AI assistant to get started'
                                     : 'No AI assistants have been created yet'}
                             </p>
                         </div>
@@ -232,7 +233,7 @@ function AIAssistants() {
                             </thead>
                             <tbody>
                                 {assistants.map((assistant) => (
-                                    <tr 
+                                    <tr
                                         key={assistant.id}
                                         onClick={() => navigate(`/ai-assistants/${assistant.id}`)}
                                         style={{ cursor: 'pointer' }}
@@ -250,9 +251,9 @@ function AIAssistants() {
                                         </td>
                                         <td>
                                             <Badge bg={
-                                                assistant.status === 'ACTIVE' ? 'success' : 
-                                                assistant.status === 'INACTIVE' ? 'secondary' : 
-                                                'warning'
+                                                assistant.status === 'ACTIVE' ? 'success' :
+                                                    assistant.status === 'INACTIVE' ? 'secondary' :
+                                                        'warning'
                                             }>
                                                 {assistant.status || 'DRAFT'}
                                             </Badge>
@@ -266,7 +267,7 @@ function AIAssistants() {
                                         </td>
                                         <td>
                                             <Badge bg="info">
-                                                {taskCounts[assistant.id] !== undefined ? taskCounts[assistant.id] : 0} 
+                                                {taskCounts[assistant.id] !== undefined ? taskCounts[assistant.id] : 0}
                                                 {taskCounts[assistant.id] === 1 ? ' task' : ' tasks'}
                                             </Badge>
                                         </td>
@@ -356,6 +357,7 @@ function AIAssistants() {
                 cancelLabel="Cancel"
                 disabled={deleting}
             />
+            <Footer />
         </div>
     );
 }

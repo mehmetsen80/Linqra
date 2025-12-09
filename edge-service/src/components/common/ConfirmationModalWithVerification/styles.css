@@ -48,8 +48,8 @@
 }
 
 .confirmation-modal-with-verification .custom-primary-button:hover:not(:disabled) {
-  background-color: var(--primary-color-dark, #d65f1f) !important;
-  border-color: var(--primary-color-dark, #d65f1f) !important;
+  background-color: var(--primary-dark, #d65f1f) !important;
+  border-color: var(--primary-dark, #d65f1f) !important;
   color: #ffffff !important;
 }
 
@@ -65,4 +65,3 @@
   border-color: var(--primary-color, #ed7534) !important;
   opacity: 0.65;
 }
-

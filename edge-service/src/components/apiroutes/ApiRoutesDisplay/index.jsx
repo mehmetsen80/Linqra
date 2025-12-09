@@ -13,6 +13,7 @@ import Button from '../../common/Button';
 import { HiPlus, HiShieldCheck, HiClock, HiRefresh, HiLightningBolt, HiTrash } from 'react-icons/hi';
 import ConfirmationModal from '../../common/ConfirmationModal';
 import { isSuperAdmin, hasAdminAccess } from '../../../utils/roleUtils';
+import Footer from '../../common/Footer';
 
 const FILTER_INFO = {
   RedisRateLimiter: {
@@ -57,7 +58,7 @@ export const ApiRoutesDisplay = () => {
       setIsFetching(true);
       setLoading(true);
       let response;
-      
+
       if (isSuperAdmin(user) && !currentTeam) {
         console.log('Fetching all routes');
         // SUPER_ADMIN without team selected - fetch all routes
@@ -70,7 +71,7 @@ export const ApiRoutesDisplay = () => {
         setRoutes([]);
         return;
       }
-     
+
       setRoutes(response || []);
     } catch (err) {
       console.error('Error loading routes:', err);
@@ -92,7 +93,7 @@ export const ApiRoutesDisplay = () => {
   }, [teamLoading, currentTeam, user]);
 
   const handleCreateRoute = async (routeData) => {
-    try {      
+    try {
       const response = await apiRouteService.createRoute(routeData);
       await fetchRoutes();
       setShowCreateModal(false);
@@ -102,7 +103,7 @@ export const ApiRoutesDisplay = () => {
     } catch (err) {
       console.error('Failed to create route:', err);
       const errorResponse = err.response?.data;
-      
+
       if (errorResponse?.code === 'AUTH_4002') {
         showErrorToast(errorResponse.message || 'Only team administrators can create API routes');
       } else if (errorResponse?.code === 'ROUTE_3007') {
@@ -133,7 +134,7 @@ export const ApiRoutesDisplay = () => {
       fetchRoutes();
     } catch (err) {
       const errorResponse = err.response?.data;
-      
+
       if (errorResponse?.code) {
         switch (errorResponse.code) {
           case 'ROUTE_3001': // ROUTE_NOT_FOUND
@@ -166,7 +167,7 @@ export const ApiRoutesDisplay = () => {
 
           default:
             showErrorToast(
-              errorResponse.message || 
+              errorResponse.message ||
               'Failed to delete route. Please try again or contact support if the problem persists.'
             );
         }
@@ -199,47 +200,47 @@ export const ApiRoutesDisplay = () => {
     <div className="routes-container">
       <Card className="mb-4 mx-1 p-0">
         <Card.Header className="d-flex justify-content-between align-items-center bg-light">
-           
-              <Breadcrumb className="bg-light mb-0">
-                <Breadcrumb.Item 
-                  linkAs={Link} 
-                  linkProps={{ to: '/' }}
-                >
-                  Home
-                </Breadcrumb.Item>
-                <Breadcrumb.Item 
-                  linkAs={Link} 
-                  linkProps={{ to: '/organizations' }}
-                >
-                  {currentTeam?.organization?.name || 'Organization'}
-                </Breadcrumb.Item>
-                <Breadcrumb.Item 
-                  onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
-                  style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
-                >
-                  {currentTeam?.name || 'All Teams'}
-                </Breadcrumb.Item>
-                <Breadcrumb.Item active>
-                  Apps
-                </Breadcrumb.Item>
-            </Breadcrumb>
-           
-          
+
+          <Breadcrumb className="bg-light mb-0">
+            <Breadcrumb.Item
+              linkAs={Link}
+              linkProps={{ to: '/' }}
+            >
+              Home
+            </Breadcrumb.Item>
+            <Breadcrumb.Item
+              linkAs={Link}
+              linkProps={{ to: '/organizations' }}
+            >
+              {currentTeam?.organization?.name || 'Organization'}
+            </Breadcrumb.Item>
+            <Breadcrumb.Item
+              onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
+              style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
+            >
+              {currentTeam?.name || 'All Teams'}
+            </Breadcrumb.Item>
+            <Breadcrumb.Item active>
+              Apps
+            </Breadcrumb.Item>
+          </Breadcrumb>
+
+
           {canManageRoutes && (
             isSuperAdmin(user) ? (
-              <Button 
-                variant="primary" 
+              <Button
+                variant="primary"
                 onClick={() => setShowCreateModal(true)}
                 disabled={!currentTeam && !hasAdminAccess(user)}
               >
-                <HiPlus /> Add new App
+                <HiPlus /> Add New App
               </Button>
             ) : (
               <OverlayTrigger
                 placement="left"
                 overlay={
                   <Tooltip id="create-route-tooltip">
-                    {!currentTeam 
+                    {!currentTeam
                       ? "Please select a team first to create an API route"
                       : "Create new API route"
                     }
@@ -247,12 +248,12 @@ export const ApiRoutesDisplay = () => {
                 }
               >
                 <span className="d-inline-block">
-                  <Button 
-                    variant="primary" 
+                  <Button
+                    variant="primary"
                     onClick={() => setShowCreateModal(true)}
                     disabled={!currentTeam && !hasAdminAccess(user)}
                   >
-                    <HiPlus /> Add new App
+                    <HiPlus /> Add New App
                   </Button>
                 </span>
               </OverlayTrigger>
@@ -265,13 +266,13 @@ export const ApiRoutesDisplay = () => {
         <div className="no-routes-message text-center py-5">
           <h4>No Apps Found</h4>
           <p className="text-muted">
-            {currentTeam 
+            {currentTeam
               ? `No Apps have been created for ${currentTeam.name} yet.`
               : 'No Apps have been created yet.'}
           </p>
           {canManageRoutes && (
-            <Button 
-              variant="primary" 
+            <Button
+              variant="primary"
               onClick={() => setShowCreateModal(true)}
               className="mt-3"
             >
@@ -282,7 +283,7 @@ export const ApiRoutesDisplay = () => {
       ) : (
         <div className="routes-grid">
           {routes.map((route) => (
-            <div 
+            <div
               key={route.id}
               className="route-card"
               onClick={() => navigate(`/api-routes/${route.routeIdentifier}`)}
@@ -302,9 +303,9 @@ export const ApiRoutesDisplay = () => {
 
               <div className="route-details" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', padding: '0', width: '100%' }}>
                 {/* First Row: PATH and VERSION */}
-                <div className="detail-row" style={{ 
-                  display: 'flex', 
-                  flexDirection: 'row', 
+                <div className="detail-row" style={{
+                  display: 'flex',
+                  flexDirection: 'row',
                   justifyContent: 'space-between',
                   width: '100%'
                 }}>
@@ -319,9 +320,9 @@ export const ApiRoutesDisplay = () => {
                 </div>
 
                 {/* Second Row: DAILY LIMIT and HEALTH CHECK */}
-                <div className="detail-row" style={{ 
-                  display: 'flex', 
-                  flexDirection: 'row', 
+                <div className="detail-row" style={{
+                  display: 'flex',
+                  flexDirection: 'row',
                   justifyContent: 'space-between',
                   width: '100%'
                 }}>
@@ -338,9 +339,9 @@ export const ApiRoutesDisplay = () => {
                 </div>
 
                 {/* Third Row: ASSIGNED BY and ROLES */}
-                <div className="detail-row" style={{ 
-                  display: 'flex', 
-                  flexDirection: 'row', 
+                <div className="detail-row" style={{
+                  display: 'flex',
+                  flexDirection: 'row',
                   justifyContent: 'space-between',
                   width: '100%'
                 }}>
@@ -356,7 +357,7 @@ export const ApiRoutesDisplay = () => {
                       {route.assignedBy || 'System'}
                     </code>
                   </div>
-                  
+
                 </div>
               </div>
 
@@ -377,8 +378,8 @@ export const ApiRoutesDisplay = () => {
                         </Tooltip>
                       }
                     >
-                      <div 
-                        className="filter-tag" 
+                      <div
+                        className="filter-tag"
                         title={JSON.stringify(filter.args, null, 2)}
                       >
                         {FILTER_INFO[filter.name]?.icon}
@@ -391,7 +392,7 @@ export const ApiRoutesDisplay = () => {
 
               <div className="route-actions">
                 {canManageRoutes && (
-                  <Button 
+                  <Button
                     variant="danger"
                     size="sm"
                     onClick={(e) => handleDelete(route.routeIdentifier, e)}
@@ -400,7 +401,7 @@ export const ApiRoutesDisplay = () => {
                     <HiTrash /> Delete
                   </Button>
                 )}
-                <Button 
+                <Button
                   variant="secondary"
                   size="sm"
                   onClick={(e) => {
@@ -436,6 +437,7 @@ export const ApiRoutesDisplay = () => {
         confirmLabel="Delete"
         variant="danger"
       />
+      <Footer />
     </div>
   );
 }; 

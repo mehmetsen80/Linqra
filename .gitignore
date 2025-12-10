@@ -62,4 +62,4 @@ build/
 .env
 .env.local
 .env.*.local
-/secrets/secrets.json
+/api-gateway/logs/

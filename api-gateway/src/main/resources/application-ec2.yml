@@ -213,6 +213,8 @@ linqra:
   knowledgehub:
     s3:
       bucket-name: ${vault.aws.s3.bucket.name}
+      backup-bucket-name: ${vault.aws.s3.backup.bucket.name}
+      backup-bucket-region: ${vault.aws.s3.backup.bucket.region}
       raw-prefix: raw
       processed-prefix: processed
       presigned-url-expiration: PT15M  # 15 minutes

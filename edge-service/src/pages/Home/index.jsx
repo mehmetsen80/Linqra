@@ -46,9 +46,9 @@ function Home() {
             alt="Linqra Logo"
             className="hero-logo"
           />
-          <div className="enterprise-title">The Unified Orchestrator for Enterprise AI</div>
+          <div className="enterprise-title">Integration Complexity Creates Security Gaps. We Close Them.</div>
           <p className="hero-text">
-            Linqra orchestrates your Models, Agents, and Legacy Data—built for strictly regulated workflows.
+            One orchestration platform for all your AI—encrypted, auditable, and compliance-ready from day one.
           </p>
 
           <div className="cta-buttons">

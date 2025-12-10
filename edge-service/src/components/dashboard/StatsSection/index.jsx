@@ -48,7 +48,7 @@ const StatsSection = ({ refreshInterval = 30000 }) => {
       setLoading(false);
       return;
     }
-    
+
     try {
       const response = await statsService.getStats(currentTeam.id);
       setStats(response);
@@ -134,7 +134,7 @@ const StatsSection = ({ refreshInterval = 30000 }) => {
 
   return (
     <div className="stats-section">
-      <h2 className="stats-section-title"></h2>
+      <h2 className="stats-section-title">Applications Real-Time Statistics</h2>
       <div className="stats-cards-container">
         {stats.map(stat => (
           <OverlayTrigger

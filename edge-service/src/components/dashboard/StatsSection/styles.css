@@ -7,7 +7,7 @@
   font-size: 1.25rem;
   font-weight: 600;
   color: var(--heading-primary);
-  margin-bottom: 1rem;
+  margin-bottom: 0rem;
   margin-top: 0;
   text-align: left;
 }
@@ -117,6 +117,7 @@
   0% {
     background-position: -1000px 0;
   }
+
   100% {
     background-position: 1000px 0;
   }
@@ -210,4 +211,4 @@
   text-align: left;
   white-space: nowrap;
   margin-bottom: 0.2rem;
-} 
+}

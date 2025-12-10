@@ -87,6 +87,13 @@ function Home() {
         </div>
       </div>
 
+      <div className="orchestration-section">
+        <h2 className="home-section-title">Unified AI Orchestration Architecture</h2>
+        <div className="hero-image-container">
+          <img src="/images/linqra_orchestrator_final.png" alt="Unified AI Orchestrator" className="hero-image" />
+        </div>
+      </div>
+
       {/* SOLUTIONS GRID (Replaces "Core Components") */}
       <div id="solutions" className="core-components-section">
         <h2 className="home-section-title">Industry-Specific AI Solutions</h2>
@@ -320,7 +327,7 @@ function Home() {
         onHide={() => setShowImageModal(false)}
         imageSrc={architectureDiagram}
       />
-    </div >
+    </div>
   );
 }
 

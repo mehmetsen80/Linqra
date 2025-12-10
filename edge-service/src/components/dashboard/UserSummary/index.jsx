@@ -53,7 +53,7 @@ const UserSummary = () => {
               <HiShieldCheck /> Role: {currentTeam?.roles?.[0] || 'USER'}
             </div>
           </div>
-          
+
           <div className="quick-actions">
             <div className="quick-actions-row">
               {/* First Row */}
@@ -69,7 +69,7 @@ const UserSummary = () => {
                 )}
                 <Link to="/api-routes" className="quick-action-button">
                   <HiViewGrid />
-                  <span>Apps</span>
+                  <span>Applications</span>
                 </Link>
                 <Link to="/service-status" className="quick-action-button">
                   <HiDocumentText />
@@ -98,7 +98,7 @@ const UserSummary = () => {
                 </Link>
                 <Link to="/rag" className="quick-action-button">
                   <HiDatabase />
-                  <span>RAG</span>
+                  <span>RAG Collections</span>
                 </Link>
                 {canAccessAdminFeatures && (
                   <>

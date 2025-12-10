@@ -26,7 +26,7 @@
   right: 0;
   bottom: 0;
   background: linear-gradient(90deg,
-      var(--primary-dark) 0%,
+      var(--primary-dark) 100%,
       var(--primary-color) 50%,
       var(--primary-dark) 100%);
   z-index: 1;
@@ -2062,4 +2062,41 @@ body,
 
 .solution-nav .nav-link:hover {
   color: #fff;
+}
+
+/* Hero Image */
+.hero-image-container {
+  margin-top: 2rem;
+  margin-bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.orchestration-section {
+  padding: 4rem 2rem;
+  background: linear-gradient(180deg, #f8f9fa 0%, #e2e8f0 100%);
+  text-align: center;
+}
+
+.hero-image {
+  max-width: 1200px;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 0 20px rgba(56, 189, 248, 0.3));
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+
+  50% {
+    transform: translateY(-20px);
+  }
+
+  100% {
+    transform: translateY(0px);
+  }
 }

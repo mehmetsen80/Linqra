@@ -8,8 +8,8 @@ const Footer = () => {
                 <div className="footer-content">
                     <div className="footer-brand">
                         <h4>Linqra</h4>
-                        <p className="copyright">&copy; 2025 Linqra Inc. All rights reserved.</p>
                         <Link to="/" className="footer-link home-footer-link">Home</Link>
+                        <p className="copyright">&copy; 2025 Linqra Inc. All rights reserved.</p>
                     </div>
                     <div className="footer-links-col">
                         <h5>Solutions</h5>

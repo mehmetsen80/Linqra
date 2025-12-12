@@ -17,10 +17,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Scheduler for weekly Milvus vector database backup to S3.
- * Creates a compressed tarball of the Milvus data directory and uploads to S3.
+ * Scheduler for daily Milvus complete backup (Milvus + etcd + MinIO) to S3.
+ * Creates a compressed tarball of all three data directories and uploads to S3.
  * 
- * Runs at 2:00 AM every Sunday.
+ * Runs at 2:00 AM every day.
  */
 @Component
 @RequiredArgsConstructor
@@ -30,19 +30,18 @@ public class MilvusBackupScheduler {
     @Value("${spring.profiles.active:dev}")
     private String activeProfile;
 
-    private static final String CONTAINER_NAME = "milvus-service";
-    private static final String MILVUS_DATA_PATH = "/var/lib/milvus";
     private static final int RETENTION_DAYS = 30;
     private static final String AWS_REGION = "us-east-1";
     private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
     /**
-     * Daily Milvus backup.
+     * Daily Milvus complete backup.
      * Cron: "0 0 2 * * ?" = At 2:00 AM every day
      */
-    @Scheduled(cron = "0 0 2 * * ?")
+    // @Scheduled(cron = "0 0 2 * * ?")
+    @Scheduled(cron = "0 */2 * * * ?")
     public void backupMilvus() {
-        log.info("🔄 Starting weekly Milvus backup");
+        log.info("🔄 Starting daily Milvus complete backup");
 
         performBackup()
                 .thenAccept(result -> log.info("✅ Milvus backup completed: {}", result))
@@ -69,56 +68,59 @@ public class MilvusBackupScheduler {
     }
 
     /**
-     * Perform the backup by creating a tarball of Milvus data and uploading to S3.
+     * Perform the backup by creating a tarball of all Milvus-related data
+     * directories.
+     * Backs up: milvus/data, etcd/data, minio/data
      */
     private CompletableFuture<String> performBackup() {
         return CompletableFuture.supplyAsync(() -> {
             String timestamp = LocalDateTime.now().format(TIMESTAMP_FORMAT);
-            String backupFile = "milvus-backup-" + timestamp + ".tar.gz";
+            String backupFile = "milvus-complete-backup-" + timestamp + ".tar.gz";
             String s3Bucket = getS3Bucket();
             String backupDir = getBackupDir();
+            String kubeDir = getKubeDir();
 
-            log.info("📋 Milvus Backup configuration:");
+            log.info("📋 Milvus Complete Backup configuration:");
             log.info("  Environment: {}", activeProfile);
             log.info("  S3 Bucket: {}", s3Bucket);
             log.info("  Backup Dir: {}", backupDir);
             log.info("  Backup File: {}", backupFile);
+            log.info("  Kube Dir: {}", kubeDir);
 
             try {
                 // Create backup directory
                 Files.createDirectories(Path.of(backupDir));
 
-                // Check if Milvus container is running
-                if (!isContainerRunning(CONTAINER_NAME)) {
-                    throw new RuntimeException("Milvus container '" + CONTAINER_NAME + "' is not running!");
+                // Verify data directories exist
+                String[] components = { "milvus/data", "etcd/data", "minio/data" };
+                for (String component : components) {
+                    Path path = Path.of(kubeDir, component);
+                    if (!Files.exists(path)) {
+                        log.warn("⚠️ Data directory not found: {}", path);
+                    } else {
+                        log.info("  ✓ Found: {}", component);
+                    }
                 }
 
-                // Create tarball of Milvus data directory inside container
-                log.info("📦 Creating Milvus data backup...");
-                String containerBackupPath = "/tmp/" + backupFile;
+                // Create tarball of all three data directories
+                log.info("📦 Creating Milvus complete backup...");
+                File localBackup = new File(backupDir, backupFile);
 
                 String[] tarCommand = {
-                        "docker", "exec", CONTAINER_NAME,
-                        "tar", "-czf", containerBackupPath, "-C", MILVUS_DATA_PATH, "."
+                        "tar", "-czf", localBackup.getAbsolutePath(),
+                        "-C", kubeDir,
+                        "milvus/data", "etcd/data", "minio/data"
                 };
-                executeCommand(tarCommand, "docker exec tar");
+                executeCommand(tarCommand, "tar");
 
-                // Copy backup from container to host
-                log.info("📤 Copying backup from container...");
-                File localBackup = new File(backupDir, backupFile);
-                String[] copyCommand = {
-                        "docker", "cp",
-                        CONTAINER_NAME + ":" + containerBackupPath,
-                        localBackup.getAbsolutePath()
-                };
-                executeCommand(copyCommand, "docker cp");
+                // Verify backup was created
+                if (!localBackup.exists()) {
+                    throw new RuntimeException("Backup file was not created!");
+                }
 
-                // Clean up container backup file
-                String[] cleanupCommand = {
-                        "docker", "exec", CONTAINER_NAME,
-                        "rm", "-f", containerBackupPath
-                };
-                executeCommand(cleanupCommand, "docker exec rm");
+                long fileSize = Files.size(localBackup.toPath());
+                double fileSizeMB = fileSize / (1024.0 * 1024.0);
+                log.info("  Backup size: {:.2f} MB", fileSizeMB);
 
                 // Upload to S3
                 log.info("☁️ Uploading backup to S3...");
@@ -139,8 +141,7 @@ public class MilvusBackupScheduler {
                 // Clean up old local backups
                 cleanupOldBackups(backupDir);
 
-                long fileSize = Files.size(localBackup.toPath());
-                return String.format("Backup completed: %s (%.2f MB)", backupFile, fileSize / (1024.0 * 1024.0));
+                return String.format("Backup completed: %s (%.2f MB)", backupFile, fileSizeMB);
 
             } catch (Exception e) {
                 throw new RuntimeException("Failed to backup Milvus: " + e.getMessage(), e);
@@ -154,52 +155,40 @@ public class MilvusBackupScheduler {
     public CompletableFuture<String> dryRun() {
         return CompletableFuture.supplyAsync(() -> {
             StringBuilder result = new StringBuilder();
-            result.append("Milvus Backup Dry Run:\n");
-            result.append("  Container: ").append(CONTAINER_NAME).append("\n");
-            result.append("  Data Path: ").append(MILVUS_DATA_PATH).append("\n");
+            result.append("Milvus Complete Backup Dry Run:\n");
+            result.append("  Components: milvus, etcd, minio\n");
             result.append("  S3 Bucket: ").append(getS3Bucket()).append("\n");
-            result.append("  Container Running: ").append(isContainerRunning(CONTAINER_NAME)).append("\n");
+            result.append("  Kube Dir: ").append(getKubeDir()).append("\n");
 
-            // Check data directory size inside container
-            try {
-                String[] command = {
-                        "docker", "exec", CONTAINER_NAME,
-                        "du", "-sh", MILVUS_DATA_PATH
-                };
-                ProcessBuilder pb = new ProcessBuilder(command);
-                pb.redirectErrorStream(true);
-                Process process = pb.start();
-
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        result.append("  Data Size: ").append(line).append("\n");
+            String kubeDir = getKubeDir();
+            String[] components = { "milvus/data", "etcd/data", "minio/data" };
+            for (String component : components) {
+                Path path = Path.of(kubeDir, component);
+                if (Files.exists(path)) {
+                    try {
+                        String[] command = { "du", "-sh", path.toString() };
+                        ProcessBuilder pb = new ProcessBuilder(command);
+                        pb.redirectErrorStream(true);
+                        Process process = pb.start();
+                        try (BufferedReader reader = new BufferedReader(
+                                new InputStreamReader(process.getInputStream()))) {
+                            String line = reader.readLine();
+                            if (line != null) {
+                                result.append("  ").append(component).append(": ").append(line.split("\t")[0])
+                                        .append("\n");
+                            }
+                        }
+                        process.waitFor();
+                    } catch (Exception e) {
+                        result.append("  ").append(component).append(": (error checking size)\n");
                     }
+                } else {
+                    result.append("  ").append(component).append(": NOT FOUND\n");
                 }
-                process.waitFor();
-            } catch (Exception e) {
-                result.append("  Error checking data size: ").append(e.getMessage()).append("\n");
             }
 
             return result.toString();
         });
-    }
-
-    private boolean isContainerRunning(String containerName) {
-        try {
-            String[] command = { "docker", "inspect", "-f", "{{.State.Running}}", containerName };
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String output = reader.readLine();
-                return "true".equals(output);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to check container status: {}", e.getMessage());
-            return false;
-        }
     }
 
     private void executeCommand(String[] command, String description) throws Exception {
@@ -232,7 +221,8 @@ public class MilvusBackupScheduler {
     private void cleanupOldBackups(String backupDir) {
         try {
             File dir = new File(backupDir);
-            File[] files = dir.listFiles((d, name) -> name.startsWith("milvus-backup-") && name.endsWith(".tar.gz"));
+            File[] files = dir
+                    .listFiles((d, name) -> name.startsWith("milvus-complete-backup-") && name.endsWith(".tar.gz"));
 
             if (files != null) {
                 long cutoffTime = System.currentTimeMillis() - (RETENTION_DAYS * 24L * 60L * 60L * 1000L);
@@ -259,5 +249,11 @@ public class MilvusBackupScheduler {
         return "ec2".equals(activeProfile)
                 ? "/opt/linqra/backups/milvus"
                 : System.getProperty("user.home") + "/linqra-backups/milvus";
+    }
+
+    private String getKubeDir() {
+        return "ec2".equals(activeProfile)
+                ? "/var/www/linqra/.kube"
+                : System.getProperty("user.home") + "/IdeaProjects/Linqra/.kube";
     }
 }

@@ -89,17 +89,20 @@ When you approach a bank, law firm, or hospital, they will send a generic **Secu
         *   **CI/CD Pipeline:** We use **GitHub Dependency Review** to automatically block pull requests that introduce new vulnerabilities.
         *   **Active Maintenance:** We actively patch and override vulnerable transitive dependencies to ensure we stay ahead of upstream fixes.
 11. **"Do you have a backup strategy?"**
-    *   **Answer:** YES. We employ a multi-layered data protection strategy:
+    *   **Answer:** YES. We employ a comprehensive multi-layered backup strategy:
+        *   **MongoDB**: Hourly backups via `MongoBackupScheduler` (7-day retention) → S3
+        *   **PostgreSQL (Keycloak)**: Hourly backups via `PostgresBackupScheduler` (7-day retention) → S3
+        *   **Milvus Vector Database**: Daily complete backups via `MilvusBackupScheduler` including Milvus, etcd (metadata), and MinIO (vector storage) - all three components backed up together for consistent recovery (30-day retention) → S3
+        *   **Neo4j Knowledge Graph**: Daily backups via `Neo4jBackupScheduler` (30-day retention) → S3
+        *   **S3 Knowledge Hub**: Hourly backups via `KnowledgeHubS3BackupScheduler`
         *   **Cross-Region Replication (CRR):** All S3 data is automatically replicated to a secondary region (us-east-1) for disaster recovery.
         *   **Versioning:** Protects against accidental deletions or overwrites.
-        *   **Object Lock (WORM):** Protects against *malicious* modification (ransomware/rogue admin). Even the root user cannot delete a locked object during the retention period.
-        *   **Monthly Sync Job:** Automated scheduler (`S3BackupSyncScheduler`) runs monthly to synchronize source and backup buckets, removing orphaned files.
-        *   **Resiliency:** S3 Standard storage provides 99.999999999% durability across multiple Availability Zones.
+        *   **Manual Scripts:** `backup-*.sh` and `restore-*.sh` scripts available for manual backup/restore operations.
 12. **"Do you have a disaster recovery plan?"**
     *   **Answer:** YES. We adhere to a strict Business Continuity Plan (BCP):
-        *   **RPO (Data Loss):** < 15 minutes (Database), ~15 minutes (S3 via CRR).
+        *   **RPO (Data Loss):** < 1 hour (MongoDB, PostgreSQL), < 24 hours (Milvus, Neo4j), ~15 minutes (S3 via CRR).
         *   **RTO (Downtime):** < 4 hours.
-        *   **Strategy:** Automated Point-in-Time Recovery (PITR) for MongoDB, **Cross-Region Replication (IMPLEMENTED)** for S3 (us-west-2 → us-east-1), and IaC-based redeployment for compute in a secondary failover region.
+        *   **Strategy:** Automated Point-in-Time Recovery (PITR) for MongoDB, S3 restore from backup buckets, database restore scripts for Milvus/Neo4j, and IaC-based redeployment for compute in a secondary failover region.
 ---
 
 ## 4. Sector-Specific Sales Readiness

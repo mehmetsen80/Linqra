@@ -49,6 +49,10 @@ spring:
       uri: ${vault.mongodb.uri:mongodb://${vault.mongodb.username}:${vault.mongodb.password}@mongodb1:27017,mongodb2:27018,mongodb3:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}
       database: Linqra
       auto-index-creation: true  # Explicitly enable auto-index creation (default is true)
+  postgres:
+    username: ${vault.postgres.user}
+    password: ${vault.postgres.password}
+    database: ${vault.postgres.db}
   cloud:
     circuitbreaker:
       resilience4j:

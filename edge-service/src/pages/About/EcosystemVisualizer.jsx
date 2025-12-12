@@ -7,7 +7,6 @@ const EcosystemVisualizer = () => {
             {/* Central Core */}
             <div className="core-glow"></div>
             <div className="core-hub">
-
                 <div className="core-label">Linqra<br />Orchestrator</div>
             </div>
 

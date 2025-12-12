@@ -10,6 +10,7 @@ services:
     build:
       context: .
       dockerfile: ./.kube/postgres/Dockerfile
+    container_name: postgres-service
     command: postgres -c "max_connections=200"
     restart: always
     ports:
@@ -28,7 +29,6 @@ services:
       VAULT_REQUIRED_VARS: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD
     networks:
       - linqra-network
-
 
   # postgres admin
   pgadmin-service:
@@ -91,7 +91,7 @@ services:
       postgres-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8080/health/ready"]
+      test: [ "CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8080/health/ready" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -176,7 +176,6 @@ services:
       - linqra-network
     command: mongod --bind_ip_all --replSet rs0 --port 27019 -keyFile /data/mongo-keyfile
 
-
   # redis
   redis-service:
     build:
@@ -189,7 +188,7 @@ services:
     volumes:
       - ./.kube/redis/data/:/var/lib/redis/data
       - ./.kube/redis/redis.conf:/usr/local/etc/redis/redis.conf
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    command: [ "redis-server", "/usr/local/etc/redis/redis.conf" ]
     networks:
       - linqra-network
 
@@ -205,7 +204,7 @@ services:
       - ./.kube/etcd/data:/etcd
     command: etcd -advertise-client-urls=http://etcd-service:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
     healthcheck:
-      test: ["CMD", "etcdctl", "endpoint", "health"]
+      test: [ "CMD", "etcdctl", "endpoint", "health" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -224,9 +223,9 @@ services:
     volumes:
       - ./.kube/minio/data:/data
       - ./secrets:/app/secrets:ro
-    command: ["server", "/data", "--console-address", ":9001"]
+    command: [ "server", "/data", "--console-address", ":9001" ]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -238,11 +237,12 @@ services:
     build:
       context: .
       dockerfile: ./.kube/milvus/Dockerfile
+    container_name: milvus-service
     environment:
       ETCD_ENDPOINTS: etcd-service:2379
       MINIO_ADDRESS: minio-service:9000
       COMMON_CFG_RETENTION_DURATION: 168h
-      MILVUS_AUTH_ENABLED: "true"
+      COMMON_SECURITY_AUTHORIZATIONENABLED: "true"
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
       VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
       VAULT_REQUIRED_VARS: MILVUS_USERNAME,MILVUS_PASSWORD,MINIO_ACCESS_KEY,MINIO_SECRET_KEY
@@ -265,7 +265,7 @@ services:
       - etcd-service
       - minio-service
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/api/v1/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:9091/api/v1/health" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -279,7 +279,6 @@ services:
       MILVUS_URL: milvus-service:19530
       MILVUS_DATABASE: default
       MILVUS_USE_SSL: "false"
-      MILVUS_INSECURE: "true"
     ports:
       - "8000:3000"
     networks:
@@ -306,8 +305,8 @@ services:
       - VAULT_ENVIRONMENT=${VAULT_ENVIRONMENT:-ec2}
       - VAULT_REQUIRED_VARS=NEO4J_USERNAME,NEO4J_PASSWORD
     ports:
-      - "7474:7474"  # HTTP
-      - "7687:7687"  # Bolt (Java driver uses this)
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt (Java driver uses this)
     volumes:
       - ./.kube/neo4j/data:/data
       - ./.kube/neo4j/logs:/logs
@@ -315,7 +314,7 @@ services:
       - ./.kube/neo4j/plugins:/plugins
       - ./secrets:/app/secrets:ro
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474/"]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474/" ]
       interval: 10s
       timeout: 3s
       retries: 3
@@ -347,7 +346,6 @@ services:
       - ./secrets:/app/secrets:ro
     networks:
       - linqra-network
-
 
   # Load Balancer
   gateway-loadbalancer:

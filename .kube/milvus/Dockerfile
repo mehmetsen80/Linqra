@@ -17,8 +17,9 @@ ENV ETCD_CFG_AUTO_COMPACTION_MODE=revision
 ENV ETCD_CFG_AUTO_COMPACTION_RETENTION=1000
 ENV COMMON_CFG_RETENTION_DURATION=168h
 
-# Enable Milvus authentication
-ENV MILVUS_AUTH_ENABLED=true
+# Enable Milvus authentication/authorization
+# These are the correct env var names for Milvus 2.x
+ENV COMMON_SECURITY_AUTHORIZATIONENABLED=true
 
 # Create directory for vault-reader
 RUN mkdir -p /app/vault-reader

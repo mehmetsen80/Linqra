@@ -2,7 +2,7 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.config.S3Properties;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -18,7 +18,7 @@ import java.util.List;
 public class S3LifecycleConfigurationServiceImpl {
 
         private final S3AsyncClient s3AsyncClient;
-        private final S3Properties s3Properties;
+        private final KnowledgeHubS3Properties s3Properties;
 
         /**
          * Initialize S3 Lifecycle Rules on startup

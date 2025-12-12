@@ -2,7 +2,7 @@ package org.lite.gateway.scheduler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.config.S3Properties;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -15,15 +15,15 @@ import java.util.concurrent.CompletableFuture;
  * Uses AWS CLI `aws s3 sync --delete` to sync the primary bucket to the backup
  * bucket,
  * removing files from backup that no longer exist in the source.
- * 
+ *
  * Runs at 3:00 AM on the 1st day of every month.
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class S3BackupSyncScheduler {
+public class KnowledgeHubS3BackupScheduler {
 
-    private final S3Properties s3Properties;
+    private final KnowledgeHubS3Properties s3Properties;
 
     /**
      * Sync source bucket to backup bucket with delete.

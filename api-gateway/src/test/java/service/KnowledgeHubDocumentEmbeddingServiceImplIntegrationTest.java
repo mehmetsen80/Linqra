@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.lite.gateway.ApiGatewayApplication;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,14 +16,18 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Integration test that exercises the full document → Milvus embedding flow using real services.
+ * Integration test that exercises the full document → Milvus embedding flow
+ * using real services.
  *
- * <p><strong>Important:</strong> This test requires real connections to AWS S3, MongoDB, and Milvus.
- * Provide valid document, collection, and team identifiers below before running locally.
- * By default the test will be skipped to avoid accidental execution in CI.</p>
+ * <p>
+ * <strong>Important:</strong> This test requires real connections to AWS S3,
+ * MongoDB, and Milvus.
+ * Provide valid document, collection, and team identifiers below before running
+ * locally.
+ * By default the test will be skipped to avoid accidental execution in CI.
+ * </p>
  */
-@SpringBootTest(classes = ApiGatewayApplication.class,
-        webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(classes = ApiGatewayApplication.class, webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @ActiveProfiles("test")
 @Slf4j
 class KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest {
@@ -43,7 +48,7 @@ class KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest {
     private LinqMilvusStoreService milvusStoreService;
 
     @Autowired
-    private org.lite.gateway.config.S3Properties s3Properties;
+    private KnowledgeHubS3Properties s3Properties;
 
     private boolean shouldRun;
 
@@ -54,7 +59,8 @@ class KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest {
                 || MILVUS_COLLECTION_NAME.startsWith("YOUR_"));
 
         if (!shouldRun) {
-            log.warn("⚠️  Skipping KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest because test constants are not configured.");
+            log.warn(
+                    "⚠️  Skipping KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest because test constants are not configured.");
             return;
         }
 
@@ -99,7 +105,7 @@ class KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest {
 
         assertNotNull(finalCount, "countDocumentEmbeddings should return a count");
         assertTrue(finalCount > initialCount, "Expected embeddings to be stored in Milvus");
-        log.info("✅ Verified embeddings increased from {} to {} for document {}", initialCount, finalCount, DOCUMENT_ID);
+        log.info("✅ Verified embeddings increased from {} to {} for document {}", initialCount, finalCount,
+                DOCUMENT_ID);
     }
 }
-

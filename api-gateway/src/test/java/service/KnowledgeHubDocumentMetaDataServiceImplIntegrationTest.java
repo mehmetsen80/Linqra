@@ -3,12 +3,13 @@ package service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.lite.gateway.config.S3Properties;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.enums.DocumentStatus;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentMetaDataServiceImpl;
+import org.lite.gateway.service.impl.KnowledgeHubDocumentServiceImpl;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.impl.S3ServiceImpl;
@@ -79,9 +80,10 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
     @Autowired(required = false)
     private org.lite.gateway.util.AuditLogHelper auditLogHelper;
 
+    private KnowledgeHubDocumentServiceImpl documentService;
     private KnowledgeHubDocumentMetaDataServiceImpl metadataService;
     private S3ServiceImpl s3Service;
-    private S3Properties s3Properties;
+    private KnowledgeHubS3Properties s3Properties;
     private ObjectMapper objectMapper;
     private S3AsyncClient s3Client;
     private S3Presigner s3Presigner;
@@ -95,7 +97,7 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
         }
 
         // Setup S3Properties
-        this.s3Properties = new S3Properties();
+        this.s3Properties = new KnowledgeHubS3Properties();
         this.s3Properties.setBucketName(BUCKET_NAME);
         this.s3Properties.setRawPrefix("raw");
         this.s3Properties.setProcessedPrefix("processed");

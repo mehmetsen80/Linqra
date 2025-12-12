@@ -2,7 +2,7 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.config.S3Properties;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.event.KnowledgeHubDocumentProcessingEvent;
@@ -40,7 +40,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         private final TeamRepository teamRepository;
         private final ApplicationEventPublisher eventPublisher;
         private final S3Service s3Service;
-        private final S3Properties s3Properties;
+        private final KnowledgeHubS3Properties s3Properties;
         private final ChunkEncryptionService chunkEncryptionService;
         private final KnowledgeHubChunkRepository chunkRepository;
         private final KnowledgeHubDocumentMetaDataRepository metadataRepository;

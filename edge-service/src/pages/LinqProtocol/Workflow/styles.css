@@ -160,7 +160,7 @@
 }
 
 .workflow-section a:hover {
-    color: var(--primary-color-dark);
+    color: var(--primary-dark);
     text-decoration: underline;
 }
 
@@ -168,16 +168,16 @@
     .workflow-overview {
         padding: 1rem;
     }
-    
+
     .workflow-section {
         padding: 1rem;
     }
-    
+
     .workflow-overview h2 {
         font-size: 2rem;
     }
-    
+
     .workflow-section h3 {
         font-size: 1.3rem;
     }
-} 
+}

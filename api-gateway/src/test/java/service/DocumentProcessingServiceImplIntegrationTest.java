@@ -2,7 +2,7 @@ package service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.lite.gateway.config.S3Properties;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.lite.gateway.entity.KnowledgeHubChunk;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.enums.DocumentStatus;
@@ -82,7 +82,7 @@ class DocumentProcessingServiceImplIntegrationTest {
 
     private KnowledgeHubDocumentProcessingServiceImpl documentProcessingService;
     private S3ServiceImpl s3Service;
-    private S3Properties s3Properties;
+    private KnowledgeHubS3Properties s3Properties;
 
     @BeforeEach
     void setUp() {
@@ -92,8 +92,8 @@ class DocumentProcessingServiceImplIntegrationTest {
             return;
         }
 
-        // Setup S3Properties
-        this.s3Properties = new S3Properties();
+        // Setup KnowledgeHubS3Properties
+        this.s3Properties = new KnowledgeHubS3Properties();
         this.s3Properties.setBucketName(BUCKET_NAME);
         this.s3Properties.setRawPrefix("raw");
         this.s3Properties.setProcessedPrefix("processed");
@@ -415,7 +415,7 @@ class DocumentProcessingServiceImplIntegrationTest {
 
         // Use dev bucket for existing USCIS document
         String devBucketName = "linqra-knowledge-hub-dev";
-        S3Properties devS3Properties = new S3Properties();
+        KnowledgeHubS3Properties devS3Properties = new KnowledgeHubS3Properties();
         devS3Properties.setBucketName(devBucketName);
         devS3Properties.setRawPrefix("raw");
         devS3Properties.setProcessedPrefix("processed");
@@ -830,7 +830,7 @@ class DocumentProcessingServiceImplIntegrationTest {
 
         // Use dev bucket
         String devBucketName = "linqra-knowledge-hub-dev";
-        S3Properties devS3Properties = new S3Properties();
+        KnowledgeHubS3Properties devS3Properties = new KnowledgeHubS3Properties();
         devS3Properties.setBucketName(devBucketName);
         devS3Properties.setRawPrefix("raw");
         devS3Properties.setProcessedPrefix("processed");
@@ -1043,7 +1043,7 @@ class DocumentProcessingServiceImplIntegrationTest {
         s3Service = setupS3ServiceForBucket(s3Properties);
     }
 
-    private S3ServiceImpl setupS3ServiceForBucket(S3Properties properties) {
+    private S3ServiceImpl setupS3ServiceForBucket(KnowledgeHubS3Properties properties) {
         // Create real AWS credentials
         var credentials = AwsBasicCredentials.create(AWS_ACCESS_KEY, AWS_SECRET_KEY);
         var credentialsProvider = StaticCredentialsProvider.create(credentials);

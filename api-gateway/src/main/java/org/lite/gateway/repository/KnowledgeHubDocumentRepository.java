@@ -1,6 +1,7 @@
 package org.lite.gateway.repository;
 
 import org.lite.gateway.entity.KnowledgeHubDocument;
+import org.lite.gateway.enums.DocumentStatus;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
@@ -26,6 +27,6 @@ public interface KnowledgeHubDocumentRepository extends ReactiveMongoRepository<
 
     Flux<KnowledgeHubDocument> findByCollectionIdAndStatus(String collectionId, String status);
 
-    Flux<KnowledgeHubDocument> findByStatusAndDeletedAtBefore(org.lite.gateway.enums.DocumentStatus status,
+    Flux<KnowledgeHubDocument> findByStatusAndDeletedAtBefore(DocumentStatus status,
             java.time.LocalDateTime threshold);
 }

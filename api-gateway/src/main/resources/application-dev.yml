@@ -197,6 +197,11 @@ neo4j:
   username: ${vault.neo4j.username}
   password: ${vault.neo4j.password}
 
+postgres:
+  username: ${vault.postgres.user}
+  password: ${vault.postgres.password}
+  database: ${vault.postgres.db}
+
 # Knowledge Hub S3 Configuration
 aws:
   region: ${vault.aws.region}

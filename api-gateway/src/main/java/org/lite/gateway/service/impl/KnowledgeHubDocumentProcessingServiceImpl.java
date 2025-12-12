@@ -2,7 +2,7 @@ package org.lite.gateway.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.config.S3Properties;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.lite.gateway.dto.ProcessedDocumentDto;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.event.KnowledgeHubDocumentMetaDataEvent;
@@ -59,7 +59,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
     private final S3Service s3Service;
     private final TikaDocumentParser tikaDocumentParser;
     private final ChunkingService chunkingService;
-    private final S3Properties s3Properties;
+    private final KnowledgeHubS3Properties s3Properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ApplicationEventPublisher eventPublisher;
     private final ChunkEncryptionService chunkEncryptionService;
@@ -74,7 +74,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             S3Service s3Service,
             TikaDocumentParser tikaDocumentParser,
             ChunkingService chunkingService,
-            S3Properties s3Properties,
+            KnowledgeHubS3Properties s3Properties,
             ApplicationEventPublisher eventPublisher,
             ChunkEncryptionService chunkEncryptionService,
             AuditLogHelper auditLogHelper,

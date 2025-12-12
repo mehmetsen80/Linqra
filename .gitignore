@@ -56,7 +56,8 @@ build/
 /secrets/*.backup
 /secrets/*.tmp
 /secrets/.gitkeep
-/secrets/secrets.json
+/secrets/secrets-dev.json
+/secrets/secrets-ec2.json
 
 ### Environment Files (Never commit secrets!)
 .env

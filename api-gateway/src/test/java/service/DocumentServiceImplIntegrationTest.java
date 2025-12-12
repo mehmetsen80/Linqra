@@ -2,7 +2,7 @@ package service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.lite.gateway.config.S3Properties;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
@@ -87,12 +87,12 @@ class DocumentServiceImplIntegrationTest {
 
     private KnowledgeHubDocumentServiceImpl documentService;
     private S3ServiceImpl s3Service;
-    private S3Properties s3Properties;
+    private KnowledgeHubS3Properties s3Properties;
 
     @BeforeEach
     void setUp() {
         // Setup S3Properties
-        this.s3Properties = new S3Properties();
+        this.s3Properties = new KnowledgeHubS3Properties();
         this.s3Properties.setBucketName(BUCKET_NAME);
         this.s3Properties.setRawPrefix("raw");
         this.s3Properties.setProcessedPrefix("processed");

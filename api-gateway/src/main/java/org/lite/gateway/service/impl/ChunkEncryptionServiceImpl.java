@@ -10,6 +10,7 @@ import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.LinqraVaultService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.UserContextService;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -49,7 +50,7 @@ public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
     public ChunkEncryptionServiceImpl(
             LinqraVaultService vaultService,
             TeamChunkKeyRepository teamChunkKeyRepository,
-            @org.springframework.context.annotation.Lazy AuditService auditService,
+            @Lazy AuditService auditService,
             UserContextService userContextService,
             TeamContextService teamContextService) {
         this.vaultService = vaultService;

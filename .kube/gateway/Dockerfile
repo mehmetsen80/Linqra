@@ -31,69 +31,26 @@ COPY keys/gateway-truststore.jks gateway-truststore.jks
 # Set permissions for keystore and truststore files
 RUN chmod 644 /app/gateway-truststore.jks /app/gateway-keystore.jks
 
-# Set environment variables for keystore and truststore
-ENV GATEWAY_KEY_STORE=/app/gateway-keystore.jks
-ENV GATEWAY_KEY_STORE_PASSWORD=123456
-ENV GATEWAY_TRUST_STORE=/app/gateway-truststore.jks
-ENV GATEWAY_TRUST_STORE_PASSWORD=123456
-ENV CACERTS_PATH=${JAVA_HOME}/lib/security/cacerts
-
-# Verify truststore exists
-RUN if [ ! -f "${GATEWAY_TRUST_STORE}" ]; then \
-        echo "client-truststore.jks not found at ${GATEWAY_TRUST_STORE}"; \
-        exit 1; \
-    fi
-
-# Verify cacerts file exists and is writable
-RUN if [ ! -f "${CACERTS_PATH}" ]; then \
-        echo "cacerts file not found at ${CACERTS_PATH}"; \
-        if [ -d "${CACERTS_PATH}" ]; then \
-            echo "cacerts is a directory, listing contents:"; \
-            ls -ltr "${CACERTS_PATH}"; \
-            exit 1; \
-        fi; \
-        echo "Attempting to restore cacerts from base image"; \
-        cp /opt/java/openjdk/lib/security/cacerts.bak "${CACERTS_PATH}" 2>/dev/null || { \
-            echo "Failed to restore cacerts. Ensure base image contains cacerts."; \
-            exit 1; \
-        }; \
-    fi && \
-    chown root:root "${CACERTS_PATH}" && \
-    chmod 664 "${CACERTS_PATH}"
-
-
-RUN chown root:root "${CACERTS_PATH}" && chmod 664 "${CACERTS_PATH}"
-
-# Import all certificates from gateway-truststore.jks into the default cacerts truststore
-RUN keytool -importkeystore -srckeystore /app/gateway-truststore.jks \
-            -destkeystore "${CACERTS_PATH}" \
-            -srcstorepass "${GATEWAY_TRUST_STORE_PASSWORD}" \
-            -deststorepass "${GATEWAY_TRUST_STORE_PASSWORD}" \
-            -noprompt -srcstoretype JKS -deststoretype JKS > keytool_import.log 2>&1 || { \
-                cat keytool_import.log; \
-                echo "keytool import failed"; \
-                exit 1; \
-            }
-
-
-# Verify the import by listing the cacerts contents (optional, for debugging)
-RUN keytool -list -cacerts -storepass "${GATEWAY_TRUST_STORE_PASSWORD}" > cacerts_list.log
-
-# Set other service-specific environment variables
-ENV REDIS_GATEWAY_URL=redis-service
-ENV KEYCLOAK_GATEWAY_URL=keycloak-service
-ENV KEYCLOAK_GATEWAY_PORT=8080
-ENV EUREKA_GATEWAY_URL=discovery-service
-ENV GATEWAY_API_HOST=api-gateway-service
-ENV GATEWAY_API_PORT=7777
-ENV MILVUS_USERNAME=milvus_admin
-ENV MILVUS_PASSWORD=Linqra2024!
+# Copy vault-reader.jar and entrypoint script for reading secrets from vault
+RUN mkdir -p /app/vault-reader
+COPY vault-reader/target/vault-reader.jar /app/vault-reader/vault-reader.jar
+COPY scripts/vault-entrypoint.sh /app/vault-entrypoint.sh
+RUN chmod +x /app/vault-entrypoint.sh
 
 # Expose the API gateway port
 EXPOSE 7777
 
-# Run the API gateway-service application with SSL configuration and memory management
-ENTRYPOINT ["java", \
+# Note: Certificate import into Java cacerts is not needed because:
+# 1. Spring Boot uses the custom truststore directly via application.yml configuration
+# 2. SSL configuration (keystore/truststore) is handled by Spring Boot using vault secrets at runtime
+# 3. All service URLs (Redis, Keycloak, Milvus, etc.) come from vault via application.yml
+# 4. This eliminates the need for hardcoded secrets and environment variables!
+
+# Run the API gateway-service application with memory management
+# vault-entrypoint.sh reads secrets from vault and exports them, then detects Java command
+# For API Gateway, vault-entrypoint.sh injects Java SSL system properties for Eureka Client
+# The Eureka Client uses Java's default SSL context, so we need javax.net.ssl.trustStore system properties
+ENTRYPOINT ["/app/vault-entrypoint.sh", "java", \
             "-Xms1g", \
             "-Xmx2g", \
             "-XX:+UseG1GC", \
@@ -101,10 +58,6 @@ ENTRYPOINT ["java", \
             "-XX:+UnlockExperimentalVMOptions", \
             "-XX:+UseStringDeduplication", \
             "-Dhttps.protocols=TLSv1.2,TLSv1.3", \
-            "-Djavax.net.ssl.keyStore=${GATEWAY_KEY_STORE}", \
-            "-Djavax.net.ssl.keyStorePassword=${GATEWAY_KEY_STORE_PASSWORD}", \
-            "-Djavax.net.ssl.trustStore=${CACERTS_PATH}", \
-            "-Djavax.net.ssl.trustStorePassword=${GATEWAY_TRUST_STORE_PASSWORD}", \
             "-Djava.net.preferIPv4Stack=true", \
             "-Djava.awt.headless=true", \
             "-Dfile.encoding=UTF-8", \

@@ -1,0 +1,64 @@
+/* Export Collection Styles - matching ViewCollection */
+.export-collection-container {
+  padding: 0;
+}
+
+.breadcrumb-card {
+  background-color: #f8f9fa;
+  border: none;
+}
+
+.export-collection-container .breadcrumb-item a {
+  color: var(--primary-color, #ed7534);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.export-collection-container .breadcrumb-item a:hover {
+  color: var(--primary-dark, #d35f28);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.export-collection-container .breadcrumb-item.active {
+  color: #6c757d;
+}
+
+.page-icon {
+  font-size: 1.5rem;
+  color: var(--primary-color, #ed7534);
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+code.small {
+  font-size: 0.875rem;
+}
+
+.table thead th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  padding: 0.75rem 1rem;
+}
+
+.table tbody td {
+  padding: 0.75rem 1rem;
+  vertical-align: middle;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.collection-link {
+  color: var(--primary-color, #ed7534);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.collection-link:hover {
+  color: var(--primary-dark, #d35f28);
+  text-decoration: underline;
+}
+

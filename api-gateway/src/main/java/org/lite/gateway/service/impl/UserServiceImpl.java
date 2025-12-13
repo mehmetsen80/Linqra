@@ -11,7 +11,12 @@ import org.lite.gateway.exception.DuplicateUserException;
 import org.lite.gateway.exception.InvalidCredentialsException;
 import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.exception.ValidationException;
+import org.lite.gateway.entity.AuditLog;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.repository.UserRepository;
+import org.lite.gateway.service.AuditService;
 import org.lite.gateway.service.JwtService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
@@ -35,8 +40,15 @@ public class UserServiceImpl implements UserService {
     private final JwtService jwtService;
     private final UserContextService userContextService;
     private final TransactionalOperator transactionalOperator;
+    private final AuditService auditService;
 
+    @Override
     public Mono<AuthResponse> login(LoginRequest request) {
+        return login(request, null, null);
+    }
+    
+    @Override
+    public Mono<AuthResponse> login(LoginRequest request, String ipAddress, String userAgent) {
         log.info("Login attempt for: {}", request.getUsername());
         
         // Try both username and email
@@ -49,9 +61,34 @@ public class UserServiceImpl implements UserService {
                 log.info("Attempting username login for: {}", login);
                 return userRepository.findByUsername(login);
             })
-            .switchIfEmpty(Mono.error(new ResourceNotFoundException("username '" + request.getUsername() + "' does not exist"
-            , ErrorCode.USER_NOT_FOUND)
-            ))
+            .switchIfEmpty(Mono.defer(() -> {
+                // Log audit event for failed login (user not found)
+                AuditLog.AuditMetadata userNotFoundMetadata = AuditLog.AuditMetadata.builder()
+                        .reason(String.format("Login failed - user not found: %s", request.getUsername()))
+                        .errorMessage("Username or email does not exist: " + request.getUsername())
+                        .build();
+                
+                return auditService.logEvent(
+                        null, // userId - user doesn't exist
+                        request.getUsername(), // username - from request
+                        null, // teamId
+                        ipAddress,
+                        userAgent,
+                        AuditEventType.LOGIN_FAILED,
+                        AuditActionType.READ.name(),
+                        AuditResourceType.AUTH.name(),
+                        request.getUsername(), // resourceId - attempted username
+                        null, // documentId
+                        null, // collectionId
+                        "FAILED",
+                        userNotFoundMetadata,
+                        null // complianceFlags
+                )
+                .doOnError(auditError -> log.error("Failed to log failed login audit event: {}", auditError.getMessage(), auditError))
+                .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                .then(Mono.error(new ResourceNotFoundException("username '" + request.getUsername() + "' does not exist"
+                , ErrorCode.USER_NOT_FOUND)));
+            }))
             .flatMap(user -> {
                 if (passwordEncoder.matches(request.getPassword(), user.getPassword())) {
                     String token = jwtService.generateToken(user.getUsername());
@@ -60,21 +97,78 @@ public class UserServiceImpl implements UserService {
                     Map<String, Object> userMap = convertToUserMap(user);
                     
                     log.info("Login successful for user: {}", user.getUsername());
-                    return Mono.just(AuthResponse.builder()
+                    
+                    AuthResponse authResponse = AuthResponse.builder()
                         .token(token)
                         .refreshToken(refreshToken)
                         .user(userMap)
                         .success(true)
                         .message("Login successful")
-                        .build());
+                        .build();
+                    
+                    // Log audit event for successful login as part of the reactive chain
+                    AuditLog.AuditMetadata loginMetadata = AuditLog.AuditMetadata.builder()
+                            .reason(String.format("User login successful for username: %s", user.getUsername()))
+                            .build();
+                    
+                    return auditService.logEvent(
+                            user.getId(),
+                            user.getUsername(),
+                            null, // teamId - not available at login
+                            ipAddress,
+                            userAgent,
+                        AuditEventType.USER_LOGIN,
+                            AuditActionType.READ.name(),
+                            AuditResourceType.AUTH.name(),
+                            user.getId(), // resourceId - user ID
+                            null, // documentId
+                            null, // collectionId
+                            "SUCCESS",
+                            loginMetadata,
+                            null // complianceFlags
+                    )
+                    .doOnError(auditError -> log.error("Failed to log login audit event: {}", auditError.getMessage(), auditError))
+                    .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                    .thenReturn(authResponse);
                 }
                 log.info("Invalid password for user: {}", user.getUsername());
-                return Mono.error(new InvalidCredentialsException(ErrorCode.USER_INVALID_CREDENTIALS));
+                
+                // Log audit event for failed login as part of the reactive chain
+                AuditLog.AuditMetadata failedLoginMetadata = AuditLog.AuditMetadata.builder()
+                        .reason(String.format("Invalid password for user: %s", user.getUsername()))
+                        .errorMessage("Invalid password provided")
+                        .build();
+                
+                return auditService.logEvent(
+                        user.getId(),
+                        user.getUsername(),
+                        null, // teamId
+                        ipAddress,
+                        userAgent,
+                        AuditEventType.LOGIN_FAILED,
+                        AuditActionType.READ.name(),
+                        AuditResourceType.AUTH.name(),
+                        user.getId(), // resourceId
+                        null, // documentId
+                        null, // collectionId
+                        "FAILED",
+                        failedLoginMetadata,
+                        null // complianceFlags
+                )
+                .doOnError(auditError -> log.error("Failed to log failed login audit event: {}", auditError.getMessage(), auditError))
+                .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                .then(Mono.error(new InvalidCredentialsException(ErrorCode.USER_INVALID_CREDENTIALS)));
             })
             .doOnError(e -> log.error("Login error: ", e));
     }
 
+    @Override
     public Mono<AuthResponse> register(RegisterRequest request) {
+        return register(request, null, null);
+    }
+    
+    @Override
+    public Mono<AuthResponse> register(RegisterRequest request, String ipAddress, String userAgent) {
         try {
             UserValidationUtil.validateRegistration(request);
         } catch (ValidationException e) {
@@ -84,17 +178,65 @@ public class UserServiceImpl implements UserService {
         Mono<AuthResponse> registrationMono = userRepository.existsByUsername(request.getUsername())
             .flatMap(exists -> {
                 if (exists) {
-                    return Mono.error(new DuplicateUserException(
+                    // Log audit event for failed registration (duplicate username)
+                    AuditLog.AuditMetadata duplicateUsernameMetadata = AuditLog.AuditMetadata.builder()
+                            .reason(String.format("Registration failed - duplicate username: %s", request.getUsername()))
+                            .errorMessage("Username already exists: " + request.getUsername())
+                            .build();
+                    
+                    return auditService.logEvent(
+                            null, // userId - user doesn't exist yet
+                            request.getUsername(), // username - from request
+                            null, // teamId
+                            ipAddress,
+                            userAgent,
+                            AuditEventType.USER_CREATED,
+                            AuditActionType.CREATE.name(),
+                            AuditResourceType.USER.name(),
+                            request.getUsername(), // resourceId - attempted username
+                            null, // documentId
+                            null, // collectionId
+                            "FAILED",
+                            duplicateUsernameMetadata,
+                            null // complianceFlags
+                    )
+                    .doOnError(auditError -> log.error("Failed to log failed registration audit event: {}", auditError.getMessage(), auditError))
+                    .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                    .then(Mono.error(new DuplicateUserException(
                         ErrorCode.USER_ALREADY_EXISTS.getDefaultMessage()
-                    ));
+                    )));
                 }
                 return userRepository.existsByEmail(request.getEmail());
             })
             .flatMap(emailExists -> {
                 if (emailExists) {
-                    return Mono.error(new DuplicateUserException(
+                    // Log audit event for failed registration (duplicate email)
+                    AuditLog.AuditMetadata duplicateEmailMetadata = AuditLog.AuditMetadata.builder()
+                            .reason(String.format("Registration failed - duplicate email for username: %s", request.getUsername()))
+                            .errorMessage("Email already exists: " + request.getEmail())
+                            .build();
+                    
+                    return auditService.logEvent(
+                            null, // userId - user doesn't exist yet
+                            request.getUsername(), // username - from request
+                            null, // teamId
+                            ipAddress,
+                            userAgent,
+                            AuditEventType.USER_CREATED,
+                            AuditActionType.CREATE.name(),
+                            AuditResourceType.USER.name(),
+                            request.getEmail(), // resourceId - attempted email
+                            null, // documentId
+                            null, // collectionId
+                            "FAILED",
+                            duplicateEmailMetadata,
+                            null // complianceFlags
+                    )
+                    .doOnError(auditError -> log.error("Failed to log failed registration audit event: {}", auditError.getMessage(), auditError))
+                    .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                    .then(Mono.error(new DuplicateUserException(
                         ErrorCode.USER_EMAIL_EXISTS.getDefaultMessage()
-                    ));
+                    )));
                 }
 
                 User newUser = new User();
@@ -104,7 +246,7 @@ public class UserServiceImpl implements UserService {
                 newUser.setRoles(Set.of("USER"));
 
                 return userRepository.save(newUser)
-                    .map(savedUser -> {
+                    .flatMap(savedUser -> {
                         String token = jwtService.generateToken(savedUser.getUsername());
                         String refreshToken = jwtService.generateRefreshToken(savedUser.getUsername());
 
@@ -115,13 +257,38 @@ public class UserServiceImpl implements UserService {
                         userMap.put("id", savedUser.getId());
                         userMap.put("authType", "LOCAL");
 
-                        return AuthResponse.builder()
+                        AuthResponse authResponse = AuthResponse.builder()
                             .token(token)
                             .refreshToken(refreshToken)
                             .user(userMap)
                             .message("Registration successful")
                             .success(true)
                             .build();
+                        
+                        // Log audit event for successful registration as part of the reactive chain
+                        AuditLog.AuditMetadata registrationMetadata = AuditLog.AuditMetadata.builder()
+                                .reason(String.format("User registration successful for username: %s", savedUser.getUsername()))
+                                .build();
+                        
+                        return auditService.logEvent(
+                                savedUser.getId(),
+                                savedUser.getUsername(),
+                                null, // teamId - not assigned at registration
+                                ipAddress,
+                                userAgent,
+                            AuditEventType.USER_CREATED,
+                                AuditActionType.CREATE.name(),
+                                AuditResourceType.USER.name(),
+                                savedUser.getId(), // resourceId - user ID
+                                null, // documentId
+                                null, // collectionId
+                                "SUCCESS",
+                                registrationMetadata,
+                                null // complianceFlags
+                        )
+                        .doOnError(auditError -> log.error("Failed to log registration audit event: {}", auditError.getMessage(), auditError))
+                        .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                        .thenReturn(authResponse);
                     });
             });
 

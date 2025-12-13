@@ -7,6 +7,7 @@ import CreateOrganizationModal from '../../components/organizations/CreateOrgani
 import EditOrganizationModal from '../../components/organizations/EditOrganizationModal';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import organizationService from '../../services/organizationService';
+import Footer from '../../components/common/Footer';
 import './styles.css';
 
 function Organizations() {
@@ -40,7 +41,7 @@ function Organizations() {
       setOperationLoading(true);
       const { data, error } = await organizationService.createOrganization(organizationData);
       if (error) throw new Error(error);
-      
+
       setOrganizations(prev => [...prev, data]);
       toast.success('Organization created successfully');
     } catch (err) {
@@ -59,8 +60,8 @@ function Organizations() {
         organizationData
       );
       if (error) throw new Error(error);
-      
-      setOrganizations(prev => prev.map(org => 
+
+      setOrganizations(prev => prev.map(org =>
         org.id === selectedOrganization.id ? data : org
       ));
       setShowEditModal(false);
@@ -77,7 +78,7 @@ function Organizations() {
       setOperationLoading(true);
       const { error } = await organizationService.deleteOrganization(organizationId);
       if (error) throw new Error(error);
-      
+
       await fetchOrganizations();
       setShowDeleteModal(false);
       setOrganizationToDelete(null);
@@ -131,7 +132,7 @@ function Organizations() {
               <h4 className="mb-0">Organizations</h4>
             </div>
             <div className="ms-auto">
-              <Button 
+              <Button
                 onClick={() => setShowCreateModal(true)}
                 disabled={operationLoading}
                 variant="primary"
@@ -158,8 +159,8 @@ function Organizations() {
               <p className="text-muted">
                 Create your first organization to start managing teams and API routes.
               </p>
-              <Button 
-                variant="primary" 
+              <Button
+                variant="primary"
                 onClick={() => setShowCreateModal(true)}
                 className="mt-3"
                 disabled={operationLoading}
@@ -268,10 +269,11 @@ function Organizations() {
         title="Confirm Delete"
         message={`Are you sure you want to delete "${organizationToDelete?.name}"? This action cannot be undone.`}
         confirmLabel="Delete"
-        
+
       />
+      <Footer />
     </div>
   );
 }
 
-export default Organizations; 
+export default Organizations;

@@ -13,6 +13,7 @@ import agentTaskService from '../../../services/agentTaskService';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { format, isValid, parseISO } from 'date-fns';
 import AgentStats from '../../../components/dashboard/AgentStats';
+import Footer from '../../../components/common/Footer';
 import './styles.css';
 import CreateAgentTaskModal from '../../../components/agents/CreateAgentTaskModal';
 import EditAgentModal from '../../../components/agents/EditAgentModal';
@@ -68,7 +69,7 @@ function ViewAgent() {
     const loadAgentStats = async () => {
         try {
             setLoadingStats(true);
-            
+
             // Load performance data
             const perfResponse = await agentMonitoringService.getAgentPerformance(agentId);
             if (perfResponse.success) {
@@ -113,8 +114,8 @@ function ViewAgent() {
         const { name, value } = e.target;
         setNewTask(prev => ({
             ...prev,
-            [name]: name === 'priority' || name === 'maxRetries' || name === 'timeoutMinutes' 
-                ? parseInt(value) || 0 
+            [name]: name === 'priority' || name === 'maxRetries' || name === 'timeoutMinutes'
+                ? parseInt(value) || 0
                 : value
         }));
     };
@@ -195,7 +196,7 @@ function ViewAgent() {
 
         try {
             setCreatingTask(true);
-            
+
             // Construct minimal valid linq_config based on taskType
             let linq_config;
             if (newTask.taskType === 'WORKFLOW_EMBEDDED') {
@@ -237,15 +238,15 @@ function ViewAgent() {
                     }
                 };
             }
-            
+
             const taskData = {
                 ...newTask,
                 agentId: agentId,
                 linq_config: linq_config
             };
-            
+
             const response = await agentTaskService.createAgentTask(taskData);
-            
+
             if (response.success) {
                 showSuccessToast('Task created successfully!');
                 setShowCreateTaskModal(false);
@@ -282,7 +283,7 @@ function ViewAgent() {
                 const hour = dateValue[3];
                 const minute = dateValue[4];
                 const second = dateValue[5] || 0;
-                
+
                 // Create UTC date
                 const date = new Date(Date.UTC(year, month, day, hour, minute, second));
                 return isValid(date) ? format(date, formatStr) : 'N/A';
@@ -298,38 +299,38 @@ function ViewAgent() {
 
     const convertCronDescriptionToLocal = (cronDescription, cronExpression) => {
         if (!cronDescription || !cronExpression) return cronDescription || 'N/A';
-        
+
         try {
             // Parse cron expression to get UTC hour and minute
             const cronParts = cronExpression.trim().split(/\s+/);
             if (cronParts.length < 6) return cronDescription;
-            
+
             const utcMinute = parseInt(cronParts[1]) || 0;
             const utcHour = parseInt(cronParts[2]) || 0;
-            
+
             // Convert UTC to local time
             const utcDate = new Date(Date.UTC(2000, 0, 1, utcHour, utcMinute));
             const localHour = utcDate.getHours();
             const localMinute = utcDate.getMinutes();
-            
+
             // Convert to 12-hour format
             const utcHour12 = utcHour === 0 ? 12 : utcHour > 12 ? utcHour - 12 : utcHour;
             const utcAmPm = utcHour >= 12 ? 'PM' : 'AM';
             const localHour12 = localHour === 0 ? 12 : localHour > 12 ? localHour - 12 : localHour;
             const localAmPm = localHour >= 12 ? 'PM' : 'AM';
-            
+
             let localDescription = cronDescription;
-            
+
             // Try different time patterns
             const utcPattern1 = `${utcHour12}:${utcMinute.toString().padStart(2, '0')} ${utcAmPm}`;
             const localPattern1 = `${localHour12}:${localMinute.toString().padStart(2, '0')} ${localAmPm}`;
-            
+
             if (localDescription.includes(utcPattern1)) {
                 localDescription = localDescription.replace(new RegExp(utcPattern1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern1);
             } else if (localDescription.includes(`${utcHour12} ${utcAmPm}`)) {
                 localDescription = localDescription.replace(new RegExp(`${utcHour12} ${utcAmPm}`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `${localHour12} ${localAmPm}`);
             }
-            
+
             return localDescription;
         } catch (error) {
             console.error('Error converting cron description to local:', error);
@@ -371,13 +372,13 @@ function ViewAgent() {
                         <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/' }}>
                             Home
                         </Breadcrumb.Item>
-                        <Breadcrumb.Item 
-                            linkAs={Link} 
+                        <Breadcrumb.Item
+                            linkAs={Link}
                             linkProps={{ to: '/organizations' }}
                         >
                             {currentTeam?.organization?.name || 'Organization'}
                         </Breadcrumb.Item>
-                        <Breadcrumb.Item 
+                        <Breadcrumb.Item
                             onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
                             style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
                         >
@@ -402,16 +403,16 @@ function ViewAgent() {
                                     placement="bottom"
                                     overlay={
                                         <Tooltip id="delete-agent-tooltip">
-                                            {tasks.length > 0 
+                                            {tasks.length > 0
                                                 ? `Cannot delete agent with ${tasks.length} task(s). Please delete all tasks first.`
                                                 : 'Delete this agent'}
                                         </Tooltip>
                                     }
                                 >
                                     <span className="d-inline-block">
-                                        <Button 
-                                            variant="outline-danger" 
-                                            size="sm" 
+                                        <Button
+                                            variant="outline-danger"
+                                            size="sm"
                                             disabled={tasks.length > 0}
                                             onClick={() => setShowDeleteConfirm(true)}
                                             style={tasks.length > 0 ? { pointerEvents: 'none' } : {}}
@@ -546,7 +547,7 @@ function ViewAgent() {
                                     <div className="stat-item">
                                         <div className="stat-label">Avg Execution Time</div>
                                         <div className="stat-value">
-                                            {performance?.averageExecutionTimeMs 
+                                            {performance?.averageExecutionTimeMs
                                                 ? `${(performance.averageExecutionTimeMs / 1000).toFixed(2)}s`
                                                 : 'N/A'}
                                         </div>
@@ -577,7 +578,7 @@ function ViewAgent() {
                 <Card.Header className="d-flex justify-content-between align-items-center">
                     <h5 className="mb-0">Agent Tasks{agent?.name ? ` - ${agent.name}` : ''}</h5>
                     {canEditAgent && (
-                        <Button 
+                        <Button
                             variant="primary"
                             onClick={() => setShowCreateTaskModal(true)}
                             disabled={!canEditAgent}
@@ -618,9 +619,9 @@ function ViewAgent() {
                                             <td>
                                                 <Badge bg={
                                                     task.taskType === 'WORKFLOW_TRIGGER' ? 'primary' :
-                                                    task.taskType === 'WORKFLOW_EMBEDDED' ? 'info' :
-                                                    task.taskType === 'API_CALL' ? 'warning' :
-                                                    'secondary'
+                                                        task.taskType === 'WORKFLOW_EMBEDDED' ? 'info' :
+                                                            task.taskType === 'API_CALL' ? 'warning' :
+                                                                'secondary'
                                                 }>
                                                     {task.taskType?.replace(/_/g, ' ')}
                                                 </Badge>
@@ -633,9 +634,9 @@ function ViewAgent() {
                                             <td>
                                                 <Badge bg={
                                                     task.executionTrigger === 'MANUAL' ? 'secondary' :
-                                                    task.executionTrigger === 'CRON' ? 'secondary' :
-                                                    task.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
-                                                    'info'
+                                                        task.executionTrigger === 'CRON' ? 'secondary' :
+                                                            task.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
+                                                                'info'
                                                 }>
                                                     {task.executionTrigger}
                                                 </Badge>
@@ -771,6 +772,7 @@ function ViewAgent() {
                 variant="danger"
                 disabled={deleting}
             />
+            <Footer />
         </div>
     );
 }

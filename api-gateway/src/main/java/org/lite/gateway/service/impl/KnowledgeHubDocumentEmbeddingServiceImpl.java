@@ -8,12 +8,21 @@ import org.lite.gateway.dto.MilvusCollectionSchemaInfo;
 import org.lite.gateway.dto.ProcessedDocumentDto;
 import org.lite.gateway.entity.KnowledgeHubCollection;
 import org.lite.gateway.entity.KnowledgeHubDocument;
+import org.lite.gateway.enums.DocumentStatus;
 import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.LlmModelRepository;
+import org.lite.gateway.enums.AuditResultType;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditResourceType;
+import org.lite.gateway.service.ChunkEncryptionService;
+import org.lite.gateway.service.GraphExtractionJobService;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.service.S3Service;
+import org.lite.gateway.util.AuditLogHelper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.messaging.MessageChannel;
@@ -27,6 +36,7 @@ import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -49,12 +59,11 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     private static final String EMBEDDING_CACHE_PREFIX = "embedding:doc:";
     private static final String MILVUS_TEXT_FIELD = "text";
     private static final int DEFAULT_CONTEXT_WINDOW_TOKENS = 4096;
-    private static final Set<String> ALLOWED_EMBEDDING_STATUSES = Set.of(
-            "METADATA_EXTRACTION",
-            "EMBEDDING",
-            "AI_READY",
-            "FAILED"
-    );
+    private static final Set<DocumentStatus> ALLOWED_EMBEDDING_STATUSES = Set.of(
+            DocumentStatus.METADATA_EXTRACTION,
+            DocumentStatus.EMBEDDING,
+            DocumentStatus.AI_READY,
+            DocumentStatus.FAILED);
 
     private final KnowledgeHubDocumentRepository documentRepository;
     private final KnowledgeHubCollectionRepository collectionRepository;
@@ -63,32 +72,117 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     private final ObjectMapper objectMapper;
     private final RedisTemplate<String, String> redisTemplate;
     private final LlmModelRepository llmModelRepository;
+    private final ChunkEncryptionService chunkEncryptionService;
+    private final AuditLogHelper auditLogHelper;
     @Qualifier("executionMessageChannel")
     private final MessageChannel executionMessageChannel;
+
+    @Autowired(required = false)
+    private GraphExtractionJobService graphExtractionJobService;
 
     @Override
     public Mono<Void> embedDocument(String documentId, String teamId) {
         log.info("Starting embedding workflow for document {} (team {})", documentId, teamId);
 
+        LocalDateTime startTime = LocalDateTime.now();
+
         return documentRepository.findByDocumentId(documentId)
                 .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)))
                 .flatMap(document -> validateDocument(document, teamId))
                 .flatMap(document -> collectionRepository.findById(document.getCollectionId())
-                        .switchIfEmpty(Mono.error(new RuntimeException("Collection not found for document: " + document.getCollectionId())))
+                        .switchIfEmpty(Mono.error(new RuntimeException(
+                                "Collection not found for document: " + document.getCollectionId())))
                         .map(collection -> Pair.of(document, collection)))
                 .flatMap(pair -> {
                     KnowledgeHubDocument document = pair.getFirst();
                     KnowledgeHubCollection collection = pair.getSecond();
+
+                    // Capture collection and document details for audit
+                    String collectionName = collection.getName();
+                    String fileName = document.getFileName();
+                    String embeddingModel = collection.getEmbeddingModel();
+                    String embeddingModelName = collection.getEmbeddingModelName();
+                    Integer embeddingDimension = collection.getEmbeddingDimension();
+                    String collectionId = collection.getId();
+                    Integer totalChunks = document.getTotalChunks();
 
                     validateCollectionEmbeddingConfig(collection);
 
                     return prepareDocumentForEmbedding(document, collection)
                             .then(fetchProcessedDocument(document))
                             .flatMap(dto -> processChunks(document, collection, dto))
-                            .flatMap(embeddedCount -> finalizeEmbedding(document, collection, embeddedCount))
+                            .flatMap(embeddedCount -> {
+                                // Log successful embedding with detailed context
+                                long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
+
+                                Map<String, Object> auditContext = new HashMap<>();
+                                auditContext.put("fileName", fileName);
+                                auditContext.put("teamId", document.getTeamId());
+                                auditContext.put("collectionName", collectionName);
+                                auditContext.put("embeddingModel", embeddingModel);
+                                auditContext.put("embeddingModelName", embeddingModelName);
+                                auditContext.put("embeddingDimension", embeddingDimension);
+                                auditContext.put("totalChunks", totalChunks);
+                                auditContext.put("chunksEmbedded", embeddedCount);
+                                auditContext.put("durationMs", durationMs);
+                                auditContext.put("embeddingTimestamp", LocalDateTime.now().toString());
+
+                                String auditReason = String.format(
+                                        "Document '%s' embedded with %d chunks using model '%s' in collection '%s'",
+                                        fileName, embeddedCount,
+                                        embeddingModelName != null ? embeddingModelName : embeddingModel,
+                                        collectionName);
+
+                                // Log detailed audit event
+                                return auditLogHelper.logDetailedEvent(
+                                        AuditEventType.CHUNK_CREATED,
+                                        AuditActionType.CREATE,
+                                        AuditResourceType.CHUNK,
+                                        documentId, // resourceId - the document ID
+                                        auditReason,
+                                        auditContext,
+                                        documentId, // documentId
+                                        collectionId // collectionId
+                                ).then(finalizeEmbedding(document, collection, embeddedCount));
+                            })
                             .doOnSuccess(v -> publishStatusUpdate(document))
-                            .doOnError(error -> log.error("Embedding failed for document {}: {}", document.getDocumentId(), error.getMessage()))
-                            .onErrorResume(error -> handleEmbeddingFailure(document, error));
+                            .onErrorResume(error -> {
+                                log.error("Embedding failed for document {}: {}", document.getDocumentId(),
+                                        error.getMessage());
+
+                                // Log failed embedding attempt using already-captured variables
+                                long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
+
+                                Map<String, Object> errorContext = new HashMap<>();
+                                errorContext.put("fileName", fileName);
+                                errorContext.put("teamId", document.getTeamId());
+                                errorContext.put("collectionName", collectionName);
+                                errorContext.put("embeddingModel", embeddingModel);
+                                errorContext.put("embeddingModelName", embeddingModelName);
+                                errorContext.put("embeddingDimension", embeddingDimension);
+                                errorContext.put("error", error.getMessage());
+                                errorContext.put("durationMs", durationMs);
+                                errorContext.put("failureTimestamp", LocalDateTime.now().toString());
+
+                                // Chain audit logging before handling failure
+                                return auditLogHelper.logDetailedEvent(
+                                        AuditEventType.CHUNK_CREATED,
+                                        AuditActionType.CREATE,
+                                        AuditResourceType.CHUNK,
+                                        documentId,
+                                        String.format("Embedding failed for document '%s': %s", fileName,
+                                                error.getMessage()),
+                                        errorContext,
+                                        documentId,
+                                        collectionId,
+                                        AuditResultType.FAILED // Result: FAILED
+                                )
+                                        .doOnError(auditError -> log.error(
+                                                "Failed to log audit event (embedding failed): {}",
+                                                auditError.getMessage(), auditError))
+                                        .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                                        .then(handleEmbeddingFailure(document, error));
+                            });
                 });
     }
 
@@ -116,7 +210,8 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
 
         int trimmedTokens = approximateTokenCount(trimmed);
         if (trimmedTokens > softLimit) {
-            log.warn("Text for {} still above safe limit after trimming ({} tokens). Final truncation applied.", contextLabel, trimmedTokens);
+            log.warn("Text for {} still above safe limit after trimming ({} tokens). Final truncation applied.",
+                    contextLabel, trimmedTokens);
             trimmed = trimmed.substring(0, Math.min(trimmed.length(), softLimit * 2));
             trimmedTokens = approximateTokenCount(trimmed);
         }
@@ -134,28 +229,68 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
         return (int) Math.ceil(text.length() / 4.0);
     }
 
+    /**
+     * Enforces the text field length limit, accounting for encryption overhead.
+     * 
+     * Encryption adds overhead (IV + GCM tag + Base64 encoding), so we need to
+     * truncate the plaintext to a smaller size to ensure the encrypted text fits
+     * within the Milvus field limit.
+     * 
+     * Calculation for encryption overhead:
+     * - Plaintext bytes → AES-GCM encryption adds 16 bytes (GCM tag)
+     * - IV (12 bytes) is prepended before Base64 encoding
+     * - Total overhead: 28 bytes before Base64 encoding
+     * - Base64 encoding: (plaintext_bytes + 28) * 4/3 characters
+     * 
+     * For ASCII text (1 byte/char): plaintext_length + 28 bytes → Base64 ≈
+     * (plaintext_length + 28) * 4/3
+     * For UTF-8 text (avg 1-2 bytes/char): more conservative limit needed
+     * 
+     * We use a conservative approach: reserve space for multi-byte UTF-8 characters
+     * and encryption overhead. For maxLength=5000, we truncate to ~3000 chars to be
+     * safe.
+     */
     private String enforceTextFieldLimit(String text,
-                                         MilvusCollectionSchemaInfo schemaInfo,
-                                         String textFieldName,
-                                         String documentId,
-                                         String chunkId) {
+            MilvusCollectionSchemaInfo schemaInfo,
+            String textFieldName,
+            String documentId,
+            String chunkId) {
         if (!StringUtils.hasText(text) || schemaInfo == null || schemaInfo.getTextFieldMaxLength() == null) {
             return text;
         }
         int maxLength = schemaInfo.getTextFieldMaxLength();
-        if (maxLength <= 0 || text.length() <= maxLength) {
+        if (maxLength <= 0) {
             return text;
         }
-        String truncated = text.substring(0, maxLength);
-        log.warn("Truncated text for document {} chunk {} to {} characters to satisfy Milvus field '{}' max_length {}",
+
+        // Calculate maximum plaintext length accounting for encryption overhead
+        // Formula: (maxLength * 3/4) - 28 bytes for overhead, then divide by bytes per
+        // char
+        // For safety with multi-byte UTF-8, assume ~1.5 bytes per char on average
+        // Conservative calculation: use ~60% of maxLength for plaintext
+        int maxPlaintextLength = (int) Math.floor(maxLength * 0.60);
+
+        // Ensure minimum reasonable size (at least 100 chars)
+        if (maxPlaintextLength < 100) {
+            maxPlaintextLength = Math.max(100, (int) Math.floor(maxLength * 0.50));
+        }
+
+        if (text.length() <= maxPlaintextLength) {
+            return text;
+        }
+
+        String truncated = text.substring(0, maxPlaintextLength);
+        log.warn(
+                "Truncated text for document {} chunk {} to {} characters (from {} chars) to satisfy Milvus field '{}' max_length {} after encryption overhead",
                 documentId,
                 StringUtils.hasText(chunkId) ? chunkId : "unknown",
-                maxLength,
+                maxPlaintextLength,
+                text.length(),
                 textFieldName,
                 maxLength);
         return truncated;
     }
-    
+
     private String resolveMimeType(KnowledgeHubDocument document, ProcessedDocumentDto processedDocumentDto) {
         if (processedDocumentDto != null && processedDocumentDto.getSourceDocument() != null) {
             String dtoContentType = processedDocumentDto.getSourceDocument().getContentType();
@@ -195,12 +330,14 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
         }
 
         if (!StringUtils.hasText(document.getProcessedS3Key())) {
-            return Mono.error(new RuntimeException("Document has no processed JSON. Please process the document before embedding."));
+            return Mono.error(new RuntimeException(
+                    "Document has no processed JSON. Please process the document before embedding."));
         }
 
-        if (!StringUtils.hasText(document.getStatus()) ||
-                ALLOWED_EMBEDDING_STATUSES.stream().noneMatch(status -> status.equalsIgnoreCase(document.getStatus()))) {
-            return Mono.error(new RuntimeException("Document must be in METADATA_EXTRACTION, EMBEDDING, AI_READY or FAILED status to start embedding"));
+        if (document.getStatus() == null ||
+                !ALLOWED_EMBEDDING_STATUSES.contains(document.getStatus())) {
+            return Mono.error(new RuntimeException(
+                    "Document must be in METADATA_EXTRACTION, EMBEDDING, AI_READY or FAILED status to start embedding"));
         }
 
         return Mono.just(document);
@@ -208,10 +345,13 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
 
     private void validateCollectionEmbeddingConfig(KnowledgeHubCollection collection) {
         if (!StringUtils.hasText(collection.getMilvusCollectionName())) {
-            throw new RuntimeException("Knowledge Hub collection has no Milvus collection assigned. Please assign one before embedding.");
+            throw new RuntimeException(
+                    "Knowledge Hub collection has no Milvus collection assigned. Please assign one before embedding.");
         }
-        if (!StringUtils.hasText(collection.getEmbeddingModel()) || !StringUtils.hasText(collection.getEmbeddingModelName())) {
-            throw new RuntimeException("Embedding model configuration missing for collection. Please configure embedding model before embedding.");
+        if (!StringUtils.hasText(collection.getEmbeddingModel())
+                || !StringUtils.hasText(collection.getEmbeddingModelName())) {
+            throw new RuntimeException(
+                    "Embedding model configuration missing for collection. Please configure embedding model before embedding.");
         }
         if (collection.getEmbeddingDimension() == null || collection.getEmbeddingDimension() <= 0) {
             throw new RuntimeException("Embedding dimension missing or invalid for collection.");
@@ -219,22 +359,25 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     }
 
     private Mono<Void> prepareDocumentForEmbedding(KnowledgeHubDocument document, KnowledgeHubCollection collection) {
-        if ("AI_READY".equalsIgnoreCase(document.getStatus())) {
-            log.info("Document {} already AI_READY, re-embedding will overwrite existing embeddings", document.getDocumentId());
+        if (document.getStatus() == DocumentStatus.AI_READY) {
+            log.info("Document {} already AI_READY, re-embedding will overwrite existing embeddings",
+                    document.getDocumentId());
         }
 
         return removeExistingEmbeddings(document, collection)
                 .doOnNext(count -> {
                     if (count > 0) {
-                        log.info("Removed {} existing embeddings for document {} from collection {}", count, document.getDocumentId(), collection.getMilvusCollectionName());
+                        log.info("Removed {} existing embeddings for document {} from collection {}", count,
+                                document.getDocumentId(), collection.getMilvusCollectionName());
                     }
                 })
                 .onErrorResume(error -> {
-                    log.warn("Failed to remove existing embeddings for document {}: {}", document.getDocumentId(), error.getMessage());
+                    log.warn("Failed to remove existing embeddings for document {}: {}", document.getDocumentId(),
+                            error.getMessage());
                     return Mono.just(0L);
                 })
                 .then(Mono.defer(() -> {
-                    document.setStatus("EMBEDDING");
+                    document.setStatus(DocumentStatus.EMBEDDING);
                     document.setProcessingModel(collection.getEmbeddingModelName());
                     document.setTotalEmbeddings(0);
                     document.setErrorMessage(null);
@@ -253,26 +396,31 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
         return milvusStoreService.deleteDocumentEmbeddings(
                 collection.getMilvusCollectionName(),
                 document.getDocumentId(),
-                document.getTeamId()
-        );
+                document.getTeamId());
     }
 
     private Mono<ProcessedDocumentDto> fetchProcessedDocument(KnowledgeHubDocument document) {
         return s3Service.downloadFileContent(document.getProcessedS3Key())
-                .map(bytes -> {
+                .flatMap(bytes -> {
                     try {
-                        return objectMapper.readValue(new String(bytes, StandardCharsets.UTF_8), ProcessedDocumentDto.class);
+                        ProcessedDocumentDto processedDoc = objectMapper
+                                .readValue(new String(bytes, StandardCharsets.UTF_8), ProcessedDocumentDto.class);
+                        // Decrypt sensitive fields in processed document after reading from S3
+                        return decryptProcessedDocumentDto(processedDoc, document.getTeamId())
+                                .thenReturn(processedDoc);
                     } catch (Exception e) {
-                        throw new RuntimeException("Failed to parse processed document JSON: " + e.getMessage(), e);
+                        return Mono.error(
+                                new RuntimeException("Failed to parse processed document JSON: " + e.getMessage(), e));
                     }
                 });
     }
 
     private Mono<Integer> processChunks(KnowledgeHubDocument document,
-                                        KnowledgeHubCollection collection,
-                                        ProcessedDocumentDto processedDocumentDto) {
+            KnowledgeHubCollection collection,
+            ProcessedDocumentDto processedDocumentDto) {
 
-        List<ProcessedDocumentDto.ChunkDto> chunks = Optional.ofNullable(processedDocumentDto.getChunks()).orElse(List.of());
+        List<ProcessedDocumentDto.ChunkDto> chunks = Optional.ofNullable(processedDocumentDto.getChunks())
+                .orElse(List.of());
         if (chunks.isEmpty()) {
             return Mono.error(new RuntimeException("Processed document contains no chunks to embed."));
         }
@@ -287,23 +435,27 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
                         .map(limit -> limit != null && limit > 0 ? limit : DEFAULT_CONTEXT_WINDOW_TOKENS)
                         .flatMap(contextWindowTokens -> {
                             if (collection.isLateChunkingEnabled()) {
-                                log.info("Late chunking enabled for collection {}. Using pooled window embeddings.", collection.getId());
-                                return processChunksWithLateChunking(document, collection, processedDocumentDto, chunks, contextWindowTokens, schemaInfo);
+                                log.info("Late chunking enabled for collection {}. Using pooled window embeddings.",
+                                        collection.getId());
+                                return processChunksWithLateChunking(document, collection, processedDocumentDto, chunks,
+                                        contextWindowTokens, schemaInfo);
                             }
-                            return processChunksStandard(document, collection, processedDocumentDto, chunks, contextWindowTokens, schemaInfo);
+                            return processChunksStandard(document, collection, processedDocumentDto, chunks,
+                                    contextWindowTokens, schemaInfo);
                         }));
     }
 
     private Mono<Integer> processChunksStandard(KnowledgeHubDocument document,
-                                                KnowledgeHubCollection collection,
-                                                ProcessedDocumentDto processedDocumentDto,
-                                                List<ProcessedDocumentDto.ChunkDto> chunks,
-                                                int contextWindowTokens,
-                                                MilvusCollectionSchemaInfo schemaInfo) {
+            KnowledgeHubCollection collection,
+            ProcessedDocumentDto processedDocumentDto,
+            List<ProcessedDocumentDto.ChunkDto> chunks,
+            int contextWindowTokens,
+            MilvusCollectionSchemaInfo schemaInfo) {
         AtomicInteger embeddedCount = new AtomicInteger();
 
         return Flux.fromIterable(chunks)
-                .concatMap(chunk -> embedChunk(document, collection, processedDocumentDto, chunk, contextWindowTokens, schemaInfo)
+                .concatMap(chunk -> embedChunk(document, collection, processedDocumentDto, chunk, contextWindowTokens,
+                        schemaInfo)
                         .doOnSuccess(v -> embeddedCount.incrementAndGet()))
                 .then(Mono.fromCallable(embeddedCount::get));
     }
@@ -314,7 +466,8 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
 
         if (!StringUtils.hasText(modelName)) {
             int derived = deriveContextWindowFromDimension(collectionDimension);
-            log.debug("Late chunking: No model name configured, using derived context window {} (dimension={}).", derived, collectionDimension);
+            log.debug("Late chunking: No model name configured, using derived context window {} (dimension={}).",
+                    derived, collectionDimension);
             return Mono.just(derived);
         }
 
@@ -326,19 +479,23 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
                     }
 
                     Integer modelDimension = llmModel.getDimensions();
-                    int derived = deriveContextWindowFromDimension(modelDimension != null ? modelDimension : collectionDimension);
-                    log.debug("Late chunking: Model {} missing explicit context window, derived {} (dimensions model={}, collection={}).",
+                    int derived = deriveContextWindowFromDimension(
+                            modelDimension != null ? modelDimension : collectionDimension);
+                    log.debug(
+                            "Late chunking: Model {} missing explicit context window, derived {} (dimensions model={}, collection={}).",
                             modelName, derived, modelDimension, collectionDimension);
                     return derived;
                 })
                 .switchIfEmpty(Mono.fromSupplier(() -> {
                     int derived = deriveContextWindowFromDimension(collectionDimension);
-                    log.warn("Late chunking: Model {} not found in repository. Falling back to derived context window {} (dimension={}).",
+                    log.warn(
+                            "Late chunking: Model {} not found in repository. Falling back to derived context window {} (dimension={}).",
                             modelName, derived, collectionDimension);
                     return derived;
                 }))
                 .map(tokens -> tokens > 0 ? tokens : DEFAULT_CONTEXT_WINDOW_TOKENS)
-                .doOnNext(tokens -> log.debug("Late chunking: resolved context window {} tokens for model {}", tokens, modelName));
+                .doOnNext(tokens -> log.debug("Late chunking: resolved context window {} tokens for model {}", tokens,
+                        modelName));
     }
 
     private int deriveContextWindowFromDimension(Integer dimension) {
@@ -358,18 +515,20 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     }
 
     private Mono<Integer> processChunksWithLateChunking(KnowledgeHubDocument document,
-                                                        KnowledgeHubCollection collection,
-                                                        ProcessedDocumentDto processedDocumentDto,
-                                                        List<ProcessedDocumentDto.ChunkDto> chunks,
-                                                        int contextWindowTokens,
-                                                        MilvusCollectionSchemaInfo schemaInfo) {
+            KnowledgeHubCollection collection,
+            ProcessedDocumentDto processedDocumentDto,
+            List<ProcessedDocumentDto.ChunkDto> chunks,
+            int contextWindowTokens,
+            MilvusCollectionSchemaInfo schemaInfo) {
 
         int strideTokens = Math.max(contextWindowTokens / 2, 256);
 
         List<ChunkWindow> windows = buildLateChunkWindows(chunks, contextWindowTokens, strideTokens);
         if (windows.isEmpty()) {
-            log.warn("Late chunking windows were empty for document {}. Falling back to standard chunk embeddings.", document.getDocumentId());
-            return processChunksStandard(document, collection, processedDocumentDto, chunks, contextWindowTokens, schemaInfo);
+            log.warn("Late chunking windows were empty for document {}. Falling back to standard chunk embeddings.",
+                    document.getDocumentId());
+            return processChunksStandard(document, collection, processedDocumentDto, chunks, contextWindowTokens,
+                    schemaInfo);
         }
 
         int totalWindowTokens = 0;
@@ -382,26 +541,33 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
 
         return Flux.fromIterable(windows)
                 .concatMap(window -> {
-                    String windowCacheKey = buildWindowCacheKey(document.getDocumentId(), collection.getEmbeddingModelName(), window);
+                    String windowCacheKey = buildWindowCacheKey(document.getDocumentId(),
+                            collection.getEmbeddingModelName(), window);
                     String windowText = enforceTokenLimit(window.getText(), contextWindowTokens,
-                            String.format("window %d-%d of document %s", window.getStartIndex(), window.getEndIndex(), document.getDocumentId()));
+                            String.format("window %d-%d of document %s", window.getStartIndex(), window.getEndIndex(),
+                                    document.getDocumentId()));
                     if (!StringUtils.hasText(windowText)) {
-                        log.warn("Late chunking: window {}-{} produced empty text after enforcing token limit. Skipping.",
+                        log.warn(
+                                "Late chunking: window {}-{} produced empty text after enforcing token limit. Skipping.",
                                 window.getStartIndex(), window.getEndIndex());
                         return Mono.empty();
                     }
-                    return getEmbeddingWithCache(windowCacheKey, windowText, collection.getEmbeddingModel(), collection.getEmbeddingModelName(), document.getTeamId())
+                    return getEmbeddingWithCache(windowCacheKey, windowText, collection.getEmbeddingModel(),
+                            collection.getEmbeddingModelName(), document.getTeamId())
                             .map(embedding -> Pair.of(window, embedding))
                             .doOnError(error -> log.error("Failed to embed window {}-{} for document {}: {}",
-                                    window.getStartIndex(), window.getEndIndex(), document.getDocumentId(), error.getMessage()));
+                                    window.getStartIndex(), window.getEndIndex(), document.getDocumentId(),
+                                    error.getMessage()));
                 })
                 .collectList()
                 .flatMap(windowEmbeddings -> {
                     if (windowEmbeddings.isEmpty()) {
-                        log.warn("Late chunking: no window embeddings were generated for document {} despite {} windows; falling back to direct chunk embeddings.",
+                        log.warn(
+                                "Late chunking: no window embeddings were generated for document {} despite {} windows; falling back to direct chunk embeddings.",
                                 document.getDocumentId(), windows.size());
                     }
-                    Map<Integer, List<List<Float>>> chunkEmbeddingPool = mapChunkEmbeddingsToWindows(windowEmbeddings, chunks.size());
+                    Map<Integer, List<List<Float>>> chunkEmbeddingPool = mapChunkEmbeddingsToWindows(windowEmbeddings,
+                            chunks.size());
                     log.info("Late chunking: mapped {} window embeddings to {} chunk indices for document {}",
                             windowEmbeddings.size(), chunkEmbeddingPool.size(), document.getDocumentId());
 
@@ -409,61 +575,83 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
                             .concatMap(chunkIndex -> {
                                 ProcessedDocumentDto.ChunkDto chunk = chunks.get(chunkIndex);
                                 if (!StringUtils.hasText(chunk.getText())) {
-                                    log.warn("Late chunking: skipping empty chunk {} for document {}", chunk.getChunkId(), document.getDocumentId());
+                                    log.warn("Late chunking: skipping empty chunk {} for document {}",
+                                            chunk.getChunkId(), document.getDocumentId());
                                     return Mono.empty();
                                 }
 
                                 List<List<Float>> pooledVectors = chunkEmbeddingPool.get(chunkIndex);
                                 Mono<List<Float>> embeddingMono;
                                 if (pooledVectors != null && !pooledVectors.isEmpty()) {
-                                    log.info("Late chunking: chunk {} received {} pooled vectors", chunk.getChunkId(), pooledVectors.size());
+                                    log.info("Late chunking: chunk {} received {} pooled vectors", chunk.getChunkId(),
+                                            pooledVectors.size());
                                     embeddingMono = Mono.fromCallable(() -> averageEmbeddings(pooledVectors))
                                             .flatMap(embedding -> {
                                                 if (embedding == null || embedding.isEmpty()) {
-                                                    log.info("Late chunking: pooled vectors empty for chunk {} – falling back to direct embedding.", chunk.getChunkId());
-                                                    String cacheKey = buildEmbeddingCacheKey(document.getDocumentId(), collection.getEmbeddingModelName(), chunk);
-                                                    String chunkText = enforceTokenLimit(chunk.getText(), contextWindowTokens,
-                                                            String.format("chunk %s of document %s", chunk.getChunkId(), document.getDocumentId()));
+                                                    log.info(
+                                                            "Late chunking: pooled vectors empty for chunk {} – falling back to direct embedding.",
+                                                            chunk.getChunkId());
+                                                    String cacheKey = buildEmbeddingCacheKey(document.getDocumentId(),
+                                                            collection.getEmbeddingModelName(), chunk);
+                                                    String chunkText = enforceTokenLimit(chunk.getText(),
+                                                            contextWindowTokens,
+                                                            String.format("chunk %s of document %s", chunk.getChunkId(),
+                                                                    document.getDocumentId()));
                                                     if (!StringUtils.hasText(chunkText)) {
                                                         return Mono.empty();
                                                     }
-                                                    return getEmbeddingWithCache(cacheKey, chunkText, collection.getEmbeddingModel(), collection.getEmbeddingModelName(), document.getTeamId());
+                                                    return getEmbeddingWithCache(cacheKey, chunkText,
+                                                            collection.getEmbeddingModel(),
+                                                            collection.getEmbeddingModelName(), document.getTeamId());
                                                 }
                                                 return Mono.just(embedding);
                                             });
                                 } else {
-                                    log.info("Late chunking: no pooled vectors for chunk {} – embedding chunk text directly.", chunk.getChunkId());
-                                    String cacheKey = buildEmbeddingCacheKey(document.getDocumentId(), collection.getEmbeddingModelName(), chunk);
+                                    log.info(
+                                            "Late chunking: no pooled vectors for chunk {} – embedding chunk text directly.",
+                                            chunk.getChunkId());
+                                    String cacheKey = buildEmbeddingCacheKey(document.getDocumentId(),
+                                            collection.getEmbeddingModelName(), chunk);
                                     String chunkText = enforceTokenLimit(chunk.getText(), contextWindowTokens,
-                                            String.format("chunk %s of document %s", chunk.getChunkId(), document.getDocumentId()));
+                                            String.format("chunk %s of document %s", chunk.getChunkId(),
+                                                    document.getDocumentId()));
                                     if (!StringUtils.hasText(chunkText)) {
                                         return Mono.empty();
                                     }
-                                    embeddingMono = getEmbeddingWithCache(cacheKey, chunkText, collection.getEmbeddingModel(), collection.getEmbeddingModelName(), document.getTeamId());
+                                    embeddingMono = getEmbeddingWithCache(cacheKey, chunkText,
+                                            collection.getEmbeddingModel(), collection.getEmbeddingModelName(),
+                                            document.getTeamId());
                                 }
 
                                 return embeddingMono
-                                        .flatMap(embedding -> storeChunkRecord(collection, document, processedDocumentDto, chunk, embedding, chunkIndex, schemaInfo))
-                                        .doOnSuccess(v -> log.info("Late chunking: stored embedding for chunk {} (index {}) in document {}",
+                                        .flatMap(embedding -> storeChunkRecord(collection, document,
+                                                processedDocumentDto, chunk, embedding, chunkIndex, schemaInfo))
+                                        .doOnSuccess(v -> log.info(
+                                                "Late chunking: stored embedding for chunk {} (index {}) in document {}",
                                                 chunk.getChunkId(), chunkIndex, document.getDocumentId()))
-                                        .doOnError(error -> log.error("Late chunking: failed to store embedding for chunk {} (index {}) in document {}: {}",
-                                                chunk.getChunkId(), chunkIndex, document.getDocumentId(), error.getMessage()))
+                                        .doOnError(error -> log.error(
+                                                "Late chunking: failed to store embedding for chunk {} (index {}) in document {}: {}",
+                                                chunk.getChunkId(), chunkIndex, document.getDocumentId(),
+                                                error.getMessage()))
                                         .thenReturn(1);
                             })
                             .reduce(0, Integer::sum)
-                            .doOnSuccess(total -> log.info("Late chunking: stored embeddings for {} chunks of document {}", total, document.getDocumentId()));
+                            .doOnSuccess(
+                                    total -> log.info("Late chunking: stored embeddings for {} chunks of document {}",
+                                            total, document.getDocumentId()));
                 });
     }
 
     private Mono<Void> embedChunk(KnowledgeHubDocument document,
-                                  KnowledgeHubCollection collection,
-                                  ProcessedDocumentDto processedDocumentDto,
-                                  ProcessedDocumentDto.ChunkDto chunk,
-                                  int contextWindowTokens,
-                                  MilvusCollectionSchemaInfo schemaInfo) {
+            KnowledgeHubCollection collection,
+            ProcessedDocumentDto processedDocumentDto,
+            ProcessedDocumentDto.ChunkDto chunk,
+            int contextWindowTokens,
+            MilvusCollectionSchemaInfo schemaInfo) {
 
         if (!StringUtils.hasText(chunk.getText())) {
-            log.warn("Skipping chunk {} for document {} due to empty text", chunk.getChunkId(), document.getDocumentId());
+            log.warn("Skipping chunk {} for document {} due to empty text", chunk.getChunkId(),
+                    document.getDocumentId());
             return Mono.empty();
         }
 
@@ -476,7 +664,8 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
             return Mono.empty();
         }
 
-        return getEmbeddingWithCache(cacheKey, embeddingText, collection.getEmbeddingModel(), collection.getEmbeddingModelName(), document.getTeamId())
+        return getEmbeddingWithCache(cacheKey, embeddingText, collection.getEmbeddingModel(),
+                collection.getEmbeddingModelName(), document.getTeamId())
                 .flatMap(embedding -> storeChunkRecord(
                         collection,
                         document,
@@ -511,12 +700,12 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     }
 
     private Mono<Void> storeChunkRecord(KnowledgeHubCollection collection,
-                                        KnowledgeHubDocument document,
-                                        ProcessedDocumentDto processedDocumentDto,
-                                        ProcessedDocumentDto.ChunkDto chunk,
-                                        List<Float> embedding,
-                                        int chunkIndex,
-                                        MilvusCollectionSchemaInfo schemaInfo) {
+            KnowledgeHubDocument document,
+            ProcessedDocumentDto processedDocumentDto,
+            ProcessedDocumentDto.ChunkDto chunk,
+            List<Float> embedding,
+            int chunkIndex,
+            MilvusCollectionSchemaInfo schemaInfo) {
 
         Set<String> allowedFields = schemaInfo != null ? schemaInfo.getFieldNames() : Set.of();
 
@@ -531,80 +720,112 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
                 : "KNOWLEDGE_HUB";
 
         Map<String, Object> record = new HashMap<>();
-        record.put(textFieldName, enforceTextFieldLimit(chunk.getText(), schemaInfo, textFieldName, document.getDocumentId(), chunk.getChunkId()));
-        putIfAllowed(record, allowedFields, "chunkId", Optional.ofNullable(chunk.getChunkId()).orElse(UUID.randomUUID().toString()));
-        Integer effectiveChunkIndex = chunk.getChunkIndex();
-        if (effectiveChunkIndex == null || effectiveChunkIndex < 0) {
-            effectiveChunkIndex = chunkIndex >= 0 ? chunkIndex : null;
-        }
-        putIfAllowed(record, allowedFields, "chunkIndex", effectiveChunkIndex);
-        putIfAllowed(record, allowedFields, "documentId", document.getDocumentId());
-        putIfAllowed(record, allowedFields, "collectionId", document.getCollectionId());
-        putIfAllowed(record, allowedFields, "fileName", document.getFileName());
-        putIfAllowed(record, allowedFields, "pageNumbers", Optional.ofNullable(chunk.getPageNumbers())
-                .map(list -> list.stream().map(String::valueOf).collect(Collectors.joining(",")))
-                .orElse(null));
-        putIfAllowed(record, allowedFields, "tokenCount", chunk.getTokenCount());
-        putIfAllowed(record, allowedFields, "language", Optional.ofNullable(chunk.getLanguage()).orElse(processedDocumentDto.getStatistics() != null ? processedDocumentDto.getStatistics().getLanguage() : null));
-        putIfAllowed(record, allowedFields, "createdAt", System.currentTimeMillis());
-        putIfAllowed(record, allowedFields, "teamId", document.getTeamId());
-        putIfAllowed(record, allowedFields, "qualityScore", chunk.getQualityScore());
-        putIfAllowed(record, allowedFields, "startPosition", chunk.getStartPosition());
-        putIfAllowed(record, allowedFields, "endPosition", chunk.getEndPosition());
-        putIfAllowed(record, allowedFields, "metadataOnly", chunk.getMetadataOnly());
 
-        String categoryValue = processedDocumentDto.getExtractedMetadata() != null
-                ? processedDocumentDto.getExtractedMetadata().getCategory()
-                : null;
-        if (!StringUtils.hasText(categoryValue) && collection.getCategories() != null && !collection.getCategories().isEmpty()) {
-            categoryValue = collection.getCategories().stream()
-                    .filter(Objects::nonNull)
-                    .map(Enum::name)
-                    .collect(Collectors.joining(","));
-        }
+        // Encrypt chunk text before storing in Milvus
+        String plaintext = enforceTextFieldLimit(chunk.getText(), schemaInfo, textFieldName, document.getDocumentId(),
+                chunk.getChunkId());
 
-        if (schemaInfo != null && "KNOWLEDGE_HUB".equalsIgnoreCase(schemaInfo.getCollectionType())) {
-            putIfAllowed(record, allowedFields, "title", processedDocumentDto.getExtractedMetadata() != null ? processedDocumentDto.getExtractedMetadata().getTitle() : null);
-            putIfAllowed(record, allowedFields, "author", processedDocumentDto.getExtractedMetadata() != null ? processedDocumentDto.getExtractedMetadata().getAuthor() : null);
-            putIfAllowed(record, allowedFields, "subject", processedDocumentDto.getExtractedMetadata() != null ? processedDocumentDto.getExtractedMetadata().getSubject() : null);
-            putIfAllowed(record, allowedFields, "category", categoryValue);
-        }
-        putIfAllowed(record, allowedFields, "documentType", documentType);
-        putIfAllowed(record, allowedFields, "mimeType", mimeType);
-        putIfAllowed(record, allowedFields, "collectionType", collectionTypeValue);
+        return chunkEncryptionService.getCurrentKeyVersion(document.getTeamId())
+                .flatMap(currentKeyVersion -> chunkEncryptionService.encryptChunkText(plaintext, document.getTeamId(),
+                        currentKeyVersion)
+                        .flatMap(encryptedText -> {
+                            record.put(textFieldName, encryptedText);
 
-        if (processedDocumentDto.getExtractedMetadata() != null) {
-            Map<String, Object> extractedMetadataMap = objectMapper.convertValue(
-                    processedDocumentDto.getExtractedMetadata(),
-                    new TypeReference<Map<String, Object>>() {});
-            extractedMetadataMap.forEach((key, value) -> putIfAllowed(record, allowedFields, key, value));
-        }
+                            // Store encryption key version for decryption later
+                            putIfAllowed(record, allowedFields, "encryptionKeyVersion", currentKeyVersion);
+                            putIfAllowed(record, allowedFields, "chunkId",
+                                    Optional.ofNullable(chunk.getChunkId()).orElse(UUID.randomUUID().toString()));
+                            Integer effectiveChunkIndex = chunk.getChunkIndex();
+                            if (effectiveChunkIndex == null || effectiveChunkIndex < 0) {
+                                effectiveChunkIndex = chunkIndex >= 0 ? chunkIndex : null;
+                            }
+                            putIfAllowed(record, allowedFields, "chunkIndex", effectiveChunkIndex);
+                            putIfAllowed(record, allowedFields, "documentId", document.getDocumentId());
+                            putIfAllowed(record, allowedFields, "collectionId", document.getCollectionId());
+                            putIfAllowed(record, allowedFields, "fileName", document.getFileName());
+                            putIfAllowed(record, allowedFields, "pageNumbers", Optional
+                                    .ofNullable(chunk.getPageNumbers())
+                                    .map(list -> list.stream().map(String::valueOf).collect(Collectors.joining(",")))
+                                    .orElse(null));
+                            putIfAllowed(record, allowedFields, "tokenCount", chunk.getTokenCount());
+                            putIfAllowed(record, allowedFields, "language",
+                                    Optional.ofNullable(chunk.getLanguage())
+                                            .orElse(processedDocumentDto.getStatistics() != null
+                                                    ? processedDocumentDto.getStatistics().getLanguage()
+                                                    : null));
+                            putIfAllowed(record, allowedFields, "createdAt", System.currentTimeMillis());
+                            putIfAllowed(record, allowedFields, "teamId", document.getTeamId());
+                            putIfAllowed(record, allowedFields, "qualityScore", chunk.getQualityScore());
+                            putIfAllowed(record, allowedFields, "startPosition", chunk.getStartPosition());
+                            putIfAllowed(record, allowedFields, "endPosition", chunk.getEndPosition());
+                            putIfAllowed(record, allowedFields, "metadataOnly", chunk.getMetadataOnly());
 
-        if (log.isDebugEnabled()) {
-            Map<String, Object> metadataSnapshot = new LinkedHashMap<>(record);
-            metadataSnapshot.remove("text");
-            metadataSnapshot.put("embeddingSize", embedding != null ? embedding.size() : null);
-            log.debug("Milvus chunk metadata for document {} chunk {} -> {}",
-                    document.getDocumentId(),
-                    record.get("chunkId"),
-                    metadataSnapshot);
-        }
+                            String categoryValue = processedDocumentDto.getExtractedMetadata() != null
+                                    ? processedDocumentDto.getExtractedMetadata().getCategory()
+                                    : null;
+                            if (!StringUtils.hasText(categoryValue) && collection.getCategories() != null
+                                    && !collection.getCategories().isEmpty()) {
+                                categoryValue = collection.getCategories().stream()
+                                        .filter(Objects::nonNull)
+                                        .map(Enum::name)
+                                        .collect(Collectors.joining(","));
+                            }
 
-        return milvusStoreService.storeRecord(
-                collection.getMilvusCollectionName(),
-                record,
-                collection.getEmbeddingModel(),
-                collection.getEmbeddingModelName(),
-                textFieldName,
-                document.getTeamId(),
-                embedding)
-                .then();
+                            if (schemaInfo != null
+                                    && "KNOWLEDGE_HUB".equalsIgnoreCase(schemaInfo.getCollectionType())) {
+                                putIfAllowed(record, allowedFields, "title",
+                                        processedDocumentDto.getExtractedMetadata() != null
+                                                ? processedDocumentDto.getExtractedMetadata().getTitle()
+                                                : null);
+                                putIfAllowed(record, allowedFields, "author",
+                                        processedDocumentDto.getExtractedMetadata() != null
+                                                ? processedDocumentDto.getExtractedMetadata().getAuthor()
+                                                : null);
+                                putIfAllowed(record, allowedFields, "subject",
+                                        processedDocumentDto.getExtractedMetadata() != null
+                                                ? processedDocumentDto.getExtractedMetadata().getSubject()
+                                                : null);
+                                putIfAllowed(record, allowedFields, "category", categoryValue);
+                            }
+                            putIfAllowed(record, allowedFields, "documentType", documentType);
+                            putIfAllowed(record, allowedFields, "mimeType", mimeType);
+                            putIfAllowed(record, allowedFields, "collectionType", collectionTypeValue);
+
+                            if (processedDocumentDto.getExtractedMetadata() != null) {
+                                Map<String, Object> extractedMetadataMap = objectMapper.convertValue(
+                                        processedDocumentDto.getExtractedMetadata(),
+                                        new TypeReference<Map<String, Object>>() {
+                                        });
+                                extractedMetadataMap
+                                        .forEach((key, value) -> putIfAllowed(record, allowedFields, key, value));
+                            }
+
+                            if (log.isDebugEnabled()) {
+                                Map<String, Object> metadataSnapshot = new LinkedHashMap<>(record);
+                                metadataSnapshot.remove("text");
+                                metadataSnapshot.put("embeddingSize", embedding != null ? embedding.size() : null);
+                                log.debug("Milvus chunk metadata for document {} chunk {} -> {}",
+                                        document.getDocumentId(),
+                                        record.get("chunkId"),
+                                        metadataSnapshot);
+                            }
+
+                            return milvusStoreService.storeRecord(
+                                    collection.getMilvusCollectionName(),
+                                    record,
+                                    collection.getEmbeddingModel(),
+                                    collection.getEmbeddingModelName(),
+                                    textFieldName,
+                                    document.getTeamId(),
+                                    embedding)
+                                    .then();
+                        }));
     }
 
     private void putIfAllowed(Map<String, Object> record,
-                              Set<String> allowedFields,
-                              String fieldName,
-                              Object value) {
+            Set<String> allowedFields,
+            String fieldName,
+            Object value) {
         if (record == null || allowedFields == null || fieldName == null) {
             return;
         }
@@ -617,8 +838,9 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
         record.put(fieldName, value);
     }
 
-    private Map<Integer, List<List<Float>>> mapChunkEmbeddingsToWindows(List<Pair<ChunkWindow, List<Float>>> windowEmbeddings,
-                                                                        int chunkCount) {
+    private Map<Integer, List<List<Float>>> mapChunkEmbeddingsToWindows(
+            List<Pair<ChunkWindow, List<Float>>> windowEmbeddings,
+            int chunkCount) {
         Map<Integer, List<List<Float>>> chunkEmbeddingPool = new HashMap<>(chunkCount);
 
         for (Pair<ChunkWindow, List<Float>> pair : windowEmbeddings) {
@@ -671,8 +893,8 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     }
 
     private List<ChunkWindow> buildLateChunkWindows(List<ProcessedDocumentDto.ChunkDto> chunks,
-                                                    int maxTokens,
-                                                    int strideTokens) {
+            int maxTokens,
+            int strideTokens) {
         if (maxTokens <= 0) {
             maxTokens = 2048;
         }
@@ -820,53 +1042,81 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     }
 
     private Mono<List<Float>> getEmbeddingWithCache(String cacheKey,
-                                                    String text,
-                                                    String modelCategory,
-                                                    String modelName,
-                                                    String teamId) {
+            String text,
+            String modelCategory,
+            String modelName,
+            String teamId) {
         return Mono.fromCallable(() -> Optional.ofNullable(redisTemplate.opsForValue().get(cacheKey)))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(optionalCached -> optionalCached.map(cached -> {
-                            try {
-                                List<Double> cachedValues = objectMapper.readValue(cached, objectMapper.getTypeFactory().constructCollectionType(List.class, Double.class));
-                                if (!cachedValues.isEmpty()) {
-                                    List<Float> embedding = cachedValues.stream().map(Double::floatValue).collect(Collectors.toList());
-                                    return Mono.just(embedding);
-                                }
-                            } catch (Exception e) {
-                                log.warn("Failed to deserialize cached embedding for key {}: {}", cacheKey, e.getMessage());
-                            }
-                            return Mono.<List<Float>>empty();
-                        })
+                    try {
+                        List<Double> cachedValues = objectMapper.readValue(cached,
+                                objectMapper.getTypeFactory().constructCollectionType(List.class, Double.class));
+                        if (!cachedValues.isEmpty()) {
+                            List<Float> embedding = cachedValues.stream().map(Double::floatValue)
+                                    .collect(Collectors.toList());
+                            return Mono.just(embedding);
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to deserialize cached embedding for key {}: {}", cacheKey, e.getMessage());
+                    }
+                    return Mono.<List<Float>>empty();
+                })
                         .orElseGet(() -> Mono.empty()))
                 .switchIfEmpty(milvusStoreService.getEmbedding(text, modelCategory, modelName, teamId)
                         .flatMap(embedding -> Mono.fromRunnable(() -> {
-                                    try {
-                                        List<Double> toCache = embedding.stream().map(Float::doubleValue).toList();
-                                        redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(toCache), EMBEDDING_CACHE_TTL);
-                                    } catch (Exception e) {
-                                        log.warn("Failed to cache embedding for key {}: {}", cacheKey, e.getMessage());
-                                    }
-                                })
+                            try {
+                                List<Double> toCache = embedding.stream().map(Float::doubleValue).toList();
+                                redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(toCache),
+                                        EMBEDDING_CACHE_TTL);
+                            } catch (Exception e) {
+                                log.warn("Failed to cache embedding for key {}: {}", cacheKey, e.getMessage());
+                            }
+                        })
                                 .subscribeOn(Schedulers.boundedElastic())
                                 .thenReturn(embedding)));
     }
 
     private Mono<Void> finalizeEmbedding(KnowledgeHubDocument document,
-                                         KnowledgeHubCollection collection,
-                                         int embeddedCount) {
-        document.setStatus("AI_READY");
+            KnowledgeHubCollection collection,
+            int embeddedCount) {
+        document.setStatus(DocumentStatus.AI_READY);
         document.setTotalEmbeddings(embeddedCount);
         document.setProcessingModel(collection.getEmbeddingModelName());
         document.setErrorMessage(null);
 
         return documentRepository.save(document)
                 .doOnSuccess(this::publishStatusUpdate)
+                .flatMap(savedDocument -> {
+                    // Automatically trigger Knowledge Graph extraction (entities + relationships)
+                    // when document becomes AI_READY
+                    if (graphExtractionJobService != null) {
+                        return graphExtractionJobService.queueExtraction(
+                                savedDocument.getDocumentId(),
+                                savedDocument.getTeamId(),
+                                "all", // Extract both entities and relationships
+                                false // Don't force re-extraction if already extracted
+                        )
+                                .doOnSuccess(job -> log.info(
+                                        "Automatically queued Knowledge Graph extraction job {} for document {} (team {}) after reaching AI_READY status",
+                                        job.getId(), savedDocument.getDocumentId(), savedDocument.getTeamId()))
+                                .doOnError(error -> log.warn(
+                                        "Failed to auto-queue Knowledge Graph extraction for document {} (team {}): {}",
+                                        savedDocument.getDocumentId(), savedDocument.getTeamId(), error.getMessage()))
+                                .onErrorResume(error -> Mono.empty()) // Don't fail the embedding process if graph
+                                                                      // extraction fails
+                                .thenReturn(savedDocument);
+                    } else {
+                        log.debug(
+                                "GraphExtractionJobService not available; skipping automatic Knowledge Graph extraction");
+                        return Mono.just(savedDocument);
+                    }
+                })
                 .then();
     }
 
     private Mono<Void> handleEmbeddingFailure(KnowledgeHubDocument document, Throwable error) {
-        document.setStatus("FAILED");
+        document.setStatus(DocumentStatus.FAILED);
         document.setErrorMessage("Embedding failed: " + error.getMessage());
 
         return documentRepository.save(document)
@@ -879,7 +1129,7 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
             Map<String, Object> statusUpdate = new HashMap<>();
             statusUpdate.put("type", "DOCUMENT_STATUS_UPDATE");
             statusUpdate.put("documentId", document.getDocumentId());
-            statusUpdate.put("status", document.getStatus());
+            statusUpdate.put("status", document.getStatus() != null ? document.getStatus().name() : null);
             statusUpdate.put("teamId", document.getTeamId());
             statusUpdate.put("collectionId", document.getCollectionId());
             statusUpdate.put("fileName", document.getFileName());
@@ -892,7 +1142,8 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
 
             boolean sent = executionMessageChannel.send(MessageBuilder.withPayload(statusUpdate).build());
             if (!sent) {
-                log.warn("Failed to publish document embedding status update for document {}", document.getDocumentId());
+                log.warn("Failed to publish document embedding status update for document {}",
+                        document.getDocumentId());
             }
         } catch (Exception e) {
             log.error("Error publishing status update for document {}", document.getDocumentId(), e);
@@ -910,5 +1161,120 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
         }
         return EMBEDDING_CACHE_PREFIX + documentId + ":" + modelName + ":" + suffix;
     }
-}
 
+    /**
+     * Decrypt sensitive fields in ProcessedDocumentDto after reading from S3.
+     * Decrypts chunk text and metadata fields.
+     * 
+     * @param processedDoc The processed document DTO to decrypt
+     * @param teamId       The team ID for key derivation
+     */
+    /**
+     * Decrypt sensitive fields in ProcessedDocumentDto after reading from S3.
+     * Decrypts chunk text and metadata fields.
+     * 
+     * @param processedDoc The processed document DTO to decrypt
+     * @param teamId       The team ID for key derivation
+     */
+    private Mono<Void> decryptProcessedDocumentDto(ProcessedDocumentDto processedDoc, String teamId) {
+        if (processedDoc == null) {
+            return Mono.empty();
+        }
+
+        String keyVersion = processedDoc.getEncryptionKeyVersion();
+        if (keyVersion == null || keyVersion.isEmpty()) {
+            keyVersion = "v1"; // Default to v1 for legacy data
+        }
+        final String finalKeyVersion = keyVersion;
+
+        List<Mono<Void>> tasks = new ArrayList<>();
+
+        // Decrypt chunk text
+        if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
+            tasks.add(Flux.fromIterable(processedDoc.getChunks())
+                    .flatMap(chunk -> {
+                        if (chunk.getText() != null && !chunk.getText().isEmpty()) {
+                            return chunkEncryptionService.decryptChunkText(chunk.getText(), teamId, finalKeyVersion)
+                                    .map(decrypted -> {
+                                        chunk.setText(decrypted);
+                                        return chunk;
+                                    })
+                                    .onErrorResume(e -> {
+                                        log.warn(
+                                                "Failed to decrypt chunk text for team {} with key version {}: {}. Keeping encrypted value.",
+                                                teamId, finalKeyVersion, e.getMessage());
+                                        return Mono.empty();
+                                    });
+                        }
+                        return Mono.empty();
+                    })
+                    .then());
+        }
+
+        // Decrypt sensitive metadata fields
+        if (processedDoc.getExtractedMetadata() != null) {
+            ProcessedDocumentDto.ExtractedMetadata metadata = processedDoc.getExtractedMetadata();
+
+            tasks.add(decryptMetadataField(metadata.getTitle(), teamId, finalKeyVersion)
+                    .doOnNext(metadata::setTitle).then());
+            tasks.add(decryptMetadataField(metadata.getAuthor(), teamId, finalKeyVersion)
+                    .doOnNext(metadata::setAuthor).then());
+            tasks.add(decryptMetadataField(metadata.getSubject(), teamId, finalKeyVersion)
+                    .doOnNext(metadata::setSubject).then());
+            tasks.add(decryptMetadataField(metadata.getKeywords(), teamId, finalKeyVersion)
+                    .doOnNext(metadata::setKeywords).then());
+            tasks.add(decryptMetadataField(metadata.getCreator(), teamId, finalKeyVersion)
+                    .doOnNext(metadata::setCreator).then());
+            tasks.add(decryptMetadataField(metadata.getProducer(), teamId, finalKeyVersion)
+                    .doOnNext(metadata::setProducer).then());
+            tasks.add(decryptMetadataField(metadata.getFormTitle(), teamId, finalKeyVersion)
+                    .doOnNext(metadata::setFormTitle).then());
+            tasks.add(decryptMetadataField(metadata.getFormNumber(), teamId, finalKeyVersion)
+                    .doOnNext(metadata::setFormNumber).then());
+        }
+
+        // Decrypt form field values
+        if (processedDoc.getFormFields() != null && !processedDoc.getFormFields().isEmpty()) {
+            tasks.add(Flux.fromIterable(processedDoc.getFormFields())
+                    .flatMap(field -> {
+                        if (field.getValue() != null && !field.getValue().isEmpty()) {
+                            return chunkEncryptionService.decryptChunkText(field.getValue(), teamId, finalKeyVersion)
+                                    .map(decrypted -> {
+                                        field.setValue(decrypted);
+                                        return field;
+                                    })
+                                    .onErrorResume(e -> {
+                                        log.debug(
+                                                "Failed to decrypt form field value for team {}: {}. Keeping encrypted value.",
+                                                teamId, e.getMessage());
+                                        return Mono.empty();
+                                    });
+                        }
+                        return Mono.empty();
+                    })
+                    .then());
+        }
+
+        return Flux.merge(tasks)
+                .then()
+                .doOnSuccess(v -> log.debug("Decrypted processed document DTO for team {} with key version {}", teamId,
+                        finalKeyVersion))
+                .onErrorResume(e -> {
+                    log.warn(
+                            "Failed to decrypt some fields in processed document DTO for team {}: {}. Some fields may remain encrypted.",
+                            teamId, e.getMessage());
+                    return Mono.empty(); // Continue even if decryption fails
+                });
+    }
+
+    private Mono<String> decryptMetadataField(String text, String teamId, String keyVersion) {
+        if (text == null || text.isEmpty()) {
+            return Mono.empty();
+        }
+        return chunkEncryptionService.decryptChunkText(text, teamId, keyVersion)
+                .onErrorResume(e -> {
+                    log.warn("Failed to decrypt metadata field: {}", e.getMessage());
+                    return Mono.empty();
+                });
+    }
+}

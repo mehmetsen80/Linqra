@@ -178,8 +178,6 @@ const authService = {
 
   handleSSOCallback: async (code) => {
     try {
-        console.log('Making SSO callback request with code:', code);
-        console.log('Current redirect URI:', process.env.REACT_APP_OAUTH2_REDIRECT_URI);
         
         const response = await axiosInstance.post('/api/auth/sso/callback', { code });
         // console.log('SSO callback full response:', response);

@@ -13,12 +13,12 @@ export default defineConfig(({ mode }) => {
   console.log('API Gateway URL:', apiGatewayUrl);
 
   // HTTPS configuration based on environment
-  const httpsConfig = mode === 'production' 
+  const httpsConfig = mode === 'production'
     ? false  // In production, SSL is handled by load balancer/reverse proxy
     : {
-        key: fs.readFileSync(path.resolve(__dirname, '../keys/edge-private.key')),
-        cert: fs.readFileSync(path.resolve(__dirname, '../keys/edge-certificate.crt')),
-      };
+      key: fs.readFileSync(path.resolve(__dirname, '../keys/edge-private.key')),
+      cert: fs.readFileSync(path.resolve(__dirname, '../keys/edge-certificate.crt')),
+    };
 
   return {
     plugins: [react()],
@@ -47,9 +47,7 @@ export default defineConfig(({ mode }) => {
         include: [/node_modules/],
       },
     },
-    define: {
-      'process.env': env
-    },
+
     optimizeDeps: {
       include: ['react', 'react-dom'],
     },
@@ -62,6 +60,6 @@ export default defineConfig(({ mode }) => {
       }
     },
     // Environment variables that should be available in the app
-    envPrefix: 'VITE_',
+    envPrefix: ['VITE_', 'REACT_APP_'],
   };
 });

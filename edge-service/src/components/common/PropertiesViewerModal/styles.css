@@ -1,0 +1,34 @@
+.properties-viewer-modal .modal-content {
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.properties-viewer-modal .modal-header {
+  background-color: #e9ecef;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.properties-viewer-modal .modal-title {
+  color: #212529 !important;
+  font-weight: 600;
+}
+
+.properties-viewer-modal .modal-body {
+  padding: 1.5rem;
+}
+
+.properties-viewer-modal .modal-footer {
+  background-color: #e9ecef;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.properties-viewer-modal code {
+  background-color: #f8f9fa;
+  padding: 0.125rem 0.25rem;
+  border-radius: 3px;
+  font-size: 0.875rem;
+}
+

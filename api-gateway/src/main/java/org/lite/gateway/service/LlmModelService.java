@@ -16,6 +16,16 @@ public interface LlmModelService {
     Flux<LlmModel> getActiveModels();
     
     /**
+     * Get all chat models (category = 'chat')
+     */
+    Flux<LlmModel> getChatModels();
+    
+    /**
+     * Get active chat models only (category = 'chat' and active = true)
+     */
+    Flux<LlmModel> getActiveChatModels();
+    
+    /**
      * Get model by name
      */
     Mono<LlmModel> getModelByName(String modelName);

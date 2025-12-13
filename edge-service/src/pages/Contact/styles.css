@@ -1,0 +1,48 @@
+/* Contact Page Styles */
+
+.contact-hero-bg {
+    background: linear-gradient(135deg, #0f766e 0%, #115e59 100%) !important;
+}
+
+.contact-content {
+    background: #fff;
+    padding: 6rem 2rem;
+    min-height: 50vh;
+    /* Ensure some height since form is gone */
+}
+
+.contact-container {
+    max-width: 800px;
+    margin: 0 auto;
+    text-align: center;
+}
+
+.contact-info-card {
+    background: #f8fafc;
+    padding: 3rem;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    display: inline-block;
+    /* Center the card */
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.contact-label {
+    font-size: 1.1rem;
+    color: #64748b;
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
+.contact-email {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #0f172a;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.contact-email:hover {
+    color: #0f766e;
+    /* Teal-700 matching hero */
+}

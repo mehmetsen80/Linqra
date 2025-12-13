@@ -20,24 +20,24 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const location = useLocation();
   const { loadEnvironment } = useEnvironment();
-  
+
   // Define the standard auth state structure
   const createAuthState = (user, token, isAuthenticated) => ({
     user,
     token,
     isAuthenticated
   });
-  
+
   // Add refreshTimerRef
   const refreshTimerRef = useRef(null);
   const authStateRef = useRef(createAuthState(null, null, false));
-  
+
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  
+
   const navigate = useNavigate();
 
 
@@ -48,12 +48,12 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(false);
     authService.logout();
   }, []);
-  
+
   const handleRefreshToken = useCallback(async () => {
     try {
       const authData = JSON.parse(localStorage.getItem('authState') || '{}');
       const refreshToken = authData.refreshToken;
-      
+
       if (!refreshToken) {
         // console.log('No refresh token available, logging out');
         logout();
@@ -61,13 +61,13 @@ export const AuthProvider = ({ children }) => {
       }
 
       const response = await authService.refreshToken(refreshToken);
-      
+
       if (response.success && response.data) {
         // Only update state if the user data has actually changed
         if (JSON.stringify(user) !== JSON.stringify(response.data.user)) {
           setUser(response.data.user);
         }
-        
+
         // Update auth state
         const authState = {
           user: response.data.user,
@@ -75,7 +75,7 @@ export const AuthProvider = ({ children }) => {
           refreshToken: response.data.refreshToken,
           isAuthenticated: true
         };
-        
+
         // Single source of truth in localStorage
         localStorage.setItem('authState', JSON.stringify(authState));
 
@@ -101,7 +101,7 @@ export const AuthProvider = ({ children }) => {
     if (newState.isAuthenticated && !newState.token) {
       return;
     }
-    
+
     try {
       const authState = {
         user: newState.user,
@@ -113,7 +113,7 @@ export const AuthProvider = ({ children }) => {
 
       // Update localStorage with single source of truth
       localStorage.setItem('authState', JSON.stringify(authState));
-      
+
       // Update state
       setUser(newState.user);
       setToken(newState.token);
@@ -123,7 +123,7 @@ export const AuthProvider = ({ children }) => {
       if (newState.token) {
         setupRefreshTokenTimer(newState.token);
       }
-      
+
       // console.log('Auth state updated:', {
       //   hasUser: !!newState.user,
       //   hasToken: !!newState.token,
@@ -222,7 +222,7 @@ export const AuthProvider = ({ children }) => {
 
       if (decoded.exp <= currentTime) {
         if (refreshing) return false;
-        
+
         setRefreshing(true);
         const refreshed = await handleRefreshToken();
         if (!refreshed) {
@@ -266,10 +266,10 @@ export const AuthProvider = ({ children }) => {
     if (isAuthenticated) {
       // Check token expiration immediately
       checkTokenExpiration();
-      
+
       // Set up a longer interval for token checks (e.g., every 5 minutes)
       const interval = setInterval(checkTokenExpiration, 300000); // 5 minutes
-      
+
       return () => {
         clearInterval(interval);
       };
@@ -279,7 +279,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, email, password) => {
     try {
       const response = await authService.registerUser(username, email, password);
-      
+
       if (response.data && response.data.token) {
         // Create auth state with all necessary info from the response
         const authState = {
@@ -304,7 +304,7 @@ export const AuthProvider = ({ children }) => {
           localStorage.setItem('lastLoginTime', new Date().toISOString());
           navigate('/dashboard');
         }, 100);
-        
+
         return true;
       } else {
         throw new Error('Invalid registration response - no token received');
@@ -333,7 +333,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('authState', JSON.stringify(authState));
 
         await loadEnvironment();
-        
+
         setTimeout(() => {
           localStorage.setItem('lastLoginTime', new Date().toISOString());
           navigate('/dashboard');
@@ -357,15 +357,15 @@ export const AuthProvider = ({ children }) => {
 
   const handleSSOCallback = async (code) => {
     const processingKey = `processing_${code}`;
-    
+
     try {
       // console.log('Starting SSO callback handling with code:', code);
-      
+
       if (sessionStorage.getItem(processingKey)) {
         // console.log('Code already being processed, waiting for result...');
         // Wait a bit for the first request to complete
         await new Promise(resolve => setTimeout(resolve, 1000));
-        
+
         // Check if we have a valid session after waiting
         const authState = localStorage.getItem('authState');
         if (authState) {
@@ -389,7 +389,7 @@ export const AuthProvider = ({ children }) => {
         // console.log('No valid session found after waiting');
         return false;
       }
-      
+
       sessionStorage.setItem(processingKey, 'true');
 
       const response = await authService.handleSSOCallback(code);
@@ -397,7 +397,7 @@ export const AuthProvider = ({ children }) => {
 
       if (response.error) {
         // console.log('SSO callback error detected:', response.error);
-        
+
         if (response.error === "Code already in use") {
           // Wait a bit and check for session
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -442,12 +442,12 @@ export const AuthProvider = ({ children }) => {
 
         updateAuthState(newAuthState);
         await loadEnvironment();
-        
+
         setTimeout(() => {
           localStorage.setItem('lastLoginTime', new Date().toISOString());
           navigate('/dashboard');
         }, 100);
-        
+
         return true;
       }
 
@@ -481,13 +481,13 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
       }
     };
-    
+
     checkAuthState();
   }, []);
 
   const handleSSOLogin = async () => {
     // console.log('handleSSOLogin');
-    
+
     // Check if we already have valid auth
     const currentAuthState = localStorage.getItem('authState');
     if (currentAuthState) {
@@ -511,20 +511,20 @@ export const AuthProvider = ({ children }) => {
       timestamp
     };
     sessionStorage.setItem('oauth_state', JSON.stringify(stateData));
-    
+
     // Get environment variables
-    const keycloakUrl = process.env.REACT_APP_KEYCLOAK_URL;
-    const clientId = process.env.REACT_APP_KEYCLOAK_CLIENT_ID;
+    const keycloakUrl = import.meta.env.REACT_APP_KEYCLOAK_URL;
+    const clientId = import.meta.env.REACT_APP_KEYCLOAK_CLIENT_ID;
     const redirectUri = encodeURIComponent(window.location.origin + '/callback');
     // console.log('Redirect URI:', {
     //   original: window.location.origin + '/callback',
     //   encoded: redirectUri
     // });
-    const realm = process.env.REACT_APP_KEYCLOAK_REALM;
-    
+    const realm = import.meta.env.REACT_APP_KEYCLOAK_REALM;
+
     // Build auth URL with state parameter and timestamp
     const authUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=openid&timestamp=${timestamp}`;
-    
+
     // Redirect to Keycloak
     window.location.href = authUrl;
   };
@@ -532,9 +532,9 @@ export const AuthProvider = ({ children }) => {
   const setupRefreshTokenTimer = useCallback((token) => {
     try {
       if (!token) return;
-      
+
       // console.log('Setting up refresh timer...');
-      
+
       // Clear any existing timer
       if (refreshTimerRef.current) {
         // console.log('Clearing existing timer');
@@ -545,7 +545,7 @@ export const AuthProvider = ({ children }) => {
       const expiresIn = decodedToken.exp * 1000;
       const currentTime = Date.now();
       const timeUntilExpiry = expiresIn - currentTime;
-      
+
       if (timeUntilExpiry < 30000) {
         // console.log('Token expired or expiring soon, logging out');
         logout();
@@ -554,7 +554,7 @@ export const AuthProvider = ({ children }) => {
 
       const refreshTime = timeUntilExpiry - 120000;
       // console.log('Setting up new refresh timer for', refreshTime / 1000, 'seconds');
-      
+
       refreshTimerRef.current = setTimeout(() => {
         // console.log('Refresh timer triggered');
         refreshToken();
@@ -581,10 +581,10 @@ export const AuthProvider = ({ children }) => {
       }
 
       const response = await authService.refreshToken(currentAuthState.refreshToken);
-      
+
       if (response.success && response.data) {
         const { token, refreshToken, user } = response.data;
-        
+
         const newAuthState = {
           user,
           token,

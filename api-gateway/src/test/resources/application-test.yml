@@ -40,7 +40,7 @@ spring:
           jwk-set-uri: http://localhost:8281/test/certs
   data:
     mongodb:
-      uri: ${MONGO_GATEWAY_URL:mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}
+      uri: ${MONGO_GATEWAY_URL:mongodb://${vault.mongodb.username:root}:${vault.mongodb.password:mongopw}@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}
       database: Linqra
       auto-index-creation: true  # Explicitly enable auto-index creation (default is true)
   cloud:
@@ -88,13 +88,13 @@ notifications:
   email:
     host: test-host
     port: 587
-    username: test-username
-    password: test-password
+    username: ${vault.smtp.username:test-username}
+    password: ${vault.smtp.password:test-password}
     to: test@example.com
     enabled: false
   slack:
-    webhook-url: https://test-webhook-url
-    enabled: false
+    webhook-url: ${vault.slack.webhook.url:https://test-webhook-url}
+    enabled: ${vault.slack.enabled:false}
 
 cors:
   allowed-origins: http://localhost:3000,https://localhost:3000,https://localhost:8080,https://your-prod-domain.com
@@ -110,13 +110,13 @@ milvus:
   host: localhost
   port: 19530
   username: test-user
-  password: test-pass
+  password: ${vault.milvus.password:test-pass}
 
 # Knowledge Hub S3 Configuration
 aws:
-  region: us-west-2
+  region: ${vault.aws.region:us-west-2}
   s3:
-    bucket: linqra-knowledge-hub-test
+    bucket: ${vault.aws.s3.bucket.name:linqra-knowledge-hub-test}
 
 linqra:
   knowledgehub:

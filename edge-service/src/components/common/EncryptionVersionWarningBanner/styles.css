@@ -1,0 +1,10 @@
+/* Encryption Version Warning Banner Styles */
+.encryption-version-warning-banner {
+  /* Add any custom styles here if needed */
+}
+
+.encryption-version-warning-banner .alert-heading {
+  display: flex;
+  align-items: center;
+}
+

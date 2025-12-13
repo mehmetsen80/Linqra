@@ -26,12 +26,20 @@ body {
 }
 
 /* Make sure all headings use Rubik */
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   font-family: 'Rubik', sans-serif;
 }
 
 /* Make sure form elements inherit the font */
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
 }
 
@@ -40,7 +48,7 @@ button, input, select, textarea {
   font-style: normal;
   font-weight: 900;
   src: url('/fonts/fa-solid-900.woff2') format('woff2'),
-       url('/fonts/fa-solid-900.ttf') format('truetype');
+    url('/fonts/fa-solid-900.ttf') format('truetype');
 }
 
 @font-face {
@@ -48,7 +56,7 @@ button, input, select, textarea {
   font-style: normal;
   font-weight: 400;
   src: url('/fonts/fa-regular-400.woff2') format('woff2'),
-       url('/fonts/fa-regular-400.ttf') format('truetype');
+    url('/fonts/fa-regular-400.ttf') format('truetype');
 }
 
 @font-face {
@@ -56,5 +64,5 @@ button, input, select, textarea {
   font-style: normal;
   font-weight: 400;
   src: url('/fonts/fa-brands-400.woff2') format('woff2'),
-       url('/fonts/fa-brands-400.ttf') format('truetype');
+    url('/fonts/fa-brands-400.ttf') format('truetype');
 }

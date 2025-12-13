@@ -7,6 +7,7 @@ import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
 import org.lite.gateway.service.KnowledgeHubDocumentProcessingService;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
+import org.lite.gateway.service.ChatExecutionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -43,6 +44,15 @@ public class WebSocketConfig {
     private final Sinks.Many<String> executionMessagesSink = Sinks.many()
         .multicast()
         .onBackpressureBuffer(1024, false);
+    private final Sinks.Many<String> chatMessagesSink = Sinks.many()
+        .multicast()
+        .onBackpressureBuffer(1024, false);
+    private final Sinks.Many<String> graphExtractionMessagesSink = Sinks.many()
+        .multicast()
+        .onBackpressureBuffer(1024, false);
+    private final Sinks.Many<String> collectionExportMessageSink = Sinks.many()
+        .multicast()
+        .onBackpressureBuffer(1024, false);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
     
@@ -57,6 +67,9 @@ public class WebSocketConfig {
 
     @Autowired(required = false)
     private KnowledgeHubDocumentEmbeddingService documentEmbeddingService;
+    
+    @Autowired(required = false)
+    private ChatExecutionService chatExecutionService;
 
     @Bean("healthMessageChannel")
     public MessageChannel messageChannel(ObjectMapper objectMapper) {
@@ -140,6 +153,129 @@ public class WebSocketConfig {
         };
     }
 
+    @Bean("chatMessageChannel")
+    public MessageChannel chatMessageChannel(ObjectMapper objectMapper) {
+        return new AbstractMessageChannel() {
+            @Override
+            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
+                try {
+                    // Check if there are any active sessions
+                    if (sessions.isEmpty()) {
+                        log.debug("💬 No active WebSocket sessions, skipping chat message emission");
+                        return true;
+                    }
+
+                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
+                    log.debug("💬 WebSocket sending chat message: {}", jsonPayload);
+                    Sinks.EmitResult result;
+                    int attempts = 0;
+                    do {
+                        result = chatMessagesSink.tryEmitNext(jsonPayload);
+                        if (result.isFailure()) {
+                            attempts++;
+                            log.warn("Attempt {} failed to emit chat message. Reason: {}. Retrying...", 
+                                attempts, result.name());
+                            Thread.sleep(100); // Small delay before retry
+                        }
+                    } while (result.isFailure() && attempts < 3);
+                    
+                    if (result.isFailure()) {
+                        log.error("Failed to emit chat message after {} attempts. Reason: {}. Payload: {}", 
+                            attempts, result.name(), jsonPayload);
+                        return false;
+                    }
+                    log.debug("Successfully emitted chat message after {} attempts", attempts + 1);
+                    return true;
+                } catch (Exception e) {
+                    log.error("Error converting chat message to JSON", e);
+                    return false;
+                }
+            }
+        };
+    }
+
+    @Bean("graphExtractionMessageChannel")
+    public MessageChannel graphExtractionMessageChannel(ObjectMapper objectMapper) {
+        return new AbstractMessageChannel() {
+            @Override
+            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
+                try {
+                    // Check if there are any active sessions
+                    if (sessions.isEmpty()) {
+                        log.debug("📊 No active WebSocket sessions, skipping graph extraction message emission");
+                        return true;
+                    }
+
+                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
+                    log.debug("📊 WebSocket sending graph extraction message: {}", jsonPayload);
+                    Sinks.EmitResult result;
+                    int attempts = 0;
+                    do {
+                        result = graphExtractionMessagesSink.tryEmitNext(jsonPayload);
+                        if (result.isFailure()) {
+                            attempts++;
+                            log.warn("Attempt {} failed to emit graph extraction message. Reason: {}. Retrying...", 
+                                attempts, result.name());
+                            Thread.sleep(100); // Small delay before retry
+                        }
+                    } while (result.isFailure() && attempts < 3);
+                    
+                    if (result.isFailure()) {
+                        log.error("Failed to emit graph extraction message after {} attempts. Reason: {}. Payload: {}", 
+                            attempts, result.name(), jsonPayload);
+                        return false;
+                    }
+                    log.debug("Successfully emitted graph extraction message after {} attempts", attempts + 1);
+                    return true;
+                } catch (Exception e) {
+                    log.error("Error converting graph extraction message to JSON", e);
+                    return false;
+                }
+            }
+        };
+    }
+
+    @Bean("collectionExportMessageChannel")
+    public MessageChannel collectionExportMessageChannel(ObjectMapper objectMapper) {
+        return new AbstractMessageChannel() {
+            @Override
+            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
+                try {
+                    // Check if there are any active sessions
+                    if (sessions.isEmpty()) {
+                        log.debug("📦 No active WebSocket sessions, skipping export message emission");
+                        return true;
+                    }
+
+                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
+                    log.debug("📦 WebSocket sending export message: {}", jsonPayload);
+                    Sinks.EmitResult result;
+                    int attempts = 0;
+                    do {
+                        result = collectionExportMessageSink.tryEmitNext(jsonPayload);
+                        if (result.isFailure()) {
+                            attempts++;
+                            log.warn("Attempt {} failed to emit export message. Reason: {}. Retrying...", 
+                                attempts, result.name());
+                            Thread.sleep(100); // Small delay before retry
+                        }
+                    } while (result.isFailure() && attempts < 3);
+                    
+                    if (result.isFailure()) {
+                        log.error("Failed to emit export message after {} attempts. Reason: {}. Payload: {}", 
+                            attempts, result.name(), jsonPayload);
+                        return false;
+                    }
+                    log.debug("Successfully emitted export message after {} attempts", attempts + 1);
+                    return true;
+                } catch (Exception e) {
+                    log.error("Error converting export message to JSON", e);
+                    return false;
+                }
+            }
+        };
+    }
+
     @Bean
     public HandlerMapping webSocketHandlerMapping() {
         Map<String, WebSocketHandler> map = new HashMap<>();
@@ -168,10 +304,13 @@ public class WebSocketConfig {
             sessions.put(sessionId, session);
             log.info("WebSocket session connected: {}", sessionId);
 
-            // Handle outbound messages - merge health and execution updates
+            // Handle outbound messages - merge health, execution, chat, graph extraction, and export updates
             Flux<WebSocketMessage> outbound = Flux.merge(
                     messagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/health")),
-                    executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution"))
+                    executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution")),
+                    chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat")),
+                    graphExtractionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/graph-extraction")),
+                    collectionExportMessageSink.asFlux().map(msg -> createStompFrame(msg, "/topic/collection-export"))
                 )
                 .onBackpressureBuffer(256)
                 .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
@@ -348,6 +487,12 @@ public class WebSocketConfig {
                         null,
                         error -> log.error("Error processing document embedding command: {}", error.getMessage(), error)
                 );
+            } else if (destination != null && destination.startsWith("/app/chat-cancel")) {
+                log.info("Received chat cancel command: {}", body);
+                processChatCancelCommand(body).subscribe(
+                        null,
+                        error -> log.error("Error processing chat cancel command: {}", error.getMessage(), error)
+                );
             }
         } catch (Exception e) {
             log.error("Error processing SEND command: {}", e.getMessage(), e);
@@ -465,6 +610,38 @@ public class WebSocketConfig {
                     .then();
         } catch (Exception e) {
             log.error("Error processing document embedding command: {}", e.getMessage(), e);
+            return Mono.empty();
+        }
+    }
+
+    private Mono<Void> processChatCancelCommand(String body) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, String> command = objectMapper.readValue(body, Map.class);
+            String conversationId = command.get("conversationId");
+            
+            if (conversationId == null) {
+                log.warn("Invalid chat cancel command: missing conversationId");
+                return Mono.empty();
+            }
+            
+            log.info("Processing chat cancel command - conversationId: {}", conversationId);
+            
+            if (chatExecutionService == null) {
+                log.warn("Chat execution service not available");
+                return Mono.empty();
+            }
+            
+            // Cancel streaming for this conversation
+            if (chatExecutionService instanceof org.lite.gateway.service.impl.ChatExecutionServiceImpl) {
+                ((org.lite.gateway.service.impl.ChatExecutionServiceImpl) chatExecutionService)
+                    .cancelStreaming(conversationId);
+                log.info("Chat streaming cancelled for conversation: {}", conversationId);
+            }
+            
+            return Mono.empty();
+        } catch (Exception e) {
+            log.error("Error processing chat cancel command: {}", e.getMessage(), e);
             return Mono.empty();
         }
     }

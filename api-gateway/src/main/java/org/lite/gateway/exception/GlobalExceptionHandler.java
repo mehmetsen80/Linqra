@@ -1,10 +1,17 @@
 package org.lite.gateway.exception;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.ErrorCode;
 import org.lite.gateway.dto.ErrorResponse;
+import org.lite.gateway.entity.AuditLog;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.service.AuditService;
+import org.lite.gateway.service.TeamContextService;
+import org.lite.gateway.service.UserContextService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -12,7 +19,12 @@ import reactor.core.publisher.Mono;
 
 @Slf4j
 @RestControllerAdvice
+@RequiredArgsConstructor
 public class GlobalExceptionHandler {
+
+    private final AuditService auditService;
+    private final UserContextService userContextService;
+    private final TeamContextService teamContextService;
 
     @ExceptionHandler(TeamOperationException.class)
     public Mono<ResponseEntity<ErrorResponse>> handleTeamOperationException(TeamOperationException ex) {
@@ -128,5 +140,67 @@ public class GlobalExceptionHandler {
                 ex.getMessage(),
                 HttpStatus.BAD_REQUEST.value()
             )));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleAccessDeniedException(AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        
+        // Extract user and team context for audit logging
+        Mono<String> usernameMono = userContextService.getCurrentUsername()
+                .onErrorResume(e -> {
+                    log.debug("Could not extract username from security context for access denied event: {}", e.getMessage());
+                    return Mono.just(UserContextService.SYSTEM_USER);
+                });
+        
+        Mono<String> teamIdMono = teamContextService.getTeamFromContext()
+                .onErrorResume(e -> {
+                    log.debug("Could not extract teamId from security context for access denied event: {}", e.getMessage());
+                    return Mono.just((String) null);
+                });
+        
+        // Log access denied event to audit logs
+        return Mono.zip(usernameMono, teamIdMono)
+                .flatMap(tuple -> {
+                    String username = tuple.getT1();
+                    String teamId = tuple.getT2();
+                    
+                    AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
+                            .reason("Access denied: " + ex.getMessage())
+                            .build();
+                    
+                    // Log the access denied event
+                    return auditService.logEvent(
+                            username,
+                            username,
+                            teamId,
+                            null, // ipAddress (not available in exception handler without ServerWebExchange)
+                            null, // userAgent (not available in exception handler without ServerWebExchange)
+                            AuditEventType.ACCESS_DENIED,
+                            "READ", // Default action
+                            "RESOURCE", // Default resource type
+                            null, // resourceId (not available from exception alone)
+                            null, // documentId
+                            null, // collectionId
+                            "DENIED",
+                            metadata,
+                            null // complianceFlags
+                    ).doOnError(error -> log.error("Failed to log access denied audit event: {}", error.getMessage(), error))
+                     .onErrorResume(error -> Mono.empty()) // Don't fail the response if audit logging fails
+                     .then(Mono.just(ResponseEntity
+                             .status(HttpStatus.FORBIDDEN)
+                             .body(ErrorResponse.fromErrorCode(
+                                     ErrorCode.FORBIDDEN,
+                                     ex.getMessage(),
+                                     HttpStatus.FORBIDDEN.value()
+                             ))));
+                })
+                .switchIfEmpty(Mono.just(ResponseEntity
+                        .status(HttpStatus.FORBIDDEN)
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.FORBIDDEN,
+                                ex.getMessage(),
+                                HttpStatus.FORBIDDEN.value()
+                        ))));
     }
 }

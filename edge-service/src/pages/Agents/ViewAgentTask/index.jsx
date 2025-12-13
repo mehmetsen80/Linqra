@@ -904,7 +904,7 @@ function ViewAgentTask() {
                 </h4>
                 <div className="d-flex gap-2">
                     <Button 
-                        variant="outline-secondary" 
+                        variant="secondary" 
                         onClick={() => navigate(`/agents/${task?.agentId}`)}
                     >
                         <HiArrowLeft className="me-1" /> Back to Agent
@@ -937,7 +937,7 @@ function ViewAgentTask() {
                     >
                         <div>
                             <Button
-                                variant="outline-primary"
+                                variant="primary"
                                 onClick={openQuestionModal}
                                 disabled={!task?.enabled || executing}
                             >
@@ -955,7 +955,7 @@ function ViewAgentTask() {
                     >
                         <div>
                             <Button 
-                                variant={task?.enabled ? 'warning' : 'success'}
+                                variant={task?.enabled ? 'secondary' : 'success'}
                                 onClick={handleEnableDisable}
                                 disabled={!canEditTask}
                             >
@@ -973,7 +973,7 @@ function ViewAgentTask() {
                     >
                         <div>
                             <Button 
-                                variant="outline-primary" 
+                                variant="secondary" 
                                 onClick={() => setShowMetadataModal(true)}
                                 disabled={!canEditTask}
                             >

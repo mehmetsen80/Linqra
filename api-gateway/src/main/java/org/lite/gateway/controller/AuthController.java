@@ -2,14 +2,20 @@ package org.lite.gateway.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.annotation.AuditLog;
 import org.lite.gateway.dto.*;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.service.JwtService;
 import org.lite.gateway.service.KeycloakService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
+import org.lite.gateway.service.impl.AuditServiceImpl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
@@ -28,10 +34,24 @@ public class AuthController {
     private final KeycloakService keycloakService;
     private final JwtService jwtService;
     private final UserContextService userContextService;
+    private final AuditServiceImpl auditServiceImpl;
 
     @PostMapping("/login")
-    public Mono<ResponseEntity<AuthResponse>> login(@RequestBody LoginRequest request) {
-        return userService.login(request)
+    @AuditLog(
+        eventType = AuditEventType.USER_LOGIN,
+        action = AuditActionType.READ,
+        resourceType = AuditResourceType.AUTH,
+        reason = "User login attempt",
+        logOnSuccessOnly = false  // Log both success and failure
+    )
+    public Mono<ResponseEntity<AuthResponse>> login(
+            @RequestBody LoginRequest request,
+            ServerWebExchange exchange) {
+        // Extract IP address and user agent from exchange
+        String ipAddress = auditServiceImpl.extractClientIpAddress(exchange);
+        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        
+        return userService.login(request, ipAddress, userAgent)
             .map(ResponseEntity::ok)
             .onErrorResume(e -> Mono.just(ResponseEntity.badRequest()
                 .body(AuthResponse.builder()
@@ -40,8 +60,21 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public Mono<ResponseEntity<AuthResponse>> register(@RequestBody RegisterRequest request) {
-        return userService.register(request)
+    @AuditLog(
+        eventType = AuditEventType.USER_CREATED,
+        action = AuditActionType.CREATE,
+        resourceType = AuditResourceType.USER,
+        reason = "User registration",
+        logOnSuccessOnly = false  // Log both success and failure
+    )
+    public Mono<ResponseEntity<AuthResponse>> register(
+            @RequestBody RegisterRequest request,
+            ServerWebExchange exchange) {
+        // Extract IP address and user agent from exchange
+        String ipAddress = auditServiceImpl.extractClientIpAddress(exchange);
+        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        
+        return userService.register(request, ipAddress, userAgent)
             .doOnSuccess(response -> log.info("Registration successful for user: {}", request.getUsername()))
             .doOnError(e -> log.error("Registration failed: {}", e.getMessage()))
             .map(ResponseEntity::ok)
@@ -57,11 +90,17 @@ public class AuthController {
     }
 
     @PostMapping("/sso/callback")
-    public Mono<ResponseEntity<Object>> handleCallback(@RequestBody KeycloakCallbackRequest request) {
+    public Mono<ResponseEntity<Object>> handleCallback(
+            @RequestBody KeycloakCallbackRequest request,
+            ServerWebExchange exchange) {
         log.info("=== SSO Callback Request Received ===");
         log.info("Request code: {}", request.code());
         
-        return keycloakService.handleCallback(request.code())
+        // Extract IP address and user agent from exchange
+        String ipAddress = auditServiceImpl.extractClientIpAddress(exchange);
+        String userAgent = exchange.getRequest().getHeaders().getFirst("User-Agent");
+        
+        return keycloakService.handleCallback(request.code(), ipAddress, userAgent)
                 .doOnSubscribe(s -> log.info("Starting SSO callback processing"))
                 .doOnSuccess(response -> {
                     log.info("SSO callback successful");
@@ -88,7 +127,15 @@ public class AuthController {
     }
 
     @PostMapping("/refresh")
-    public Mono<ResponseEntity<AuthResponse>> refreshToken(@RequestBody RefreshTokenRequest request) {
+    @AuditLog(
+        eventType = AuditEventType.TOKEN_REFRESHED,
+        action = AuditActionType.READ,
+        resourceType = AuditResourceType.AUTH,
+        reason = "Token refresh requested"
+    )
+    public Mono<ResponseEntity<AuthResponse>> refreshToken(
+            @RequestBody RefreshTokenRequest request,
+            ServerWebExchange exchange) {
         boolean isKeycloakToken = userContextService.isKeycloakToken(request.getRefresh_token());
         log.info("Token type: {}", isKeycloakToken ? "Keycloak" : "Standard");
 
@@ -152,14 +199,24 @@ public class AuthController {
     }
 
     @PostMapping("/test-refresh")
-    public Mono<ResponseEntity<AuthResponse>> testRefresh(@RequestBody RefreshTokenRequest request) {
+    public Mono<ResponseEntity<AuthResponse>> testRefresh(
+            @RequestBody RefreshTokenRequest request,
+            ServerWebExchange exchange) {
         log.info("Testing token refresh with token: {}", 
             request.getRefresh_token() != null ? request.getRefresh_token().substring(0, 10) + "..." : "null");
-        return refreshToken(request);
+        return refreshToken(request, exchange);
     }
 
     @PostMapping("/switch-team")
-    public Mono<ResponseEntity<AuthResponse>> switchTeam(@RequestBody SwitchTeamRequest request) {
+    @AuditLog(
+        eventType = AuditEventType.TEAM_SWITCHED,
+        action = AuditActionType.UPDATE,
+        resourceType = AuditResourceType.TEAM,
+        reason = "User switched teams"
+    )
+    public Mono<ResponseEntity<AuthResponse>> switchTeam(
+            @RequestBody SwitchTeamRequest request,
+            ServerWebExchange exchange) {
         log.info("Switching team for user: {} to team: {}", request.getUsername(), request.getTeamId());
         
         return userService.findByUsername(request.getUsername())

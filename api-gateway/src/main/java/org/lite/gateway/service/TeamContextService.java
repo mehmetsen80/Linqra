@@ -25,7 +25,10 @@ public class TeamContextService {
     private final ReactiveJwtDecoder keycloakJwtDecoder;
     private final UserContextService userContextService;
     
-    private Mono<String> getTeamFromContext() {
+    /**
+     * Get team from security context (for service layer use)
+     */
+    public Mono<String> getTeamFromContext() {
         return ReactiveSecurityContextHolder.getContext()
                 .map(SecurityContext::getAuthentication)
                 .map(Authentication::getPrincipal)

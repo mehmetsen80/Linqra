@@ -11,6 +11,7 @@ import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import { format, isValid, parseISO } from 'date-fns';
 import { Link, useNavigate } from 'react-router-dom';
 import AgentStats from '../../components/dashboard/AgentStats';
+import Footer from '../../components/common/Footer';
 import './styles.css';
 import CreateAgentModal from '../../components/agents/CreateAgentModal';
 
@@ -45,7 +46,7 @@ function Agents() {
             const response = await agentService.getAgentsByTeam(currentTeam.id);
             if (response.success) {
                 setAgents(response.data);
-                
+
                 // Fetch task counts for each agent
                 const counts = {};
                 await Promise.all(
@@ -152,13 +153,13 @@ function Agents() {
                         <Breadcrumb.Item linkAs={Link} linkProps={{ to: '/' }}>
                             Home
                         </Breadcrumb.Item>
-                        <Breadcrumb.Item 
-                            linkAs={Link} 
+                        <Breadcrumb.Item
+                            linkAs={Link}
                             linkProps={{ to: '/organizations' }}
                         >
                             {currentTeam?.organization?.name || 'Organization'}
                         </Breadcrumb.Item>
-                        <Breadcrumb.Item 
+                        <Breadcrumb.Item
                             onClick={() => currentTeam?.id && navigate(`/teams/${currentTeam.id}`)}
                             style={{ cursor: currentTeam?.id ? 'pointer' : 'default' }}
                         >
@@ -168,7 +169,7 @@ function Agents() {
                     </Breadcrumb>
 
                     {canEditAgent && (
-                        <Button 
+                        <Button
                             variant="primary"
                             onClick={() => setShowCreateAgentModal(true)}
                         >
@@ -185,88 +186,88 @@ function Agents() {
             )}
 
             <Card className="agents-table-card">
-                        <Card.Header className="text-start">
-                            <h5 className="mb-0">Agents{currentTeam?.name ? ` - ${currentTeam.name}` : ''}</h5>
-                        </Card.Header>
-                        <Card.Body>
-                            {agents.length === 0 ? (
-                                <div className="text-center py-5">
-                                    <i className="fas fa-robot fa-3x text-muted mb-3"></i>
-                                    <h5 className="text-muted">No agents found</h5>
-                                    <p className="text-muted">
-                                        {canEditAgent 
-                                            ? 'Create your first agent to get started' 
-                                            : 'No agents have been created yet'}
-                                    </p>
-                                </div>
-                            ) : (
-                                <Table hover responsive className="agents-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Name</th>
-                                            <th>Description</th>
-                                            <th>Status</th>
-                                            <th>Tasks</th>
-                                            <th>Created</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {agents.map((agent) => (
-                                            <tr 
-                                                key={agent.id}
-                                                onClick={() => handleRowClick(agent)}
-                                                style={{ cursor: 'pointer' }}
-                                            >
-                                                <td>
-                                                    <div className="agent-name">
-                                                        <i className="fas fa-robot me-2"></i>
-                                                        {agent.name}
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div className="agent-description">
-                                                        {agent.description || 'No description'}
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <Badge bg={agent.enabled ? 'success' : 'secondary'}>
-                                                        {agent.enabled ? 'Active' : 'Inactive'}
-                                                    </Badge>
-                                                </td>
-                                                <td>
-                                                    <Badge bg="info">
-                                                        {taskCounts[agent.id] !== undefined ? taskCounts[agent.id] : '...'} 
-                                                        {taskCounts[agent.id] === 1 ? ' task' : ' tasks'}
-                                                    </Badge>
-                                                </td>
-                                                <td>
-                                                    {formatDate(agent.createdAt)}
-                                                </td>
-                                                <td onClick={(e) => e.stopPropagation()}>
-                                                    {canEditAgent && (
-                                                        <div className="action-buttons">
-                                                            <Button
-                                                                variant="link"
-                                                                size="sm"
-                                                                onClick={() => navigate(`/agents/${agent.id}`)}
-                                                                title="View Details"
-                                                            >
-                                                                <HiEye /> View Agent
-                                                            </Button>
-                                                        </div>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </Table>
-                            )}
-                        </Card.Body>
-                    </Card>
+                <Card.Header className="text-start">
+                    <h5 className="mb-0">Agents{currentTeam?.name ? ` - ${currentTeam.name}` : ''}</h5>
+                </Card.Header>
+                <Card.Body>
+                    {agents.length === 0 ? (
+                        <div className="text-center py-5">
+                            <i className="fas fa-robot fa-3x text-muted mb-3"></i>
+                            <h5 className="text-muted">No agents found</h5>
+                            <p className="text-muted">
+                                {canEditAgent
+                                    ? 'Create your first agent to get started'
+                                    : 'No agents have been created yet'}
+                            </p>
+                        </div>
+                    ) : (
+                        <Table hover responsive className="agents-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Description</th>
+                                    <th>Status</th>
+                                    <th>Tasks</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {agents.map((agent) => (
+                                    <tr
+                                        key={agent.id}
+                                        onClick={() => handleRowClick(agent)}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        <td>
+                                            <div className="agent-name">
+                                                <i className="fas fa-robot me-2"></i>
+                                                {agent.name}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div className="agent-description">
+                                                {agent.description || 'No description'}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <Badge bg={agent.enabled ? 'success' : 'secondary'}>
+                                                {agent.enabled ? 'Active' : 'Inactive'}
+                                            </Badge>
+                                        </td>
+                                        <td>
+                                            <Badge bg="info">
+                                                {taskCounts[agent.id] !== undefined ? taskCounts[agent.id] : '...'}
+                                                {taskCounts[agent.id] === 1 ? ' task' : ' tasks'}
+                                            </Badge>
+                                        </td>
+                                        <td>
+                                            {formatDate(agent.createdAt)}
+                                        </td>
+                                        <td onClick={(e) => e.stopPropagation()}>
+                                            {canEditAgent && (
+                                                <div className="action-buttons">
+                                                    <Button
+                                                        variant="link"
+                                                        size="sm"
+                                                        onClick={() => navigate(`/agents/${agent.id}`)}
+                                                        title="View Details"
+                                                    >
+                                                        <HiEye /> View Agent
+                                                    </Button>
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </Table>
+                    )}
+                </Card.Body>
+            </Card>
 
             {/* Agent Analytics */}
-            
+
             <div className="mt-4">
                 <AgentStats />
             </div>
@@ -280,6 +281,7 @@ function Agents() {
                 onCreate={handleCreateAgent}
                 creating={creatingAgent}
             />
+            <Footer />
         </div>
     );
 }

@@ -72,11 +72,11 @@ const ViewToken = () => {
 
   useEffect(() => {
     const authState = JSON.parse(localStorage.getItem('authState') || '{}');
-    console.log('Button should be:', {
-      disabled: !authState.refreshToken,
-      refreshTokenExists: !!authState.refreshToken,
-      refreshTokenValue: authState.refreshToken?.substring(0, 10) + '...'
-    });
+    // console.log('Button should be:', {
+    //   disabled: !authState.refreshToken,
+    //   refreshTokenExists: !!authState.refreshToken,
+    //   refreshTokenValue: authState.refreshToken?.substring(0, 10) + '...'
+    // });
   }, []);
 
   const handleSubmit = async (e) => {

@@ -73,12 +73,8 @@ export const TeamProvider = ({ children }) => {
             const aLastActive = parseMongoDate(a.lastActiveAt);
             const bLastActive = parseMongoDate(b.lastActiveAt);
             
-            console.log('Team A:', a.name, 'lastActiveAt:', aLastActive.toISOString());
-            console.log('Team B:', b.name, 'lastActiveAt:', bLastActive.toISOString());
-            
             return bLastActive - aLastActive; // Most recent first
           });
-          console.log('Sorted teams:', sortedTeams);
           teamToSet = sortedTeams[0];
           localStorage.setItem('currentTeamId', sortedTeams[0].id);
         }

@@ -6,7 +6,7 @@ spring:
     allow-circular-references: true
     web-application-type: reactive
   redis:
-    host: ${REDIS_GATEWAY_URL:localhost}
+    host: ${vault.redis.host}
     port: 6379
     database: 0
     timeout: 60000
@@ -25,30 +25,34 @@ spring:
         registration:
           linqra-gateway-client:
             client-id: linqra-gateway-client
-            client-secret: ${KEYCLOAK_CLIENT_SECRET:TixdWtVigsJ0qUUvwP4ccso6QTMLGC6W}
+            client-secret: ${vault.keycloak.client.secret}
             authorization-grant-type: authorization_code
             scope: gateway.read
-            redirect-uri: ${OAUTH2_REDIRECT_URI:https://localhost:3000/callback}
+            redirect-uri: ${vault.oauth2.redirect.uri}
             provider: keycloak
         provider:
           keycloak:
-            token-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/token
-            authorization-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/auth
-            jwk-set-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/certs
-            issuer-uri: http://keycloak-service:8080/keycloak/realms/Linqra
+            token-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/token
+            authorization-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/auth
+            jwk-set-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/certs
+            issuer-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra
       resourceserver:
         opaquetoken:
-          introspection-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/token/introspect
+          introspection-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/token/introspect
           client-id: linqra-gateway-client
-          client-secret: ${KEYCLOAK_CLIENT_SECRET:TixdWtVigsJ0qUUvwP4ccso6QTMLGC6W}
+          client-secret: ${vault.keycloak.client.secret}
         jwt:
-          issuer-uri: http://keycloak-service:8080/keycloak/realms/Linqra
-          jwk-set-uri: http://keycloak-service:8080/keycloak/realms/Linqra/protocol/openid-connect/certs
+          issuer-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra
+          jwk-set-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/certs
   data:
     mongodb:
-      uri: ${MONGO_GATEWAY_URL:mongodb://root:mongopw@localhost:27017,localhost:27018,localhost:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}
+      uri: ${vault.mongodb.uri:mongodb://${vault.mongodb.username}:${vault.mongodb.password}@mongodb1:27017,mongodb2:27018,mongodb3:27019/?replicaSet=rs0&authSource=admin&readConcernLevel=majority}
       database: Linqra
       auto-index-creation: true  # Explicitly enable auto-index creation (default is true)
+  postgres:
+    username: ${vault.postgres.user}
+    password: ${vault.postgres.password}
+    database: ${vault.postgres.db}
   cloud:
     circuitbreaker:
       resilience4j:
@@ -69,7 +73,7 @@ spring:
         # so, our gateway port is 7777, we access the discovery server through http://localhost:7777/eureka/web
         # the filter is to reroute the request from http://localhost:7777/eureka/web to http://localhost:8761
         - id: discovery-server
-          uri: https://${EUREKA_GATEWAY_URL:localhost}:8761
+          uri: https://${vault.eureka.gateway.url}:8761
           predicates:
             - Path=/eureka/web
           filters:
@@ -77,7 +81,7 @@ spring:
 
           ## Discovery server static resources
         - id: discovery-server-static
-          uri: https://${EUREKA_GATEWAY_URL:localhost}:8761
+          uri: https://${vault.eureka.gateway.url}:8761
           predicates:
             - Path=/eureka/**
 
@@ -98,7 +102,7 @@ management:
 eureka:
   client:
     service-url:
-      defaultZone: https://${EUREKA_GATEWAY_URL:localhost}:8761/eureka/eureka/
+      defaultZone: https://${vault.eureka.gateway.url}:8761/eureka/eureka/
     enabled: true
     register-with-eureka: true
     fetch-registry: true
@@ -108,7 +112,7 @@ eureka:
     instance-info-replication-interval-seconds: 30
     initial-instance-info-replication-interval-seconds: 60
   instance:
-    hostname: ${EUREKA_INSTANCE_URL:localhost}
+    hostname: ${vault.eureka.instance.url}
     instance-id: ${spring.application.name}:${instanceId:${random.value}}
     non-secure-port-enabled: false
     secure-port-enabled: true
@@ -117,19 +121,19 @@ eureka:
     lease-expiration-duration-in-seconds: 30
 
 server:
-  host: ${GATEWAY_API_HOST:localhost}  # Default to "localhost" unless overridden
-  port: ${GATEWAY_API_PORT:7777}       # Default to 7777 unless overridden
+  host: ${vault.gateway.api.host}
+  port: ${vault.gateway.api.port}
   http2:
     enabled: true
   use-forwarded-headers: true
   ssl:
     enabled: true
-    key-store: ${GATEWAY_KEY_STORE}
-    key-store-password: ${GATEWAY_KEY_STORE_PASSWORD}
-    key-alias: ${GATEWAY_ALIAS_NAME:gateway-app}
+    key-store: ${vault.gateway.key.store}
+    key-store-password: ${vault.gateway.keystore.password}
+    key-alias: ${vault.gateway.alias.name}
     key-store-type: PKCS12
-    trust-store: ${GATEWAY_TRUST_STORE}
-    trust-store-password: ${GATEWAY_TRUST_STORE_PASSWORD}
+    trust-store: ${vault.gateway.trust.store}
+    trust-store-password: ${vault.gateway.truststore.password}
     trust-store-type: JKS
     client-auth: want
 
@@ -166,13 +170,13 @@ notifications:
   email:
     host: in-v3.mailjet.com
     port: 587
-    username: ${SMTP_USERNAME}
-    password: ${SMTP_PASSWORD}
+    username: ${vault.smtp.username}
+    password: ${vault.smtp.password}
     to: msen@dipme.com
-    enabled: ${SMTP_ENABLED:false}
+    enabled: ${vault.smtp.enabled}
   slack:
-    webhook-url: ${SLACK_WEBHOOK_URL}
-    enabled: ${SLACK_ENABLED:false}
+    webhook-url: ${vault.slack.webhook.url}
+    enabled: ${vault.slack.enabled}
 
 cors:
   allowed-origins: http://localhost:3000,https://localhost:3000,https://localhost:8080,https://your-prod-domain.com
@@ -181,25 +185,40 @@ cors:
   max-age: 3600
 
 jwt:
-  secret: 3a98d4c7b6e5f2a1d8c9b4a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1b8a7e6f3d2c1
+  secret: ${vault.jwt.secret}
   expiration: 86400000 # 24 hours in milliseconds
 
 milvus:
-  host: ${MILVUS_HOST:localhost}
-  port: ${MILVUS_PORT:19530}
-  username: ${MILVUS_USERNAME}
-  password: ${MILVUS_PASSWORD}
+  host: ${vault.milvus.host}
+  port: ${vault.milvus.port}
+  username: ${vault.milvus.username}
+  password: ${vault.milvus.password}
+
+neo4j:
+  uri: ${vault.neo4j.uri}
+  username: ${vault.neo4j.username}
+  password: ${vault.neo4j.password}
 
 # Knowledge Hub S3 Configuration
 aws:
-  region: ${AWS_REGION:us-west-2}
+  region: ${vault.aws.region}
   s3:
-    bucket: ${AWS_S3_BUCKET:linqra-knowledge-hub}
+    bucket: ${vault.aws.s3.bucket.name}
+
+# Vault Configuration
+# Path: /app/secrets/vault.encrypted (absolute path) - for Docker containers
+vault:
+  file:
+    path: /app/secrets/vault.encrypted
+  master:
+    key: ${VAULT_MASTER_KEY}
 
 linqra:
   knowledgehub:
     s3:
-      bucket-name: ${AWS_S3_BUCKET:linqra-knowledge-hub}
+      bucket-name: ${vault.aws.s3.bucket.name}
+      backup-bucket-name: ${vault.aws.s3.backup.bucket.name}
+      backup-bucket-region: ${vault.aws.s3.backup.bucket.region}
       raw-prefix: raw
       processed-prefix: processed
       presigned-url-expiration: PT15M  # 15 minutes

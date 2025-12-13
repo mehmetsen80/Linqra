@@ -37,7 +37,15 @@ public class KnowledgeHubChunk {
     
     private Integer chunkIndex; // Sequential index of the chunk in the document
     
-    private String text; // The actual chunk text
+    private String text; // The actual chunk text (encrypted if encryptionKeyVersion is set)
+    
+    /**
+     * Encryption key version used to encrypt this chunk.
+     * Format: "v1", "v2", etc.
+     * Null or "v1" = default/legacy key or unencrypted
+     * "v2" = new key after rotation
+     */
+    private String encryptionKeyVersion; // e.g., "v1", "v2"
     
     private Integer tokenCount; // Number of tokens in this chunk
     

@@ -13,7 +13,11 @@ public interface UserService {
     
     Mono<AuthResponse> login(LoginRequest request);
     
+    Mono<AuthResponse> login(LoginRequest request, String ipAddress, String userAgent);
+    
     Mono<AuthResponse> register(RegisterRequest request);
+    
+    Mono<AuthResponse> register(RegisterRequest request, String ipAddress, String userAgent);
     
     Mono<User> findByUsername(String username);
     

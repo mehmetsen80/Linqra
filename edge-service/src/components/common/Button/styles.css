@@ -43,6 +43,22 @@
   transform: none;
 }
 
+/* Link variant - no border, no background, just text */
+button.custom-button-link,
+button[class*="custom-button"]:not(.custom-button-primary):not(.custom-button-secondary) {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+button.custom-button-link:hover,
+button[class*="custom-button"]:not(.custom-button-primary):not(.custom-button-secondary):hover {
+  background: none;
+  transform: none;
+}
+
 /* Full width utility */
 .w-100 {
   width: 100%;

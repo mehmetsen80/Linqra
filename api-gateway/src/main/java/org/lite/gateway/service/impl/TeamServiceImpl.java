@@ -9,8 +9,12 @@ import org.lite.gateway.exception.InvalidAuthenticationException;
 import org.lite.gateway.exception.ResourceNotFoundException;
 import org.lite.gateway.exception.TeamOperationException;
 import org.lite.gateway.repository.*;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.service.TeamService;
 import org.lite.gateway.service.UserService;
+import org.lite.gateway.util.AuditLogHelper;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.reactive.TransactionalOperator;
@@ -19,7 +23,9 @@ import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -37,6 +43,7 @@ public class TeamServiceImpl implements TeamService {
     private final UserRepository userRepository;
     private final TransactionalOperator transactionalOperator;
     private final LinqLlmModelRepository linqLlmModelRepository;
+    private final AuditLogHelper auditLogHelper;
 
     private OrganizationDTO convertToOrganizationDTO(Organization org) {
         return OrganizationDTO.builder()
@@ -289,6 +296,11 @@ public class TeamServiceImpl implements TeamService {
                         ));
                     }
                     
+                    // Capture team details for audit logging
+                    String teamName = team.getName();
+                    String organizationId = team.getOrganizationId();
+                    TeamStatus teamStatus = team.getStatus();
+                    
                     return Mono.zip(
                         teamMemberRepository.findByTeamId(teamId).collectList(),
                         teamRouteRepository.findByTeamId(teamId).collectList()
@@ -304,10 +316,33 @@ public class TeamServiceImpl implements TeamService {
                         }
                         
                         log.debug("Deleting team members for team: {}", teamId);
+                        int memberCount = members.size();
+                        
+                        // Build detailed audit context
+                        Map<String, Object> auditContext = new HashMap<>();
+                        auditContext.put("teamName", teamName);
+                        auditContext.put("organizationId", organizationId);
+                        auditContext.put("teamStatus", teamStatus != null ? teamStatus.name() : null);
+                        auditContext.put("membersDeleted", memberCount);
+                        auditContext.put("routesChecked", routes.size());
+                        auditContext.put("deletionTimestamp", LocalDateTime.now().toString());
+                        
+                        String auditReason = String.format("Team deletion: %s (ID: %s) with %d members and %d routes", 
+                            teamName, teamId, memberCount, routes.size());
+                        
                         return teamMemberRepository.deleteByTeamId(teamId)
-                            .doOnSuccess(v -> log.debug("Successfully deleted team members"))
+                            .doOnSuccess(v -> log.debug("Successfully deleted {} team members", memberCount))
                             .then(teamRepository.deleteById(teamId))
-                            .doOnSuccess(v -> log.info("Successfully deleted team: {}", teamId));
+                            .doOnSuccess(v -> log.info("Successfully deleted team: {} (name: {}, members: {})", 
+                                teamId, teamName, memberCount))
+                            .then(auditLogHelper.logDetailedEvent(
+                                AuditEventType.TEAM_DELETED,
+                                AuditActionType.DELETE,
+                                AuditResourceType.TEAM,
+                                teamId,
+                                auditReason,
+                                auditContext
+                            ));
                     });
                 })
                 .switchIfEmpty(Mono.<Void>defer(() -> {
@@ -317,7 +352,7 @@ public class TeamServiceImpl implements TeamService {
                 }))
         );
     }
-
+    
     public Mono<Boolean> isUserTeamAdmin(String teamId, String userId) {
         return teamMemberRepository.findByTeamIdAndUserId(teamId, userId)
             .map(member -> member.getRole() == UserRole.ADMIN)
@@ -332,29 +367,64 @@ public class TeamServiceImpl implements TeamService {
     public Mono<TeamRoute> assignRouteToTeam(String teamId, String routeId, String assignedBy, Set<RoutePermission> permissions) {
         return teamRepository.findById(teamId)
             .switchIfEmpty(Mono.error(new TeamOperationException("Team not found")))
-            .flatMap(team -> apiRouteRepository.findByRouteIdentifier(routeId)
-                .switchIfEmpty(Mono.error(new TeamOperationException(
-                    String.format("Route '%s' does not exist", routeId)
-                )))
-                .flatMap(route -> teamRouteRepository.findByTeamIdAndRouteId(teamId, route.getId())
-                    .hasElement()
-                    .flatMap(exists -> {
-                        if (exists) {
-                            return Mono.error(new TeamOperationException(
-                                String.format("Route '%s' (v%d) is already assigned to this team", 
-                                    route.getRouteIdentifier(), route.getVersion())
-                            ));
-                        }
-                        TeamRoute teamRoute = TeamRoute.builder()
-                            .teamId(teamId)
-                            .routeId(route.getId())
-                            .assignedAt(LocalDateTime.now())
-                            .assignedBy(assignedBy)
-                            .permissions(permissions)
-                            .build();
-                        return teamRouteRepository.save(teamRoute);
-                    })
-                ));
+            .flatMap(team -> {
+                String teamName = team.getName();
+                
+                return apiRouteRepository.findByRouteIdentifier(routeId)
+                    .switchIfEmpty(Mono.error(new TeamOperationException(
+                        String.format("Route '%s' does not exist", routeId)
+                    )))
+                    .flatMap(route -> {
+                        String routeIdentifier = route.getRouteIdentifier();
+                        int routeVersion = route.getVersion();
+                        
+                        return teamRouteRepository.findByTeamIdAndRouteId(teamId, route.getId())
+                            .hasElement()
+                            .flatMap(exists -> {
+                                if (exists) {
+                                    return Mono.error(new TeamOperationException(
+                                        String.format("Route '%s' (v%d) is already assigned to this team", 
+                                            routeIdentifier, routeVersion)
+                                    ));
+                                }
+                                TeamRoute teamRoute = TeamRoute.builder()
+                                    .teamId(teamId)
+                                    .routeId(route.getId())
+                                    .assignedAt(LocalDateTime.now())
+                                    .assignedBy(assignedBy)
+                                    .permissions(permissions)
+                                    .build();
+                                
+                                return teamRouteRepository.save(teamRoute)
+                                    .flatMap(savedTeamRoute -> {
+                                        // Build detailed audit context
+                                        Map<String, Object> auditContext = new HashMap<>();
+                                        auditContext.put("teamName", teamName);
+                                        auditContext.put("routeIdentifier", routeIdentifier);
+                                        auditContext.put("routeVersion", routeVersion);
+                                        auditContext.put("routePath", route.getPath());
+                                        auditContext.put("permissions", permissions != null ? 
+                                            permissions.stream().map(Enum::name).collect(java.util.stream.Collectors.toList()) : 
+                                            java.util.Collections.emptyList());
+                                        auditContext.put("assignedBy", assignedBy);
+                                        auditContext.put("assignedAt", savedTeamRoute.getAssignedAt().toString());
+                                        
+                                        String auditReason = String.format("Route '%s' (v%d) assigned to team '%s' with permissions: %s", 
+                                            routeIdentifier, routeVersion, teamName, permissions);
+                                        
+                                        // Log detailed audit event
+                                        return auditLogHelper.logDetailedEvent(
+                                            AuditEventType.API_ROUTE_UPDATED,
+                                            AuditActionType.CREATE,
+                                            AuditResourceType.API_ROUTE,
+                                            route.getId(), // resourceId - the route ID
+                                            auditReason,
+                                            auditContext
+                                        ).thenReturn(savedTeamRoute);
+                                    });
+                            });
+                    });
+            });
     }
 
     @Override

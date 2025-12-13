@@ -13,7 +13,10 @@ import {
   HiOutlineLightningBolt,
   HiOutlineLightBulb,
   HiOutlineCollection,
-  HiOutlineDesktopComputer
+  HiOutlineDesktopComputer,
+  HiOutlineChatAlt,
+  HiDownload,
+  HiOutlineClipboardList
 } from 'react-icons/hi';
 import Tippy from '@tippyjs/react';
 import 'tippy.js/dist/tippy.css';
@@ -45,7 +48,7 @@ const UserTeamMenu = () => {
 
   const renderRoutesList = (routes) => {
     if (!routes || routes.length === 0) return null;
-    
+
     return (
       <div className="routes-list">
         {routes.map((route, index) => (
@@ -70,8 +73,8 @@ const UserTeamMenu = () => {
           {currentTeam ? (
             <>
               <div className="current-team-info">
-                <span 
-                  className="team-name" 
+                <span
+                  className="team-name"
                   onClick={(e) => {
                     e.stopPropagation();
                     navigate(`/teams/${currentTeam.id}`);
@@ -185,6 +188,10 @@ const UserTeamMenu = () => {
             <HiOutlineDesktopComputer size={16} style={{ marginRight: '8px' }} />
             Agents
           </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/ai-assistants">
+            <HiOutlineChatAlt size={16} style={{ marginRight: '8px' }} />
+            AI Assistants
+          </Dropdown.Item>
           <Dropdown.Item as={Link} to="/llm-models">
             <HiOutlineSparkles size={16} style={{ marginRight: '8px' }} />
             LLM Models
@@ -204,6 +211,14 @@ const UserTeamMenu = () => {
           <Dropdown.Item as={Link} to="/rag">
             <HiOutlineDatabase size={16} style={{ marginRight: '8px' }} />
             RAG Collections
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/knowledge-hub/export">
+            <HiDownload size={16} style={{ marginRight: '8px' }} />
+            Export Collections
+          </Dropdown.Item>
+          <Dropdown.Item as={Link} to="/audits">
+            <HiOutlineClipboardList size={16} style={{ marginRight: '8px' }} />
+            Audits
           </Dropdown.Item>
           <Dropdown.Divider />
           <Dropdown.Item onClick={handleLogoutClick}>

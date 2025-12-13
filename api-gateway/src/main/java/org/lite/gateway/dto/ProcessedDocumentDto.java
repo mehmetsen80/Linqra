@@ -28,6 +28,13 @@ public class ProcessedDocumentDto {
     private Statistics statistics;
     private QualityChecks qualityChecks;
     
+    /**
+     * Encryption key version used to encrypt sensitive fields in this processed document.
+     * Format: "v1", "v2", etc.
+     * Null or "v1" = default/legacy key or unencrypted
+     */
+    private String encryptionKeyVersion; // e.g., "v1", "v2"
+    
     @Data
     @Builder
     @NoArgsConstructor

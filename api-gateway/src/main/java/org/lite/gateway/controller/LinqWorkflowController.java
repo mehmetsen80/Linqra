@@ -53,28 +53,26 @@ public class LinqWorkflowController {
 
     @PostMapping
     public Mono<ResponseEntity<?>> createWorkflow(
-        @RequestBody String rawRequest,
-        ServerWebExchange exchange
-    ) {
+            @RequestBody String rawRequest,
+            ServerWebExchange exchange) {
         log.info("Creating new workflow with request: {}", rawRequest);
-        
+
         try {
             // First validate the raw JSON
             ValidationResult validationResult = linqRequestValidationService.validate(rawRequest);
             if (!validationResult.isValid()) {
                 return Mono.just(ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.VALIDATION_ERROR,
-                        "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.VALIDATION_ERROR,
+                                "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
+                                HttpStatus.BAD_REQUEST.value())));
             }
 
             // Then check if it's a LinqRequest structure
             JsonNode rootNode = objectMapper.readTree(rawRequest);
             LinqWorkflow workflow = new LinqWorkflow();
-            
+
             if (rootNode.has("link") && rootNode.has("query")) {
                 // It's a LinqRequest structure
                 LinqRequest request = objectMapper.readValue(rawRequest, LinqRequest.class);
@@ -84,23 +82,21 @@ public class LinqWorkflowController {
                 workflow = objectMapper.readValue(rawRequest, LinqWorkflow.class);
             } else {
                 return Mono.just(ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.VALIDATION_ERROR,
-                        "Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)",
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.VALIDATION_ERROR,
+                                "Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)",
+                                HttpStatus.BAD_REQUEST.value())));
             }
-            
+
             return validateAndCreateWorkflow(workflow, exchange);
         } catch (Exception e) {
             return Mono.just(ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.fromErrorCode(
-                    ErrorCode.VALIDATION_ERROR,
-                    "Error processing request: " + e.getMessage(),
-                    HttpStatus.BAD_REQUEST.value()
-                )));
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                            ErrorCode.VALIDATION_ERROR,
+                            "Error processing request: " + e.getMessage(),
+                            HttpStatus.BAD_REQUEST.value())));
         }
     }
 
@@ -110,275 +106,267 @@ public class LinqWorkflowController {
             ValidationResult validationResult = linqRequestValidationService.validate(workflow.getRequest());
             if (!validationResult.isValid()) {
                 return Mono.just(ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.VALIDATION_ERROR,
-                        "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.VALIDATION_ERROR,
+                                "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
+                                HttpStatus.BAD_REQUEST.value())));
             }
 
             return userContextService.getCurrentUsername(exchange)
-                .flatMap(userService::findByUsername)
-                .flatMap(user -> {
-                    // Set createdBy and updatedBy
-                    workflow.setCreatedBy(user.getUsername());
-                    workflow.setUpdatedBy(user.getUsername());
-                    
-                    // Get team from context and handle authorization
-                    return teamContextService.getTeamFromContext(exchange)
-                        .flatMap(teamId -> {
-                            // Set the teamId in the workflow entity
-                            workflow.setTeamId(teamId);
-                            
-                            // For SUPER_ADMIN, proceed directly
-                            if (user.getRoles().contains("SUPER_ADMIN")) {
-                                return addGlobalParamsToWorkflow(workflow)
-                                    .flatMap(linqWorkflowService::createWorkflow)
-                                    .map(ResponseEntity::ok);
-                            }
-                            
-                            // For non-SUPER_ADMIN users, check team role
-                            return teamService.hasRole(teamId, user.getId(), "ADMIN")
-                                .flatMap(isAdmin -> {
-                                    if (!isAdmin) {
-                                        return Mono.just(ResponseEntity
-                                            .status(HttpStatus.FORBIDDEN)
-                                            .body(ErrorResponse.fromErrorCode(
-                                                ErrorCode.FORBIDDEN,
-                                                "Only team administrators can create workflows",
-                                                HttpStatus.FORBIDDEN.value()
-                                            )));
+                    .flatMap(userService::findByUsername)
+                    .flatMap(user -> {
+                        // Set createdBy and updatedBy
+                        workflow.setCreatedBy(user.getUsername());
+                        workflow.setUpdatedBy(user.getUsername());
+
+                        // Get team from context and handle authorization
+                        return teamContextService.getTeamFromContext(exchange)
+                                .flatMap(teamId -> {
+                                    // Set the teamId in the workflow entity
+                                    workflow.setTeamId(teamId);
+
+                                    // For SUPER_ADMIN, proceed directly
+                                    if (user.getRoles().contains("SUPER_ADMIN")) {
+                                        return addGlobalParamsToWorkflow(workflow)
+                                                .flatMap(linqWorkflowService::createWorkflow)
+                                                .map(ResponseEntity::ok);
                                     }
-                                    return addGlobalParamsToWorkflow(workflow)
-                                        .flatMap(linqWorkflowService::createWorkflow)
-                                        .map(ResponseEntity::ok);
+
+                                    // For non-SUPER_ADMIN users, check team role
+                                    return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                            .flatMap(isAdmin -> {
+                                                if (!isAdmin) {
+                                                    return Mono.just(ResponseEntity
+                                                            .status(HttpStatus.FORBIDDEN)
+                                                            .body(ErrorResponse.fromErrorCode(
+                                                                    ErrorCode.FORBIDDEN,
+                                                                    "Only team administrators can create workflows",
+                                                                    HttpStatus.FORBIDDEN.value())));
+                                                }
+                                                return addGlobalParamsToWorkflow(workflow)
+                                                        .flatMap(linqWorkflowService::createWorkflow)
+                                                        .map(ResponseEntity::ok);
+                                            });
                                 });
-                        });
-                })
-                .doOnSuccess(w -> Optional.ofNullable(w.getBody())
-                    .map(body -> (LinqWorkflow) body)
-                    .ifPresent(savedWorkflow -> log.info("Workflow created successfully: {}", savedWorkflow.getId())))
-                .doOnError(error -> log.error("Error creating workflow: {}", error.getMessage()));
+                    })
+                    .doOnSuccess(w -> Optional.ofNullable(w.getBody())
+                            .map(body -> (LinqWorkflow) body)
+                            .ifPresent(savedWorkflow -> log.info("Workflow created successfully: {}",
+                                    savedWorkflow.getId())))
+                    .doOnError(error -> log.error("Error creating workflow: {}", error.getMessage()));
         } catch (Exception e) {
             log.error("Error processing request: ", e);
             return Mono.just(ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.fromErrorCode(
-                    ErrorCode.VALIDATION_ERROR,
-                    "Error processing request: " + e.getMessage(),
-                    HttpStatus.BAD_REQUEST.value()
-                )));
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                            ErrorCode.VALIDATION_ERROR,
+                            "Error processing request: " + e.getMessage(),
+                            HttpStatus.BAD_REQUEST.value())));
         }
     }
 
     @PutMapping("/{workflowId}")
     public Mono<ResponseEntity<?>> updateWorkflow(
-        @PathVariable String workflowId,
-        @RequestBody LinqWorkflow workflow,
-        ServerWebExchange exchange
-    ) {
+            @PathVariable String workflowId,
+            @RequestBody LinqWorkflow workflow,
+            ServerWebExchange exchange) {
         log.info("Updating workflow: {}", workflowId);
         return teamContextService.getTeamFromContext(exchange)
-            .flatMap(teamId -> linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId)
-                .flatMap(existingWorkflow -> userContextService.getCurrentUsername(exchange)
-                    .flatMap(userService::findByUsername)
-                    .flatMap(user -> {
-                        // Set updatedBy and teamId from existing workflow
-                        workflow.setUpdatedBy(user.getUsername());
-                        workflow.setCreatedBy(existingWorkflow.getCreatedBy()); // Preserve original creator
-                        workflow.setTeamId(existingWorkflow.getTeamId()); // Set teamId from existing workflow
-                        
-                        // For SUPER_ADMIN, proceed directly
-                        if (user.getRoles().contains("SUPER_ADMIN")) {
-                            return linqWorkflowService.updateWorkflow(workflowId, workflow)
-                                .map(ResponseEntity::ok);
-                        }
-                        
-                        // For non-SUPER_ADMIN users, check team role
-                        return teamService.hasRole(existingWorkflow.getTeamId(), user.getId(), "ADMIN")
-                            .flatMap(isAdmin -> {
-                                if (!isAdmin) {
-                                    return Mono.just(ResponseEntity
-                                        .status(HttpStatus.FORBIDDEN)
-                                        .body(ErrorResponse.fromErrorCode(
-                                            ErrorCode.FORBIDDEN,
-                                            "Only team administrators can update workflows",
-                                            HttpStatus.FORBIDDEN.value()
-                                        )));
-                                }
-                                return linqWorkflowService.updateWorkflow(workflowId, workflow)
-                                    .map(ResponseEntity::ok);
-                            });
-                    }))
-            )
-            .doOnSuccess(w -> Optional.ofNullable(w.getBody())
-                .map(body -> (LinqWorkflow) body)
-                .ifPresent(updatedWorkflow -> log.info("Workflow updated successfully: {}", updatedWorkflow.getId())))
-            .doOnError(error -> log.error("Error updating workflow: {}", error.getMessage()));
+                .flatMap(teamId -> linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId)
+                        .flatMap(existingWorkflow -> userContextService.getCurrentUsername(exchange)
+                                .flatMap(userService::findByUsername)
+                                .flatMap(user -> {
+                                    // Set updatedBy and teamId from existing workflow
+                                    workflow.setUpdatedBy(user.getUsername());
+                                    workflow.setCreatedBy(existingWorkflow.getCreatedBy()); // Preserve original creator
+                                    workflow.setTeamId(existingWorkflow.getTeamId()); // Set teamId from existing
+                                                                                      // workflow
+
+                                    // For SUPER_ADMIN, proceed directly
+                                    if (user.getRoles().contains("SUPER_ADMIN")) {
+                                        return linqWorkflowService.updateWorkflow(workflowId, workflow)
+                                                .map(ResponseEntity::ok);
+                                    }
+
+                                    // For non-SUPER_ADMIN users, check team role
+                                    return teamService.hasRole(existingWorkflow.getTeamId(), user.getId(), "ADMIN")
+                                            .flatMap(isAdmin -> {
+                                                if (!isAdmin) {
+                                                    return Mono.just(ResponseEntity
+                                                            .status(HttpStatus.FORBIDDEN)
+                                                            .body(ErrorResponse.fromErrorCode(
+                                                                    ErrorCode.FORBIDDEN,
+                                                                    "Only team administrators can update workflows",
+                                                                    HttpStatus.FORBIDDEN.value())));
+                                                }
+                                                return linqWorkflowService.updateWorkflow(workflowId, workflow)
+                                                        .map(ResponseEntity::ok);
+                                            });
+                                })))
+                .doOnSuccess(w -> Optional.ofNullable(w.getBody())
+                        .map(body -> (LinqWorkflow) body)
+                        .ifPresent(updatedWorkflow -> log.info("Workflow updated successfully: {}",
+                                updatedWorkflow.getId())))
+                .doOnError(error -> log.error("Error updating workflow: {}", error.getMessage()));
     }
 
     @DeleteMapping("/{workflowId}")
     public Mono<ResponseEntity<?>> deleteWorkflow(
-        @PathVariable String workflowId,
-        ServerWebExchange exchange
-    ) {
+            @PathVariable String workflowId,
+            ServerWebExchange exchange) {
         log.info("Deleting workflow: {}", workflowId);
         return teamContextService.getTeamFromContext(exchange)
-            .flatMap(teamId -> linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId)
-                .flatMap(workflow -> userContextService.getCurrentUsername(exchange)
-                    .flatMap(userService::findByUsername)
-                    .flatMap(user -> {
-                        // For SUPER_ADMIN, proceed directly
-                        if (user.getRoles().contains("SUPER_ADMIN")) {
-                            return linqWorkflowService.deleteWorkflow(workflowId, teamId)
-                                .then(Mono.just(ResponseEntity.noContent().<Void>build()));
-                        }
-                        
-                        // For non-SUPER_ADMIN users, check team role
-                        return teamService.hasRole(workflow.getTeamId(), user.getId(), "ADMIN")
-                            .flatMap(isAdmin -> {
-                                if (!isAdmin) {
-                                    return Mono.just(ResponseEntity
-                                        .status(HttpStatus.FORBIDDEN)
-                                        .body(ErrorResponse.fromErrorCode(
-                                            ErrorCode.FORBIDDEN,
-                                            "Only team administrators can delete workflows",
-                                            HttpStatus.FORBIDDEN.value()
-                                        )));
-                                }
-                                return linqWorkflowService.deleteWorkflow(workflowId, teamId)
-                                    .then(Mono.just(ResponseEntity.noContent().<Void>build()));
-                            });
-                    }))
-            )
-            .doOnSuccess(v -> log.info("Workflow deleted successfully: {}", workflowId))
-            .doOnError(error -> log.error("Error deleting workflow: {}", error.getMessage()));
+                .flatMap(teamId -> linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId)
+                        .flatMap(workflow -> userContextService.getCurrentUsername(exchange)
+                                .flatMap(userService::findByUsername)
+                                .flatMap(user -> {
+                                    // For SUPER_ADMIN, proceed directly
+                                    if (user.getRoles().contains("SUPER_ADMIN")) {
+                                        return linqWorkflowService.deleteWorkflow(workflowId, teamId)
+                                                .then(Mono.just(ResponseEntity.noContent().<Void>build()));
+                                    }
+
+                                    // For non-SUPER_ADMIN users, check team role
+                                    return teamService.hasRole(workflow.getTeamId(), user.getId(), "ADMIN")
+                                            .flatMap(isAdmin -> {
+                                                if (!isAdmin) {
+                                                    return Mono.just(ResponseEntity
+                                                            .status(HttpStatus.FORBIDDEN)
+                                                            .body(ErrorResponse.fromErrorCode(
+                                                                    ErrorCode.FORBIDDEN,
+                                                                    "Only team administrators can delete workflows",
+                                                                    HttpStatus.FORBIDDEN.value())));
+                                                }
+                                                return linqWorkflowService.deleteWorkflow(workflowId, teamId)
+                                                        .then(Mono.just(ResponseEntity.noContent().<Void>build()));
+                                            });
+                                })))
+                .doOnSuccess(v -> log.info("Workflow deleted successfully: {}", workflowId))
+                .doOnError(error -> log.error("Error deleting workflow: {}", error.getMessage()));
     }
 
     @GetMapping
     public Flux<LinqWorkflow> getAllWorkflows(ServerWebExchange exchange) {
         log.info("Fetching all workflows");
         return teamContextService.getTeamFromContext(exchange)
-            .flatMapMany(teamId -> {
-                log.info("Getting workflows for teamId: {}", teamId);
-                return linqWorkflowService.getAllWorkflows(teamId);
-            })
-            .doOnError(error -> log.error("Error getting all workflows: {}", error.getMessage()));
+                .flatMapMany(teamId -> {
+                    log.info("Getting workflows for teamId: {}", teamId);
+                    return linqWorkflowService.getAllWorkflows(teamId);
+                })
+                .doOnError(error -> log.error("Error getting all workflows: {}", error.getMessage()));
     }
 
     @GetMapping("/{workflowId}")
     public Mono<LinqWorkflow> getWorkflow(@PathVariable String workflowId, ServerWebExchange exchange) {
         log.info("Fetching workflow: {}", workflowId);
         return teamContextService.getTeamFromContext(exchange)
-            .flatMap(teamId -> {
-                log.info("Getting workflow {} for teamId: {}", workflowId, teamId);
-                return linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId);
-            })
-            .doOnSuccess(w -> log.info("Workflow fetched successfully: {}", w.getId()))
-            .doOnError(error -> log.error("Error fetching workflow: {}", error.getMessage()));
+                .flatMap(teamId -> {
+                    log.info("Getting workflow {} for teamId: {}", workflowId, teamId);
+                    return linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId);
+                })
+                .doOnSuccess(w -> log.info("Workflow fetched successfully: {}", w.getId()))
+                .doOnError(error -> log.error("Error fetching workflow: {}", error.getMessage()));
     }
 
     @PostMapping("/{workflowId}/execute")
     public Mono<LinqResponse> executeWorkflow(
-        @PathVariable String workflowId,
-        @RequestBody(required = false) Map<String, Object> variables,
-        ServerWebExchange exchange
-    ) {
+            @PathVariable String workflowId,
+            @RequestBody(required = false) Map<String, Object> variables,
+            ServerWebExchange exchange) {
 
         log.info("workflow exchange headers: " + exchange.getRequest().getHeaders());
 
         log.info("Executing workflow: {} with variables: {}", workflowId, variables);
         return Mono.zip(
-                    userContextService.getCurrentUsername(exchange),
-                    teamContextService.getTeamFromContext(exchange)
-                )
+                userContextService.getCurrentUsername(exchange),
+                teamContextService.getTeamFromContext(exchange))
                 .flatMap(tuple -> {
                     String username = tuple.getT1();
                     String teamId = tuple.getT2();
                     return linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId)
-                        .flatMap(workflow -> {
-                            // Use the workflow's request directly
-                            LinqRequest request = workflow.getRequest();
-                            
-                            // Ensure it's a workflow request
-                            if (!request.getLink().getTarget().equals("workflow")) {
-                                return Mono.error(new ResponseStatusException(
-                                    HttpStatus.BAD_REQUEST, 
-                                    "Invalid workflow request: target must be 'workflow'"
-                                ));
-                            }
-                            
-                            // Set the workflowId in the request
-                            if (request.getQuery() == null) {
-                                request.setQuery(new LinqRequest.Query());
-                            }
-                            request.getQuery().setWorkflowId(workflowId);
-                            
-                            // Store the workflow steps for each individual request
-                            List<LinqRequest.Query.WorkflowStep> workflowSteps = request.getQuery().getWorkflow();
-                            
-                            // Fix the max.tokens issue in the workflow steps
-                            if (workflowSteps != null) {
-                                workflowSteps.forEach(step -> {
-                                    if (step.getLlmConfig() != null && step.getLlmConfig().getSettings() != null) {
-                                        Map<String, Object> settings = step.getLlmConfig().getSettings();
-                                        if (settings.containsKey("max.tokens")) {
-                                            Object value = settings.remove("max.tokens");
-                                            settings.put("max_tokens", value);
+                            .flatMap(workflow -> {
+                                // Use the workflow's request directly
+                                LinqRequest request = workflow.getRequest();
+
+                                // Ensure it's a workflow request
+                                if (!request.getLink().getTarget().equals("workflow")) {
+                                    return Mono.error(new ResponseStatusException(
+                                            HttpStatus.BAD_REQUEST,
+                                            "Invalid workflow request: target must be 'workflow'"));
+                                }
+
+                                // Set the workflowId in the request
+                                if (request.getQuery() == null) {
+                                    request.setQuery(new LinqRequest.Query());
+                                }
+                                request.getQuery().setWorkflowId(workflowId);
+
+                                // Store the workflow steps for each individual request
+                                List<LinqRequest.Query.WorkflowStep> workflowSteps = request.getQuery().getWorkflow();
+
+                                // Fix the max.tokens issue in the workflow steps
+                                if (workflowSteps != null) {
+                                    workflowSteps.forEach(step -> {
+                                        if (step.getLlmConfig() != null && step.getLlmConfig().getSettings() != null) {
+                                            Map<String, Object> settings = step.getLlmConfig().getSettings();
+                                            if (settings.containsKey("max.tokens")) {
+                                                Object value = settings.remove("max.tokens");
+                                                settings.put("max_tokens", value);
+                                            }
                                         }
-                                    }
-                                });
-                            }
-                            
-                            // Set the executedBy field from current user context using the exchange
-                            request.setExecutedBy(username);
-                            log.info("Setting executedBy to: {}", username);
-                            
-                            // Ensure params map exists
-                            if (request.getQuery().getParams() == null) {
-                                request.getQuery().setParams(new HashMap<>());
-                            }
-                            // Add teamId to params if not already present
-                            request.getQuery().getParams().putIfAbsent("teamId", teamId);
-                            log.info("Setting teamId to: {}", teamId);
-                            
-                            return workflowExecutionService.initializeExecution(request)
-                                .then(workflowExecutionService.executeWorkflow(request)
-                                    .flatMap(response -> workflowExecutionService.trackExecution(request, response)
-                                        .thenReturn(response)));
-                        });
+                                    });
+                                }
+
+                                // Set the executedBy field from current user context using the exchange
+                                request.setExecutedBy(username);
+                                log.info("Setting executedBy to: {}", username);
+
+                                // Ensure params map exists
+                                if (request.getQuery().getParams() == null) {
+                                    request.getQuery().setParams(new HashMap<>());
+                                }
+                                // Add teamId to params if not already present
+                                request.getQuery().getParams().putIfAbsent("teamId", teamId);
+                                log.info("Setting teamId to: {}", teamId);
+
+                                return workflowExecutionService.initializeExecution(request)
+                                        .then(workflowExecutionService.executeWorkflow(request)
+                                                .flatMap(response -> workflowExecutionService
+                                                        .trackExecution(request, response)
+                                                        .thenReturn(response)));
+                            });
                 })
-            .doOnSuccess(response -> {
-                String status = response.getMetadata() != null ? response.getMetadata().getStatus() : "unknown";
-                if ("error".equals(status)) {
-                    log.error("❌ Workflow {} execution FAILED with status: {}", workflowId, status);
-                } else if ("success".equals(status)) {
-                    log.info("✅ Workflow {} executed successfully with status: {}", workflowId, status);
-                } else {
-                    log.warn("⚠️ Workflow {} executed with UNKNOWN status: {}", workflowId, status);
-                }
-            })
-            .doOnError(error -> log.error("💥 Error executing workflow {}: {}", workflowId, error.getMessage()));
+                .doOnSuccess(response -> {
+                    String status = response.getMetadata() != null ? response.getMetadata().getStatus() : "unknown";
+                    if ("error".equals(status)) {
+                        log.error("❌ Workflow {} execution FAILED with status: {}", workflowId, status);
+                    } else if ("success".equals(status)) {
+                        log.info("✅ Workflow {} executed successfully with status: {}", workflowId, status);
+                    } else {
+                        log.warn("⚠️ Workflow {} executed with UNKNOWN status: {}", workflowId, status);
+                    }
+                })
+                .doOnError(error -> log.error("💥 Error executing workflow {}: {}", workflowId, error.getMessage()));
     }
 
     @GetMapping("/{workflowId}/executions")
     public Flux<LinqWorkflowExecution> getWorkflowExecutions(@PathVariable String workflowId) {
         log.info("Fetching executions for workflow: {}", workflowId);
         return workflowExecutionService.getWorkflowExecutions(workflowId)
-            .doOnNext(e -> log.info("Execution fetched: {}", e.getId()))
-            .doOnError(error -> log.error("Error fetching executions: {}", error.getMessage()));
+                .doOnNext(e -> log.info("Execution fetched: {}", e.getId()))
+                .doOnError(error -> log.error("Error fetching executions: {}", error.getMessage()));
     }
 
     @GetMapping("/executions")
     public Flux<LinqWorkflowExecution> getTeamExecutions(ServerWebExchange exchange) {
         log.info("Fetching executions for current team");
         return teamContextService.getTeamFromContext(exchange)
-            .flatMapMany(teamId -> {
-                log.info("Getting executions for teamId: {}", teamId);
-                return workflowExecutionService.getTeamExecutions(teamId);
-            })
-            .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
+                .flatMapMany(teamId -> {
+                    log.info("Getting executions for teamId: {}", teamId);
+                    return workflowExecutionService.getTeamExecutions(teamId);
+                })
+                .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
     }
 
     @GetMapping("/executions/{executionId}")
@@ -386,49 +374,49 @@ public class LinqWorkflowController {
             @PathVariable String executionId,
             ServerWebExchange exchange) {
         log.info("Fetching execution: {}", executionId);
-        
+
         // Add basic team context validation
         return teamContextService.getTeamFromContext(exchange)
-            .flatMap(teamId -> {
-                // First, try to find by agentExecutionId (UUID format)
-                // If not found, fall back to finding by MongoDB _id
-                return workflowExecutionService.getExecutionByAgentExecutionId(executionId)
-                    .onErrorResume(error -> {
-                        log.info("Not found by agentExecutionId, trying by _id: {}", executionId);
-                        return workflowExecutionService.getExecution(executionId);
-                    });
-            })
-            .doOnSuccess(e -> log.info("Execution fetched successfully: {}", e.getId()))
-            .doOnError(error -> log.error("Error fetching execution: {}", error.getMessage()));
+                .flatMap(teamId -> {
+                    // First, try to find by agentExecutionId (UUID format)
+                    // If not found, fall back to finding by MongoDB _id
+                    return workflowExecutionService.getExecutionByAgentExecutionId(executionId)
+                            .onErrorResume(error -> {
+                                log.info("Not found by agentExecutionId, trying by _id: {}", executionId);
+                                return workflowExecutionService.getExecution(executionId);
+                            });
+                })
+                .doOnSuccess(e -> log.info("Execution fetched successfully: {}", e.getId()))
+                .doOnError(error -> log.error("Error fetching execution: {}", error.getMessage()));
     }
 
     @GetMapping("/search")
     public Flux<LinqWorkflow> searchWorkflows(@RequestParam String query) {
         log.info("Searching workflows with query: {}", query);
         return linqWorkflowService.searchWorkflows(query)
-            .doOnError(error -> log.error("Error searching workflows: {}", error.getMessage()));
+                .doOnError(error -> log.error("Error searching workflows: {}", error.getMessage()));
     }
 
     @GetMapping("/{workflowId}/stats")
     public Mono<LinqWorkflowStats> getWorkflowStats(@PathVariable String workflowId) {
         log.info("Fetching stats for workflow: {}", workflowId);
         return linqWorkflowStatsService.getWorkflowStats(workflowId)
-            .doOnError(error -> log.error("Error fetching workflow stats: {}", error.getMessage()));
+                .doOnError(error -> log.error("Error fetching workflow stats: {}", error.getMessage()));
     }
 
     @GetMapping("/agent-task/{agentTaskId}/stats")
     public Mono<LinqWorkflowStats> getAgentTaskWorkflowStats(@PathVariable String agentTaskId) {
         log.info("Fetching workflow stats for agent task: {}", agentTaskId);
         return linqWorkflowStatsService.getAgentTaskWorkflowStats(agentTaskId)
-            .doOnSuccess(stats -> log.info("Successfully fetched stats for agent task {} with {} executions", 
-                agentTaskId, stats.getTotalExecutions()))
-            .doOnError(error -> log.error("Error fetching agent task workflow stats: {}", error.getMessage()));
+                .doOnSuccess(stats -> log.info("Successfully fetched stats for agent task {} with {} executions",
+                        agentTaskId, stats.getTotalExecutions()))
+                .doOnError(error -> log.error("Error fetching agent task workflow stats: {}", error.getMessage()));
     }
 
     @PostMapping("/validate")
     public Mono<ValidationResult> validateWorkflow(@RequestBody String rawRequest) {
         log.info("Validating workflow request: {}", rawRequest);
-        
+
         try {
             // First validate the raw JSON
             ValidationResult validationResult = linqRequestValidationService.validate(rawRequest);
@@ -449,7 +437,8 @@ public class LinqWorkflowController {
             } else {
                 ValidationResult result = new ValidationResult();
                 result.setValid(false);
-                result.setErrors(List.of("Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)"));
+                result.setErrors(List.of(
+                        "Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)"));
                 return Mono.just(result);
             }
         } catch (Exception e) {
@@ -462,17 +451,16 @@ public class LinqWorkflowController {
 
     @PostMapping("/{workflowId}/versions")
     public Mono<ResponseEntity<?>> createNewVersion(
-        @PathVariable String workflowId,
-        @RequestBody String rawRequest,
-        ServerWebExchange exchange
-    ) {
+            @PathVariable String workflowId,
+            @RequestBody String rawRequest,
+            ServerWebExchange exchange) {
         log.info("Creating new version for workflow: {}", workflowId);
-        
+
         try {
             // First check if it's a LinqRequest structure
             JsonNode rootNode = objectMapper.readTree(rawRequest);
             LinqWorkflow updatedWorkflow = new LinqWorkflow();
-            
+
             if (rootNode.has("link") && rootNode.has("query")) {
                 // It's a LinqRequest structure
                 LinqRequest request = objectMapper.readValue(rawRequest, LinqRequest.class);
@@ -482,201 +470,199 @@ public class LinqWorkflowController {
                 updatedWorkflow = objectMapper.readValue(rawRequest, LinqWorkflow.class);
             } else {
                 return Mono.just(ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.VALIDATION_ERROR,
-                        "Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)",
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.VALIDATION_ERROR,
+                                "Invalid request format: must contain either 'link' and 'query' fields (LinqRequest) or 'request' field (LinqWorkflow)",
+                                HttpStatus.BAD_REQUEST.value())));
             }
-            
+
             return validateAndCreateNewVersion(workflowId, updatedWorkflow, exchange);
         } catch (Exception e) {
             return Mono.just(ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.fromErrorCode(
-                    ErrorCode.VALIDATION_ERROR,
-                    "Error processing request: " + e.getMessage(),
-                    HttpStatus.BAD_REQUEST.value()
-                )));
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                            ErrorCode.VALIDATION_ERROR,
+                            "Error processing request: " + e.getMessage(),
+                            HttpStatus.BAD_REQUEST.value())));
         }
     }
 
     private Mono<ResponseEntity<?>> validateAndCreateNewVersion(
-        String workflowId,
-        LinqWorkflow updatedWorkflow,
-        ServerWebExchange exchange
-    ) {
+            String workflowId,
+            LinqWorkflow updatedWorkflow,
+            ServerWebExchange exchange) {
         try {
             // Validate the request part
             ValidationResult validationResult = linqRequestValidationService.validate(updatedWorkflow.getRequest());
             if (!validationResult.isValid()) {
                 return Mono.just(ResponseEntity
-                    .status(HttpStatus.BAD_REQUEST)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.VALIDATION_ERROR,
-                        "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
+                        .status(HttpStatus.BAD_REQUEST)
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.VALIDATION_ERROR,
+                                "Workflow validation failed: " + String.join(", ", validationResult.getErrors()),
+                                HttpStatus.BAD_REQUEST.value())));
             }
 
             return userContextService.getCurrentUsername(exchange)
-                .flatMap(userService::findByUsername)
-                .flatMap(user -> {
-                    // Set updatedBy for the new version
-                    updatedWorkflow.setUpdatedBy(user.getUsername());
-                    
-                    // For SUPER_ADMIN, proceed directly
-                    if (user.getRoles().contains("SUPER_ADMIN")) {
-                        return addGlobalParamsToWorkflow(updatedWorkflow)
-                            .flatMap(updatedWorkflowWithParams -> linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflowWithParams))
-                            .map(ResponseEntity::ok);
-                    }
-                    
-                    // For non-SUPER_ADMIN users, check team role
-                    return teamContextService.getTeamFromContext(exchange)
-                        .flatMap(teamId -> {
-                            // Set the teamId in the workflow entity
-                            updatedWorkflow.setTeamId(teamId);
-                            
-                            return teamService.hasRole(teamId, user.getId(), "ADMIN")
-                                .flatMap(isAdmin -> {
-                                    if (!isAdmin) {
-                                        return Mono.just(ResponseEntity
-                                            .status(HttpStatus.FORBIDDEN)
-                                            .body(ErrorResponse.fromErrorCode(
-                                                ErrorCode.FORBIDDEN,
-                                                "Only team administrators can create new workflow versions",
-                                                HttpStatus.FORBIDDEN.value()
-                                            )));
-                                    }
-                                    return addGlobalParamsToWorkflow(updatedWorkflow)
-                                        .flatMap(updatedWorkflowWithParams -> linqWorkflowVersionService.createNewVersion(workflowId, updatedWorkflowWithParams))
-                                        .map(ResponseEntity::ok);
+                    .flatMap(userService::findByUsername)
+                    .flatMap(user -> {
+                        // Set updatedBy for the new version
+                        updatedWorkflow.setUpdatedBy(user.getUsername());
+
+                        // For SUPER_ADMIN, proceed directly
+                        if (user.getRoles().contains("SUPER_ADMIN")) {
+                            return addGlobalParamsToWorkflow(updatedWorkflow)
+                                    .flatMap(updatedWorkflowWithParams -> linqWorkflowVersionService
+                                            .createNewVersion(workflowId, updatedWorkflowWithParams))
+                                    .map(ResponseEntity::ok);
+                        }
+
+                        // For non-SUPER_ADMIN users, check team role
+                        return teamContextService.getTeamFromContext(exchange)
+                                .flatMap(teamId -> {
+                                    // Set the teamId in the workflow entity
+                                    updatedWorkflow.setTeamId(teamId);
+
+                                    return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                                            .flatMap(isAdmin -> {
+                                                if (!isAdmin) {
+                                                    return Mono.just(ResponseEntity
+                                                            .status(HttpStatus.FORBIDDEN)
+                                                            .body(ErrorResponse.fromErrorCode(
+                                                                    ErrorCode.FORBIDDEN,
+                                                                    "Only team administrators can create new workflow versions",
+                                                                    HttpStatus.FORBIDDEN.value())));
+                                                }
+                                                return addGlobalParamsToWorkflow(updatedWorkflow)
+                                                        .flatMap(updatedWorkflowWithParams -> linqWorkflowVersionService
+                                                                .createNewVersion(workflowId,
+                                                                        updatedWorkflowWithParams))
+                                                        .map(ResponseEntity::ok);
+                                            });
                                 });
-                        });
-                })
-                .doOnSuccess(w -> Optional.ofNullable(w.getBody())
-                    .map(body -> (LinqWorkflow) body)
-                    .ifPresent(savedWorkflow -> log.info("New workflow version created successfully: {}", savedWorkflow.getId())))
-                .doOnError(error -> log.error("Error creating new workflow version: {}", error.getMessage()));
+                    })
+                    .doOnSuccess(w -> Optional.ofNullable(w.getBody())
+                            .map(body -> (LinqWorkflow) body)
+                            .ifPresent(savedWorkflow -> log.info("New workflow version created successfully: {}",
+                                    savedWorkflow.getId())))
+                    .doOnError(error -> log.error("Error creating new workflow version: {}", error.getMessage()));
         } catch (Exception e) {
             log.error("Error processing request: ", e);
             return Mono.just(ResponseEntity
-                .status(HttpStatus.BAD_REQUEST)
-                .body(ErrorResponse.fromErrorCode(
-                    ErrorCode.VALIDATION_ERROR,
-                    "Error processing request: " + e.getMessage(),
-                    HttpStatus.BAD_REQUEST.value()
-                )));
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.fromErrorCode(
+                            ErrorCode.VALIDATION_ERROR,
+                            "Error processing request: " + e.getMessage(),
+                            HttpStatus.BAD_REQUEST.value())));
         }
     }
 
     @PostMapping("/{workflowId}/versions/{versionId}/rollback")
     public Mono<ResponseEntity<?>> rollbackToVersion(
-        @PathVariable String workflowId,
-        @PathVariable String versionId,
-        ServerWebExchange exchange
-    ) {
+            @PathVariable String workflowId,
+            @PathVariable String versionId,
+            ServerWebExchange exchange) {
         log.info("Rolling back workflow: {} to version: {}", workflowId, versionId);
         return teamContextService.getTeamFromContext(exchange)
-            .flatMap(teamId -> linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId)
-                .flatMap(workflow -> userContextService.getCurrentUsername(exchange)
-                    .flatMap(userService::findByUsername)
-                    .flatMap(user -> {
-                        // For SUPER_ADMIN, proceed directly
-                        if (user.getRoles().contains("SUPER_ADMIN")) {
-                            return linqWorkflowVersionService.rollbackToVersion(workflowId, versionId, teamId)
-                                .map(ResponseEntity::ok);
-                        }
-                        
-                        // For non-SUPER_ADMIN users, check team role
-                        return teamService.hasRole(workflow.getTeamId(), user.getId(), "ADMIN")
-                            .flatMap(isAdmin -> {
-                                if (!isAdmin) {
-                                    return Mono.just(ResponseEntity
-                                        .status(HttpStatus.FORBIDDEN)
-                                        .body(ErrorResponse.fromErrorCode(
-                                            ErrorCode.FORBIDDEN,
-                                            "Only team administrators can rollback versions",
-                                            HttpStatus.FORBIDDEN.value()
-                                        )));
-                                }
-                                return linqWorkflowVersionService.rollbackToVersion(workflowId, versionId, teamId)
-                                    .map(w -> ResponseEntity.ok(w));
-                            });
-                    }))
-            )
-            .doOnSuccess(w -> Optional.ofNullable(w.getBody())
-                .map(body -> (LinqWorkflow) body)
-                .ifPresent(rolledBackWorkflow -> log.info("Rolled back workflow: {} to version: {}", rolledBackWorkflow.getId(), versionId)))
-            .doOnError(error -> log.error("Error rolling back workflow: {}", error.getMessage()));
+                .flatMap(teamId -> linqWorkflowService.getWorkflowByIdAndTeam(workflowId, teamId)
+                        .flatMap(workflow -> userContextService.getCurrentUsername(exchange)
+                                .flatMap(userService::findByUsername)
+                                .flatMap(user -> {
+                                    // For SUPER_ADMIN, proceed directly
+                                    if (user.getRoles().contains("SUPER_ADMIN")) {
+                                        return linqWorkflowVersionService
+                                                .rollbackToVersion(workflowId, versionId, teamId)
+                                                .map(ResponseEntity::ok);
+                                    }
+
+                                    // For non-SUPER_ADMIN users, check team role
+                                    return teamService.hasRole(workflow.getTeamId(), user.getId(), "ADMIN")
+                                            .flatMap(isAdmin -> {
+                                                if (!isAdmin) {
+                                                    return Mono.just(ResponseEntity
+                                                            .status(HttpStatus.FORBIDDEN)
+                                                            .body(ErrorResponse.fromErrorCode(
+                                                                    ErrorCode.FORBIDDEN,
+                                                                    "Only team administrators can rollback versions",
+                                                                    HttpStatus.FORBIDDEN.value())));
+                                                }
+                                                return linqWorkflowVersionService
+                                                        .rollbackToVersion(workflowId, versionId, teamId)
+                                                        .map(w -> ResponseEntity.ok(w));
+                                            });
+                                })))
+                .doOnSuccess(w -> Optional.ofNullable(w.getBody())
+                        .map(body -> (LinqWorkflow) body)
+                        .ifPresent(rolledBackWorkflow -> log.info("Rolled back workflow: {} to version: {}",
+                                rolledBackWorkflow.getId(), versionId)))
+                .doOnError(error -> log.error("Error rolling back workflow: {}", error.getMessage()));
     }
 
     @GetMapping("/{workflowId}/versions")
     public Flux<LinqWorkflowVersion> getVersionHistory(@PathVariable String workflowId, ServerWebExchange exchange) {
         log.info("Fetching version history for workflow: {}", workflowId);
         return teamContextService.getTeamFromContext(exchange)
-            .flatMapMany(teamId -> {
-                log.info("Getting version history for workflow {} for teamId: {}", workflowId, teamId);
-                return linqWorkflowVersionService.getVersionHistory(workflowId, teamId);
-            })
-            .doOnError(error -> log.error("Error fetching version history: {}", error.getMessage()));
+                .flatMapMany(teamId -> {
+                    log.info("Getting version history for workflow {} for teamId: {}", workflowId, teamId);
+                    return linqWorkflowVersionService.getVersionHistory(workflowId, teamId);
+                })
+                .doOnError(error -> log.error("Error fetching version history: {}", error.getMessage()));
     }
 
     @GetMapping("/{workflowId}/versions/{versionId}")
     public Mono<LinqWorkflowVersion> getVersion(
-        @PathVariable String workflowId,
-        @PathVariable String versionId,
-        ServerWebExchange exchange
-    ) {
+            @PathVariable String workflowId,
+            @PathVariable String versionId,
+            ServerWebExchange exchange) {
         log.info("Fetching version: {} for workflow: {}", versionId, workflowId);
         return teamContextService.getTeamFromContext(exchange)
-            .flatMap(teamId -> {
-                log.info("Getting version {} for workflow {} for teamId: {}", versionId, workflowId, teamId);
-                return linqWorkflowVersionService.getVersion(workflowId, versionId, teamId);
-            })
-            .doOnSuccess(v -> log.info("Fetched version: {} for workflow: {}", v.getId(), workflowId))
-            .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()));
+                .flatMap(teamId -> {
+                    log.info("Getting version {} for workflow {} for teamId: {}", versionId, workflowId, teamId);
+                    return linqWorkflowVersionService.getVersion(workflowId, versionId, teamId);
+                })
+                .doOnSuccess(v -> log.info("Fetched version: {} for workflow: {}", v.getId(), workflowId))
+                .doOnError(error -> log.error("Error fetching version: {}", error.getMessage()));
     }
 
     @GetMapping("/team/stats")
     public Mono<ResponseEntity<TeamWorkflowStats>> getTeamStats(ServerWebExchange exchange) {
         log.info("Fetching team workflow statistics");
         return teamContextService.getTeamFromContext(exchange)
-            .flatMap(teamId -> {
-                log.info("Getting stats for teamId: {}", teamId);
-                return linqWorkflowStatsService.getTeamStats(teamId);
-            })
-            .map(ResponseEntity::ok)
-            .doOnError(error -> log.error("Error fetching team workflow statistics: {}", error.getMessage()));
+                .flatMap(teamId -> {
+                    log.info("Getting stats for teamId: {}", teamId);
+                    return linqWorkflowStatsService.getTeamStats(teamId);
+                })
+                .map(ResponseEntity::ok)
+                .doOnError(error -> log.error("Error fetching team workflow statistics: {}", error.getMessage()));
     }
 
     /**
-     * Helper method to add teamId and userId to workflow query params if not already present
+     * Helper method to add teamId and userId to workflow query params if not
+     * already present
      */
     private Mono<LinqWorkflow> addGlobalParamsToWorkflow(LinqWorkflow workflow) {
-        if (workflow.getRequest() != null && 
-            workflow.getRequest().getQuery() != null && 
-            workflow.getTeamId() != null) {
-            
+        if (workflow.getRequest() != null &&
+                workflow.getRequest().getQuery() != null &&
+                workflow.getTeamId() != null) {
+
             // Ensure params map exists
             if (workflow.getRequest().getQuery().getParams() == null) {
                 workflow.getRequest().getQuery().setParams(new HashMap<>());
             }
-            
+
             // Add teamId to params if not already present
             workflow.getRequest().getQuery().getParams().putIfAbsent("teamId", workflow.getTeamId());
-            
+
             // Add userId to params if not already present (use createdBy or updatedBy)
             String userId = workflow.getCreatedBy() != null ? workflow.getCreatedBy() : workflow.getUpdatedBy();
             if (userId != null) {
                 workflow.getRequest().getQuery().getParams().putIfAbsent("userId", userId);
             }
-            
+
             log.info("Added teamId {} and userId {} to workflow params", workflow.getTeamId(), userId);
         }
-        
+
         return Mono.just(workflow);
     }
 }

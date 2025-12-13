@@ -7,6 +7,7 @@ import RouteDetails from '../../../components/apiroutes/RouteDetails';
 import RouteEndpoints from '../../../components/apiroutes/RouteEndpoints';
 import ServiceInteractionStats from '../../../components/apiroutes/ServiceInteractionStats';
 import ServiceTopEndpoints from '../../../components/apiroutes/ServiceTopEndpoints';
+import Footer from '../../../components/common/Footer';
 import './styles.css';
 
 const ViewRoute = () => {
@@ -44,13 +45,13 @@ const ViewRoute = () => {
           <div className="route-subtitle">Configure app settings, API endpoints, resiliency, and monitor performance with version control</div>
         </div>
       </div>
-      
+
       <ServiceInteractionStats serviceName={route.routeIdentifier} />
-      
+
       <ServiceTopEndpoints serviceName={route.routeIdentifier} />
-      
+
       <div className="tab-navigation">
-      <button 
+        <button
           className={`tab-button ${showEndpoints ? 'active' : ''}`}
           onClick={() => setShowEndpoints(true)}
           type="button"
@@ -58,7 +59,7 @@ const ViewRoute = () => {
           <FaNetworkWired />
           <span>API Endpoints</span>
         </button>
-        <button 
+        <button
           className={`tab-button ${!showEndpoints ? 'active' : ''}`}
           onClick={() => setShowEndpoints(false)}
           type="button"
@@ -67,18 +68,19 @@ const ViewRoute = () => {
           <span>Route Details</span>
         </button>
       </div>
-      
+
       <div className="content-area">
         {showEndpoints ? (
           <RouteEndpoints route={route} />
         ) : (
-          <RouteDetails 
+          <RouteDetails
             route={route}
             setRoute={setRoute}
             activeItem="basic"
           />
         )}
       </div>
+      <Footer />
     </div>
   );
 };

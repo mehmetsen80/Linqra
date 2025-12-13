@@ -36,26 +36,78 @@ import WorkflowQuotes from '../pages/LinqProtocol/Workflow/Quotes';
 import Agents from '../pages/Agents';
 import ViewAgent from '../pages/Agents/ViewAgent';
 import ViewAgentTask from '../pages/Agents/ViewAgentTask';
+import AIAssistants from '../pages/AIAssistants';
+import ViewAssistant from '../pages/AIAssistants/ViewAssistant';
 import LlmUsage from '../pages/LlmUsage';
 import LlmModels from '../pages/LlmModels';
 import ExecutionMonitoring from '../pages/ExecutionMonitoring';
 import KnowledgeHub from '../pages/KnowledgeHub';
 import ViewCollection from '../pages/KnowledgeHub/ViewCollection';
 import ViewDocument from '../pages/KnowledgeHub/ViewCollection/ViewDocument';
+import ExportCollection from '../pages/KnowledgeHub/ExportCollection';
 import Rag from '../pages/Rag';
 import ViewRag from '../pages/Rag/ViewRag';
+import Audits from '../pages/Audits';
+import { LoadingSpinner } from '../components/common/LoadingSpinner';
+
+const SecurityIncidents = React.lazy(() => import('../pages/SecurityIncidents'));
+
+const FinanceSolution = React.lazy(() => import('../pages/Solutions/FinanceSolution'));
+const LegalSolution = React.lazy(() => import('../pages/Solutions/LegalSolution'));
+const HealthcareSolution = React.lazy(() => import('../pages/Solutions/HealthcareSolution'));
+
+const About = React.lazy(() => import('../pages/About'));
+const Careers = React.lazy(() => import('../pages/Careers'));
+const Contact = React.lazy(() => import('../pages/Contact'));
+
+const SecurityPolicy = React.lazy(() => import('../pages/SecurityPolicy'));
 
 const AppRoutes = () => {
   return (
     <Routes>
       {/* Public Routes */}
       <Route path="/" element={<Home />} />
+      <Route path="/solutions/finance" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <FinanceSolution />
+        </React.Suspense>
+      } />
+      <Route path="/solutions/legal" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <LegalSolution />
+        </React.Suspense>
+      } />
+      <Route path="/solutions/healthcare" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <HealthcareSolution />
+        </React.Suspense>
+      } />
+      <Route path="/about" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <About />
+        </React.Suspense>
+      } />
+      <Route path="/careers" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <Careers />
+        </React.Suspense>
+      } />
+      <Route path="/contact" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <Contact />
+        </React.Suspense>
+      } />
+      <Route path="/security-policy" element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <SecurityPolicy />
+        </React.Suspense>
+      } />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/callback" element={<Callback />} />
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/terms-of-service" element={<TermsOfService />} />
-      
+
       {/* Linq Protocol Routes */}
       <Route path="/linq-protocol" element={<LinqProtocol />}>
         <Route index element={<Navigate to="/linq-protocol/basics" replace />} />
@@ -63,7 +115,7 @@ const AppRoutes = () => {
         <Route path="basics/request-structure" element={<RequestStructure />} />
         <Route path="basics/response-format" element={<ResponseFormat />} />
         <Route path="basics/error-handling" element={<ErrorHandling />} />
-        
+
         {/* Workflow Routes */}
         <Route path="workflow" element={<WorkflowOverview />} />
         <Route path="workflow/create" element={<WorkflowCreate />} />
@@ -89,6 +141,8 @@ const AppRoutes = () => {
         <Route path="/agents" element={<Agents />} />
         <Route path="/agents/:agentId" element={<ViewAgent />} />
         <Route path="/agents/:agentId/tasks/:taskId" element={<ViewAgentTask />} />
+        <Route path="/ai-assistants" element={<AIAssistants />} />
+        <Route path="/ai-assistants/:assistantId" element={<ViewAssistant />} />
         <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
         <Route path="/llm-usage" element={<LlmUsage />} />
         <Route path="/execution-monitoring" element={<ExecutionMonitoring />} />
@@ -96,42 +150,68 @@ const AppRoutes = () => {
         <Route path="/knowledge-hub" element={<KnowledgeHub />} />
         <Route path="/knowledge-hub/collection/:collectionId" element={<ViewCollection />} />
         <Route path="/knowledge-hub/document/:documentId" element={<ViewDocument />} />
+        <Route
+          path="/knowledge-hub/export"
+          element={
+            <AdminGuard>
+              <ExportCollection />
+            </AdminGuard>
+          }
+        />
         <Route path="/rag" element={<Rag />} />
         <Route path="/rag/view/:collectionName" element={<ViewRag />} />
-        
-        <Route 
-          path="/teams" 
+        <Route
+          path="/audits"
+          element={
+            <AdminGuard>
+              <Audits />
+            </AdminGuard>
+          }
+        />
+        <Route
+          path="/security/incidents"
+          element={
+            <AdminGuard>
+              <React.Suspense fallback={<LoadingSpinner />}>
+                <SecurityIncidents />
+              </React.Suspense>
+            </AdminGuard>
+          }
+        />
+
+        <Route
+          path="/teams"
           element={
             <AdminGuard>
               <Teams />
             </AdminGuard>
-          } 
+          }
         />
-        <Route 
-          path="/teams/:teamId" 
+        <Route
+          path="/teams/:teamId"
           element={
             <AdminGuard>
               <ViewTeam />
             </AdminGuard>
-          } 
+          }
         />
-        <Route 
-          path="/organizations" 
+        <Route
+          path="/organizations"
           element={
             <AdminGuard>
               <Organizations />
             </AdminGuard>
-          } 
+          }
         />
         <Route path="/api-routes" element={<ApiRoutes />} />
         <Route path="/api-routes/:routeId" element={<ViewRoute />} />
-        <Route 
-          path="/view-token" 
+        <Route
+          path="/view-token"
           element={
             <NonProdGuard>
               <ViewToken />
             </NonProdGuard>
-          } 
+          }
         />
         <Route path="/404" element={<NotFound />} />
         <Route path="*" element={<Navigate to="/404" replace />} />

@@ -101,7 +101,7 @@
 }
 
 .quotes-docs-button:hover {
-    background-color: var(--primary-color-dark) !important;
+    background-color: var(--primary-dark) !important;
     transform: translateY(-2px) !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
     color: white !important;
@@ -158,11 +158,25 @@
 }
 
 /* Syntax highlighting for JSON */
-.code-example code .string { color: #a6e22e; }
-.code-example code .number { color: #ae81ff; }
-.code-example code .boolean { color: #f92672; }
-.code-example code .null { color: #f92672; }
-.code-example code .key { color: #66d9ef; }
+.code-example code .string {
+    color: #a6e22e;
+}
+
+.code-example code .number {
+    color: #ae81ff;
+}
+
+.code-example code .boolean {
+    color: #f92672;
+}
+
+.code-example code .null {
+    color: #f92672;
+}
+
+.code-example code .key {
+    color: #66d9ef;
+}
 
 /* Main Title Styling */
 .workflow-quotes h2 {

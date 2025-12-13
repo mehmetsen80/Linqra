@@ -5,12 +5,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.AssignMilvusCollectionRequest;
 import org.lite.gateway.dto.MilvusCollectionInfo;
 import org.lite.gateway.entity.KnowledgeHubCollection;
+import org.lite.gateway.enums.AuditActionType;
+import org.lite.gateway.enums.AuditEventType;
+import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.enums.KnowledgeCategory;
 import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.KnowledgeHubCollectionService;
 import org.lite.gateway.service.LinqMilvusStoreService;
+import org.lite.gateway.util.AuditLogHelper;
 import org.lite.gateway.validation.validator.MilvusSchemaValidator;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -20,6 +24,7 @@ import reactor.core.publisher.Mono;
 import reactor.util.function.Tuples;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -39,6 +44,7 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
     private final TeamRepository teamRepository;
     private final KnowledgeHubDocumentRepository documentRepository;
     private final LinqMilvusStoreService milvusStoreService;
+    private final AuditLogHelper auditLogHelper;
 
     @Override
     public Mono<KnowledgeHubCollection> createCollection(String name, String description, List<KnowledgeCategory> categories, String teamId, String createdBy) {
@@ -72,7 +78,34 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                         .build();
                                 
                                 return collectionRepository.save(collection)
-                                        .doOnSuccess(col -> log.info("Created knowledge collection: {} with ID: {}", col.getName(), col.getId()));
+                                        .flatMap(savedCollection -> {
+                                            log.info("Created knowledge collection: {} with ID: {}", savedCollection.getName(), savedCollection.getId());
+                                            
+                                            // Build detailed audit context
+                                            Map<String, Object> auditContext = new HashMap<>();
+                                            auditContext.put("collectionName", savedCollection.getName());
+                                            auditContext.put("description", savedCollection.getDescription());
+                                            auditContext.put("categories", savedCollection.getCategories() != null ?
+                                                savedCollection.getCategories().stream().map(Enum::name).collect(Collectors.toList()) :
+                                                java.util.Collections.emptyList());
+                                            auditContext.put("createdBy", savedCollection.getCreatedBy());
+                                            auditContext.put("createdAt", savedCollection.getCreatedAt().toString());
+                                            
+                                            String auditReason = String.format("Knowledge Hub collection '%s' created in team %s", 
+                                                savedCollection.getName(), teamId);
+                                            
+                                            // Log detailed audit event with collectionId populated
+                                            return auditLogHelper.logDetailedEvent(
+                                                AuditEventType.COLLECTION_CREATED,
+                                                AuditActionType.CREATE,
+                                                AuditResourceType.COLLECTION,
+                                                savedCollection.getId(), // resourceId - the collection ID
+                                                auditReason,
+                                                auditContext,
+                                                null, // documentId - not applicable for collection creation
+                                                savedCollection.getId() // collectionId - the created collection
+                                            ).thenReturn(savedCollection);
+                                        });
                             });
                 });
     }
@@ -98,6 +131,11 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                     return Mono.error(new RuntimeException("Collection with name '" + name + "' already exists for this team"));
                                 }
                                 
+                                // Capture "before" state for audit
+                                String oldName = collection.getName();
+                                String oldDescription = collection.getDescription();
+                                List<KnowledgeCategory> oldCategories = collection.getCategories();
+                                
                                 // Update collection
                                 collection.setName(name);
                                 collection.setDescription(description);
@@ -106,7 +144,40 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                 collection.setUpdatedAt(LocalDateTime.now());
                                 
                                 return collectionRepository.save(collection)
-                                        .doOnSuccess(col -> log.info("Updated knowledge collection: {} with ID: {}", col.getName(), col.getId()));
+                                        .flatMap(savedCollection -> {
+                                            log.info("Updated knowledge collection: {} with ID: {}", savedCollection.getName(), savedCollection.getId());
+                                            
+                                            // Build detailed audit context
+                                            Map<String, Object> auditContext = new HashMap<>();
+                                            auditContext.put("collectionName", savedCollection.getName());
+                                            auditContext.put("oldName", oldName);
+                                            auditContext.put("newName", name);
+                                            auditContext.put("oldDescription", oldDescription);
+                                            auditContext.put("newDescription", description);
+                                            auditContext.put("oldCategories", oldCategories != null ?
+                                                oldCategories.stream().map(Enum::name).collect(Collectors.toList()) :
+                                                java.util.Collections.emptyList());
+                                            auditContext.put("newCategories", categories != null ?
+                                                categories.stream().map(Enum::name).collect(Collectors.toList()) :
+                                                java.util.Collections.emptyList());
+                                            auditContext.put("updatedBy", updatedBy);
+                                            auditContext.put("updatedAt", savedCollection.getUpdatedAt().toString());
+                                            
+                                            String auditReason = String.format("Knowledge Hub collection '%s' (ID: %s) updated", 
+                                                savedCollection.getName(), savedCollection.getId());
+                                            
+                                            // Log detailed audit event
+                                            return auditLogHelper.logDetailedEvent(
+                                                AuditEventType.COLLECTION_UPDATED,
+                                                AuditActionType.UPDATE,
+                                                AuditResourceType.COLLECTION,
+                                                savedCollection.getId(),
+                                                auditReason,
+                                                auditContext,
+                                                null, // documentId
+                                                savedCollection.getId() // collectionId
+                                            ).thenReturn(savedCollection);
+                                        });
                             });
                 });
     }
@@ -123,6 +194,12 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                         return Mono.error(new RuntimeException("Collection not found or access denied: " + id));
                     }
                     
+                    // Capture collection details before deletion for audit
+                    String collectionName = collection.getName();
+                    String collectionDescription = collection.getDescription();
+                    List<KnowledgeCategory> collectionCategories = collection.getCategories();
+                    String milvusCollectionName = collection.getMilvusCollectionName();
+                    
                     // Check if collection has any documents
                     return documentRepository.findByCollectionId(id)
                             .count()
@@ -135,7 +212,37 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                 
                                 // No documents, safe to delete
                                 return collectionRepository.deleteById(id)
-                                        .doOnSuccess(v -> log.info("Deleted knowledge collection: {}", id));
+                                        .flatMap(v -> {
+                                            log.info("Deleted knowledge collection: {}", id);
+                                            
+                                            // Build detailed audit context
+                                            Map<String, Object> auditContext = new HashMap<>();
+                                            auditContext.put("collectionName", collectionName);
+                                            auditContext.put("description", collectionDescription);
+                                            auditContext.put("categories", collectionCategories != null ?
+                                                collectionCategories.stream().map(Enum::name).collect(Collectors.toList()) :
+                                                java.util.Collections.emptyList());
+                                            auditContext.put("milvusCollectionName", milvusCollectionName);
+                                            auditContext.put("documentCount", documentCount);
+                                            auditContext.put("deletionTimestamp", LocalDateTime.now().toString());
+                                            
+                                            String auditReason = String.format("Knowledge Hub collection '%s' (ID: %s) deleted", 
+                                                collectionName, id);
+                                            
+                                            // Log detailed audit event as part of reactive chain
+                                            return auditLogHelper.logDetailedEvent(
+                                                AuditEventType.COLLECTION_DELETED,
+                                                AuditActionType.DELETE,
+                                                AuditResourceType.COLLECTION,
+                                                id,
+                                                auditReason,
+                                                auditContext,
+                                                null, // documentId
+                                                id // collectionId
+                                            )
+                                            .doOnError(auditError -> log.error("Failed to log audit event (collection deletion): {}", auditError.getMessage(), auditError))
+                                            .onErrorResume(auditError -> Mono.empty()); // Don't fail if audit logging fails
+                                        });
                             });
                 });
     }
@@ -204,6 +311,13 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                     KnowledgeHubCollection collection = tuple.getT1();
                     Integer effectiveDimension = tuple.getT2();
 
+                    // Capture "before" state for audit
+                    String oldMilvusCollectionName = collection.getMilvusCollectionName();
+                    String oldEmbeddingModel = collection.getEmbeddingModel();
+                    String oldEmbeddingModelName = collection.getEmbeddingModelName();
+                    Integer oldEmbeddingDimension = collection.getEmbeddingDimension();
+                    boolean oldLateChunkingEnabled = collection.isLateChunkingEnabled();
+                    
                     collection.setMilvusCollectionName(request.getMilvusCollectionName());
                     collection.setEmbeddingModel(request.getEmbeddingModel());
                     collection.setEmbeddingModelName(request.getEmbeddingModelName());
@@ -213,7 +327,40 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                     collection.setUpdatedAt(LocalDateTime.now());
 
                     return collectionRepository.save(collection)
-                            .doOnSuccess(col -> log.info("Assigned Milvus collection {} to KnowledgeHub collection {}", col.getMilvusCollectionName(), col.getId()));
+                            .flatMap(savedCollection -> {
+                                log.info("Assigned Milvus collection {} to KnowledgeHub collection {}", savedCollection.getMilvusCollectionName(), savedCollection.getId());
+                                
+                                // Build detailed audit context
+                                Map<String, Object> auditContext = new HashMap<>();
+                                auditContext.put("collectionName", savedCollection.getName());
+                                auditContext.put("oldMilvusCollectionName", oldMilvusCollectionName);
+                                auditContext.put("newMilvusCollectionName", request.getMilvusCollectionName());
+                                auditContext.put("oldEmbeddingModel", oldEmbeddingModel);
+                                auditContext.put("newEmbeddingModel", request.getEmbeddingModel());
+                                auditContext.put("oldEmbeddingModelName", oldEmbeddingModelName);
+                                auditContext.put("newEmbeddingModelName", request.getEmbeddingModelName());
+                                auditContext.put("oldEmbeddingDimension", oldEmbeddingDimension);
+                                auditContext.put("newEmbeddingDimension", effectiveDimension);
+                                auditContext.put("oldLateChunkingEnabled", oldLateChunkingEnabled);
+                                auditContext.put("newLateChunkingEnabled", request.isLateChunkingEnabled());
+                                auditContext.put("updatedBy", updatedBy);
+                                auditContext.put("updatedAt", savedCollection.getUpdatedAt().toString());
+                                
+                                String auditReason = String.format("Milvus collection '%s' assigned to Knowledge Hub collection '%s'", 
+                                    request.getMilvusCollectionName(), savedCollection.getName());
+                                
+                                // Log detailed audit event
+                                return auditLogHelper.logDetailedEvent(
+                                    AuditEventType.COLLECTION_UPDATED,
+                                    AuditActionType.UPDATE,
+                                    AuditResourceType.COLLECTION,
+                                    savedCollection.getId(),
+                                    auditReason,
+                                    auditContext,
+                                    null, // documentId
+                                    savedCollection.getId() // collectionId
+                                ).thenReturn(savedCollection);
+                            });
                 });
     }
 
@@ -228,6 +375,13 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                         return Mono.error(new RuntimeException("Collection not found or access denied: " + id));
                     }
 
+                    // Capture "before" state for audit
+                    String oldMilvusCollectionName = collection.getMilvusCollectionName();
+                    String oldEmbeddingModel = collection.getEmbeddingModel();
+                    String oldEmbeddingModelName = collection.getEmbeddingModelName();
+                    Integer oldEmbeddingDimension = collection.getEmbeddingDimension();
+                    boolean oldLateChunkingEnabled = collection.isLateChunkingEnabled();
+                    
                     collection.setMilvusCollectionName(null);
                     collection.setEmbeddingModel(null);
                     collection.setEmbeddingModelName(null);
@@ -237,7 +391,35 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                     collection.setUpdatedAt(LocalDateTime.now());
 
                     return collectionRepository.save(collection)
-                            .doOnSuccess(col -> log.info("Removed Milvus assignment from collection {}", col.getId()));
+                            .flatMap(savedCollection -> {
+                                log.info("Removed Milvus assignment from collection {}", savedCollection.getId());
+                                
+                                // Build detailed audit context
+                                Map<String, Object> auditContext = new HashMap<>();
+                                auditContext.put("collectionName", savedCollection.getName());
+                                auditContext.put("removedMilvusCollectionName", oldMilvusCollectionName);
+                                auditContext.put("removedEmbeddingModel", oldEmbeddingModel);
+                                auditContext.put("removedEmbeddingModelName", oldEmbeddingModelName);
+                                auditContext.put("removedEmbeddingDimension", oldEmbeddingDimension);
+                                auditContext.put("removedLateChunkingEnabled", oldLateChunkingEnabled);
+                                auditContext.put("updatedBy", updatedBy);
+                                auditContext.put("updatedAt", savedCollection.getUpdatedAt().toString());
+                                
+                                String auditReason = String.format("Milvus collection assignment removed from Knowledge Hub collection '%s'", 
+                                    savedCollection.getName());
+                                
+                                // Log detailed audit event
+                                return auditLogHelper.logDetailedEvent(
+                                    AuditEventType.COLLECTION_UPDATED,
+                                    AuditActionType.UPDATE,
+                                    AuditResourceType.COLLECTION,
+                                    savedCollection.getId(),
+                                    auditReason,
+                                    auditContext,
+                                    null, // documentId
+                                    savedCollection.getId() // collectionId
+                                ).thenReturn(savedCollection);
+                            });
                 });
     }
 
@@ -282,7 +464,60 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                     collection.getEmbeddingModelName(),
                                     effectiveTopK,
                                     metadataFilters)
-                            .doOnError(error -> log.error("Semantic search failed for collection {}: {}", collectionId, error.getMessage(), error));
+                            .flatMap(searchResults -> {
+                                // Build detailed audit context
+                                Map<String, Object> auditContext = new HashMap<>();
+                                auditContext.put("collectionName", collection.getName());
+                                auditContext.put("milvusCollectionName", collection.getMilvusCollectionName());
+                                auditContext.put("embeddingModel", collection.getEmbeddingModel());
+                                auditContext.put("embeddingModelName", collection.getEmbeddingModelName());
+                                auditContext.put("query", query);
+                                auditContext.put("topK", effectiveTopK);
+                                auditContext.put("metadataFilters", metadataFilters != null ? metadataFilters : java.util.Collections.emptyMap());
+                                auditContext.put("resultCount", searchResults != null && searchResults instanceof Map ? 
+                                    ((Map<?, ?>) searchResults).size() : 0);
+                                auditContext.put("searchTimestamp", LocalDateTime.now().toString());
+                                
+                                String auditReason = String.format("Semantic search executed on collection '%s' with query: '%s' (topK: %d)", 
+                                    collection.getName(), query, effectiveTopK);
+                                
+                                // Log detailed audit event
+                                return auditLogHelper.logDetailedEvent(
+                                    AuditEventType.CHUNK_ACCESSED, // Using CHUNK_ACCESSED for search operations
+                                    AuditActionType.READ,
+                                    AuditResourceType.COLLECTION,
+                                    collectionId,
+                                    auditReason,
+                                    auditContext,
+                                    null, // documentId
+                                    collectionId // collectionId
+                                ).thenReturn(searchResults);
+                            })
+                            .onErrorResume(error -> {
+                                log.error("Semantic search failed for collection {}: {}", collectionId, error.getMessage(), error);
+                                
+                                // Log failed search attempt
+                                Map<String, Object> errorContext = new HashMap<>();
+                                errorContext.put("collectionName", collection.getName());
+                                errorContext.put("query", query);
+                                errorContext.put("error", error.getMessage());
+                                errorContext.put("searchTimestamp", LocalDateTime.now().toString());
+                                
+                                // Chain audit logging before returning error
+                                return auditLogHelper.logDetailedEvent(
+                                    AuditEventType.CHUNK_ACCESSED,
+                                    AuditActionType.READ,
+                                    AuditResourceType.COLLECTION,
+                                    collectionId,
+                                    String.format("Semantic search failed on collection '%s'", collection.getName()),
+                                    errorContext,
+                                    null,
+                                    collectionId
+                                )
+                                .doOnError(auditError -> log.error("Failed to log audit event (search failed): {}", auditError.getMessage(), auditError))
+                                .onErrorResume(auditError -> Mono.empty()) // Don't fail if audit logging fails
+                                .then(Mono.error(error)); // Return the original error after logging
+                            });
                 });
     }
 

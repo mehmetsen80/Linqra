@@ -4,7 +4,7 @@ import { jwtDecode } from 'jwt-decode';
 
 const axiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_GATEWAY_URL || 'https://localhost:7777',
-  timeout: 30000,
+  timeout: 120000, // 2 minutes default timeout (increased from 30s for long-running operations)
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json'

@@ -33,6 +33,16 @@ public class LlmModelServiceImpl implements LlmModelService {
     }
     
     @Override
+    public Flux<LlmModel> getChatModels() {
+        return llmModelRepository.findByCategoryChatSorted();
+    }
+    
+    @Override
+    public Flux<LlmModel> getActiveChatModels() {
+        return llmModelRepository.findByCategoryChatAndActiveSorted(true);
+    }
+    
+    @Override
     public Mono<LlmModel> getModelByName(String modelName) {
         return llmModelRepository.findByModelName(modelName);
     }

@@ -4,9 +4,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LlmUsageStats;
 import org.lite.gateway.dto.LinqResponse;
+import org.lite.gateway.entity.ConversationMessage;
+import org.lite.gateway.entity.KnowledgeHubDocumentMetaData;
 import org.lite.gateway.entity.LinqWorkflowExecution;
 import org.lite.gateway.entity.LlmModel;
 import org.lite.gateway.entity.LlmPricingSnapshot;
+import org.lite.gateway.repository.ConversationMessageRepository;
+import org.lite.gateway.repository.ConversationRepository;
+import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.lite.gateway.repository.LlmModelRepository;
 import org.lite.gateway.repository.LlmPricingSnapshotRepository;
@@ -36,6 +41,9 @@ public class LlmCostServiceImpl implements LlmCostService {
     private static final Duration CACHE_EXPIRATION = Duration.ofHours(24); // Cache expires in 24 hours, refreshed on startup
     
     private final LinqWorkflowExecutionRepository executionRepository;
+    private final ConversationRepository conversationRepository;
+    private final ConversationMessageRepository conversationMessageRepository;
+    private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
     private final LlmPricingSnapshotRepository pricingSnapshotRepository;
     private final LlmModelRepository llmModelRepository;
     private final RedisTemplate<String, String> redisTemplate;
@@ -96,9 +104,42 @@ public class LlmCostServiceImpl implements LlmCostService {
             java.time.LocalDate.parse(toDate, DateTimeFormatter.ISO_LOCAL_DATE).atTime(23, 59, 59, 999999999) : 
             LocalDateTime.now();
         
-        return executionRepository.findByTeamIdAndExecutedAtBetween(teamId, from, to)
-            .collectList()
-            .map(executions -> calculateUsageStats(teamId, executions, from, to));
+        // Query all three sources in parallel
+        Mono<java.util.List<LinqWorkflowExecution>> executionsMono = executionRepository.findByTeamIdAndExecutedAtBetween(teamId, from, to)
+            .collectList();
+        
+        // Get conversations for the team, filter by date range, then get all messages
+        Mono<java.util.List<ConversationMessage>> chatMessagesMono = conversationRepository.findByTeamIdOrderByStartedAtDesc(teamId)
+            .filter(conversation -> {
+                LocalDateTime startedAt = conversation.getStartedAt() != null ? conversation.getStartedAt() : conversation.getCreatedAt();
+                return startedAt != null && !startedAt.isBefore(from) && !startedAt.isAfter(to);
+            })
+            .flatMap(conversation -> conversationMessageRepository.findByConversationIdOrderBySequenceNumberAsc(conversation.getId()))
+            .filter(message -> {
+                // Filter messages by timestamp/createdAt within date range
+                LocalDateTime messageTime = message.getTimestamp() != null ? message.getTimestamp() : message.getCreatedAt();
+                return messageTime != null && !messageTime.isBefore(from) && !messageTime.isAfter(to);
+            })
+            .collectList();
+        
+        // Get knowledge hub metadata for the team, filter by extractedAt date range
+        Mono<java.util.List<KnowledgeHubDocumentMetaData>> metadataMono = metadataRepository.findAll()
+            .filter(metadata -> teamId.equals(metadata.getTeamId()))
+            .filter(metadata -> {
+                LocalDateTime extractedAt = metadata.getExtractedAt() != null ? metadata.getExtractedAt() : metadata.getCreatedAt();
+                return extractedAt != null && !extractedAt.isBefore(from) && !extractedAt.isAfter(to);
+            })
+            .collectList();
+        
+        // Combine all three sources and calculate aggregated stats
+        return Mono.zip(executionsMono, chatMessagesMono, metadataMono)
+            .map(tuple -> {
+                java.util.List<LinqWorkflowExecution> executions = tuple.getT1();
+                java.util.List<ConversationMessage> chatMessages = tuple.getT2();
+                java.util.List<KnowledgeHubDocumentMetaData> metadataList = tuple.getT3();
+                
+                return calculateUsageStats(teamId, executions, chatMessages, metadataList, from, to);
+            });
     }
     
     @Override
@@ -278,7 +319,10 @@ public class LlmCostServiceImpl implements LlmCostService {
         }
     }
     
-    private LlmUsageStats calculateUsageStats(String teamId, java.util.List<LinqWorkflowExecution> executions, 
+    private LlmUsageStats calculateUsageStats(String teamId, 
+                                               java.util.List<LinqWorkflowExecution> executions,
+                                               java.util.List<ConversationMessage> chatMessages,
+                                               java.util.List<KnowledgeHubDocumentMetaData> metadataList,
                                                LocalDateTime from, LocalDateTime to) {
         LlmUsageStats stats = new LlmUsageStats();
         stats.setTeamId(teamId);
@@ -297,6 +341,7 @@ public class LlmCostServiceImpl implements LlmCostService {
         long totalCompletionTokens = 0;
         double totalCost = 0.0;
         
+        // 1. Process workflow executions (existing logic)
         for (LinqWorkflowExecution execution : executions) {
             if (execution.getResponse() == null || 
                 execution.getResponse().getMetadata() == null || 
@@ -390,6 +435,218 @@ public class LlmCostServiceImpl implements LlmCostService {
             }
         }
         
+        // 2. Process chat conversation messages (ASSISTANT messages with tokenUsage)
+        for (ConversationMessage message : chatMessages) {
+            if (!"ASSISTANT".equals(message.getRole()) || message.getMetadata() == null || message.getMetadata().getTokenUsage() == null) {
+                continue;
+            }
+            
+            ConversationMessage.MessageMetadata.TokenUsage tokenUsage = message.getMetadata().getTokenUsage();
+            if (tokenUsage.getCostUsd() == null || tokenUsage.getCostUsd() == 0.0) {
+                continue; // Skip if no cost
+            }
+            
+            String modelCategory = message.getMetadata().getModelCategory();
+            String rawModel = message.getMetadata().getModelName();
+            if (rawModel == null || rawModel.isEmpty() || modelCategory == null || modelCategory.isEmpty()) {
+                continue;
+            }
+            
+            String model = normalizeModelName(rawModel);
+            long promptTokens = tokenUsage.getPromptTokens() != null ? tokenUsage.getPromptTokens() : 0;
+            long completionTokens = tokenUsage.getCompletionTokens() != null ? tokenUsage.getCompletionTokens() : 0;
+            long tokens = tokenUsage.getTotalTokens() != null ? tokenUsage.getTotalTokens() : (promptTokens + completionTokens);
+            double cost = tokenUsage.getCostUsd();
+            
+            // Update totals
+            totalRequests++;
+            totalPromptTokens += promptTokens;
+            totalCompletionTokens += completionTokens;
+            totalCost += cost;
+            
+            // Update model breakdown
+            LlmUsageStats.ModelUsage modelUsage = modelBreakdown.computeIfAbsent(model, k -> {
+                LlmUsageStats.ModelUsage mu = new LlmUsageStats.ModelUsage();
+                mu.setModelName(model);
+                mu.setModelCategory(modelCategory);
+                mu.setProvider(detectProviderFromModelName(model));
+                mu.setRequests(0);
+                mu.setPromptTokens(0);
+                mu.setCompletionTokens(0);
+                mu.setTotalTokens(0);
+                mu.setCostUsd(0.0);
+                mu.setAverageLatencyMs(0.0);
+                return mu;
+            });
+            
+            if (!rawModel.equals(model)) {
+                modelUsage.getVersions().add(rawModel);
+            }
+            
+            modelUsage.setRequests(modelUsage.getRequests() + 1);
+            modelUsage.setPromptTokens(modelUsage.getPromptTokens() + promptTokens);
+            modelUsage.setCompletionTokens(modelUsage.getCompletionTokens() + completionTokens);
+            modelUsage.setTotalTokens(modelUsage.getTotalTokens() + tokens);
+            modelUsage.setCostUsd(modelUsage.getCostUsd() + cost);
+            
+            // Update provider breakdown
+            String provider = modelUsage.getProvider();
+            LlmUsageStats.ProviderUsage providerUsage = providerBreakdown.computeIfAbsent(provider, k -> {
+                LlmUsageStats.ProviderUsage pu = new LlmUsageStats.ProviderUsage();
+                pu.setProvider(provider);
+                pu.setRequests(0);
+                pu.setTotalTokens(0);
+                pu.setCostUsd(0.0);
+                return pu;
+            });
+            
+            providerUsage.setRequests(providerUsage.getRequests() + 1);
+            providerUsage.setTotalTokens(providerUsage.getTotalTokens() + tokens);
+            providerUsage.setCostUsd(providerUsage.getCostUsd() + cost);
+        }
+        
+        // 3. Process knowledge hub graph extraction costs (entity and relationship extraction)
+        for (KnowledgeHubDocumentMetaData metadata : metadataList) {
+            if (metadata.getCustomMetadata() == null) {
+                continue;
+            }
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> customMetadata = (Map<String, Object>) metadata.getCustomMetadata();
+            if (!customMetadata.containsKey("graphExtraction")) {
+                continue;
+            }
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> graphExtraction = (Map<String, Object>) customMetadata.get("graphExtraction");
+            
+            // Process entity extraction costs
+            if (graphExtraction.containsKey("entityExtraction")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> entityExtraction = (Map<String, Object>) graphExtraction.get("entityExtraction");
+                if (entityExtraction.containsKey("costUsd") && entityExtraction.get("costUsd") instanceof Number) {
+                    long promptTokens = entityExtraction.containsKey("promptTokens") ? 
+                        ((Number) entityExtraction.get("promptTokens")).longValue() : 0;
+                    long completionTokens = entityExtraction.containsKey("completionTokens") ? 
+                        ((Number) entityExtraction.get("completionTokens")).longValue() : 0;
+                    long tokens = entityExtraction.containsKey("totalTokens") ? 
+                        ((Number) entityExtraction.get("totalTokens")).longValue() : (promptTokens + completionTokens);
+                    double cost = ((Number) entityExtraction.get("costUsd")).doubleValue();
+                    
+                    if (cost > 0) {
+                        // Use a default model name for graph extraction (could be improved to store actual model used)
+                        String model = "gpt-4o"; // Default - graph extraction typically uses chat models
+                        String modelCategory = "openai-chat";
+                        
+                        // Update totals
+                        totalRequests++;
+                        totalPromptTokens += promptTokens;
+                        totalCompletionTokens += completionTokens;
+                        totalCost += cost;
+                        
+                        // Update model breakdown
+                        LlmUsageStats.ModelUsage modelUsage = modelBreakdown.computeIfAbsent(model, k -> {
+                            LlmUsageStats.ModelUsage mu = new LlmUsageStats.ModelUsage();
+                            mu.setModelName(model);
+                            mu.setModelCategory(modelCategory);
+                            mu.setProvider(detectProviderFromModelName(model));
+                            mu.setRequests(0);
+                            mu.setPromptTokens(0);
+                            mu.setCompletionTokens(0);
+                            mu.setTotalTokens(0);
+                            mu.setCostUsd(0.0);
+                            mu.setAverageLatencyMs(0.0);
+                            return mu;
+                        });
+                        
+                        modelUsage.setRequests(modelUsage.getRequests() + 1);
+                        modelUsage.setPromptTokens(modelUsage.getPromptTokens() + promptTokens);
+                        modelUsage.setCompletionTokens(modelUsage.getCompletionTokens() + completionTokens);
+                        modelUsage.setTotalTokens(modelUsage.getTotalTokens() + tokens);
+                        modelUsage.setCostUsd(modelUsage.getCostUsd() + cost);
+                        
+                        // Update provider breakdown
+                        String provider = modelUsage.getProvider();
+                        LlmUsageStats.ProviderUsage providerUsage = providerBreakdown.computeIfAbsent(provider, k -> {
+                            LlmUsageStats.ProviderUsage pu = new LlmUsageStats.ProviderUsage();
+                            pu.setProvider(provider);
+                            pu.setRequests(0);
+                            pu.setTotalTokens(0);
+                            pu.setCostUsd(0.0);
+                            return pu;
+                        });
+                        
+                        providerUsage.setRequests(providerUsage.getRequests() + 1);
+                        providerUsage.setTotalTokens(providerUsage.getTotalTokens() + tokens);
+                        providerUsage.setCostUsd(providerUsage.getCostUsd() + cost);
+                    }
+                }
+            }
+            
+            // Process relationship extraction costs
+            if (graphExtraction.containsKey("relationshipExtraction")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> relationshipExtraction = (Map<String, Object>) graphExtraction.get("relationshipExtraction");
+                if (relationshipExtraction.containsKey("costUsd") && relationshipExtraction.get("costUsd") instanceof Number) {
+                    long promptTokens = relationshipExtraction.containsKey("promptTokens") ? 
+                        ((Number) relationshipExtraction.get("promptTokens")).longValue() : 0;
+                    long completionTokens = relationshipExtraction.containsKey("completionTokens") ? 
+                        ((Number) relationshipExtraction.get("completionTokens")).longValue() : 0;
+                    long tokens = relationshipExtraction.containsKey("totalTokens") ? 
+                        ((Number) relationshipExtraction.get("totalTokens")).longValue() : (promptTokens + completionTokens);
+                    double cost = ((Number) relationshipExtraction.get("costUsd")).doubleValue();
+                    
+                    if (cost > 0) {
+                        // Use a default model name for graph extraction (could be improved to store actual model used)
+                        String model = "gpt-4o"; // Default - graph extraction typically uses chat models
+                        String modelCategory = "openai-chat";
+                        
+                        // Update totals
+                        totalRequests++;
+                        totalPromptTokens += promptTokens;
+                        totalCompletionTokens += completionTokens;
+                        totalCost += cost;
+                        
+                        // Update model breakdown
+                        LlmUsageStats.ModelUsage modelUsage = modelBreakdown.computeIfAbsent(model, k -> {
+                            LlmUsageStats.ModelUsage mu = new LlmUsageStats.ModelUsage();
+                            mu.setModelName(model);
+                            mu.setModelCategory(modelCategory);
+                            mu.setProvider(detectProviderFromModelName(model));
+                            mu.setRequests(0);
+                            mu.setPromptTokens(0);
+                            mu.setCompletionTokens(0);
+                            mu.setTotalTokens(0);
+                            mu.setCostUsd(0.0);
+                            mu.setAverageLatencyMs(0.0);
+                            return mu;
+                        });
+                        
+                        modelUsage.setRequests(modelUsage.getRequests() + 1);
+                        modelUsage.setPromptTokens(modelUsage.getPromptTokens() + promptTokens);
+                        modelUsage.setCompletionTokens(modelUsage.getCompletionTokens() + completionTokens);
+                        modelUsage.setTotalTokens(modelUsage.getTotalTokens() + tokens);
+                        modelUsage.setCostUsd(modelUsage.getCostUsd() + cost);
+                        
+                        // Update provider breakdown
+                        String provider = modelUsage.getProvider();
+                        LlmUsageStats.ProviderUsage providerUsage = providerBreakdown.computeIfAbsent(provider, k -> {
+                            LlmUsageStats.ProviderUsage pu = new LlmUsageStats.ProviderUsage();
+                            pu.setProvider(provider);
+                            pu.setRequests(0);
+                            pu.setTotalTokens(0);
+                            pu.setCostUsd(0.0);
+                            return pu;
+                        });
+                        
+                        providerUsage.setRequests(providerUsage.getRequests() + 1);
+                        providerUsage.setTotalTokens(providerUsage.getTotalTokens() + tokens);
+                        providerUsage.setCostUsd(providerUsage.getCostUsd() + cost);
+                    }
+                }
+            }
+        }
+        
         totalUsage.setTotalRequests(totalRequests);
         totalUsage.setTotalPromptTokens(totalPromptTokens);
         totalUsage.setTotalCompletionTokens(totalCompletionTokens);
@@ -417,10 +674,11 @@ public class LlmCostServiceImpl implements LlmCostService {
         stats.setModelBreakdown(sortedModelBreakdown);
         stats.setProviderBreakdown(providerBreakdown);
         
-        // Calculate daily breakdown
+        // Calculate daily breakdown (includes all three sources)
         Map<String, LlmUsageStats.DailyUsage> dailyMap = new HashMap<>();
         DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         
+        // Daily breakdown from workflow executions
         for (LinqWorkflowExecution execution : executions) {
             if (execution.getResponse() == null || 
                 execution.getResponse().getMetadata() == null || 
@@ -468,13 +726,130 @@ public class LlmCostServiceImpl implements LlmCostService {
             }
         }
         
+        // Daily breakdown from chat conversation messages
+        for (ConversationMessage message : chatMessages) {
+            if (!"ASSISTANT".equals(message.getRole()) || message.getMetadata() == null || message.getMetadata().getTokenUsage() == null) {
+                continue;
+            }
+            
+            ConversationMessage.MessageMetadata.TokenUsage tokenUsage = message.getMetadata().getTokenUsage();
+            if (tokenUsage.getCostUsd() == null || tokenUsage.getCostUsd() == 0.0) {
+                continue;
+            }
+            
+            // Get the message date
+            LocalDateTime messageTime = message.getTimestamp() != null ? message.getTimestamp() : message.getCreatedAt();
+            if (messageTime == null) {
+                continue;
+            }
+            String dateKey = messageTime.format(dateFormatter);
+            
+            LlmUsageStats.DailyUsage dailyUsage = dailyMap.computeIfAbsent(dateKey, k -> {
+                LlmUsageStats.DailyUsage du = new LlmUsageStats.DailyUsage();
+                du.setDate(dateKey);
+                du.setRequests(0);
+                du.setTotalTokens(0);
+                du.setCostUsd(0.0);
+                return du;
+            });
+            
+            long tokens = tokenUsage.getTotalTokens() != null ? tokenUsage.getTotalTokens() : 
+                ((tokenUsage.getPromptTokens() != null ? tokenUsage.getPromptTokens() : 0) + 
+                 (tokenUsage.getCompletionTokens() != null ? tokenUsage.getCompletionTokens() : 0));
+            double cost = tokenUsage.getCostUsd();
+            
+            dailyUsage.setRequests(dailyUsage.getRequests() + 1);
+            dailyUsage.setTotalTokens(dailyUsage.getTotalTokens() + tokens);
+            dailyUsage.setCostUsd(dailyUsage.getCostUsd() + cost);
+        }
+        
+        // Daily breakdown from knowledge hub graph extraction
+        for (KnowledgeHubDocumentMetaData metadata : metadataList) {
+            if (metadata.getCustomMetadata() == null) {
+                continue;
+            }
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> customMetadata = (Map<String, Object>) metadata.getCustomMetadata();
+            if (!customMetadata.containsKey("graphExtraction")) {
+                continue;
+            }
+            
+            // Get the extraction date
+            LocalDateTime extractedAt = metadata.getExtractedAt() != null ? metadata.getExtractedAt() : metadata.getCreatedAt();
+            if (extractedAt == null) {
+                continue;
+            }
+            String dateKey = extractedAt.format(dateFormatter);
+            
+            @SuppressWarnings("unchecked")
+            Map<String, Object> graphExtraction = (Map<String, Object>) customMetadata.get("graphExtraction");
+            
+            // Process entity extraction
+            if (graphExtraction.containsKey("entityExtraction")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> entityExtraction = (Map<String, Object>) graphExtraction.get("entityExtraction");
+                if (entityExtraction.containsKey("costUsd") && entityExtraction.get("costUsd") instanceof Number) {
+                    long tokens = entityExtraction.containsKey("totalTokens") ? 
+                        ((Number) entityExtraction.get("totalTokens")).longValue() : 
+                        ((entityExtraction.containsKey("promptTokens") ? ((Number) entityExtraction.get("promptTokens")).longValue() : 0) +
+                         (entityExtraction.containsKey("completionTokens") ? ((Number) entityExtraction.get("completionTokens")).longValue() : 0));
+                    double cost = ((Number) entityExtraction.get("costUsd")).doubleValue();
+                    
+                    if (cost > 0) {
+                        LlmUsageStats.DailyUsage dailyUsage = dailyMap.computeIfAbsent(dateKey, k -> {
+                            LlmUsageStats.DailyUsage du = new LlmUsageStats.DailyUsage();
+                            du.setDate(dateKey);
+                            du.setRequests(0);
+                            du.setTotalTokens(0);
+                            du.setCostUsd(0.0);
+                            return du;
+                        });
+                        
+                        dailyUsage.setRequests(dailyUsage.getRequests() + 1);
+                        dailyUsage.setTotalTokens(dailyUsage.getTotalTokens() + tokens);
+                        dailyUsage.setCostUsd(dailyUsage.getCostUsd() + cost);
+                    }
+                }
+            }
+            
+            // Process relationship extraction
+            if (graphExtraction.containsKey("relationshipExtraction")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> relationshipExtraction = (Map<String, Object>) graphExtraction.get("relationshipExtraction");
+                if (relationshipExtraction.containsKey("costUsd") && relationshipExtraction.get("costUsd") instanceof Number) {
+                    long tokens = relationshipExtraction.containsKey("totalTokens") ? 
+                        ((Number) relationshipExtraction.get("totalTokens")).longValue() : 
+                        ((relationshipExtraction.containsKey("promptTokens") ? ((Number) relationshipExtraction.get("promptTokens")).longValue() : 0) +
+                         (relationshipExtraction.containsKey("completionTokens") ? ((Number) relationshipExtraction.get("completionTokens")).longValue() : 0));
+                    double cost = ((Number) relationshipExtraction.get("costUsd")).doubleValue();
+                    
+                    if (cost > 0) {
+                        LlmUsageStats.DailyUsage dailyUsage = dailyMap.computeIfAbsent(dateKey, k -> {
+                            LlmUsageStats.DailyUsage du = new LlmUsageStats.DailyUsage();
+                            du.setDate(dateKey);
+                            du.setRequests(0);
+                            du.setTotalTokens(0);
+                            du.setCostUsd(0.0);
+                            return du;
+                        });
+                        
+                        dailyUsage.setRequests(dailyUsage.getRequests() + 1);
+                        dailyUsage.setTotalTokens(dailyUsage.getTotalTokens() + tokens);
+                        dailyUsage.setCostUsd(dailyUsage.getCostUsd() + cost);
+                    }
+                }
+            }
+        }
+        
         // Convert to sorted list (by date)
         List<LlmUsageStats.DailyUsage> dailyBreakdown = new ArrayList<>(dailyMap.values());
         dailyBreakdown.sort(Comparator.comparing(LlmUsageStats.DailyUsage::getDate));
         stats.setDailyBreakdown(dailyBreakdown);
         
-        log.info("Calculated LLM usage for team {}: {} requests, ${} total cost, {} days", 
-            teamId, totalRequests, String.format("%.4f", totalCost), dailyBreakdown.size());
+        log.info("Calculated LLM usage for team {}: {} requests, ${} total cost, {} days (workflows: {}, chat: {}, graph: {})", 
+            teamId, totalRequests, String.format("%.4f", totalCost), dailyBreakdown.size(),
+            executions.size(), chatMessages.size(), metadataList.size());
         
         return stats;
     }
@@ -688,8 +1063,41 @@ public class LlmCostServiceImpl implements LlmCostService {
     
     @Override
     public Mono<Integer> backfillExecutionCosts(String teamId, boolean dryRun) {
-        log.info("🔄 Starting cost backfill for executions (dryRun: {}, teamId: {})", dryRun, teamId);
+        log.info("🔄 Starting cost backfill for executions, chat conversations, and graph extraction (dryRun: {}, teamId: {})", dryRun, teamId);
         
+        // 1. Backfill workflow executions
+        Mono<Integer> executionsCount = backfillWorkflowExecutionCosts(teamId, dryRun);
+        
+        // 2. Backfill chat conversation costs
+        Mono<Integer> chatCount = backfillChatConversationCosts(teamId, dryRun);
+        
+        // 3. Backfill graph extraction costs
+        Mono<Integer> graphCount = backfillGraphExtractionCosts(teamId, dryRun);
+        
+        // Combine all counts
+        return Mono.zip(executionsCount, chatCount, graphCount)
+            .map(tuple -> {
+                int execCount = tuple.getT1();
+                int chatCountResult = tuple.getT2();
+                int graphCountResult = tuple.getT3();
+                int total = execCount + chatCountResult + graphCountResult;
+                
+                if (dryRun) {
+                    log.info("✅ [DRY RUN] Would update {} executions, {} chat messages, {} graph extractions (total: {})", 
+                        execCount, chatCountResult, graphCountResult, total);
+                } else {
+                    log.info("✅ Successfully backfilled costs: {} executions, {} chat messages, {} graph extractions (total: {})", 
+                        execCount, chatCountResult, graphCountResult, total);
+                }
+                return total;
+            })
+            .doOnError(error -> log.error("❌ Error during cost backfill: {}", error.getMessage()));
+    }
+    
+    /**
+     * Backfill costs for workflow executions
+     */
+    private Mono<Integer> backfillWorkflowExecutionCosts(String teamId, boolean dryRun) {
         Flux<LinqWorkflowExecution> executionsFlux;
         
         // Get executions based on teamId filter
@@ -816,15 +1224,213 @@ public class LlmCostServiceImpl implements LlmCostService {
                     return Mono.just(dryRun ? 1 : 0);
                 }
             })
-            .reduce(0, Integer::sum)
-            .doOnSuccess(count -> {
-                if (dryRun) {
-                    log.info("✅ [DRY RUN] Would update {} executions with backfilled costs", count);
+            .reduce(0, Integer::sum);
+    }
+    
+    /**
+     * Backfill costs for chat conversation messages
+     */
+    private Mono<Integer> backfillChatConversationCosts(String teamId, boolean dryRun) {
+        Flux<ConversationMessage> messagesFlux;
+        
+        // Get all ASSISTANT messages with token usage
+        if (teamId != null && !teamId.isEmpty()) {
+            // Get conversations for team, then get messages
+            messagesFlux = conversationRepository.findByTeamIdOrderByStartedAtDesc(teamId)
+                .flatMap(conversation -> conversationMessageRepository.findByConversationIdOrderBySequenceNumberAsc(conversation.getId()));
+        } else {
+            messagesFlux = conversationMessageRepository.findAll(Sort.by(Sort.Direction.DESC, "timestamp"));
+        }
+        
+        return messagesFlux
+            .filter(message -> {
+                // Only process ASSISTANT messages with token usage
+                if (!"ASSISTANT".equals(message.getRole())) {
+                    return false;
+                }
+                
+                if (message.getMetadata() == null || message.getMetadata().getTokenUsage() == null) {
+                    return false;
+                }
+                
+                ConversationMessage.MessageMetadata.TokenUsage tokenUsage = message.getMetadata().getTokenUsage();
+                // Has token usage but missing cost
+                return tokenUsage.getCostUsd() == null || tokenUsage.getCostUsd() == 0.0;
+            })
+            .flatMap(message -> {
+                ConversationMessage.MessageMetadata.TokenUsage tokenUsage = message.getMetadata().getTokenUsage();
+                String modelCategory = message.getMetadata().getModelCategory();
+                String modelName = message.getMetadata().getModelName();
+                
+                // Use model from metadata, or default based on category
+                String model = modelName != null && !modelName.isEmpty() ? modelName : getDefaultModelForCategory(modelCategory);
+                
+                long promptTokens = tokenUsage.getPromptTokens() != null ? tokenUsage.getPromptTokens() : 0;
+                long completionTokens = tokenUsage.getCompletionTokens() != null ? tokenUsage.getCompletionTokens() : 0;
+                double cost = calculateCost(model, promptTokens, completionTokens);
+                
+                log.info("💬 {} chat message {} (conversation {}): model={}, tokens={}p/{}c, cost=${}", 
+                    dryRun ? "[DRY RUN]" : "Updating",
+                    message.getId(), 
+                    message.getConversationId(),
+                    model, 
+                    promptTokens, 
+                    completionTokens, 
+                    String.format("%.6f", cost));
+                
+                if (!dryRun) {
+                    tokenUsage.setCostUsd(cost);
+                    return conversationMessageRepository.save(message).thenReturn(1);
                 } else {
-                    log.info("✅ Successfully backfilled costs for {} executions", count);
+                    return Mono.just(1);
                 }
             })
-            .doOnError(error -> log.error("❌ Error during cost backfill: {}", error.getMessage()));
+            .reduce(0, Integer::sum);
+    }
+    
+    /**
+     * Backfill costs for knowledge graph extraction (entity and relationship extraction)
+     */
+    private Mono<Integer> backfillGraphExtractionCosts(String teamId, boolean dryRun) {
+        Flux<KnowledgeHubDocumentMetaData> metadataFlux;
+        
+        if (teamId != null && !teamId.isEmpty()) {
+            metadataFlux = metadataRepository.findAll()
+                .filter(metadata -> teamId.equals(metadata.getTeamId()));
+        } else {
+            metadataFlux = metadataRepository.findAll();
+        }
+        
+        return metadataFlux
+            .filter(metadata -> {
+                // Only process metadata with graphExtraction
+                if (metadata.getCustomMetadata() == null || !metadata.getCustomMetadata().containsKey("graphExtraction")) {
+                    return false;
+                }
+                
+                @SuppressWarnings("unchecked")
+                Map<String, Object> graphExtraction = (Map<String, Object>) metadata.getCustomMetadata().get("graphExtraction");
+                
+                // Check if entityExtraction or relationshipExtraction has token usage but missing cost
+                boolean entityNeedsCost = false;
+                boolean relationshipNeedsCost = false;
+                
+                if (graphExtraction.containsKey("entityExtraction")) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> entityExtraction = (Map<String, Object>) graphExtraction.get("entityExtraction");
+                    if (entityExtraction.containsKey("promptTokens") || entityExtraction.containsKey("completionTokens")) {
+                        Object costObj = entityExtraction.get("costUsd");
+                        entityNeedsCost = costObj == null || (costObj instanceof Number && ((Number) costObj).doubleValue() == 0.0);
+                    }
+                }
+                
+                if (graphExtraction.containsKey("relationshipExtraction")) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> relationshipExtraction = (Map<String, Object>) graphExtraction.get("relationshipExtraction");
+                    if (relationshipExtraction.containsKey("promptTokens") || relationshipExtraction.containsKey("completionTokens")) {
+                        Object costObj = relationshipExtraction.get("costUsd");
+                        relationshipNeedsCost = costObj == null || (costObj instanceof Number && ((Number) costObj).doubleValue() == 0.0);
+                    }
+                }
+                
+                return entityNeedsCost || relationshipNeedsCost;
+            })
+            .flatMap(metadata -> {
+                boolean updated = false;
+                @SuppressWarnings("unchecked")
+                Map<String, Object> graphExtraction = (Map<String, Object>) metadata.getCustomMetadata().get("graphExtraction");
+                
+                // Default model for graph extraction (typically uses chat models)
+                String defaultModel = "gpt-4o";
+                
+                // Process entity extraction
+                if (graphExtraction.containsKey("entityExtraction")) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> entityExtraction = (Map<String, Object>) graphExtraction.get("entityExtraction");
+                    
+                    Object costObj = entityExtraction.get("costUsd");
+                    boolean needsCost = costObj == null || (costObj instanceof Number && ((Number) costObj).doubleValue() == 0.0);
+                    
+                    if (needsCost) {
+                        long promptTokens = entityExtraction.containsKey("promptTokens") ? 
+                            ((Number) entityExtraction.get("promptTokens")).longValue() : 0;
+                        long completionTokens = entityExtraction.containsKey("completionTokens") ? 
+                            ((Number) entityExtraction.get("completionTokens")).longValue() : 0;
+                        
+                        if (promptTokens > 0 || completionTokens > 0) {
+                            double cost = calculateCost(defaultModel, promptTokens, completionTokens);
+                            entityExtraction.put("costUsd", cost);
+                            updated = true;
+                            
+                            log.info("🔗 {} graph entity extraction (document {}): model={}, tokens={}p/{}c, cost=${}", 
+                                dryRun ? "[DRY RUN]" : "Updating",
+                                metadata.getDocumentId(),
+                                defaultModel, 
+                                promptTokens, 
+                                completionTokens, 
+                                String.format("%.6f", cost));
+                        }
+                    }
+                }
+                
+                // Process relationship extraction
+                if (graphExtraction.containsKey("relationshipExtraction")) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> relationshipExtraction = (Map<String, Object>) graphExtraction.get("relationshipExtraction");
+                    
+                    Object costObj = relationshipExtraction.get("costUsd");
+                    boolean needsCost = costObj == null || (costObj instanceof Number && ((Number) costObj).doubleValue() == 0.0);
+                    
+                    if (needsCost) {
+                        long promptTokens = relationshipExtraction.containsKey("promptTokens") ? 
+                            ((Number) relationshipExtraction.get("promptTokens")).longValue() : 0;
+                        long completionTokens = relationshipExtraction.containsKey("completionTokens") ? 
+                            ((Number) relationshipExtraction.get("completionTokens")).longValue() : 0;
+                        
+                        if (promptTokens > 0 || completionTokens > 0) {
+                            double cost = calculateCost(defaultModel, promptTokens, completionTokens);
+                            relationshipExtraction.put("costUsd", cost);
+                            updated = true;
+                            
+                            log.info("🔗 {} graph relationship extraction (document {}): model={}, tokens={}p/{}c, cost=${}", 
+                                dryRun ? "[DRY RUN]" : "Updating",
+                                metadata.getDocumentId(),
+                                defaultModel, 
+                                promptTokens, 
+                                completionTokens, 
+                                String.format("%.6f", cost));
+                        }
+                    }
+                }
+                
+                if (!dryRun && updated) {
+                    return metadataRepository.save(metadata).thenReturn(1);
+                } else {
+                    return Mono.just(dryRun && updated ? 1 : 0);
+                }
+            })
+            .reduce(0, Integer::sum);
+    }
+    
+    /**
+     * Get default model name based on model category
+     */
+    private String getDefaultModelForCategory(String modelCategory) {
+        if (modelCategory == null || modelCategory.isEmpty()) {
+            return "gpt-4o-mini"; // Default fallback
+        }
+        
+        if (modelCategory.equals("openai-chat") || modelCategory.equals("openai-embed")) {
+            return "gpt-4o-mini";
+        } else if (modelCategory.equals("gemini-chat") || modelCategory.equals("gemini-embed")) {
+            return "gemini-2.0-flash";
+        } else if (modelCategory.equals("cohere-chat") || modelCategory.equals("cohere-embed")) {
+            return "command-r-08-2024";
+        } else if (modelCategory.equals("claude-chat")) {
+            return "claude-sonnet-4-5";
+        }
+        
+        return "gpt-4o-mini"; // Default fallback
     }
     
     @Override

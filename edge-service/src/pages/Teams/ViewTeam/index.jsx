@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  Badge, 
-  Card, 
-  Row, 
-  Col, 
+import {
+  Badge,
+  Card,
+  Row,
+  Col,
   Button as BootstrapButton,
   Spinner,
   OverlayTrigger,
@@ -13,10 +13,10 @@ import {
 import Button from '../../../components/common/Button';
 import {
   HiArrowLeft,
-  HiPencil, 
-  HiUsers, 
+  HiPencil,
+  HiUsers,
   HiUserGroup,
-  HiTemplate, 
+  HiTemplate,
   HiDocumentText,
   HiOfficeBuilding,
   HiClock,
@@ -43,6 +43,7 @@ import GeminiModal from '../../../components/teams/GeminiModal';
 import CohereModal from '../../../components/teams/CohereModal';
 import ClaudeModal from '../../../components/teams/ClaudeModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
+import Footer from '../../../components/common/Footer';
 import './styles.css';
 
 const PERMISSION_INFO = {
@@ -81,7 +82,7 @@ function ViewTeam() {
     show: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
     variant: 'danger'
   });
   const [knowledgeCollections, setKnowledgeCollections] = useState([]);
@@ -90,6 +91,7 @@ function ViewTeam() {
   const [milvusCollections, setMilvusCollections] = useState([]);
   const [milvusCollectionsLoading, setMilvusCollectionsLoading] = useState(false);
   const [milvusCollectionsError, setMilvusCollectionsError] = useState(null);
+  const [activeKeyVersion, setActiveKeyVersion] = useState(null);
 
   useEffect(() => {
     if (teamId) {
@@ -98,6 +100,7 @@ function ViewTeam() {
       fetchApiKeys();
       fetchKnowledgeCollections();
       fetchMilvusCollections();
+      fetchActiveKey();
     }
   }, [teamId]);
 
@@ -134,6 +137,17 @@ function ViewTeam() {
     } catch (err) {
       console.error('Error fetching API keys:', err);
       setApiKeys([]);
+    }
+  };
+
+  const fetchActiveKey = async () => {
+    try {
+      const { data, success } = await teamService.getActiveEncryptionKeyVersion(teamId);
+      if (success && data) {
+        setActiveKeyVersion(data.version);
+      }
+    } catch (err) {
+      console.error('Error fetching active key:', err);
     }
   };
 
@@ -200,20 +214,20 @@ function ViewTeam() {
 
   const formatDate = (dateInput) => {
     if (!dateInput) return 'N/A';
-    
+
     let date;
-    
+
     if (Array.isArray(dateInput)) {
       const [year, month, day, hour, minute, second] = dateInput;
       date = new Date(year, month - 1, day, hour, minute, second);
     } else {
       date = new Date(dateInput);
     }
-    
+
     if (isNaN(date.getTime())) {
       return 'Invalid Date';
     }
-    
+
     return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -247,7 +261,7 @@ function ViewTeam() {
 
   const renderPermissionBadges = (permissions) => {
     if (!permissions || !Array.isArray(permissions)) return null;
-    
+
     return permissions.map((permission, index) => (
       <OverlayTrigger
         key={index}
@@ -258,9 +272,9 @@ function ViewTeam() {
           </Tooltip>
         }
       >
-        <span 
+        <span
           className="badge me-1"
-          style={{ 
+          style={{
             backgroundColor: PERMISSION_INFO[permission]?.color || '#6c757d',
             color: 'white'
           }}
@@ -276,9 +290,9 @@ function ViewTeam() {
     try {
       setOperationLoading(true);
       const { data, error } = await teamService.addTeamMember(team.id, memberData);
-      
+
       if (error) throw new Error(error);
-      
+
       setTeam(data);
       setShowMembersModal(false);
       showSuccessToast(`Member added to team "${team.name}" successfully`);
@@ -294,7 +308,7 @@ function ViewTeam() {
       setOperationLoading(true);
       const { data, error } = await teamService.removeTeamMember(team.id, userId);
       if (error) throw new Error(error);
-      
+
       setTeam(data);
       showSuccessToast('Team member removed successfully');
     } catch (err) {
@@ -312,9 +326,9 @@ function ViewTeam() {
         description: teamData.description,
         organizationId: teamData.organizationId
       });
-      
+
       if (error) throw new Error(error);
-      
+
       setTeam(data);
       setShowEditModal(false);
       showSuccessToast(`Team "${data.name}" updated successfully`);
@@ -333,9 +347,9 @@ function ViewTeam() {
         routeData.routeId,
         routeData.permissions
       );
-      
+
       if (error) throw new Error(error);
-      
+
       setTeam(data);
       setShowRoutesModal(false);
       showSuccessToast(`Route added to team "${team.name}" successfully`);
@@ -351,7 +365,7 @@ function ViewTeam() {
       setOperationLoading(true);
       const { data, error } = await teamService.removeTeamRoute(team.id, routeId);
       if (error) throw new Error(error);
-      
+
       setTeam(data);
       showSuccessToast('Route removed successfully');
     } catch (err) {
@@ -366,7 +380,7 @@ function ViewTeam() {
       setOperationLoading(true);
       const { data, error } = await teamService.createApiKey(apiKeyData);
       if (error) throw new Error(error);
-      
+
       if (data && data.key) {
         showSuccessToast(
           <div>
@@ -383,6 +397,22 @@ function ViewTeam() {
       setShowApiKeysModal(false);
     } catch (err) {
       showErrorToast(err.message || 'Failed to create API key');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  const handleRotateKey = async () => {
+    try {
+      setOperationLoading(true);
+      const { data, success, error } = await teamService.rotateEncryptionKey(teamId);
+      if (!success) throw new Error(error);
+
+      setActiveKeyVersion(data.version);
+      showSuccessToast(`Key rotated successfully. New version: ${data.version}`);
+      setConfirmModal({ ...confirmModal, show: false });
+    } catch (err) {
+      showErrorToast(err.message || 'Failed to rotate key');
     } finally {
       setOperationLoading(false);
     }
@@ -417,9 +447,9 @@ function ViewTeam() {
       documentName: doc.fileName || doc.documentId || 'Unnamed document',
       status: doc.status || null,
       uploadedAt: doc.uploadedAt || doc.createdAt || null,
-        documentId: doc.documentId || doc.id || null,
-        isEmpty: false,
-        isError: false
+      documentId: doc.documentId || doc.id || null,
+      isEmpty: false,
+      isError: false
     }));
   });
 
@@ -511,21 +541,21 @@ function ViewTeam() {
         <Card.Body>
           <div className="d-flex align-items-center justify-content-between">
             <div className="d-flex align-items-center gap-2">
-              <BootstrapButton 
-                variant="link" 
+              <BootstrapButton
+                variant="link"
                 className="p-0"
                 onClick={() => navigate('/teams')}
               >
                 <HiArrowLeft className="text-primary" size={24} />
               </BootstrapButton>
               <h4 className="mb-0">{team.name}</h4>
-              <Badge 
-                bg={team.status === 'ACTIVE' ? 'success' : 'secondary'} 
+              <Badge
+                bg={team.status === 'ACTIVE' ? 'success' : 'secondary'}
               >
                 {team.status}
               </Badge>
             </div>
-            <Button 
+            <Button
               variant="primary"
               onClick={() => setShowEditModal(true)}
               disabled={team.status === 'INACTIVE' || operationLoading}
@@ -543,19 +573,19 @@ function ViewTeam() {
         <Col md={6}>
           <Card className="border-0 bg-light h-100">
             <Card.Body>
-                    <div className="d-flex align-items-center g mb-3">
-                      <HiUserGroup className="text-primary me-2" size={24} />
-                      <h5 className="mb-0 fw-semibold">Team</h5>
-                    </div>
-                    <div className="d-flex align-items-center gap-2">
-                      <p className="mb-0 text-muted text-start flex-grow-1">{team.name} / {team.organization?.name || 'No organization assigned'}</p>
-                      <code className="bg-transparent px-2 py-1 rounded flex-grow-1 text-muted text-start">{team.id}</code>
-                      <Badge bg={team.status === 'ACTIVE' ? 'success' : 'secondary'}>
-                        {team.status}
-                      </Badge>
-                    </div>
-                    <p className="mb-0 mt-3 text-muted small text-start">{team.description || 'No description provided.'}</p>
-                
+              <div className="d-flex align-items-center g mb-3">
+                <HiUserGroup className="text-primary me-2" size={24} />
+                <h5 className="mb-0 fw-semibold">Team</h5>
+              </div>
+              <div className="d-flex align-items-center gap-2">
+                <p className="mb-0 text-muted text-start flex-grow-1">{team.name} / {team.organization?.name || 'No organization assigned'}</p>
+                <code className="bg-transparent px-2 py-1 rounded flex-grow-1 text-muted text-start">{team.id}</code>
+                <Badge bg={team.status === 'ACTIVE' ? 'success' : 'secondary'}>
+                  {team.status}
+                </Badge>
+              </div>
+              <p className="mb-0 mt-3 text-muted small text-start">{team.description || 'No description provided.'}</p>
+
             </Card.Body>
           </Card>
         </Col>
@@ -563,8 +593,8 @@ function ViewTeam() {
         <Col md={6}>
           <Card className="border-0 bg-light h-100">
             <Card.Body>
-          
-            <div className="d-flex align-items-center mb-3">
+
+              <div className="d-flex align-items-center mb-3">
                 <HiKey className="text-primary me-2" size={24} />
                 <h5 className="mb-0 fw-semibold">API Keys</h5>
               </div>
@@ -589,15 +619,15 @@ function ViewTeam() {
                       </BootstrapButton>
 
                       <BootstrapButton
-                      className="ms-2"
-                      size="sm"
-                      variant="outline-purple"
-                      onClick={() => setShowApiKeysModal(true)}
-                      disabled={team.status === 'INACTIVE' || operationLoading}
-                    >
-                      <HiKey size={14} className="me-1" />
-                      Manage API Key
-                    </BootstrapButton>
+                        className="ms-2"
+                        size="sm"
+                        variant="outline-purple"
+                        onClick={() => setShowApiKeysModal(true)}
+                        disabled={team.status === 'INACTIVE' || operationLoading}
+                      >
+                        <HiKey size={14} className="me-1" />
+                        Manage API Key
+                      </BootstrapButton>
                     </div>
                   </>
                 ) : (
@@ -620,6 +650,44 @@ function ViewTeam() {
           </Card>
         </Col>
 
+
+        <Col md={6}>
+          <Card className="border-0 bg-light h-100">
+            <Card.Body>
+              <div className="d-flex align-items-center mb-3">
+                <HiLockClosed className="text-primary me-2" size={24} />
+                <h5 className="mb-0">Chunk Encryption</h5>
+              </div>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <span className="text-muted h6 mb-0">Active Key Version</span>
+                <Badge bg="success" className="px-3 py-2 text-monospace">
+                  {activeKeyVersion || 'v1'}
+                </Badge>
+              </div>
+
+              <div className="d-grid">
+                <BootstrapButton
+                  variant="outline-danger"
+                  size="sm"
+                  disabled={operationLoading || team.status === 'INACTIVE'}
+                  onClick={() => setConfirmModal({
+                    show: true,
+                    title: 'Rotate Encryption Key',
+                    message: 'Are you sure you want to rotate the encryption key? This will generate a new version.',
+                    variant: 'danger',
+                    onConfirm: handleRotateKey
+                  })}
+                >
+                  <HiSparkles className="me-1" /> Rotate Key
+                </BootstrapButton>
+              </div>
+              <div className="mt-2 text-muted" style={{ fontSize: '0.75rem' }}>
+                <small>Rotating creates a new key version. Existing data remains readable using old keys.</small>
+              </div>
+
+            </Card.Body>
+          </Card>
+        </Col>
 
         {/* Statistics */}
         <Col md={6}>
@@ -671,9 +739,9 @@ function ViewTeam() {
           </Card>
         </Col>
 
-      
 
-        
+
+
 
         {/* Members Table */}
         <Col md={12}>
@@ -684,8 +752,8 @@ function ViewTeam() {
                   <HiUsers className="text-primary me-2" size={24} />
                   <h5 className="mb-0">Team Members</h5>
                 </div>
-                <BootstrapButton 
-                  size="sm" 
+                <BootstrapButton
+                  size="sm"
                   variant="outline-secondary"
                   onClick={() => setShowMembersModal(true)}
                 >
@@ -737,8 +805,8 @@ function ViewTeam() {
                   <HiTemplate className="text-primary me-2" size={24} />
                   <h5 className="mb-0">Apps</h5>
                 </div>
-                <BootstrapButton 
-                  size="sm" 
+                <BootstrapButton
+                  size="sm"
                   variant="outline-info"
                   onClick={() => setShowRoutesModal(true)}
                 >
@@ -789,32 +857,32 @@ function ViewTeam() {
                   <h5 className="mb-0">LLM Models</h5>
                 </div>
                 <div className="d-flex gap-2">
-                  <BootstrapButton 
-                    size="sm" 
+                  <BootstrapButton
+                    size="sm"
                     variant="outline-info"
                     onClick={() => setShowOpenAIModal(true)}
                     disabled={team.status === 'INACTIVE' || operationLoading}
                   >
                     <SiOpenai className="me-1" size={16} /> OpenAI
                   </BootstrapButton>
-                  <BootstrapButton 
-                    size="sm" 
+                  <BootstrapButton
+                    size="sm"
                     variant="outline-info"
                     onClick={() => setShowGeminiModal(true)}
                     disabled={team.status === 'INACTIVE' || operationLoading}
                   >
                     <SiGoogle className="me-1" size={14} /> Gemini
                   </BootstrapButton>
-                  <BootstrapButton 
-                    size="sm" 
+                  <BootstrapButton
+                    size="sm"
                     variant="outline-info"
                     onClick={() => setShowCohereModal(true)}
                     disabled={team.status === 'INACTIVE' || operationLoading}
                   >
                     <FaCloud className="me-1" size={16} /> Cohere
                   </BootstrapButton>
-                  <BootstrapButton 
-                    size="sm" 
+                  <BootstrapButton
+                    size="sm"
                     variant="outline-info"
                     onClick={() => setShowClaudeModal(true)}
                     disabled={team.status === 'INACTIVE' || operationLoading}
@@ -842,14 +910,14 @@ function ViewTeam() {
                           <td>
                             <Badge bg={
                               model.provider?.toLowerCase() === 'openai' ? 'primary' :
-                              model.provider?.toLowerCase() === 'gemini' ? 'warning' :
-                              model.provider?.toLowerCase() === 'cohere' ? 'info' :
-                              model.provider?.toLowerCase() === 'anthropic' ? 'danger' : 'secondary'
+                                model.provider?.toLowerCase() === 'gemini' ? 'warning' :
+                                  model.provider?.toLowerCase() === 'cohere' ? 'info' :
+                                    model.provider?.toLowerCase() === 'anthropic' ? 'danger' : 'secondary'
                             }>
                               {model.provider}
                             </Badge>
                           </td>
-                                                   <td>
+                          <td>
                             <Badge bg="secondary">{model.modelCategory}</Badge>
                           </td>
                           <td>{model.modelName}</td>
@@ -858,7 +926,7 @@ function ViewTeam() {
                               placement="top"
                               overlay={<Tooltip id={`tooltip-endpoint-${model.id}`}>{model.endpoint}</Tooltip>}
                             >
-                              <code className="text-truncate" style={{maxWidth: '400px', display: 'block'}}>
+                              <code className="text-truncate" style={{ maxWidth: '400px', display: 'block' }}>
                                 {model.endpoint}
                               </code>
                             </OverlayTrigger>
@@ -868,9 +936,9 @@ function ViewTeam() {
                           </td>
                           <td>
                             {model.supportedIntents?.map(intent => (
-                              <Badge 
-                                key={intent} 
-                                bg="info" 
+                              <Badge
+                                key={intent}
+                                bg="info"
                                 className="me-1"
                               >
                                 {intent}
@@ -982,7 +1050,7 @@ function ViewTeam() {
               <div className="d-flex align-items-center justify-content-between mb-3">
                 <div className="d-flex align-items-center">
                   <HiDatabase className="text-primary me-2" size={24} />
-                  <h5 className="mb-0">Milvus Collections</h5>
+                  <h5 className="mb-0">RAG Collections</h5>
                 </div>
                 <Button variant="link" onClick={() => navigate('/rag')}>
                   Manage in RAG Console
@@ -1112,6 +1180,7 @@ function ViewTeam() {
         message={confirmModal.message}
         variant={confirmModal.variant}
       />
+      <Footer />
     </div>
   );
 }

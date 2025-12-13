@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  HiUserGroup, 
-  HiPlus, 
-  HiEye, 
-  HiPencil, 
+import {
+  HiUserGroup,
+  HiPlus,
+  HiEye,
+  HiPencil,
 
-  HiRefresh, 
-  HiTrash, 
+  HiRefresh,
+  HiTrash,
 
 } from 'react-icons/hi';
 import { Spinner, OverlayTrigger, Tooltip, Table } from 'react-bootstrap';
@@ -15,6 +15,7 @@ import CreateTeamModal from '../../components/teams/CreateTeamModal';
 import TeamDetailsModal from '../../components/teams/TeamDetailsModal';
 import TeamEditModal from '../../components/teams/TeamEditModal';
 import { teamService } from '../../services/teamService';
+import Footer from '../../components/common/Footer';
 import './styles.css';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
@@ -34,7 +35,7 @@ function Teams() {
     show: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
     variant: 'danger'
   });
 
@@ -48,7 +49,7 @@ function Teams() {
       const { data, error } = await teamService.getAllTeams();
       if (error) throw new Error(error);
       // Sort teams by createdAt in ascending order to match backend
-      const sortedTeams = [...data].sort((a, b) => 
+      const sortedTeams = [...data].sort((a, b) =>
         new Date(a.createdAt) - new Date(b.createdAt)
       );
       setTeams(sortedTeams);
@@ -64,7 +65,7 @@ function Teams() {
       setOperationLoading(true);
       const { data, error } = await teamService.createTeam(teamData);
       if (error) throw new Error(error);
-      
+
       await fetchTeams();
       setShowCreateModal(false);
       showSuccessToast(`Team "${data.name}" created successfully`);
@@ -119,14 +120,14 @@ function Teams() {
 
   const handleToggleTeamStatus = async (team) => {
     const action = team.status === 'ACTIVE' ? 'deactivate' : 'activate';
-    
+
     try {
       setOperationLoading(true);
       const { data, error } = await teamService[`${action}Team`](team.id);
       if (error) throw new Error(error);
-      
+
       setConfirmModal(prev => ({ ...prev, show: false }));
-      setTeams(prev => prev.map(t => 
+      setTeams(prev => prev.map(t =>
         t.id === team.id ? data : t
       ));
       showSuccessToast(`Team "${team.name}" ${action}d successfully`);
@@ -148,8 +149,8 @@ function Teams() {
   };
 
   const canDeleteTeam = (team) => {
-    return team.status === 'INACTIVE' && 
-           (!team.routes || team.routes.length === 0);
+    return team.status === 'INACTIVE' &&
+      (!team.routes || team.routes.length === 0);
   };
 
 
@@ -161,9 +162,9 @@ function Teams() {
         description: teamData.description,
         organizationId: teamData.organizationId
       });
-      
+
       if (error) throw new Error(error);
-      
+
       await fetchTeams();
       setShowEditModal(false);
       showSuccessToast(`Team "${data.name}" updated successfully`);
@@ -177,20 +178,20 @@ function Teams() {
 
   const formatDate = (dateInput) => {
     if (!dateInput) return 'N/A';
-    
+
     let date;
-    
+
     if (Array.isArray(dateInput)) {
       const [year, month, day, hour, minute, second] = dateInput;
       date = new Date(year, month - 1, day, hour, minute, second);
     } else {
       date = new Date(dateInput);
     }
-    
+
     if (isNaN(date.getTime())) {
       return 'Invalid Date';
     }
-    
+
     return date.toLocaleString('en-US', {
       year: 'numeric',
       month: 'short',
@@ -226,7 +227,7 @@ function Teams() {
               <h4 className="mb-0">Teams</h4>
             </div>
             <div className="ms-auto">
-              <Button 
+              <Button
                 onClick={() => setShowCreateModal(true)}
                 disabled={operationLoading}
                 variant="primary"
@@ -251,7 +252,7 @@ function Teams() {
               {error}
             </div>
           )}
-          
+
           {loading ? (
             <div className="text-center">
               <Spinner animation="border" role="status">
@@ -264,8 +265,8 @@ function Teams() {
               <p className="text-muted">
                 Create your first team to start managing members and API routes.
               </p>
-              <Button 
-                variant="primary" 
+              <Button
+                variant="primary"
                 onClick={() => setShowCreateModal(true)}
                 className="mt-3"
                 disabled={operationLoading}
@@ -307,8 +308,8 @@ function Teams() {
                         </td>
                       </tr>
                       {org.teams.map(team => (
-                        <tr 
-                          key={team.id} 
+                        <tr
+                          key={team.id}
                           className={team.status === 'INACTIVE' ? 'table-secondary' : ''}
                           style={{ cursor: 'pointer' }}
                           onClick={() => navigate(`/teams/${team.id}`)}
@@ -343,7 +344,7 @@ function Teams() {
                           </td>
                           <td>
                             <div className="d-flex gap-1 flex-wrap">
-                              <button 
+                              <button
                                 className="btn btn-sm btn-outline-primary action-button"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -353,7 +354,7 @@ function Teams() {
                               >
                                 <HiEye className="me-1" /> View
                               </button>
-                              <button 
+                              <button
                                 className="btn btn-sm btn-outline-secondary action-button"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -364,7 +365,7 @@ function Teams() {
                               >
                                 <HiPencil className="me-1" /> Edit
                               </button>
-                              <button 
+                              <button
                                 className="btn btn-sm btn-outline-warning action-button status-action-button"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -384,7 +385,7 @@ function Teams() {
                                 }
                               >
                                 <span className="d-inline-block">
-                                  <button 
+                                  <button
                                     className="btn btn-sm btn-outline-danger action-button"
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -438,6 +439,7 @@ function Teams() {
         message={confirmModal.message}
         variant={confirmModal.variant}
       />
+      <Footer />
     </div>
   );
 }

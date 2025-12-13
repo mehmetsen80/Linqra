@@ -690,7 +690,7 @@ h6 {
 }
 
 .add-endpoint-button:hover {
-  background-color: var(--primary-color-dark);
+  background-color: var(--primary-dark);
 }
 
 .route-endpoints.version-preview {
@@ -749,11 +749,13 @@ h6 {
   margin-top: 12px;
 }
 
-.schema-section, .example-section {
+.schema-section,
+.example-section {
   margin: 10px 0;
 }
 
-.schema-section h6, .example-section h6 {
+.schema-section h6,
+.example-section h6 {
   color: #666;
   margin-bottom: 10px;
   font-size: 0.9rem;

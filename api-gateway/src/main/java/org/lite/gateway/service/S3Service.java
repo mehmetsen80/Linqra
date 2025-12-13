@@ -22,6 +22,17 @@ public interface S3Service {
     Mono<Void> uploadFile(String s3Key, Flux<DataBuffer> content, String contentType, long fileSize);
     
     /**
+     * Upload file bytes directly (server-side) - Reactive version
+     * Convenient method for uploading encrypted files
+     * 
+     * @param s3Key S3 key for the file
+     * @param fileBytes File bytes to upload
+     * @param contentType Content type of the file
+     * @param encryptionKeyVersion Optional encryption key version (e.g., "v1", "v2"). If provided, will be stored in S3 metadata
+     */
+    Mono<Void> uploadFileBytes(String s3Key, byte[] fileBytes, String contentType, String encryptionKeyVersion);
+    
+    /**
      * Download file from S3 - Reactive version
      * Note: This is a placeholder implementation. For actual file download, use presigned URL
      */

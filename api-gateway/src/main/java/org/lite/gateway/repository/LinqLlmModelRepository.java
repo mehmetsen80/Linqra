@@ -17,5 +17,19 @@ public interface LinqLlmModelRepository extends ReactiveMongoRepository<LinqLlmM
     default Flux<LinqLlmModel> findByTeamId(String teamId) {
         return findByTeamId(teamId, Sort.by(Sort.Direction.ASC, "provider", "modelCategory", "modelName"));
     }
+    
+    /**
+     * Find LinqLlmModel by modelName and teamId (optionally filter by provider)
+     * Used to look up modelCategory when it's missing from AI Assistant defaultModel
+     */
+    @Query("{ 'modelName': ?0, 'teamId': ?1 }")
+    Flux<LinqLlmModel> findByModelNameAndTeamId(String modelName, String teamId);
+    
+    /**
+     * Find LinqLlmModel by modelName, provider, and teamId
+     * More specific lookup when provider is known
+     */
+    @Query("{ 'modelName': ?0, 'provider': ?1, 'teamId': ?2 }")
+    Mono<LinqLlmModel> findByModelNameAndProviderAndTeamId(String modelName, String provider, String teamId);
 }
 

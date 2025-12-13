@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card } from 'react-bootstrap';
-import { HiClock, HiCalendar, HiKey, HiViewGrid, HiDocumentText, HiUserGroup, HiOfficeBuilding, HiShieldCheck, HiHashtag } from 'react-icons/hi';
+import { HiClock, HiCalendar, HiKey, HiViewGrid, HiDocumentText, HiUserGroup, HiOfficeBuilding, HiShieldCheck, HiHashtag, HiSparkles, HiCollection, HiDatabase, HiChatAlt, HiLightBulb } from 'react-icons/hi';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTeam } from '../../../contexts/TeamContext';
 import { useEnvironment } from '../../../contexts/EnvironmentContext';
@@ -53,38 +53,67 @@ const UserSummary = () => {
               <HiShieldCheck /> Role: {currentTeam?.roles?.[0] || 'USER'}
             </div>
           </div>
-          
+
           <div className="quick-actions">
-            {!isProd() && (
-              <div className="token-section">
-                {renderEnvironmentBadge()}
-                <Link to="/view-token" className="quick-action-button">
-                  <HiKey />
-                  <span>View Token</span>
+            <div className="quick-actions-row">
+              {/* First Row */}
+              <div className="quick-actions-group">
+                {!isProd() && (
+                  <div className="token-section">
+                    {renderEnvironmentBadge()}
+                    <Link to="/view-token" className="quick-action-button">
+                      <HiKey />
+                      <span>View Token</span>
+                    </Link>
+                  </div>
+                )}
+                <Link to="/api-routes" className="quick-action-button">
+                  <HiViewGrid />
+                  <span>Applications</span>
+                </Link>
+                <Link to="/service-status" className="quick-action-button">
+                  <HiDocumentText />
+                  <span>Service Status</span>
+                </Link>
+                <Link to="/ai-assistants" className="quick-action-button">
+                  <HiChatAlt />
+                  <span>AI Assistants</span>
+                </Link>
+                <Link to="/knowledge-hub" className="quick-action-button">
+                  <HiLightBulb />
+                  <span>Knowledge Hub</span>
                 </Link>
               </div>
-            )}
-            <Link to="/api-routes" className="quick-action-button">
-              <HiViewGrid />
-              <span>Apps</span>
-            </Link>
-            <Link to="/service-status" className="quick-action-button">
-              <HiDocumentText />
-              <span>Service Status</span>
-            </Link>
-            {/* Show admin features for both SUPER_ADMIN and team admins */}
-            {canAccessAdminFeatures && (
-              <>
-                <Link to="/teams" className="quick-action-button">
-                  <HiUserGroup />
-                  <span>Teams</span>
+            </div>
+            {/* Second Row - LLM Models, RAG, and Admin Features */}
+            <div className="quick-actions-row">
+              <div className="quick-actions-group">
+                <Link to="/llm-models" className="quick-action-button">
+                  <HiSparkles />
+                  <span>LLM Models</span>
                 </Link>
-                <Link to="/organizations" className="quick-action-button">
-                  <HiOfficeBuilding />
-                  <span>Organizations</span>
+                <Link to="/llm-usage" className="quick-action-button">
+                  <HiCollection />
+                  <span>LLM Usage</span>
                 </Link>
-              </>
-            )}
+                <Link to="/rag" className="quick-action-button">
+                  <HiDatabase />
+                  <span>RAG Collections</span>
+                </Link>
+                {canAccessAdminFeatures && (
+                  <>
+                    <Link to="/teams" className="quick-action-button">
+                      <HiUserGroup />
+                      <span>Teams</span>
+                    </Link>
+                    <Link to="/organizations" className="quick-action-button">
+                      <HiOfficeBuilding />
+                      <span>Organizations</span>
+                    </Link>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </Card.Body>

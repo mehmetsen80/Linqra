@@ -1,3 +1,4 @@
+import Footer from '../../components/common/Footer';
 import React from 'react';
 import { Link } from 'react-router-dom';
 import './styles.css';
@@ -13,6 +14,8 @@ function PrivacyPolicy() {
         </div>
       </nav>
 
+      {/* ... keeping existing Hero and Content ... */}
+
       <div className="hero-section">
         <div className="hero-content">
           <h1>Privacy Policy</h1>
@@ -24,8 +27,9 @@ function PrivacyPolicy() {
 
       <div className="content-wrapper">
         <div className="privacy-policy-content">
+          {/* ... existing content ... */}
           <p className="last-updated">Last updated: January 2025</p>
-          
+
           <section>
             <h2>1. Introduction</h2>
             <p>
@@ -177,6 +181,7 @@ function PrivacyPolicy() {
           </div>
         </div>
       </div>
+      <Footer />
     </div>
   );
 }

@@ -194,6 +194,110 @@ function Home() {
         </div>
       </div>
 
+      {/* FEATURES SECTION - AI Agents with Enterprise-Grade Security */}
+      <div id="features" className="features-section">
+        <h2>AI Agents with Enterprise-Grade Security</h2>
+        <div className="features-grid">
+          <div className="feature-card">
+            <i className="fas fa-robot"></i>
+            <h3>AI Agents</h3>
+            <p>Discover and deploy AI applications with just a few clicks, from chatbots to specialized ML models</p>
+          </div>
+          <div className="feature-card">
+            <i className="fas fa-shield-alt"></i>
+            <h3>Secure Gateway</h3>
+            <p>Enterprise-grade security layer for both traditional APIs and AI services with unified authentication</p>
+          </div>
+          <div className="feature-card">
+            <i className="fas fa-link"></i>
+            <h3>Linq Protocol</h3>
+            <p>Standardized communication protocol that simplifies integration of AI apps with your existing infrastructure</p>
+          </div>
+          <div className="feature-card">
+            <i className="fas fa-rocket"></i>
+            <h3>One-Click Deployment</h3>
+            <p>Deploy AI applications instantly with automated scaling and load balancing</p>
+          </div>
+          <div className="feature-card">
+            <i className="fas fa-chart-line"></i>
+            <h3>Usage Analytics</h3>
+            <p>Monitor AI app performance, usage patterns, and costs in real-time</p>
+          </div>
+          <div className="feature-card">
+            <i className="fas fa-puzzle-piece"></i>
+            <h3>Custom Integration</h3>
+            <p>Easily integrate AI apps into your existing workflows with our flexible API architecture</p>
+          </div>
+        </div>
+      </div>
+
+      {/* HOW IT WORKS SECTION */}
+      <div id="how-it-works" className="architecture-section">
+        <h2>How It Works?</h2>
+
+        <div className="architecture-explanation">
+          <p>
+            Linqra is a unified gateway that seamlessly handles requests from traditional APIs, user applications,
+            and AI services. Our centralized architecture simplifies integration by using a single, consistent protocol
+            for all interactions.
+          </p>
+          <p>
+            Every request is enhanced with enterprise-grade features:
+          </p>
+          <ul>
+            <li>
+              <strong>Security</strong>
+              <span>Zero-trust architecture ensuring comprehensive protection at every layer</span>
+            </li>
+            <li>
+              <strong>Resiliency</strong>
+              <span>Built-in circuit breakers, automatic retries, and intelligent rate limiting</span>
+            </li>
+            <li>
+              <strong>Dynamic Routing</strong>
+              <span>Instant service discovery and automatic routing without configuration</span>
+            </li>
+            <li>
+              <strong>Analytics</strong>
+              <span>Comprehensive metrics and insights for real-time monitoring</span>
+            </li>
+          </ul>
+        </div>
+
+        <div className="architecture-content">
+          <div className="architecture-features">
+            <div className="arch-feature">
+              <i className="fas fa-shield-alt"></i>
+              <div>
+                <h3>Security</h3>
+                <p>Enterprise-grade authentication, authorization, and API security controls</p>
+              </div>
+            </div>
+            <div className="arch-feature">
+              <i className="fas fa-sync-alt"></i>
+              <div>
+                <h3>Resiliency</h3>
+                <p>Advanced circuit breaking, rate limiting, and robust fault tolerance for reliable services</p>
+              </div>
+            </div>
+            <div className="arch-feature">
+              <i className="fas fa-route"></i>
+              <div>
+                <h3>Dynamic Routing</h3>
+                <p>Intelligent request routing with automated real-time service discovery</p>
+              </div>
+            </div>
+            <div className="arch-feature">
+              <i className="fas fa-chart-bar"></i>
+              <div>
+                <h3>Analytics</h3>
+                <p>Advanced monitoring and real-time performance insights for your services</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* SECURITY DEEP DIVE */}
       <div id="security" className="compliance-section">
         <div className="container">
@@ -235,6 +339,71 @@ function Home() {
               />
               <p className="caption">Click to view Security Architecture</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* SDK COMING SOON SECTION - Full Width Two Column */}
+      <div className="sdk-coming-soon-section">
+        {/* Header Row - Developer Friendly Title */}
+        <div className="developer-friendly-header">
+          <div className="developer-friendly-icon">
+            <i className="fas fa-code fa-2x"></i>
+          </div>
+          <h2>Developer Friendly</h2>
+        </div>
+
+        {/* Two Column Content */}
+        <div className="sdk-content-wrapper">
+          {/* Left Column - Why Custom */}
+          <div className="sdk-left-column">
+            <p>
+              Linqra is built for regulated industries—healthcare, legal, and finance—but serves as a
+              powerful backend API and AI orchestration platform for any institution, company, or startup
+              that needs enterprise-grade security and compliance.
+            </p>
+            <ul className="developer-benefits">
+              <li>
+                <i className="fas fa-check-circle"></i>
+                <span><strong>Custom Workflows:</strong> Build AI pipelines tailored to your business logic</span>
+              </li>
+              <li>
+                <i className="fas fa-check-circle"></i>
+                <span><strong>Linq Protocol:</strong> Unified API layer that standardizes communication—the SDK is built on it</span>
+              </li>
+              <li>
+                <i className="fas fa-check-circle"></i>
+                <span><strong>Extensible Agents:</strong> Create specialized AI agents with custom tools</span>
+              </li>
+              <li>
+                <i className="fas fa-check-circle"></i>
+                <span><strong>White-Label Ready:</strong> Embed Linqra capabilities into your own products</span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Right Column - SDK Coming Soon */}
+          <div className="sdk-right-column">
+            <div className="sdk-icon-wrapper">
+              <i className="fas fa-cubes sdk-big-icon"></i>
+            </div>
+            <h2>Developer SDK</h2>
+            <p>
+              Build, extend, and integrate AI Agents even faster with the upcoming Linqra SDK for developers.
+            </p>
+            <div className="sdk-language-icons">
+              <div className="sdk-lang-icon" title="Python SDK">
+                <i className="fab fa-python"></i>
+                <span>Python</span>
+              </div>
+              <div className="sdk-lang-icon" title="Java SDK">
+                <i className="fab fa-java"></i>
+                <span>Java</span>
+              </div>
+            </div>
+            <button className="sdk-coming-soon-btn" disabled>
+              SDK Coming Soon
+            </button>
           </div>
         </div>
       </div>

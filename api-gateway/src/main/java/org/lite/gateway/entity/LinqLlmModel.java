@@ -19,16 +19,17 @@ import java.util.Map;
 public class LinqLlmModel {
     @Id
     private String id;
-    private String provider;          // e.g., "openai", "gemini", "cohere", "claude"
-    private String modelCategory;     // e.g., "openai-chat", "openai-embed", "gemini-chat", "gemini-embed"
-    private String modelName;         // e.g., "gpt-4o", "text-embedding-004", "gemini-embedding-001"
-    private String endpoint;          // e.g., "https://api.openai.com/v1/chat/completions"
-    private String method;            // e.g., "POST"
+    private String provider; // e.g., "openai", "gemini", "cohere", "claude"
+    private String modelCategory; // e.g., "openai-chat", "openai-embed", "gemini-chat", "gemini-embed"
+    private String modelName; // e.g., "gpt-4o", "text-embedding-004", "gemini-embedding-001"
+    private String endpoint; // e.g., "https://api.openai.com/v1/chat/completions"
+    private String method; // e.g., "POST"
     private Map<String, String> headers; // e.g., {"Content-Type": "application/json"}
-    private String authType;          // e.g., "bearer", "api_key_query", "none"
-    private String apiKey;            // The API key for the service
+    private String authType; // e.g., "bearer", "api_key_query", "none"
+    private String apiKey; // The API key for the service
     private List<String> supportedIntents; // e.g., ["generate", "summarize"]
-    private String teamId;              // e.g., "67d0aeb17172416c411d419e" (team ID)
+    private String teamId; // e.g., "67d0aeb17172416c411d419e" (team ID)
+    private Integer priority; // Lower number = higher priority (1 = first choice, null = unassigned)
 
     @Transient
     private Integer embeddingDimension; // Derived from LlmModel for embedding category models
@@ -42,4 +43,3 @@ public class LinqLlmModel {
     @Transient
     private Integer contextWindowTokens; // Derived maximum context window tokens (if available)
 }
-

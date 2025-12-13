@@ -34,7 +34,7 @@ class ServiceHealthWebSocket {
         try {
             console.log(`Attempting to connect to ${this.wsUrl}`);
             this.setConnectionStatus('connecting');
-            
+
             this.ws = new WebSocket(this.wsUrl);
             this.setupWebSocket();
         } catch (error) {
@@ -47,7 +47,7 @@ class ServiceHealthWebSocket {
         this.ws.onopen = () => {
             console.log('WebSocket Connected');
             this.reconnectAttempts = 0;
-            
+
             // Send STOMP CONNECT frame
             setTimeout(() => {
                 if (this.ws.readyState === WebSocket.OPEN) {
@@ -64,7 +64,7 @@ class ServiceHealthWebSocket {
             //console.log('Received raw message:', event.data);
             const frame = this.parseStompFrame(event.data);
             //console.log('Parsed frame:', frame);
-            
+
             if (frame.command === 'CONNECTED') {
                 console.log('STOMP Connected');
                 this.connected = true;
@@ -143,12 +143,12 @@ class ServiceHealthWebSocket {
                 this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts),
                 this.maxReconnectDelay
             );
-            
+
             setTimeout(() => {
                 this.reconnectAttempts++;
                 this.connect();
             }, delay);
-            
+
             this.connectionStatus = 'reconnecting';
             this.notifyConnectionSubscribers();
         } else {
@@ -175,11 +175,17 @@ class ServiceHealthWebSocket {
 
     disconnect() {
         if (this.ws) {
-            if (this.connected) {
+            // Only send DISCONNECT frame if WebSocket is open and STOMP connected
+            if (this.connected && this.ws.readyState === WebSocket.OPEN) {
                 const disconnectFrame = 'DISCONNECT\n\n\0';
                 this.ws.send(disconnectFrame);
             }
-            this.ws.close();
+            // Only close if not already closing/closed
+            if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+                this.ws.close();
+            }
+            this.ws = null;
+            this.connected = false;
         }
     }
 }

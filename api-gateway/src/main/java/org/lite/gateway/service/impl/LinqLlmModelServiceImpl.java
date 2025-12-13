@@ -43,10 +43,9 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     @NonNull
     private final AuditLogHelper auditLogHelper;
 
-    // Provider priority for tie-breaking when models have similar costs (lower
-    // index = higher priority)
-    // Prioritizes cheaper providers: Gemini, Cohere first
-    private static final List<String> PROVIDER_PRIORITY = List.of("gemini", "cohere", "openai", "claude", "mistral");
+    // Priority is now stored per-model in the database (LinqLlmModel.priority
+    // field)
+    // Lower priority number = higher priority (tried first), null = unassigned
 
     private Mono<LinqLlmModel> enrichWithModelMetadata(LinqLlmModel linqLlmModel) {
         if (linqLlmModel == null) {
@@ -107,8 +106,28 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     // Create new linq llm model
                     log.info("Creating new LinqLlmModel for modelCategory: {}, modelName: {} and team: {}",
                             linqLlmModel.getModelCategory(), linqLlmModel.getModelName(), linqLlmModel.getTeamId());
+
+                    // Auto-assign priority if not set - find max priority for team and add 1
+                    if (linqLlmModel.getPriority() == null) {
+                        return linqLlmModelRepository.findByTeamId(linqLlmModel.getTeamId())
+                                .map(LinqLlmModel::getPriority)
+                                .filter(p -> p != null)
+                                .reduce(0, (a, b) -> Math.max(a, b))
+                                .defaultIfEmpty(0)
+                                .flatMap(maxPriority -> {
+                                    linqLlmModel.setPriority(maxPriority + 1);
+                                    log.info("Auto-assigned priority {} to new model {}", maxPriority + 1,
+                                            linqLlmModel.getModelName());
+                                    return linqLlmModelRepository.save(linqLlmModel);
+                                })
+                                .doOnSuccess(saved -> log.info("Created new LinqLlmModel with ID: {} and priority: {}",
+                                        saved.getId(), saved.getPriority()))
+                                .doOnError(error -> log.error("Failed to create LinqLlmModel: {}", error.getMessage()));
+                    }
+
                     return linqLlmModelRepository.save(linqLlmModel)
-                            .doOnSuccess(saved -> log.info("Created new LinqLlmModel with ID: {}", saved.getId()))
+                            .doOnSuccess(saved -> log.info("Created new LinqLlmModel with ID: {} and priority: {}",
+                                    saved.getId(), saved.getPriority()))
                             .doOnError(error -> log.error("Failed to create LinqLlmModel: {}", error.getMessage()));
                 }));
     }
@@ -237,30 +256,22 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     log.info("🔍 Available models for selection:");
                     for (LinqLlmModel model : models) {
                         double cost = calculateEstimatedCost(model, estimatedPromptTokens, estimatedCompletionTokens);
-                        int priority = PROVIDER_PRIORITY
-                                .indexOf(model.getProvider() != null ? model.getProvider().toLowerCase() : "");
-                        priority = priority == -1 ? Integer.MAX_VALUE : priority;
                         log.info("  - {} (provider: {}, category: {}, priority: {}, estimated cost: ${})",
                                 model.getModelName(),
                                 model.getProvider(),
                                 model.getModelCategory(),
-                                priority == Integer.MAX_VALUE ? "N/A" : priority,
+                                model.getPriority() != null ? model.getPriority() : "N/A",
                                 String.format("%.6f", cost));
                     }
 
-                    // Sort models by cost (prioritizing Gemini/Cohere first, then by estimated
-                    // cost)
+                    // Sort models by database priority (lower = higher priority), then by cost
                     List<LinqLlmModel> sortedModels = models.stream()
                             .sorted((m1, m2) -> {
-                                // Get provider priority (lower index = higher priority)
-                                int priority1 = PROVIDER_PRIORITY
-                                        .indexOf(m1.getProvider() != null ? m1.getProvider().toLowerCase() : "");
-                                int priority2 = PROVIDER_PRIORITY
-                                        .indexOf(m2.getProvider() != null ? m2.getProvider().toLowerCase() : "");
-                                priority1 = priority1 == -1 ? Integer.MAX_VALUE : priority1;
-                                priority2 = priority2 == -1 ? Integer.MAX_VALUE : priority2;
+                                // Get priority from database (null treated as lowest priority)
+                                int priority1 = m1.getPriority() != null ? m1.getPriority() : Integer.MAX_VALUE;
+                                int priority2 = m2.getPriority() != null ? m2.getPriority() : Integer.MAX_VALUE;
 
-                                // First sort by provider priority (Gemini/Cohere first)
+                                // First sort by database priority
                                 if (priority1 != priority2) {
                                     return Integer.compare(priority1, priority2);
                                 }
@@ -279,14 +290,11 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     for (int i = 0; i < sortedModels.size(); i++) {
                         LinqLlmModel model = sortedModels.get(i);
                         double cost = calculateEstimatedCost(model, estimatedPromptTokens, estimatedCompletionTokens);
-                        int priority = PROVIDER_PRIORITY
-                                .indexOf(model.getProvider() != null ? model.getProvider().toLowerCase() : "");
-                        priority = priority == -1 ? Integer.MAX_VALUE : priority;
                         log.info("  {}. {} (provider: {}, priority: {}, cost: ${})",
                                 i + 1,
                                 model.getModelName(),
                                 model.getProvider(),
-                                priority == Integer.MAX_VALUE ? "N/A" : priority,
+                                model.getPriority() != null ? model.getPriority() : "N/A",
                                 String.format("%.6f", cost));
                     }
 
@@ -976,5 +984,33 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 .bodyToMono(Object.class)
                 .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
                 .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage()));
+    }
+
+    @Override
+    public Mono<Void> updatePriorities(String teamId, Map<String, Integer> priorityUpdates) {
+        log.info("Updating priorities for team: {} - {} models", teamId, priorityUpdates.size());
+
+        return Flux.fromIterable(priorityUpdates.entrySet())
+                .flatMap(entry -> {
+                    String modelId = entry.getKey();
+                    Integer newPriority = entry.getValue();
+
+                    return linqLlmModelRepository.findById(modelId)
+                            .flatMap(model -> {
+                                // Verify model belongs to the team
+                                if (!teamId.equals(model.getTeamId())) {
+                                    log.warn("Model {} does not belong to team {}", modelId, teamId);
+                                    return Mono.empty();
+                                }
+
+                                model.setPriority(newPriority);
+                                log.debug("Updating model {} priority to {}", model.getModelName(), newPriority);
+                                return linqLlmModelRepository.save(model);
+                            });
+                })
+                .then()
+                .doOnSuccess(v -> log.info("✅ Successfully updated priorities for team: {}", teamId))
+                .doOnError(
+                        error -> log.error("❌ Error updating priorities for team {}: {}", teamId, error.getMessage()));
     }
 }

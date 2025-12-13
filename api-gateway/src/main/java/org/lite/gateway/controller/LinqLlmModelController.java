@@ -39,141 +39,135 @@ public class LinqLlmModelController {
             @PathVariable String teamId,
             ServerWebExchange exchange) {
         log.info("Getting LLM model configurations for team: {}", teamId);
-        
+
         return userContextService.getCurrentUsername(exchange)
-            .flatMap(userService::findByUsername)
-            .flatMap(user -> {
-                // For SUPER_ADMIN, proceed directly
-                if (user.getRoles().contains("SUPER_ADMIN")) {
-                    return linqLlmModelService.findByTeamId(teamId)
-                        .collectList()
-                        .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
-                }
-                
-                // For non-SUPER_ADMIN users, check team admin role
-                return teamService.hasRole(teamId, user.getId(), "ADMIN")
-                    .flatMap(isAdmin -> {
-                        if (!isAdmin) {
-                            return Mono.just((ResponseEntity<?>) ResponseEntity
-                                .status(HttpStatus.FORBIDDEN)
-                                .body(ErrorResponse.fromErrorCode(
-                                    ErrorCode.FORBIDDEN,
-                                    "Only team administrators can view LLM model configurations",
-                                    HttpStatus.FORBIDDEN.value()
-                                )));
-                        }
+                .flatMap(userService::findByUsername)
+                .flatMap(user -> {
+                    // For SUPER_ADMIN, proceed directly
+                    if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqLlmModelService.findByTeamId(teamId)
-                            .collectList()
-                            .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
-                    });
-            })
-            .onErrorResume(error -> {
-                log.error("Error getting LLM model configurations: {}", error.getMessage());
-                return Mono.just((ResponseEntity<?>) ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.INTERNAL_ERROR,
-                        "Error getting LLM model configurations: " + error.getMessage(),
-                        HttpStatus.INTERNAL_SERVER_ERROR.value()
-                    )));
-            });
+                                .collectList()
+                                .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
+                    }
+
+                    // For non-SUPER_ADMIN users, check team admin role
+                    return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                            .flatMap(isAdmin -> {
+                                if (!isAdmin) {
+                                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                                            .status(HttpStatus.FORBIDDEN)
+                                            .body(ErrorResponse.fromErrorCode(
+                                                    ErrorCode.FORBIDDEN,
+                                                    "Only team administrators can view LLM model configurations",
+                                                    HttpStatus.FORBIDDEN.value())));
+                                }
+                                return linqLlmModelService.findByTeamId(teamId)
+                                        .collectList()
+                                        .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
+                            });
+                })
+                .onErrorResume(error -> {
+                    log.error("Error getting LLM model configurations: {}", error.getMessage());
+                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.INTERNAL_ERROR,
+                                    "Error getting LLM model configurations: " + error.getMessage(),
+                                    HttpStatus.INTERNAL_SERVER_ERROR.value())));
+                });
     }
 
     @GetMapping("/team/{teamId}/modelCategory/{modelCategory}")
     public Mono<ResponseEntity<?>> getLlmModelByModelCategory(
-            @PathVariable String teamId, 
+            @PathVariable String teamId,
             @PathVariable String modelCategory,
             ServerWebExchange exchange) {
         log.info("Getting LLM model configurations for team: {} and modelCategory: {}", teamId, modelCategory);
-        
+
         return userContextService.getCurrentUsername(exchange)
                 .flatMap(userService::findByUsername)
                 .flatMap(user -> {
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqLlmModelService.findByModelCategoryAndTeamId(modelCategory, teamId)
-                            .collectList()
-                            .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
-                    }
-                    
-                    // For non-SUPER_ADMIN users, check team admin role
-                    return teamService.hasRole(teamId, user.getId(), "ADMIN")
-                        .flatMap(isAdmin -> {
-                            if (!isAdmin) {
-                                return Mono.just((ResponseEntity<?>) ResponseEntity
-                                    .status(HttpStatus.FORBIDDEN)
-                                    .body(ErrorResponse.fromErrorCode(
-                                        ErrorCode.FORBIDDEN,
-                                        "Only team administrators can view LLM model configurations",
-                                        HttpStatus.FORBIDDEN.value()
-                                    )));
-                            }
-                            return linqLlmModelService.findByModelCategoryAndTeamId(modelCategory, teamId)
                                 .collectList()
                                 .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
-                        });
+                    }
+
+                    // For non-SUPER_ADMIN users, check team admin role
+                    return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                            .flatMap(isAdmin -> {
+                                if (!isAdmin) {
+                                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                                            .status(HttpStatus.FORBIDDEN)
+                                            .body(ErrorResponse.fromErrorCode(
+                                                    ErrorCode.FORBIDDEN,
+                                                    "Only team administrators can view LLM model configurations",
+                                                    HttpStatus.FORBIDDEN.value())));
+                                }
+                                return linqLlmModelService.findByModelCategoryAndTeamId(modelCategory, teamId)
+                                        .collectList()
+                                        .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
+                            });
                 })
-            .onErrorResume(error -> {
-                log.error("Error getting LLM model configurations: {}", error.getMessage());
-                return Mono.just((ResponseEntity<?>) ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.INTERNAL_ERROR,
-                        "Error getting LLM model configurations: " + error.getMessage(),
-                        HttpStatus.INTERNAL_SERVER_ERROR.value()
-                    )));
-            });
+                .onErrorResume(error -> {
+                    log.error("Error getting LLM model configurations: {}", error.getMessage());
+                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.INTERNAL_ERROR,
+                                    "Error getting LLM model configurations: " + error.getMessage(),
+                                    HttpStatus.INTERNAL_SERVER_ERROR.value())));
+                });
     }
-    
+
     @PostMapping("/team/{teamId}/modelCategories")
     public Mono<ResponseEntity<?>> getLlmModelsByModelCategories(
-            @PathVariable String teamId, 
+            @PathVariable String teamId,
             @RequestBody java.util.List<String> modelCategoryList,
             ServerWebExchange exchange) {
         log.info("Getting LLM model configurations for team: {} and modelCategoryList: {}", teamId, modelCategoryList);
-        
+
         return userContextService.getCurrentUsername(exchange)
                 .flatMap(userService::findByUsername)
                 .flatMap(user -> {
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         return linqLlmModelService.findByModelCategoriesAndTeamId(modelCategoryList, teamId)
-                            .collectList()
-                            .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
-                    }
-                    
-                    // For non-SUPER_ADMIN users, check team admin role
-                    return teamService.hasRole(teamId, user.getId(), "ADMIN")
-                        .flatMap(isAdmin -> {
-                            if (!isAdmin) {
-                                return Mono.just((ResponseEntity<?>) ResponseEntity
-                                    .status(HttpStatus.FORBIDDEN)
-                                    .body(ErrorResponse.fromErrorCode(
-                                        ErrorCode.FORBIDDEN,
-                                        "Only team administrators can view LLM model configurations",
-                                        HttpStatus.FORBIDDEN.value()
-                                    )));
-                            }
-                            return linqLlmModelService.findByModelCategoriesAndTeamId(modelCategoryList, teamId)
                                 .collectList()
                                 .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
-                        });
+                    }
+
+                    // For non-SUPER_ADMIN users, check team admin role
+                    return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                            .flatMap(isAdmin -> {
+                                if (!isAdmin) {
+                                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                                            .status(HttpStatus.FORBIDDEN)
+                                            .body(ErrorResponse.fromErrorCode(
+                                                    ErrorCode.FORBIDDEN,
+                                                    "Only team administrators can view LLM model configurations",
+                                                    HttpStatus.FORBIDDEN.value())));
+                                }
+                                return linqLlmModelService.findByModelCategoriesAndTeamId(modelCategoryList, teamId)
+                                        .collectList()
+                                        .map(configs -> (ResponseEntity<?>) ResponseEntity.ok(configs));
+                            });
                 })
-            .onErrorResume(error -> {
-                log.error("Error getting LLM model configurations: {}", error.getMessage());
-                return Mono.just((ResponseEntity<?>) ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.INTERNAL_ERROR,
-                        "Error getting LLM model configurations: " + error.getMessage(),
-                        HttpStatus.INTERNAL_SERVER_ERROR.value()
-                    )));
-            });
+                .onErrorResume(error -> {
+                    log.error("Error getting LLM model configurations: {}", error.getMessage());
+                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.INTERNAL_ERROR,
+                                    "Error getting LLM model configurations: " + error.getMessage(),
+                                    HttpStatus.INTERNAL_SERVER_ERROR.value())));
+                });
     }
-    
+
     @GetMapping("/team/{teamId}/modelCategory/{modelCategory}/model/{modelName}")
     public Mono<LinqLlmModel> getLlmModelByModelCategoryAndCategoryName(
-            @PathVariable String teamId, 
+            @PathVariable String teamId,
             @PathVariable String modelCategory,
             @PathVariable String modelName) {
         return linqLlmModelService.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId);
@@ -182,51 +176,89 @@ public class LinqLlmModelController {
     @DeleteMapping("/{id}")
     public Mono<ResponseEntity<?>> deleteLinqLlmModel(@PathVariable String id, ServerWebExchange exchange) {
         log.info("Deleting LinqLlmModel with ID: {}", id);
-        
+
         // First, get the model to check team ownership
         return linqLlmModelService.findById(id)
-            .flatMap(model -> userContextService.getCurrentUsername(exchange)
+                .flatMap(model -> userContextService.getCurrentUsername(exchange)
+                        .flatMap(userService::findByUsername)
+                        .flatMap(user -> {
+                            // For SUPER_ADMIN, proceed directly
+                            if (user.getRoles().contains("SUPER_ADMIN")) {
+                                return linqLlmModelService.deleteLinqLlmModel(id)
+                                        .thenReturn((ResponseEntity<?>) ResponseEntity.noContent().build());
+                            }
+
+                            // For non-SUPER_ADMIN users, check team admin role
+                            return teamService.hasRole(model.getTeamId(), user.getId(), "ADMIN")
+                                    .flatMap(isAdmin -> {
+                                        if (!isAdmin) {
+                                            return Mono.just((ResponseEntity<?>) ResponseEntity
+                                                    .status(HttpStatus.FORBIDDEN)
+                                                    .body(ErrorResponse.fromErrorCode(
+                                                            ErrorCode.FORBIDDEN,
+                                                            "Only team administrators can delete LLM model configurations",
+                                                            HttpStatus.FORBIDDEN.value())));
+                                        }
+                                        return linqLlmModelService.deleteLinqLlmModel(id)
+                                                .thenReturn((ResponseEntity<?>) ResponseEntity.noContent().build());
+                                    });
+                        }))
+                .switchIfEmpty(Mono.just((ResponseEntity<?>) ResponseEntity
+                        .status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.INTERNAL_ERROR,
+                                "LinqLlmModel not found with ID: " + id,
+                                HttpStatus.NOT_FOUND.value()))))
+                .onErrorResume(error -> {
+                    log.error("Error deleting LinqLlmModel: {}", error.getMessage());
+                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.INTERNAL_ERROR,
+                                    "Error deleting LinqLlmModel: " + error.getMessage(),
+                                    HttpStatus.INTERNAL_SERVER_ERROR.value())));
+                });
+    }
+
+    @PutMapping("/team/{teamId}/priorities")
+    public Mono<ResponseEntity<?>> updatePriorities(
+            @PathVariable String teamId,
+            @RequestBody java.util.Map<String, Integer> priorityUpdates,
+            ServerWebExchange exchange) {
+        log.info("Updating LLM model priorities for team: {} - {} models", teamId, priorityUpdates.size());
+
+        return userContextService.getCurrentUsername(exchange)
                 .flatMap(userService::findByUsername)
                 .flatMap(user -> {
                     // For SUPER_ADMIN, proceed directly
                     if (user.getRoles().contains("SUPER_ADMIN")) {
-                        return linqLlmModelService.deleteLinqLlmModel(id)
-                            .thenReturn((ResponseEntity<?>) ResponseEntity.noContent().build());
+                        return linqLlmModelService.updatePriorities(teamId, priorityUpdates)
+                                .thenReturn((ResponseEntity<?>) ResponseEntity.ok().build());
                     }
-                    
+
                     // For non-SUPER_ADMIN users, check team admin role
-                    return teamService.hasRole(model.getTeamId(), user.getId(), "ADMIN")
-                        .flatMap(isAdmin -> {
-                            if (!isAdmin) {
-                                return Mono.just((ResponseEntity<?>) ResponseEntity
-                                    .status(HttpStatus.FORBIDDEN)
-                                    .body(ErrorResponse.fromErrorCode(
-                                        ErrorCode.FORBIDDEN,
-                                        "Only team administrators can delete LLM model configurations",
-                                        HttpStatus.FORBIDDEN.value()
-                                    )));
-                            }
-                            return linqLlmModelService.deleteLinqLlmModel(id)
-                                .thenReturn((ResponseEntity<?>) ResponseEntity.noContent().build());
-                        });
-                }))
-            .switchIfEmpty(Mono.just((ResponseEntity<?>) ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.fromErrorCode(
-                    ErrorCode.INTERNAL_ERROR,
-                    "LinqLlmModel not found with ID: " + id,
-                    HttpStatus.NOT_FOUND.value()
-                ))))
-            .onErrorResume(error -> {
-                log.error("Error deleting LinqLlmModel: {}", error.getMessage());
-                return Mono.just((ResponseEntity<?>) ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.INTERNAL_ERROR,
-                        "Error deleting LinqLlmModel: " + error.getMessage(),
-                        HttpStatus.INTERNAL_SERVER_ERROR.value()
-                    )));
-            });
+                    return teamService.hasRole(teamId, user.getId(), "ADMIN")
+                            .flatMap(isAdmin -> {
+                                if (!isAdmin) {
+                                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                                            .status(HttpStatus.FORBIDDEN)
+                                            .body(ErrorResponse.fromErrorCode(
+                                                    ErrorCode.FORBIDDEN,
+                                                    "Only team administrators can update LLM model priorities",
+                                                    HttpStatus.FORBIDDEN.value())));
+                                }
+                                return linqLlmModelService.updatePriorities(teamId, priorityUpdates)
+                                        .thenReturn((ResponseEntity<?>) ResponseEntity.ok().build());
+                            });
+                })
+                .onErrorResume(error -> {
+                    log.error("Error updating LLM model priorities: {}", error.getMessage());
+                    return Mono.just((ResponseEntity<?>) ResponseEntity
+                            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.INTERNAL_ERROR,
+                                    "Error updating LLM model priorities: " + error.getMessage(),
+                                    HttpStatus.INTERNAL_SERVER_ERROR.value())));
+                });
     }
 }
-

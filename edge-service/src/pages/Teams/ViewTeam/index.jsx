@@ -24,7 +24,11 @@ import {
   HiKey,
   HiSparkles,
   HiDatabase,
-  HiEye
+  HiEye,
+  HiArrowUp,
+  HiArrowDown,
+  HiSave,
+  HiRefresh
 } from 'react-icons/hi';
 import { SiOpenai, SiGoogle, SiAnthropic } from 'react-icons/si';
 import { FaCloud } from 'react-icons/fa';
@@ -92,6 +96,17 @@ function ViewTeam() {
   const [milvusCollectionsLoading, setMilvusCollectionsLoading] = useState(false);
   const [milvusCollectionsError, setMilvusCollectionsError] = useState(null);
   const [activeKeyVersion, setActiveKeyVersion] = useState(null);
+  const [priorityChanged, setPriorityChanged] = useState(false);
+
+  // Sort LLM models by priority (lower = higher priority)
+  const sortedLlmModels = useMemo(() => {
+    if (!llmModels || llmModels.length === 0) return [];
+    return [...llmModels].sort((a, b) => {
+      const priorityA = a.priority ?? Number.MAX_SAFE_INTEGER;
+      const priorityB = b.priority ?? Number.MAX_SAFE_INTEGER;
+      return priorityA - priorityB;
+    });
+  }, [llmModels]);
 
   useEffect(() => {
     if (teamId) {
@@ -123,6 +138,7 @@ function ViewTeam() {
     try {
       const data = await linqLlmModelService.getTeamConfiguration(teamId);
       setLlmModels(Array.isArray(data) ? data : []);
+      setPriorityChanged(false);
     } catch (err) {
       console.error('Error fetching LLM models:', err);
       setLlmModels([]);
@@ -422,6 +438,84 @@ function ViewTeam() {
     setShowApiKeysModal(false);
     // Refresh API keys when modal closes in case changes were made
     fetchApiKeys();
+  };
+
+  // Move model priority up (decrease priority number)
+  const handleMovePriorityUp = (modelId) => {
+    const modelIndex = sortedLlmModels.findIndex(m => m.id === modelId);
+    if (modelIndex <= 0) return; // Already at top
+
+    const updatedModels = [...llmModels];
+    const currentModel = updatedModels.find(m => m.id === modelId);
+    const prevModel = sortedLlmModels[modelIndex - 1];
+    const prevModelInList = updatedModels.find(m => m.id === prevModel.id);
+
+    // Swap priorities
+    const tempPriority = currentModel.priority;
+    currentModel.priority = prevModelInList.priority;
+    prevModelInList.priority = tempPriority;
+
+    setLlmModels(updatedModels);
+    setPriorityChanged(true);
+  };
+
+  // Move model priority down (increase priority number)
+  const handleMovePriorityDown = (modelId) => {
+    const modelIndex = sortedLlmModels.findIndex(m => m.id === modelId);
+    if (modelIndex >= sortedLlmModels.length - 1) return; // Already at bottom
+
+    const updatedModels = [...llmModels];
+    const currentModel = updatedModels.find(m => m.id === modelId);
+    const nextModel = sortedLlmModels[modelIndex + 1];
+    const nextModelInList = updatedModels.find(m => m.id === nextModel.id);
+
+    // Swap priorities
+    const tempPriority = currentModel.priority;
+    currentModel.priority = nextModelInList.priority;
+    nextModelInList.priority = tempPriority;
+
+    setLlmModels(updatedModels);
+    setPriorityChanged(true);
+  };
+
+  // Save priority changes to backend
+  const handleSavePriorities = async () => {
+    try {
+      setOperationLoading(true);
+      // Build priority map: { modelId: priority }
+      const priorityUpdates = {};
+      llmModels.forEach(model => {
+        priorityUpdates[model.id] = model.priority;
+      });
+
+      await linqLlmModelService.updatePriorities(teamId, priorityUpdates);
+      showSuccessToast('LLM model priorities updated successfully');
+      setPriorityChanged(false);
+    } catch (err) {
+      showErrorToast(err.message || 'Failed to update priorities');
+    } finally {
+      setOperationLoading(false);
+    }
+  };
+
+  // Check if priorities need reordering (duplicates or nulls exist)
+  const needsPriorityReorder = useMemo(() => {
+    if (!llmModels || llmModels.length === 0) return false;
+    const priorities = llmModels.map(m => m.priority);
+    const hasNull = priorities.some(p => p === null || p === undefined);
+    const hasDuplicates = new Set(priorities.filter(p => p !== null && p !== undefined)).size !== priorities.filter(p => p !== null && p !== undefined).length;
+    return hasNull || hasDuplicates;
+  }, [llmModels]);
+
+  // Auto-reorder priorities to sequential values (1, 2, 3...)
+  const handleAutoReorderPriorities = () => {
+    const updatedModels = sortedLlmModels.map((model, index) => ({
+      ...model,
+      priority: index + 1
+    }));
+    setLlmModels(updatedModels);
+    setPriorityChanged(true);
+    showSuccessToast('Priorities reordered. Click "Save Priority Order" to persist changes.');
   };
 
   const knowledgeCollectionRows = knowledgeCollections.flatMap((collection) => {
@@ -889,67 +983,122 @@ function ViewTeam() {
                   >
                     <SiAnthropic className="me-1" size={16} /> Claude
                   </BootstrapButton>
+                  {needsPriorityReorder && (
+                    <BootstrapButton
+                      size="sm"
+                      variant="outline-warning"
+                      onClick={handleAutoReorderPriorities}
+                      disabled={operationLoading}
+                      title="Assign sequential priorities (1, 2, 3...) to fix duplicates or missing values"
+                    >
+                      <HiRefresh className="me-1" size={14} /> Auto-reorder
+                    </BootstrapButton>
+                  )}
                 </div>
               </div>
-              {llmModels && llmModels.length > 0 ? (
-                <div className="table-responsive">
-                  <table className="table table-sm mb-0">
-                    <thead>
-                      <tr>
-                        <th>Provider</th>
-                        <th>Model Category</th>
-                        <th>Model Name</th>
-                        <th>Endpoint</th>
-                        <th>Auth Type</th>
-                        <th>Supported Intents</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {llmModels.map(model => (
-                        <tr key={model.id}>
-                          <td>
-                            <Badge bg={
-                              model.provider?.toLowerCase() === 'openai' ? 'primary' :
-                                model.provider?.toLowerCase() === 'gemini' ? 'warning' :
-                                  model.provider?.toLowerCase() === 'cohere' ? 'info' :
-                                    model.provider?.toLowerCase() === 'anthropic' ? 'danger' : 'secondary'
-                            }>
-                              {model.provider}
-                            </Badge>
-                          </td>
-                          <td>
-                            <Badge bg="secondary">{model.modelCategory}</Badge>
-                          </td>
-                          <td>{model.modelName}</td>
-                          <td>
-                            <OverlayTrigger
-                              placement="top"
-                              overlay={<Tooltip id={`tooltip-endpoint-${model.id}`}>{model.endpoint}</Tooltip>}
-                            >
-                              <code className="text-truncate" style={{ maxWidth: '400px', display: 'block' }}>
-                                {model.endpoint}
-                              </code>
-                            </OverlayTrigger>
-                          </td>
-                          <td>
-                            <Badge bg="secondary">{model.authType}</Badge>
-                          </td>
-                          <td>
-                            {model.supportedIntents?.map(intent => (
-                              <Badge
-                                key={intent}
-                                bg="info"
-                                className="me-1"
-                              >
-                                {intent}
-                              </Badge>
-                            ))}
-                          </td>
+              {sortedLlmModels && sortedLlmModels.length > 0 ? (
+                <>
+                  <div className="table-responsive">
+                    <table className="table table-sm mb-0">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '80px' }}>Priority</th>
+                          <th>Provider</th>
+                          <th>Model Category</th>
+                          <th>Model Name</th>
+                          <th>Endpoint</th>
+                          <th>Auth Type</th>
+                          <th>Supported Intents</th>
+                          <th style={{ width: '100px' }}>Reorder</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {sortedLlmModels.map((model, index) => (
+                          <tr key={model.id}>
+                            <td>
+                              <Badge bg="dark" className="px-2">
+                                #{model.priority ?? '-'}
+                              </Badge>
+                            </td>
+                            <td>
+                              <Badge bg={
+                                model.provider?.toLowerCase() === 'openai' ? 'primary' :
+                                  model.provider?.toLowerCase() === 'gemini' ? 'warning' :
+                                    model.provider?.toLowerCase() === 'cohere' ? 'info' :
+                                      model.provider?.toLowerCase() === 'anthropic' ? 'danger' : 'secondary'
+                              }>
+                                {model.provider}
+                              </Badge>
+                            </td>
+                            <td>
+                              <Badge bg="secondary">{model.modelCategory}</Badge>
+                            </td>
+                            <td>{model.modelName}</td>
+                            <td>
+                              <OverlayTrigger
+                                placement="top"
+                                overlay={<Tooltip id={`tooltip-endpoint-${model.id}`}>{model.endpoint}</Tooltip>}
+                              >
+                                <code className="text-truncate" style={{ maxWidth: '300px', display: 'block' }}>
+                                  {model.endpoint}
+                                </code>
+                              </OverlayTrigger>
+                            </td>
+                            <td>
+                              <Badge bg="secondary">{model.authType}</Badge>
+                            </td>
+                            <td>
+                              {model.supportedIntents?.map(intent => (
+                                <Badge
+                                  key={intent}
+                                  bg="info"
+                                  className="me-1"
+                                >
+                                  {intent}
+                                </Badge>
+                              ))}
+                            </td>
+                            <td>
+                              <div className="d-flex gap-1">
+                                <BootstrapButton
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  disabled={index === 0 || operationLoading}
+                                  onClick={() => handleMovePriorityUp(model.id)}
+                                  title="Move up (higher priority)"
+                                >
+                                  <HiArrowUp size={14} />
+                                </BootstrapButton>
+                                <BootstrapButton
+                                  size="sm"
+                                  variant="outline-secondary"
+                                  disabled={index === sortedLlmModels.length - 1 || operationLoading}
+                                  onClick={() => handleMovePriorityDown(model.id)}
+                                  title="Move down (lower priority)"
+                                >
+                                  <HiArrowDown size={14} />
+                                </BootstrapButton>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {priorityChanged && (
+                    <div className="mt-3 d-flex justify-content-end">
+                      <BootstrapButton
+                        size="sm"
+                        variant="success"
+                        onClick={handleSavePriorities}
+                        disabled={operationLoading}
+                      >
+                        <HiSave className="me-1" size={14} />
+                        {operationLoading ? 'Saving...' : 'Save Priority Order'}
+                      </BootstrapButton>
+                    </div>
+                  )}
+                </>
               ) : (
                 <p className="text-muted mb-0">No LLM models configured yet. Click the provider buttons above to configure.</p>
               )}

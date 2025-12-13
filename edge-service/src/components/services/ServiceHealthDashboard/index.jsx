@@ -25,8 +25,13 @@ const ServiceHealthDashboard = () => {
         const fetchServices = async () => {
             try {
                 const services = await apiGatewayService.getAllServices();
+                console.log('All services from API Gateway:', services);
                 const serviceIds = services.map(service => service.serviceId);
+                console.log('Service IDs:', serviceIds);
                 setExpectedServices(serviceIds);
+                // Also initialize services directly so they show even before WebSocket updates
+                setServices(services);
+                setLoading(false);
             } catch (err) {
                 console.error('Error fetching services:', err);
                 setError('Failed to fetch services from API Gateway');
@@ -79,6 +84,12 @@ const ServiceHealthDashboard = () => {
         });
     };
 
+    // Use ref to access expectedServices in callback without causing effect re-run
+    const expectedServicesRef = React.useRef(expectedServices);
+    useEffect(() => {
+        expectedServicesRef.current = expectedServices;
+    }, [expectedServices]);
+
     useEffect(() => {
         // Track connection status
         const handleConnectionChange = (status) => {
@@ -97,7 +108,44 @@ const ServiceHealthDashboard = () => {
                     throw new Error('Invalid data format received');
                 }
                 //console.log('Received service data:', JSON.stringify(data, null, 2));
-                setServices(getAllServices(data));
+                // Use ref to get current expectedServices without causing re-render
+                const currentExpectedServices = expectedServicesRef.current;
+                const servicesMap = new Map(data.map(s => [s.serviceId, s]));
+
+                // Add placeholder for missing services
+                currentExpectedServices.forEach(serviceId => {
+                    if (!servicesMap.has(serviceId)) {
+                        servicesMap.set(serviceId, {
+                            serviceId: serviceId,
+                            status: 'DOWN',
+                            metrics: { cpu: 0, memory: 0, responseTime: 0 },
+                            trends: {
+                                cpu: { direction: '⬇️', percentageChange: 0 },
+                                memory: { direction: '⬇️', percentageChange: 0 },
+                                responseTime: { direction: '⬇️', percentageChange: 0 }
+                            },
+                            uptime: null,
+                            lastChecked: null
+                        });
+                    }
+                });
+
+                // Transform active services to match expected structure
+                const allServices = Array.from(servicesMap.values()).map(service => {
+                    if (typeof service.status === 'object') {
+                        return {
+                            serviceId: service.serviceId,
+                            status: service.status.status,
+                            metrics: service.status.metrics || {},
+                            trends: service.trends || {},
+                            uptime: service.status.uptime,
+                            lastChecked: service.status.lastChecked
+                        };
+                    }
+                    return service;
+                });
+
+                setServices(allServices);
                 setError(null);
                 setLoading(false);
             } catch (err) {
@@ -109,13 +157,13 @@ const ServiceHealthDashboard = () => {
         // Subscribe to connection status updates
         serviceHealthWebSocket.onConnectionChange(handleConnectionChange);
 
-        // Cleanup subscription on unmount
+        // Cleanup subscription on unmount ONLY (empty dependency array)
         return () => {
             unsubscribeFromHealthUpdates();
             serviceHealthWebSocket.offConnectionChange(handleConnectionChange);
             serviceHealthWebSocket.disconnect();
         };
-    }, [expectedServices]);
+    }, []); // Empty array - only run on mount/unmount
 
     const handleAnalysisClick = async (serviceId) => {
         // Find the service by ID

@@ -379,6 +379,8 @@ services:
     volumes:
       - ./keys:/app/keys
       - ./secrets:/app/secrets:ro
+      # Mount data directories for backup scheduler access
+      - ./.kube:/var/www/linqra/.kube:ro
     deploy:
       resources:
         limits:

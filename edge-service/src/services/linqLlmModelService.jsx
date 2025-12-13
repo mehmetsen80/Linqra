@@ -66,6 +66,18 @@ export const linqLlmModelService = {
       console.error('Error deleting configuration:', error);
       throw error;
     }
+  },
+
+  // Update priorities for multiple LLM models
+  // priorityUpdates: { modelId: priority, ... } e.g., { "abc123": 1, "def456": 2 }
+  updatePriorities: async (teamId, priorityUpdates) => {
+    try {
+      await axiosInstance.put(`/api/linq-llm-models/team/${teamId}/priorities`, priorityUpdates);
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating priorities:', error);
+      throw error;
+    }
   }
 };
 

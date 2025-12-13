@@ -90,7 +90,7 @@ jobs:
             !vault-reader/target/**
             !vault-reader/target/
 
-  # Build vault-reader JAR (needed for Docker images that use vault system)
+  # Build vault-reader JAR (needed for Docker images that use vault system in any app)
   build-vault-reader:
     needs: java-app
     runs-on: ubuntu-latest

@@ -38,8 +38,8 @@ public class MilvusBackupScheduler {
      * Daily Milvus complete backup.
      * Cron: "0 0 2 * * ?" = At 2:00 AM every day
      */
-    // @Scheduled(cron = "0 0 2 * * ?")
-    @Scheduled(cron = "0 */2 * * * ?")
+    @Scheduled(cron = "0 0 2 * * ?")
+    // @Scheduled(cron = "0 */2 * * * ?")
     public void backupMilvus() {
         log.info("🔄 Starting daily Milvus complete backup");
 
@@ -111,7 +111,9 @@ public class MilvusBackupScheduler {
                         "-C", kubeDir,
                         "milvus/data", "etcd/data", "minio/data"
                 };
-                executeCommand(tarCommand, "tar");
+                // Allow exit code 1: "file changed as we read it" - this is OK for live
+                // database backups
+                executeCommand(tarCommand, "tar", 0, 1);
 
                 // Verify backup was created
                 if (!localBackup.exists()) {
@@ -192,6 +194,10 @@ public class MilvusBackupScheduler {
     }
 
     private void executeCommand(String[] command, String description) throws Exception {
+        executeCommand(command, description, 0); // Default: only exit code 0 is success
+    }
+
+    private void executeCommand(String[] command, String description, int... allowedExitCodes) throws Exception {
         log.debug("Executing: {}", String.join(" ", command));
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
@@ -213,8 +219,20 @@ public class MilvusBackupScheduler {
         }
 
         int exitCode = process.exitValue();
-        if (exitCode != 0) {
+        boolean isAllowed = false;
+        for (int allowed : allowedExitCodes) {
+            if (exitCode == allowed) {
+                isAllowed = true;
+                break;
+            }
+        }
+
+        if (!isAllowed) {
             throw new RuntimeException(description + " failed with exit code " + exitCode + ": " + output);
+        }
+
+        if (exitCode != 0) {
+            log.warn("⚠️ {} completed with warning exit code {}: {}", description, exitCode, output.toString().trim());
         }
     }
 

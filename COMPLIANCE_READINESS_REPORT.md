@@ -166,7 +166,23 @@ When you approach a bank, law firm, or hospital, they will send a generic **Secu
 
 ---
 
-### 📋 Recommended Actions Summary
+### � Broker-Dealers & Investment Advisors (SEC/FINRA)
+
+| Requirement | Status | Notes |
+| :--- | :--- | :--- |
+| Encryption at rest | ✅ | AES-256 per-team |
+| Audit logging | ✅ | Full access logging, S3 archival |
+| Record retention (3-6 years) | ✅ | S3 lifecycle policies + backup strategy |
+| WORM storage (SEC 17a-4) | ❌ | **BLOCKER** - Object Lock not enabled |
+| FINRA Rule 4511 compliance | ❌ | **BLOCKER** - Requires WORM |
+
+**Verdict**: **NOT READY** for SEC-registered broker-dealers. Missing S3 Object Lock (WORM) storage required by SEC Rule 17a-4.
+
+**Remediation:** If targeting this market, enable S3 Object Lock on backup/audit buckets with appropriate retention periods.
+
+---
+
+### �📋 Recommended Actions Summary
 
 | Action | Cost | Impact | Priority |
 | :--- | :--- | :--- | :--- |

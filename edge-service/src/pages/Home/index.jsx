@@ -108,7 +108,7 @@ function Home() {
             <h3>Financial Services</h3>
             <p>Automate fraud detection and portfolio analysis without exposing customer PII.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Audit Logs:</strong> Immutable S3 Object Lock (WORM).</li>
+              <li><i className="fas fa-check"></i> <strong>Audit Logs:</strong> Immutable S3 Archival with Versioning.</li>
               <li><i className="fas fa-check"></i> <strong>Data Sovereignty:</strong> Keep data in Your AWS VPC.</li>
               <li><i className="fas fa-check"></i> <strong>Fraud:</strong> Real-time anomaly detection agents.</li>
             </ul>

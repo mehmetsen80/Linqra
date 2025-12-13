@@ -498,6 +498,17 @@ jobs:
             sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
             sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
 
+            # Set correct permissions for Neo4j directories (Neo4j runs as UID 7474)
+            echo 'Setting Neo4j directory permissions'
+            sudo mkdir -p /var/www/linqra/.kube/neo4j/data
+            sudo mkdir -p /var/www/linqra/.kube/neo4j/logs
+            sudo mkdir -p /var/www/linqra/.kube/neo4j/import
+            sudo mkdir -p /var/www/linqra/.kube/neo4j/plugins
+            sudo chown -R 7474:7474 /var/www/linqra/.kube/neo4j/data
+            sudo chown -R 7474:7474 /var/www/linqra/.kube/neo4j/logs
+            sudo chown -R 7474:7474 /var/www/linqra/.kube/neo4j/import
+            sudo chown -R 7474:7474 /var/www/linqra/.kube/neo4j/plugins
+
             # Ensure scripts are executable
             sudo chmod +x /var/www/linqra/scripts/*.sh
 

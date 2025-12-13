@@ -415,24 +415,25 @@ jobs:
             sudo find /var/www/linqra/keys -type f ! -name 'mongo-keyfile' -exec chmod 600 {} \;
 
             # Ensure secrets directory exists with proper permissions
+            # NOTE: Must be 755/644 so Docker containers (running as different UIDs) can read vault
             echo 'Setting up secrets directory for vault'
             if [ ! -d /var/www/linqra/secrets ]; then
               sudo mkdir -p /var/www/linqra/secrets
-              sudo chown ubuntu:ubuntu /var/www/linqra/secrets
-              sudo chmod 700 /var/www/linqra/secrets
             fi
+            sudo chown ubuntu:ubuntu /var/www/linqra/secrets
+            sudo chmod 755 /var/www/linqra/secrets
             
             # Copy vault.encrypted from /tmp if it was uploaded
             if [ -f /tmp/vault.encrypted ]; then
               echo 'Copying vault.encrypted from /tmp to secrets directory'
               sudo mv /tmp/vault.encrypted /var/www/linqra/secrets/vault.encrypted
               sudo chown ubuntu:ubuntu /var/www/linqra/secrets/vault.encrypted
-              sudo chmod 600 /var/www/linqra/secrets/vault.encrypted
+              sudo chmod 644 /var/www/linqra/secrets/vault.encrypted
               echo '✅ vault.encrypted file deployed and permissions set'
             elif [ -f /var/www/linqra/secrets/vault.encrypted ]; then
               echo 'vault.encrypted already exists, preserving existing file'
               sudo chown ubuntu:ubuntu /var/www/linqra/secrets/vault.encrypted
-              sudo chmod 600 /var/www/linqra/secrets/vault.encrypted
+              sudo chmod 644 /var/www/linqra/secrets/vault.encrypted
             else
               echo 'WARNING: vault.encrypted file not found'
               echo 'This should have been generated in CI/CD pipeline'

@@ -337,6 +337,7 @@ services:
       context: .
       dockerfile: .kube/eureka/Dockerfile
     environment:
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
     ports:
       - "8761:8761"

@@ -90,6 +90,33 @@ jobs:
             !vault-reader/target/**
             !vault-reader/target/
 
+  # Build vault-reader JAR (needed for Docker images that use vault system)
+  build-vault-reader:
+    needs: java-app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Build vault-reader JAR
+        run: |
+          cd vault-reader
+          mvn clean package -DskipTests
+          echo "✅ vault-reader.jar built successfully"
+          ls -la target/vault-reader.jar
+
+      - name: Upload vault-reader JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-reader-jar
+          path: vault-reader/target/vault-reader.jar
+          retention-days: 1
+
   # we build react here in the GitHub actions
   react-build:
     needs: java-app
@@ -290,7 +317,7 @@ jobs:
           retention-days: 1
 
   deploy:
-    needs: [java-app, react-build, generate-vault]
+    needs: [java-app, react-build, generate-vault, build-vault-reader]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
 
@@ -334,6 +361,18 @@ jobs:
             scp -v artifacts/vault-encrypted/vault.encrypted $EC2_USERNAME@$EC2_HOST:/tmp/vault.encrypted
           else
             echo "WARNING: vault.encrypted file not found in artifacts"
+          fi
+
+          # Upload vault-reader JAR to EC2
+          if [ -f "artifacts/vault-reader-jar/vault-reader.jar" ]; then
+            echo "Uploading vault-reader.jar to EC2..."
+            ssh $EC2_USERNAME@$EC2_HOST "sudo mkdir -p /var/www/linqra/vault-reader/target"
+            scp -v artifacts/vault-reader-jar/vault-reader.jar $EC2_USERNAME@$EC2_HOST:/tmp/vault-reader.jar
+            ssh $EC2_USERNAME@$EC2_HOST "sudo mv /tmp/vault-reader.jar /var/www/linqra/vault-reader/target/vault-reader.jar && sudo chown ubuntu:ubuntu /var/www/linqra/vault-reader/target/vault-reader.jar"
+            echo "✅ vault-reader.jar deployed to EC2"
+          else
+            echo "ERROR: vault-reader.jar not found in artifacts"
+            exit 1
           fi
 
           # .kube, keys, and scripts (if needed, use scp or rsync as appropriate)

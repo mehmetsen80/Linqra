@@ -24,10 +24,10 @@ function Home() {
   return (
     <div className="home-container">
       <nav className="top-nav">
-        <div className="nav-links">
-          <a href="#solutions">Solutions</a>
+        <div className="nav-links mt-3">
+          {/* <a href="#solutions">Solutions</a>
           <a href="#security">Security</a>
-          <a href="https://docs.linqra.com" target="_blank" rel="noopener noreferrer">Docs</a>
+          <a href="https://docs.linqra.com" target="_blank" rel="noopener noreferrer">Docs</a> */}
           {isAuthenticated ? (
             <Link to="/dashboard" className="auth-link">Dashboard</Link>
           ) : (
@@ -46,9 +46,9 @@ function Home() {
             alt="Linqra Logo"
             className="hero-logo"
           />
-          <div className="enterprise-title">Integration Complexity Creates Security Gaps. We Close Them.</div>
+          <div className="enterprise-title">AI Orchestration for Regulated Industries</div>
           <p className="hero-text">
-            One orchestration platform for all your AI—encrypted, auditable, and compliance-ready from day one.
+            Simplify AI integration, close security gaps—compliance-ready from day one.
           </p>
 
           <div className="cta-buttons">
@@ -108,9 +108,9 @@ function Home() {
             <h3>Financial Services</h3>
             <p>Automate fraud detection and portfolio analysis without exposing customer PII.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Audit Logs:</strong> Immutable S3 Archival with Versioning.</li>
-              <li><i className="fas fa-check"></i> <strong>Data Sovereignty:</strong> Keep data in Your AWS VPC.</li>
-              <li><i className="fas fa-check"></i> <strong>Fraud:</strong> Real-time anomaly detection agents.</li>
+              <li><i className="fas fa-check"></i> Immutable S3 audit logs with versioning</li>
+              <li><i className="fas fa-check"></i> Keep data in your AWS VPC</li>
+              <li><i className="fas fa-check"></i> Real-time fraud detection agents</li>
             </ul>
           </div>
 
@@ -122,9 +122,9 @@ function Home() {
             <h3>Legal & Law Firms</h3>
             <p>Process contracts and discovery documents with strict Attorney-Client privilege.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Isolation:</strong> Per-Tenant Encryption Keys.</li>
-              <li><i className="fas fa-check"></i> <strong>Privilege:</strong> No data training on your documents.</li>
-              <li><i className="fas fa-check"></i> <strong>Discovery:</strong> AI-powered document review workflows.</li>
+              <li><i className="fas fa-check"></i> Per-tenant encryption keys</li>
+              <li><i className="fas fa-check"></i> No data training on your documents</li>
+              <li><i className="fas fa-check"></i> AI-powered document review workflows</li>
             </ul>
           </div>
 
@@ -136,9 +136,9 @@ function Home() {
             <h3>Healthcare (HIPAA)</h3>
             <p>Enhance patient care with AI while adhering to strict HIPAA privacy rules.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>PHI Protection:</strong> Auto-redaction of PII/PHI.</li>
-              <li><i className="fas fa-check"></i> <strong>Access Control:</strong> Role-Based Access (RBAC).</li>
-              <li><i className="fas fa-check"></i> <strong>BAA:</strong> We sign Business Associate Agreements.</li>
+              <li><i className="fas fa-check"></i> Auto-redaction of PII/PHI</li>
+              <li><i className="fas fa-check"></i> Role-Based Access Control (RBAC)</li>
+              <li><i className="fas fa-check"></i> We sign Business Associate Agreements</li>
             </ul>
           </div>
         </div>
@@ -158,9 +158,9 @@ function Home() {
             <h3>Custom AI Assistants</h3>
             <p>Design specialized agents that run on your choice of LLMs. From Legal Reviewers to Financial Analysts.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Orchestration:</strong> Chain multiple agents for complex tasks.</li>
-              <li><i className="fas fa-check"></i> <strong>Controls:</strong> Define strict boundaries and tools.</li>
-              <li><i className="fas fa-check"></i> <strong>Audit:</strong> Every agent action is logged and traceable.</li>
+              <li><i className="fas fa-check"></i> Chain agents for complex tasks</li>
+              <li><i className="fas fa-check"></i> Define strict boundaries and tools</li>
+              <li><i className="fas fa-check"></i> Every action is logged and traceable</li>
             </ul>
           </div>
 
@@ -172,9 +172,9 @@ function Home() {
             <h3>Secure Knowledge Hub</h3>
             <p>Upload your sensitive PDFs, Excel sheets, and Contracts. We index them into a secure, private vector store.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Isolation:</strong> Per-Tenant Vector Collections.</li>
-              <li><i className="fas fa-check"></i> <strong>Encryption:</strong> Documents encrypted before indexing.</li>
-              <li><i className="fas fa-check"></i> <strong>Management:</strong> Easy upload & version control.</li>
+              <li><i className="fas fa-check"></i> Per-tenant vector collections</li>
+              <li><i className="fas fa-check"></i> Documents encrypted before indexing</li>
+              <li><i className="fas fa-check"></i> Easy upload and version control</li>
             </ul>
           </div>
 
@@ -186,9 +186,9 @@ function Home() {
             <h3>Talk to Your Data (RAG)</h3>
             <p>Empower your agents to "read" and cite your internal documents to answer questions with high accuracy.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Citations:</strong> Agents provide sources for their answers.</li>
-              <li><i className="fas fa-check"></i> <strong>Privacy:</strong> Data never trains public models.</li>
-              <li><i className="fas fa-check"></i> <strong>Context:</strong> Smart retrieval for relevant answers.</li>
+              <li><i className="fas fa-check"></i> Agents cite sources for answers</li>
+              <li><i className="fas fa-check"></i> Data never trains public models</li>
+              <li><i className="fas fa-check"></i> Smart retrieval for relevant answers</li>
             </ul>
           </div>
         </div>
@@ -238,11 +238,7 @@ function Home() {
         <div className="architecture-explanation">
           <p>
             Linqra is a unified gateway that seamlessly handles requests from traditional APIs, user applications,
-            and AI services. Our centralized architecture simplifies integration by using a single, consistent protocol
-            for all interactions.
-          </p>
-          <p>
-            Every request is enhanced with enterprise-grade features:
+            and AI services.
           </p>
           <ul>
             <li>

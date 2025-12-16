@@ -496,7 +496,7 @@
   gap: 1.25rem;
   align-items: center;
   /* background: rgba(0, 0, 0, 0.1); */
-  padding: 0.5rem 1rem;
+  padding: 0.2rem 1rem;
   border-radius: 30px;
   /* backdrop-filter: blur(4px); */
 }
@@ -534,6 +534,12 @@
 
   .nav-links {
     padding: 0.25rem 0.75rem;
+  }
+
+  .home-container .nav-links .auth-link {
+    padding: 0.5rem 0.4rem;
+    margin-top: 0.5rem;
+    margin-right: 0.1rem;
   }
 }
 
@@ -1738,6 +1744,19 @@ html {
   border-bottom: 1px solid #e2e8f0;
 }
 
+.trust-title {
+  width: 100%;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
 .trust-badge {
   display: flex;
   align-items: center;
@@ -1755,6 +1774,7 @@ html {
   flex: 1;
   min-width: 150px;
   text-align: center;
+  cursor: help;
 }
 
 .trust-badge i {
@@ -1846,8 +1866,23 @@ html {
 }
 
 .home-container .health-icon {
-  background: #ecfdf5;
-  color: #059669;
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.home-container .education-icon {
+  background: #f3e8ff;
+  color: #9333ea;
+}
+
+.home-container .transport-icon {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.home-container .gov-icon {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .solution-card h3 {

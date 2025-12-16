@@ -1,6 +1,5 @@
 package org.lite.gateway.service;
 
-import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,16 +14,16 @@ import reactor.core.publisher.Mono;
 public class NotificationService {
     private final JavaMailSender mailSender;
     private final WebClient.Builder webClientBuilder;
-    
+
     @Value("${notifications.email.to}")
     private String emailTo;
-    
+
     @Value("${notifications.slack.webhook-url}")
     private String slackWebhookUrl;
-    
+
     @Value("${notifications.email.enabled:false}")
     private boolean emailEnabled;
-    
+
     @Value("${notifications.slack.enabled:false}")
     private boolean slackEnabled;
 
@@ -42,14 +41,14 @@ public class NotificationService {
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
-            
+
             helper.setTo(emailTo);
             helper.setSubject(subject);
             helper.setText(message, true); // true enables HTML content
-            
+
             mailSender.send(mimeMessage);
             log.info("Email alert sent successfully: {}", subject);
-        } catch (MessagingException e) {
+        } catch (Exception e) {
             log.error("Failed to send email alert: {}", e.getMessage());
         }
     }
@@ -61,24 +60,24 @@ public class NotificationService {
         }
 
         String payload = String.format("""
-            {
-                "attachments": [{
-                    "color": "%s",
-                    "title": "%s",
-                    "text": "%s",
-                    "footer": "API Gateway Health Monitor"
-                }]
-            }""", color, subject, message);
+                {
+                    "attachments": [{
+                        "color": "%s",
+                        "title": "%s",
+                        "text": "%s",
+                        "footer": "API Gateway Health Monitor"
+                    }]
+                }""", color, subject, message);
 
         webClientBuilder.build()
-            .post()
-            .uri(slackWebhookUrl)
-            .bodyValue(payload)
-            .retrieve()
-            .bodyToMono(String.class)
-            .doOnSuccess(response -> log.info("Slack notification sent successfully"))
-            .doOnError(e -> log.error("Failed to send Slack notification: {}", e.getMessage()))
-            .onErrorResume(e -> Mono.empty())
-            .subscribe();
+                .post()
+                .uri(slackWebhookUrl)
+                .bodyValue(payload)
+                .retrieve()
+                .bodyToMono(String.class)
+                .doOnSuccess(response -> log.info("Slack notification sent successfully"))
+                .doOnError(e -> log.error("Failed to send Slack notification: {}", e.getMessage()))
+                .onErrorResume(e -> Mono.empty())
+                .subscribe();
     }
-} 
+}

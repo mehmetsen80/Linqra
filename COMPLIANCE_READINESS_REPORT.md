@@ -60,6 +60,17 @@ The most critical question for serving multiple distinct businesses is: *"Can Te
     *   ✅ **Audit Controls:** Full logging of who accessed what record and when.
     *   ✅ **Breach Detection:** `SecuritySentinelService` actively monitors for anomalies (e.g., Mass Exfiltration) to satisfy the notification timeline.
 
+### 🎓 Education (FERPA)
+
+**What they care about:** Protection of Student Education Records and "Direct Control" by the institution.
+
+*   **Family Educational Rights and Privacy Act (FERPA):**
+    *   *Linqra Status:* **Compliant**.
+    *   ✅ **Security:** Industry-standard encryption safeguards education records.
+    *   ✅ **Direct Control:** Institutions retain full ownership; Linqra acts as a "School Official" with legitimate educational interest via contract.
+    *   ✅ **Re-disclosure:** Strict prohibition on data sharing enforced by technical isolation.
+    *   ✅ **Inspection Rights:** Logs and data export features facilitate parent/student review requests.
+
 ---
 
 ## 3. "What Will They Ask?" - Vendor Risk Assessment Checklist
@@ -179,6 +190,20 @@ When you approach a bank, law firm, or hospital, they will send a generic **Secu
 **Verdict**: **NOT READY** for SEC-registered broker-dealers. Missing S3 Object Lock (WORM) storage required by SEC Rule 17a-4.
 
 **Remediation:** If targeting this market, enable S3 Object Lock on backup/audit buckets with appropriate retention periods.
+
+---
+
+### 🎓 Universities & Schools (FERPA)
+
+| Requirement | Status | Notes |
+| :--- | :--- | :--- |
+| Education Record Encryption | ✅ | AES-256 for all student data |
+| School Official Status | ✅ | Technical control + Contract |
+| Directory Information Control | ✅ | RBAC controls access |
+| Inspection Rights | ✅ | Data export features |
+| Re-disclosure Prevention | ✅ | Technical isolation (TeamId) |
+
+**Verdict**: **READY**. Technically compliant with FERPA security standards. Needs Data Processing Agreement (DPA) specifying "School Official" status.
 
 ---
 

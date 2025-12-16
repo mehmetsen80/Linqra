@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Modal, Button } from 'react-bootstrap';
+import { Modal, Button, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import architectureDiagram from '/images/linqra-diagram-transparent.svg';
 import ImageModal from '../../components/common/ImageModal';
 import Footer from '../../components/common/Footer';
@@ -25,9 +25,9 @@ function Home() {
     <div className="home-container">
       <nav className="top-nav">
         <div className="nav-links">
-          <a href="#solutions">Solutions</a>
+          {/* <a href="#solutions">Solutions</a>
           <a href="#security">Security</a>
-          <a href="https://docs.linqra.com" target="_blank" rel="noopener noreferrer">Docs</a>
+          <a href="https://docs.linqra.com" target="_blank" rel="noopener noreferrer">Docs</a> */}
           {isAuthenticated ? (
             <Link to="/dashboard" className="auth-link">Dashboard</Link>
           ) : (
@@ -46,9 +46,9 @@ function Home() {
             alt="Linqra Logo"
             className="hero-logo"
           />
-          <div className="enterprise-title">Integration Complexity Creates Security Gaps. We Close Them.</div>
+          <div className="enterprise-title">AI Orchestration for Regulated Industries</div>
           <p className="hero-text">
-            One orchestration platform for all your AI—encrypted, auditable, and compliance-ready from day one.
+            Simplify AI integration, close security gaps—compliance-ready from day one.
           </p>
 
           <div className="cta-buttons">
@@ -70,21 +70,134 @@ function Home() {
 
       {/* TRUST STRIP */}
       <div className="trust-strip">
-        <div className="trust-badge" title="Data encrypted at rest and in transit">
+        <div className="trust-title">
           <i className="fas fa-lock"></i> AES-256 Encrypted
         </div>
-        <div className="trust-badge" title="Ready for SOC 2 Type II Audits">
-          <i className="fas fa-file-contract"></i> SOC 2 Ready
-        </div>
-        <div className="trust-badge" title="HIPAA Compliant for PHI data">
-          <i className="fas fa-heartbeat"></i> HIPAA Compliant
-        </div>
-        <div className="trust-badge" title="GDPR & CCPA Ready">
-          <i className="fas fa-globe-europe"></i> GDPR Ready
-        </div>
-        <div className="trust-badge" title="Financial Services Compatible">
-          <i className="fas fa-university"></i> GLBA Ready
-        </div>
+
+        {/* Row 1 */}
+        <OverlayTrigger
+          placement="top"
+          overlay={
+            <Tooltip id="tooltip-soc2">
+              <strong>Service Organization Control 2 (SOC 2)</strong><br />
+              A gold standard for SaaS security.<br /><br />
+              <strong>Why Linqra is Ready:</strong> We implement strict access controls (RBAC), immutable audit logs, and encrypted backups to satisfy Trust Services Criteria.
+            </Tooltip>
+          }
+        >
+          <div className="trust-badge">
+            <i className="fas fa-file-contract"></i> SOC 2 Ready
+          </div>
+        </OverlayTrigger>
+
+        <OverlayTrigger
+          placement="top"
+          overlay={
+            <Tooltip id="tooltip-hipaa">
+              <strong>HIPAA (Healthcare)</strong><br />
+              Protects sensitive patient health information (PHI).<br /><br />
+              <strong>Why Linqra is Compliant:</strong> We isolate PHI using per-team encryption keys (AES-256) and sign Business Associate Agreements (BAA).
+            </Tooltip>
+          }
+        >
+          <div className="trust-badge">
+            <i className="fas fa-heartbeat"></i> HIPAA Compliant
+          </div>
+        </OverlayTrigger>
+
+        <OverlayTrigger
+          placement="top"
+          overlay={
+            <Tooltip id="tooltip-gdpr">
+              <strong>GDPR (Europe)</strong><br />
+              The toughest privacy and security law in the world.<br /><br />
+              <strong>Why Linqra is Ready:</strong> We support "Right to be Forgotten" via crypto-shredding and enforce strict data residency controls.
+            </Tooltip>
+          }
+        >
+          <div className="trust-badge">
+            <i className="fas fa-globe-europe"></i> GDPR Ready
+          </div>
+        </OverlayTrigger>
+
+        <OverlayTrigger
+          placement="top"
+          overlay={
+            <Tooltip id="tooltip-glba">
+              <strong>GLBA (Financial Services)</strong><br />
+              Requires financial institutions to protect customer data.<br /><br />
+              <strong>Why Linqra is Ready:</strong> We enforce strict separation of duties and financial-grade encryption for all data at rest and in transit.
+            </Tooltip>
+          }
+        >
+          <div className="trust-badge">
+            <i className="fas fa-university"></i> GLBA Ready
+          </div>
+        </OverlayTrigger>
+
+        {/* Force new row */}
+        <div style={{ width: '100%', height: '0' }}></div>
+
+        {/* Row 2 */}
+        <OverlayTrigger
+          placement="top"
+          overlay={
+            <Tooltip id="tooltip-ferpa">
+              <strong>FERPA (Education)</strong><br />
+              Protects student education records access and privacy.<br /><br />
+              <strong>Why Linqra is Ready:</strong> We act as a "School Official" with legitimate educational interest, securing records with encryption and RBAC.
+            </Tooltip>
+          }
+        >
+          <div className="trust-badge">
+            <i className="fas fa-user-graduate"></i> FERPA Ready
+          </div>
+        </OverlayTrigger>
+
+        <OverlayTrigger
+          placement="top"
+          overlay={
+            <Tooltip id="tooltip-aba">
+              <strong>ABA Model Rules (Legal)</strong><br />
+              Requires lawyers to protect client confidentiality.<br /><br />
+              <strong>Why Linqra is Ready:</strong> Our "blind" architecture ensures attorney-client privilege is preserved—even we cannot see your data.
+            </Tooltip>
+          }
+        >
+          <div className="trust-badge">
+            <i className="fas fa-balance-scale"></i> ABA Ready
+          </div>
+        </OverlayTrigger>
+
+        <OverlayTrigger
+          placement="top"
+          overlay={
+            <Tooltip id="tooltip-iso">
+              <strong>ISO 27001</strong><br />
+              International standard for Information Security Management.<br /><br />
+              <strong>Why Linqra is Aligned:</strong> Our security policies, risk management, and operational controls are built on the ISO 27001 framework.
+            </Tooltip>
+          }
+        >
+          <div className="trust-badge">
+            <i className="fas fa-shield-alt"></i> ISO 27001 Aligned
+          </div>
+        </OverlayTrigger>
+
+        <OverlayTrigger
+          placement="top"
+          overlay={
+            <Tooltip id="tooltip-ccpa">
+              <strong>CCPA (California)</strong><br />
+              Gives consumers control over their personal information.<br /><br />
+              <strong>Why Linqra is Ready:</strong> We provide detailed data mapping and automated "Do Not Sell" compliance features.
+            </Tooltip>
+          }
+        >
+          <div className="trust-badge">
+            <i className="fas fa-landmark"></i> CCPA Ready
+          </div>
+        </OverlayTrigger>
       </div>
 
       <div className="orchestration-section">
@@ -100,17 +213,17 @@ function Home() {
         <p className="section-subtitle">Don't risk your license with generic AI tools. Linqra is built for compliance.</p>
 
         <div className="solutions-grid">
-          {/* FINANCE CARD */}
+          {/* EDUCATION CARD (Moved to top) */}
           <div className="solution-card">
-            <div className="card-icon finance-icon">
-              <i className="fas fa-chart-line"></i>
+            <div className="card-icon education-icon">
+              <i className="fas fa-user-graduate"></i>
             </div>
-            <h3>Financial Services</h3>
-            <p>Automate fraud detection and portfolio analysis without exposing customer PII.</p>
+            <h3>Education (FERPA)</h3>
+            <p>Safeguard student records and research data with institutional control.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Audit Logs:</strong> Immutable S3 Archival with Versioning.</li>
-              <li><i className="fas fa-check"></i> <strong>Data Sovereignty:</strong> Keep data in Your AWS VPC.</li>
-              <li><i className="fas fa-check"></i> <strong>Fraud:</strong> Real-time anomaly detection agents.</li>
+              <li><i className="fas fa-check"></i> FERPA-compliant encryption</li>
+              <li><i className="fas fa-check"></i> "School Official" status ready</li>
+              <li><i className="fas fa-check"></i> Isolated research environments</li>
             </ul>
           </div>
 
@@ -122,9 +235,9 @@ function Home() {
             <h3>Legal & Law Firms</h3>
             <p>Process contracts and discovery documents with strict Attorney-Client privilege.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Isolation:</strong> Per-Tenant Encryption Keys.</li>
-              <li><i className="fas fa-check"></i> <strong>Privilege:</strong> No data training on your documents.</li>
-              <li><i className="fas fa-check"></i> <strong>Discovery:</strong> AI-powered document review workflows.</li>
+              <li><i className="fas fa-check"></i> Per-tenant encryption keys</li>
+              <li><i className="fas fa-check"></i> No data training on your documents</li>
+              <li><i className="fas fa-check"></i> AI-powered document review workflows</li>
             </ul>
           </div>
 
@@ -136,9 +249,51 @@ function Home() {
             <h3>Healthcare (HIPAA)</h3>
             <p>Enhance patient care with AI while adhering to strict HIPAA privacy rules.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>PHI Protection:</strong> Auto-redaction of PII/PHI.</li>
-              <li><i className="fas fa-check"></i> <strong>Access Control:</strong> Role-Based Access (RBAC).</li>
-              <li><i className="fas fa-check"></i> <strong>BAA:</strong> We sign Business Associate Agreements.</li>
+              <li><i className="fas fa-check"></i> Auto-redaction of PII/PHI</li>
+              <li><i className="fas fa-check"></i> Role-Based Access Control (RBAC)</li>
+              <li><i className="fas fa-check"></i> We sign Business Associate Agreements</li>
+            </ul>
+          </div>
+
+          {/* FINANCE CARD (Moved from top) */}
+          <div className="solution-card">
+            <div className="card-icon finance-icon">
+              <i className="fas fa-chart-line"></i>
+            </div>
+            <h3>Financial Services</h3>
+            <p>Automate fraud detection and portfolio analysis without exposing customer PII.</p>
+            <ul className="solution-features">
+              <li><i className="fas fa-check"></i> Immutable S3 audit logs with versioning</li>
+              <li><i className="fas fa-check"></i> Keep data in your AWS VPC</li>
+              <li><i className="fas fa-check"></i> Real-time fraud detection agents</li>
+            </ul>
+          </div>
+
+          {/* TRANSPORTATION CARD (New) */}
+          <div className="solution-card">
+            <div className="card-icon transport-icon">
+              <i className="fas fa-truck-moving"></i>
+            </div>
+            <h3>Transportation & Logistics</h3>
+            <p>Optimize fleet operations and routes while securing driver data.</p>
+            <ul className="solution-features">
+              <li><i className="fas fa-check"></i> Secure IoT data ingestion</li>
+              <li><i className="fas fa-check"></i> Driver PII protection</li>
+              <li><i className="fas fa-check"></i> Real-time supply chain analytics</li>
+            </ul>
+          </div>
+
+          {/* GOVERNMENT CARD (New) */}
+          <div className="solution-card">
+            <div className="card-icon gov-icon">
+              <i className="fas fa-landmark"></i>
+            </div>
+            <h3>Government & Defense</h3>
+            <p>Modernize public services with sovereign, fed-ready AI infrastructure.</p>
+            <ul className="solution-features">
+              <li><i className="fas fa-check"></i> Private Cloud / Air-gapped options</li>
+              <li><i className="fas fa-check"></i> Strict data residency controls</li>
+              <li><i className="fas fa-check"></i> FedRAMP-aligned security headers</li>
             </ul>
           </div>
         </div>
@@ -158,9 +313,9 @@ function Home() {
             <h3>Custom AI Assistants</h3>
             <p>Design specialized agents that run on your choice of LLMs. From Legal Reviewers to Financial Analysts.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Orchestration:</strong> Chain multiple agents for complex tasks.</li>
-              <li><i className="fas fa-check"></i> <strong>Controls:</strong> Define strict boundaries and tools.</li>
-              <li><i className="fas fa-check"></i> <strong>Audit:</strong> Every agent action is logged and traceable.</li>
+              <li><i className="fas fa-check"></i> Chain agents for complex tasks</li>
+              <li><i className="fas fa-check"></i> Define strict boundaries and tools</li>
+              <li><i className="fas fa-check"></i> Every action is logged and traceable</li>
             </ul>
           </div>
 
@@ -172,9 +327,9 @@ function Home() {
             <h3>Secure Knowledge Hub</h3>
             <p>Upload your sensitive PDFs, Excel sheets, and Contracts. We index them into a secure, private vector store.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Isolation:</strong> Per-Tenant Vector Collections.</li>
-              <li><i className="fas fa-check"></i> <strong>Encryption:</strong> Documents encrypted before indexing.</li>
-              <li><i className="fas fa-check"></i> <strong>Management:</strong> Easy upload & version control.</li>
+              <li><i className="fas fa-check"></i> Per-tenant vector collections</li>
+              <li><i className="fas fa-check"></i> Documents encrypted before indexing</li>
+              <li><i className="fas fa-check"></i> Easy upload and version control</li>
             </ul>
           </div>
 
@@ -186,9 +341,9 @@ function Home() {
             <h3>Talk to Your Data (RAG)</h3>
             <p>Empower your agents to "read" and cite your internal documents to answer questions with high accuracy.</p>
             <ul className="solution-features">
-              <li><i className="fas fa-check"></i> <strong>Citations:</strong> Agents provide sources for their answers.</li>
-              <li><i className="fas fa-check"></i> <strong>Privacy:</strong> Data never trains public models.</li>
-              <li><i className="fas fa-check"></i> <strong>Context:</strong> Smart retrieval for relevant answers.</li>
+              <li><i className="fas fa-check"></i> Agents cite sources for answers</li>
+              <li><i className="fas fa-check"></i> Data never trains public models</li>
+              <li><i className="fas fa-check"></i> Smart retrieval for relevant answers</li>
             </ul>
           </div>
         </div>
@@ -238,11 +393,7 @@ function Home() {
         <div className="architecture-explanation">
           <p>
             Linqra is a unified gateway that seamlessly handles requests from traditional APIs, user applications,
-            and AI services. Our centralized architecture simplifies integration by using a single, consistent protocol
-            for all interactions.
-          </p>
-          <p>
-            Every request is enhanced with enterprise-grade features:
+            and AI services.
           </p>
           <ul>
             <li>

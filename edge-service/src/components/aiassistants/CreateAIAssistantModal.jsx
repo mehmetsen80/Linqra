@@ -49,12 +49,12 @@ const CreateAIAssistantModal = ({
     // Set default model when models are loaded
     if (availableModels && availableModels.length > 0 && !formData.defaultModel.modelName) {
       // Try to find OpenAI chat model first, then any chat model, then first available
-      const defaultModel = availableModels.find(m => 
+      const defaultModel = availableModels.find(m =>
         m.provider === 'openai' && m.modelCategory === 'openai-chat'
-      ) || availableModels.find(m => 
+      ) || availableModels.find(m =>
         m.modelCategory?.includes('chat')
       ) || availableModels[0];
-      
+
       if (defaultModel) {
         setFormData(prev => ({
           ...prev,
@@ -71,7 +71,7 @@ const CreateAIAssistantModal = ({
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
+
     if (name.includes('.')) {
       // Nested field (e.g., "defaultModel.modelName")
       const [parent, child] = name.split('.');
@@ -125,7 +125,7 @@ const CreateAIAssistantModal = ({
     const provider = e.target.value;
     // Filter models by provider and find a default chat model
     const providerModels = availableModels?.filter(m => m.provider === provider) || [];
-    const chatModel = providerModels.find(m => 
+    const chatModel = providerModels.find(m =>
       m.modelCategory?.includes('chat')
     ) || providerModels[0];
 
@@ -169,7 +169,7 @@ const CreateAIAssistantModal = ({
   const handleAccessControlChange = (e) => {
     const { name, value, type, checked } = e.target;
     const key = name.replace('accessControl.', '');
-    
+
     setFormData(prev => ({
       ...prev,
       accessControl: {
@@ -185,7 +185,7 @@ const CreateAIAssistantModal = ({
       .split('\n')
       .map(d => d.trim())
       .filter(Boolean);
-    
+
     setFormData(prev => ({
       ...prev,
       accessControl: {
@@ -197,7 +197,7 @@ const CreateAIAssistantModal = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.name || !formData.description) {
       return;
     }
@@ -205,7 +205,7 @@ const CreateAIAssistantModal = ({
     try {
       setCreating(true);
       const response = await aiAssistantService.createAssistant(formData);
-      
+
       if (response.success) {
         showSuccessToast(response.message || 'AI Assistant created successfully');
         onSuccess();
@@ -222,12 +222,18 @@ const CreateAIAssistantModal = ({
 
   // Prepare model options for react-select
   const modelOptions = availableModels
-    ?.map(m => ({
-      value: m.modelName,
-      label: `${m.displayName || m.modelName} (${m.provider}, ${m.modelName})`,
-      modelCategory: m.modelCategory,
-      provider: m.provider
-    })) || [];
+    ?.map(m => {
+      const costs = m.inputPricePer1M && m.outputPricePer1M
+        ? ` ($${m.inputPricePer1M}/$${m.outputPricePer1M} per 1M)`
+        : '';
+
+      return {
+        value: m.modelName,
+        label: `${m.displayName || m.modelName} (${m.provider}, ${m.modelName})${costs}`,
+        modelCategory: m.modelCategory,
+        provider: m.provider
+      };
+    }) || [];
 
   const selectedModelOption = modelOptions.find(
     opt => opt.value === formData.defaultModel.modelName

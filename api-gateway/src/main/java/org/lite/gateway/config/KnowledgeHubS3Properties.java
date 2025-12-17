@@ -13,6 +13,8 @@ public class KnowledgeHubS3Properties {
 
     private String bucketName = "linqra-knowledge-hub";
     private String backupBucketName = "backup-linqra-knowledge-hub";
+    private String auditBucketName = "linqra-audit";
+    private String auditBackupBucketName = "backup-linqra-audit";
     private String backupBucketRegion = "us-east-1";
     private String rawPrefix = "raw";
     private String processedPrefix = "processed";

@@ -115,9 +115,16 @@ public class S3ServiceImpl implements S3Service {
 
     @Override
     public Mono<Void> uploadFileBytes(String s3Key, byte[] fileBytes, String contentType, String encryptionKeyVersion) {
+        return uploadFileBytes(s3Properties.getBucketName(), s3Key, fileBytes, contentType, encryptionKeyVersion);
+    }
+
+    @Override
+    public Mono<Void> uploadFileBytes(String bucketName, String s3Key, byte[] fileBytes, String contentType,
+            String encryptionKeyVersion) {
         return Mono.fromCallable(() -> {
             try {
-                log.info("Uploading file bytes to S3: {} ({} bytes)", s3Key, fileBytes.length);
+                log.info("Uploading file bytes to S3 Bucket: {} Key: {} ({} bytes)", bucketName, s3Key,
+                        fileBytes.length);
 
                 Map<String, String> metadata = new HashMap<>();
                 metadata.put("uploaded-at", Instant.now().toString());
@@ -131,7 +138,7 @@ public class S3ServiceImpl implements S3Service {
                 }
 
                 PutObjectRequest putObjectRequest = PutObjectRequest.builder()
-                        .bucket(s3Properties.getBucketName())
+                        .bucket(bucketName)
                         .key(s3Key)
                         .contentType(contentType)
                         .contentLength((long) fileBytes.length)

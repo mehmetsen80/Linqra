@@ -57,7 +57,56 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
     // Ordered by cost priority: cheapest first (Gemini, Cohere) to most expensive
     private static final List<String> CHAT_MODEL_CATEGORIES = List.of(
             "gemini-chat", "cohere-chat", "openai-chat", "claude-chat", "mistral-chat");
-    private static final int MAX_CHUNKS_PER_BATCH = 5; // Process chunks in batches to avoid token limits
+    // Batches should be limited by token count, not just chunk count
+    private static final int MAX_BATCH_TOKENS_ESTIMATE = 80000; // Safe limit (well below 200k context)
+    private static final int MAX_CHUNKS_PER_BATCH = 5; // Secondary limit
+
+    // ... existing constants ...
+
+    private List<List<KnowledgeHubChunk>> partitionChunksBySize(List<KnowledgeHubChunk> chunks) {
+        List<List<KnowledgeHubChunk>> partitions = new ArrayList<>();
+        List<KnowledgeHubChunk> currentBatch = new ArrayList<>();
+        long currentBatchTokens = 0;
+
+        for (KnowledgeHubChunk chunk : chunks) {
+            String text = chunk.getText();
+            if (text == null)
+                continue;
+
+            // Estimate tokens:
+            // 1. If encrypted (Base64), real size is ~0.75 * length.
+            // 2. 1 token approx 4 chars.
+            // So tokens ~ length * 0.75 / 4 = length * 0.1875
+            // We use length / 4 as a conservative estimate assuming raw text (safer)
+            long estimatedTokens = text.length() / 4;
+
+            // If adding this chunk exceeds the limit AND we already have chunks in the
+            // batch,
+            // close the current batch and start a new one.
+            if (!currentBatch.isEmpty() && currentBatchTokens + estimatedTokens > MAX_BATCH_TOKENS_ESTIMATE) {
+                log.debug("Batch full ({} tokens), starting new batch", currentBatchTokens);
+                partitions.add(new ArrayList<>(currentBatch));
+                currentBatch.clear();
+                currentBatchTokens = 0;
+            }
+
+            currentBatch.add(chunk);
+            currentBatchTokens += estimatedTokens;
+
+            // Secondary check: if we hit max chunks count
+            if (currentBatch.size() >= MAX_CHUNKS_PER_BATCH) {
+                partitions.add(new ArrayList<>(currentBatch));
+                currentBatch.clear();
+                currentBatchTokens = 0;
+            }
+        }
+
+        if (!currentBatch.isEmpty()) {
+            partitions.add(currentBatch);
+        }
+
+        return partitions;
+    }
 
     // Cost optimization settings
     private static final double TEMPERATURE = 0.3; // Lower temperature for consistent extraction (already optimal)
@@ -144,9 +193,11 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
 
                                             log.info("Found {} chunks for document: {}", chunks.size(), documentId);
 
-                                            // Process chunks in batches
-                                            List<List<KnowledgeHubChunk>> batches = partitionList(chunks,
-                                                    MAX_CHUNKS_PER_BATCH);
+                                            // Process chunks in dynamic batches based on estimated token size
+                                            // This prevents "prompt is too long" errors for large documents while
+                                            // maintaining
+                                            // efficiency for smaller chunks
+                                            List<List<KnowledgeHubChunk>> batches = partitionChunksBySize(chunks);
                                             log.info("Processing {} batches of chunks", batches.size());
 
                                             // Track total token usage and cost across all batches
@@ -907,14 +958,6 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
 
         // Fallback to UUID-based ID
         return entityType + "_" + UUID.randomUUID().toString();
-    }
-
-    private <T> List<List<T>> partitionList(List<T> list, int partitionSize) {
-        List<List<T>> partitions = new ArrayList<>();
-        for (int i = 0; i < list.size(); i += partitionSize) {
-            partitions.add(list.subList(i, Math.min(i + partitionSize, list.size())));
-        }
-        return partitions;
     }
 
     /**

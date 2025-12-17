@@ -11,49 +11,52 @@ import java.io.InputStreamReader;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Scheduler for monthly Knowledge Hub S3 backup bucket synchronization.
- * Uses AWS CLI `aws s3 sync --delete` to sync the primary bucket to the backup
- * bucket, removing files from backup that no longer exist in the source.
- *
- * Runs at 4:00 AM on the 1st day of every month.
+ * Scheduler for Audit Log Backup Synchronization.
+ * 
+ * Purpose:
+ * Syncs the Primary Audit Bucket to the Backup Audit Bucket.
+ * 
+ * Features:
+ * - Daily Schedule (3:00 AM)
+ * - Additive Only (No --delete flag) to ensure immutability
+ * - Targeted strictly at the dedicated audit buckets
  */
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class KnowledgeHubS3BackupScheduler {
+public class AuditBackupScheduler {
 
     private final KnowledgeHubS3Properties s3Properties;
 
     /**
-     * Sync general Knowledge Hub bucket to backup (Standard Sync).
-     * Maintains an exact mirror of the knowledge base (documents).
-     * Runs Monthly at 4:00 AM on the 1st.
+     * Sync source bucket audit logs to backup bucket (Additive Only).
+     * Ensures immutable history by never deleting files from backup.
+     * Runs Daily at 3:00 AM.
      */
-    @Scheduled(cron = "0 0 4 1 * ?") // Monthly at 4:00 AM on the 1st
-    public void syncKnowledgeHubBucket() {
-        log.info("🔄 Starting Monthly Knowledge Hub Backup Sync from {} to {}",
-                s3Properties.getBucketName(), s3Properties.getBackupBucketName());
+    @Scheduled(cron = "0 0 3 * * ?") // Daily at 3:00 AM
+    public void syncAuditBucket() {
+        log.info("🔄 Starting Daily Audit Log Integrity Sync from {} to {}",
+                s3Properties.getAuditBucketName(), s3Properties.getAuditBackupBucketName());
 
-        performGeneralSync()
-                .thenAccept(result -> log.info("✅ Monthly Knowledge Hub Backup Sync completed: {}", result))
+        performAuditSync()
+                .thenAccept(result -> log.info("✅ Daily Audit Log Integrity Sync completed: {}", result))
                 .exceptionally(error -> {
-                    log.error("❌ Monthly Knowledge Hub Backup Sync failed: {}", error.getMessage(), error);
+                    log.error("❌ Daily Audit Log Integrity Sync failed: {}", error.getMessage(), error);
                     return null;
                 });
     }
 
-    private CompletableFuture<String> performGeneralSync() {
+    private CompletableFuture<String> performAuditSync() {
         return CompletableFuture.supplyAsync(() -> {
-            String sourceBucket = "s3://" + s3Properties.getBucketName();
-            String backupBucket = "s3://" + s3Properties.getBackupBucketName();
+            String sourcePath = "s3://" + s3Properties.getAuditBucketName() + "/audit-logs";
+            String backupPath = "s3://" + s3Properties.getAuditBackupBucketName() + "/audit-logs";
             String backupRegion = s3Properties.getBackupBucketRegion();
 
-            // Standard Backup: Use --delete to mirror exactly
+            // Compliance: No --delete flag
             String[] command = {
                     "aws", "s3", "sync",
-                    sourceBucket,
-                    backupBucket,
-                    "--delete",
+                    sourcePath,
+                    backupPath,
                     "--region", backupRegion
             };
 
@@ -96,34 +99,32 @@ public class KnowledgeHubS3BackupScheduler {
     /**
      * Manual trigger for testing or immediate sync.
      */
-
     public CompletableFuture<String> triggerSync() {
-        log.info("🔧 Manual S3 Knowledge Hub sync triggered");
-        return performGeneralSync()
+        log.info("🔧 Manual S3 Audit sync triggered");
+        return performAuditSync()
                 .thenApply(result -> {
-                    log.info("✅ Manual S3 Knowledge Hub sync completed: {}", result);
+                    log.info("✅ Manual S3 Audit sync completed: {}", result);
                     return result;
                 })
                 .exceptionally(error -> {
-                    log.error("❌ Manual S3 Knowledge Hub sync failed: {}", error.getMessage(), error);
+                    log.error("❌ Manual S3 Audit sync failed: {}", error.getMessage(), error);
                     return "Sync failed: " + error.getMessage();
                 });
     }
-    /**
-     
 
+    /**
+     * Dry run - Audit Sync dry run.
      */
     public CompletableFuture<String> dryRun() {
         return CompletableFuture.supplyAsync(() -> {
-            String sourceBucket = "s3://" + s3Properties.getBucketName();
-            String backupBucket = "s3://" + s3Properties.getBackupBucketName();
+            String sourcePath = "s3://" + s3Properties.getAuditBucketName() + "/audit-logs";
+            String backupPath = "s3://" + s3Properties.getAuditBackupBucketName() + "/audit-logs";
             String backupRegion = s3Properties.getBackupBucketRegion();
 
             String[] command = {
                     "aws", "s3", "sync",
-                    sourceBucket,
-                    backupBucket,
-                    "--delete",
+                    sourcePath,
+                    backupPath,
                     "--dryrun",
                     "--region", backupRegion
             };

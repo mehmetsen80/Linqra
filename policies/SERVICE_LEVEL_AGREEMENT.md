@@ -63,7 +63,7 @@ e) **Third-Party Failures:** AWS outages, internet backbone issues
 | :--- | :--- | :--- |
 | S3 Object Storage | 99.999999999% | 11 nines durability |
 | MongoDB Database | 99.99% | Replica set with journaling |
-| Audit Logs | 99.999999999% | S3 with cross-region replication |
+| Audit Logs | 99.999999999% | S3 Object Lock (Compliance Mode) + CRR |
 
 ### 3.3 Recovery Objectives
 
@@ -134,7 +134,7 @@ Total credits in any billing month shall not exceed 100% of that month's fees.
 | Encryption at Rest | AES-256-GCM with per-tenant keys |
 | Encryption in Transit | TLS 1.2 or higher |
 | Access Control | Role-based access control (RBAC) |
-| Audit Logging | Comprehensive logging, 7-year retention |
+| Audit Logging | Comprehensive logging, 7-year retention, **Immutable** (WORM) |
 
 ### 6.2 Compliance
 

@@ -81,7 +81,7 @@ const EditAIAssistantModal = ({
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    
+
     if (name.includes('.')) {
       // Nested field (e.g., "defaultModel.modelName")
       const [parent, child] = name.split('.');
@@ -135,7 +135,7 @@ const EditAIAssistantModal = ({
     const provider = e.target.value;
     // Filter models by provider and find a default chat model
     const providerModels = availableModels?.filter(m => m.provider === provider) || [];
-    const chatModel = providerModels.find(m => 
+    const chatModel = providerModels.find(m =>
       m.modelCategory?.includes('chat')
     ) || providerModels[0];
 
@@ -179,7 +179,7 @@ const EditAIAssistantModal = ({
   const handleAccessControlChange = (e) => {
     const { name, value, type, checked } = e.target;
     const key = name.replace('accessControl.', '');
-    
+
     setFormData(prev => ({
       ...prev,
       accessControl: {
@@ -195,7 +195,7 @@ const EditAIAssistantModal = ({
       .split('\n')
       .map(d => d.trim())
       .filter(Boolean);
-    
+
     setFormData(prev => ({
       ...prev,
       accessControl: {
@@ -207,7 +207,7 @@ const EditAIAssistantModal = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.name || !formData.description) {
       return;
     }
@@ -215,7 +215,7 @@ const EditAIAssistantModal = ({
     try {
       setUpdating(true);
       const response = await aiAssistantService.updateAssistant(assistant.id, formData);
-      
+
       if (response.success) {
         showSuccessToast(response.message || 'AI Assistant updated successfully');
         onSuccess();
@@ -232,12 +232,18 @@ const EditAIAssistantModal = ({
 
   // Prepare model options for react-select
   const modelOptions = availableModels
-    ?.map(m => ({
-      value: m.modelName,
-      label: `${m.displayName || m.modelName} (${m.provider}, ${m.modelName})`,
-      modelCategory: m.modelCategory,
-      provider: m.provider
-    })) || [];
+    ?.map(m => {
+      const costs = m.inputPricePer1M && m.outputPricePer1M
+        ? ` ($${m.inputPricePer1M}/$${m.outputPricePer1M} per 1M)`
+        : '';
+
+      return {
+        value: m.modelName,
+        label: `${m.displayName || m.modelName} (${m.provider}, ${m.modelName})${costs}`,
+        modelCategory: m.modelCategory,
+        provider: m.provider
+      };
+    }) || [];
 
   const selectedModelOption = modelOptions.find(
     opt => opt.value === formData.defaultModel?.modelName

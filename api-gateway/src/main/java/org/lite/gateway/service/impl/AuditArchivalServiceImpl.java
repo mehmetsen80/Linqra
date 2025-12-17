@@ -3,6 +3,7 @@ package org.lite.gateway.service.impl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.lite.gateway.entity.AuditLog;
 import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.repository.AuditLogRepository;
@@ -43,6 +44,7 @@ public class AuditArchivalServiceImpl implements AuditArchivalService {
     private final S3Service s3Service;
     private final ObjectMapper objectMapper;
     private final ChunkEncryptionService chunkEncryptionService;
+    private final KnowledgeHubS3Properties s3Properties;
 
     @Override
     public Mono<Void> archiveOldLogs(int retentionDays) {
@@ -133,9 +135,11 @@ public class AuditArchivalServiceImpl implements AuditArchivalService {
                         // Encrypt
                         return chunkEncryptionService.encryptFile(compressedBytes, teamId, keyVersion)
                                 .flatMap(encryptedBytes -> {
-                                    // Upload to S3
+                                    // Upload to S3 Dedicated Audit Bucket
+                                    String auditBucket = s3Properties.getAuditBucketName();
                                     return s3Service
-                                            .uploadFileBytes(s3Key, encryptedBytes, "application/gzip", keyVersion)
+                                            .uploadFileBytes(auditBucket, s3Key, encryptedBytes, "application/gzip",
+                                                    keyVersion)
                                             .then(Mono.defer(() -> {
                                                 // Delete logs from MongoDB after successful archival
                                                 log.debug("Deleting {} archived logs from MongoDB", logs.size());

@@ -51,7 +51,7 @@ c) **Implement Technical Safeguards:**
    - **Encryption in Transit:** TLS 1.2 or higher for all data transmission
    - **Per-Tenant Encryption Keys:** Each Customer receives a unique cryptographic key; Dipme cannot access Customer data
    - **Access Controls:** Role-based access control (RBAC) integrated with SSO
-   - **Audit Logging:** Comprehensive logging of all access to PHI, retained for 7 years
+   - **Audit Logging:** Comprehensive logging of all access to PHI, retained for 7 years; **Immutable Storage** via S3 Object Lock
 
 ### 4.2 Use and Disclosure
 

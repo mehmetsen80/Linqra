@@ -93,7 +93,7 @@ public class AuditArchivalServiceImpl implements AuditArchivalService {
                     // Execute all archival tasks and sum the results
                     return Flux.fromIterable(archiveTasks)
                             .flatMap(task -> task)
-                            .reduce(0, Integer::sum)
+                            .reduce(0, (a, b) -> a + b)
                             .doOnSuccess(total -> log.info("Total logs archived: {}", total));
                 });
     }

@@ -16,6 +16,7 @@ import CreateAIAssistantModal from '../../components/aiassistants/CreateAIAssist
 import EditAIAssistantModal from '../../components/aiassistants/EditAIAssistantModal';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 import Footer from '../../components/common/Footer';
+import { linqLlmModelService } from '../../services/linqLlmModelService';
 
 function AIAssistants() {
     const { currentTeam, loading: teamLoading } = useTeam();
@@ -107,10 +108,25 @@ function AIAssistants() {
 
     const loadAvailableModels = async () => {
         try {
-            // Load active chat models for assistant default model selection
-            const llmModelService = (await import('../../services/llmModelService')).default;
-            const models = await llmModelService.getAllChatModels(true);
-            setAvailableModels(models);
+            // Load ONLY team-specific models for assistant default model selection
+            // Load ONLY team-specific models for assistant default model selection
+
+            // We want all configured models for the team, not just chat ones, but typically we filter for chat capable ones
+            // linqLlmModelService.getTeamConfiguration returns a list of LinqLlmModel objects
+            const teamModels = await linqLlmModelService.getTeamConfiguration(currentTeam.id);
+
+            // Map the team models to the format expected by the dropdown (similar to LlmModel)
+            // LlmModel has: provider, modelName, modelCategory, etc.
+            // LinqLlmModel has the same fields.
+            // We should filter for likely chat models if needed, or rely on the backend to provide valid ones.
+            // For now, let's include all active team models.
+
+            // Filter for active models that are chat-capable (exclude embeddings)
+            const activeTeamModels = teamModels.filter(m =>
+                m.active !== false &&
+                m.modelCategory?.toLowerCase().includes('chat')
+            );
+            setAvailableModels(activeTeamModels);
         } catch (err) {
             console.error('Error loading available models:', err);
         }

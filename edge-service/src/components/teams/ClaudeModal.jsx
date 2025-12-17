@@ -8,19 +8,19 @@ import Button from '../../components/common/Button';
 import ConfirmationModal from '../../components/common/ConfirmationModal';
 
 const initialFormData = {
-    modelCategory: 'claude-chat',
-    provider: 'anthropic',
-    endpoint: '',
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01'
-    },
-    authType: 'api_key',
-    apiKey: '',
-    modelName: '',
-    supportedIntents: ['generate', 'summarize', 'translate'],
-    teamId: ''
+  modelCategory: 'claude-chat',
+  provider: 'anthropic',
+  endpoint: '',
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'anthropic-version': '2023-06-01'
+  },
+  authType: 'api_key',
+  apiKey: '',
+  modelName: '',
+  supportedIntents: ['generate', 'summarize', 'translate'],
+  teamId: ''
 };
 
 const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
@@ -58,7 +58,7 @@ const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
     try {
       setLoading(true);
       const allConfigs = await linqLlmModelService.getLlmModelByModelCategories(team.id, ['claude']);
-      
+
       if (allConfigs && allConfigs.length > 0) {
         const config = allConfigs[0];
         const intents = config.supportedIntents || [];
@@ -113,7 +113,7 @@ const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
 
   const handleSave = async (e) => {
     e.preventDefault();
-    
+
     // Validate required fields
     const requiredFields = {
       endpoint: 'Endpoint',
@@ -199,18 +199,18 @@ const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
 
   const handleModelNameChange = async (modelName) => {
     const selectedModel = availableModels.find(model => model.modelName === modelName);
-    
+
     if (!selectedModel || !selectedModel.endpoint) {
       console.error('Selected model not found or missing endpoint');
       return;
     }
-    
+
     const modelCategory = 'claude-chat';//claude does not have embedding, it's only chat
     const endpoint = selectedModel.endpoint;
     const supportedIntents = ['generate', 'summarize', 'translate'];
-    
+
     const existingConfig = existingConfigs.find(config => config.modelName === modelName);
-    
+
     setFormData({
       ...formData,
       modelName: modelName,
@@ -240,285 +240,289 @@ const ClaudeModal = ({ show, onHide, team, onTeamUpdate }) => {
             <span className="ms-2 text-muted">- {team?.name}</span>
           </Modal.Title>
         </Modal.Header>
-      <Form onSubmit={handleSave}>
-        <Modal.Body>
-          {loading ? (
-            <div className="text-center">
-              <Spinner animation="border" />
-            </div>
-          ) : (
-            <>
-              <Alert variant="info">
-                Configure Claude API settings for team: <strong>{team?.name}</strong>
-              </Alert>
+        <Form onSubmit={handleSave}>
+          <Modal.Body>
+            {loading ? (
+              <div className="text-center">
+                <Spinner animation="border" />
+              </div>
+            ) : (
+              <>
+                <Alert variant="info">
+                  Configure Claude API settings for team: <strong>{team?.name}</strong>
+                </Alert>
 
-              <Row>
-                <Col md={12}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>Model Type</Form.Label>
-                    {loadingModels ? (
-                      <Spinner animation="border" size="sm" className="me-2" />
-                    ) : (
-                      <Form.Select
-                        value={formData.modelName || ''}
-                        onChange={(e) => handleModelNameChange(e.target.value)}
-                        required
-                      >
-                        <option value="">Select a model...</option>
-                        {availableModels.map(model => {
-                          const isConfigured = existingConfigs.some(config => config.modelName === model.modelName);
-                          return (
-                            <option 
-                              key={model.id} 
-                              value={model.modelName}
-                              disabled={isConfigured}
-                              className={isConfigured ? 'text-secondary' : ''}
-                            >
-                              {model.displayName} ({model.modelName}) - {model.category}
-                              {isConfigured ? ' (Configured)' : ''}
-                            </option>
-                          );
-                        })}
-                      </Form.Select>
-                    )}
-                    <Form.Text className="text-muted">
-                      Select the Claude model to use for this configuration
-                    </Form.Text>
-                  </Form.Group>
-                </Col>
-              </Row>
+                <Row>
+                  <Col md={12}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Model Type</Form.Label>
+                      {loadingModels ? (
+                        <Spinner animation="border" size="sm" className="me-2" />
+                      ) : (
+                        <Form.Select
+                          value={formData.modelName || ''}
+                          onChange={(e) => handleModelNameChange(e.target.value)}
+                          required
+                        >
+                          <option value="">Select a model...</option>
+                          {availableModels.map(model => {
+                            const isConfigured = existingConfigs.some(config => config.modelName === model.modelName);
+                            const costs = model.inputPricePer1M && model.outputPricePer1M
+                              ? ` ($${model.inputPricePer1M}/$${model.outputPricePer1M} per 1M)`
+                              : '';
 
-              {formData.modelName && (
-                <Accordion className="mb-3">
-                  <Accordion.Item eventKey="0">
-                    <Accordion.Header style={{ backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}>
-                      Configuration Details
-                    </Accordion.Header>
-                    <Accordion.Body>
-                      <Row>
-                        <Col md={6}>
-                          <strong>Model Category:</strong>
-                          <p className="text-muted mb-0">{formData.modelCategory}</p>
-                        </Col>
-                        <Col md={6}>
-                          <strong>Auth Type:</strong>
-                          <p className="text-muted mb-0">{formData.authType}</p>
-                        </Col>
-                      </Row>
-                      <hr />
-                      <Row>
-                        <Col md={6}>
-                          <strong>Endpoint:</strong>
-                          <p className="text-muted mb-0 small">{formData.endpoint}</p>
-                        </Col>
-                        <Col md={6}>
-                          <strong>Supported Intents:</strong>
-                          <div className="mt-2">
-                            {formData.supportedIntents.map(intent => (
-                              <span key={intent} className="badge bg-primary me-2">{intent}</span>
-                            ))}
-                          </div>
-                        </Col>
-                      </Row>
-                      <hr />
-                      <Row>
-                        <Col md={12}>
-                          <strong>Headers:</strong>
-                          <div className="mt-2">
-                            {Object.entries(formData.headers || {}).map(([key, value]) => (
-                              <span key={key} className="badge bg-secondary me-2">
-                                {key}: {value}
-                              </span>
-                            ))}
-                          </div>
-                        </Col>
-                      </Row>
-                    </Accordion.Body>
-                  </Accordion.Item>
-                </Accordion>
-              )}
+                            return (
+                              <option
+                                key={model.id}
+                                value={model.modelName}
+                                disabled={isConfigured}
+                                className={isConfigured ? 'text-secondary' : ''}
+                              >
+                                {model.displayName} ({model.modelName}) - {model.category}{costs}
+                                {isConfigured ? ' (Configured)' : ''}
+                              </option>
+                            );
+                          })}
+                        </Form.Select>
+                      )}
+                      <Form.Text className="text-muted">
+                        Select the Claude model to use for this configuration
+                      </Form.Text>
+                    </Form.Group>
+                  </Col>
+                </Row>
 
-              <Form.Group className="mb-3">
-                <Form.Label>API Key</Form.Label>
-                <div className="d-flex gap-2">
+                {formData.modelName && (
+                  <Accordion className="mb-3">
+                    <Accordion.Item eventKey="0">
+                      <Accordion.Header style={{ backgroundColor: '#f8f9fa', border: '1px solid #dee2e6' }}>
+                        Configuration Details
+                      </Accordion.Header>
+                      <Accordion.Body>
+                        <Row>
+                          <Col md={6}>
+                            <strong>Model Category:</strong>
+                            <p className="text-muted mb-0">{formData.modelCategory}</p>
+                          </Col>
+                          <Col md={6}>
+                            <strong>Auth Type:</strong>
+                            <p className="text-muted mb-0">{formData.authType}</p>
+                          </Col>
+                        </Row>
+                        <hr />
+                        <Row>
+                          <Col md={6}>
+                            <strong>Endpoint:</strong>
+                            <p className="text-muted mb-0 small">{formData.endpoint}</p>
+                          </Col>
+                          <Col md={6}>
+                            <strong>Supported Intents:</strong>
+                            <div className="mt-2">
+                              {formData.supportedIntents.map(intent => (
+                                <span key={intent} className="badge bg-primary me-2">{intent}</span>
+                              ))}
+                            </div>
+                          </Col>
+                        </Row>
+                        <hr />
+                        <Row>
+                          <Col md={12}>
+                            <strong>Headers:</strong>
+                            <div className="mt-2">
+                              {Object.entries(formData.headers || {}).map(([key, value]) => (
+                                <span key={key} className="badge bg-secondary me-2">
+                                  {key}: {value}
+                                </span>
+                              ))}
+                            </div>
+                          </Col>
+                        </Row>
+                      </Accordion.Body>
+                    </Accordion.Item>
+                  </Accordion>
+                )}
+
+                <Form.Group className="mb-3">
+                  <Form.Label>API Key</Form.Label>
+                  <div className="d-flex gap-2">
+                    <Form.Control
+                      type={showApiKey ? 'text' : 'password'}
+                      value={formData.apiKey || ''}
+                      onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+                      placeholder="Enter your Claude API key"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      disabled={!formData.apiKey}
+                    >
+                      <HiEye size={16} className="me-1" />
+                      {showApiKey ? 'Hide' : 'Show'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary"
+                      onClick={handleCopyApiKey}
+                      disabled={!formData.apiKey}
+                    >
+                      <HiKey size={16} className="me-1" />
+                      Copy
+                    </button>
+                  </div>
+                  <Form.Text className="text-muted">
+                    Your API key will be securely stored and used for Claude API requests.
+                  </Form.Text>
+                </Form.Group>
+
+                <Form.Group className="mb-3">
+                  <Form.Label>Headers</Form.Label>
                   <Form.Control
-                    type={showApiKey ? 'text' : 'password'}
-                    value={formData.apiKey || ''}
-                    onChange={(e) => setFormData({...formData, apiKey: e.target.value})}
-                    placeholder="Enter your Claude API key"
-                    required
-                  />
-                  <button 
-                    type="button"
-                    className="btn btn-outline-secondary"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    disabled={!formData.apiKey}
-                  >
-                    <HiEye size={16} className="me-1" />
-                    {showApiKey ? 'Hide' : 'Show'}
-                  </button>
-                  <button 
-                    type="button"
-                    className="btn btn-outline-primary"
-                    onClick={handleCopyApiKey}
-                    disabled={!formData.apiKey}
-                  >
-                    <HiKey size={16} className="me-1" />
-                    Copy
-                  </button>
-                </div>
-                <Form.Text className="text-muted">
-                  Your API key will be securely stored and used for Claude API requests.
-                </Form.Text>
-              </Form.Group>
-
-              <Form.Group className="mb-3">
-                <Form.Label>Headers</Form.Label>
-                <Form.Control
-                  type="text"
-                  value={formData.headers ? Object.entries(formData.headers).map(([key, value]) => `${key}: ${value}`).join('; ') : 'Content-Type: application/json; anthropic-version: 2023-06-01'}
-                  onChange={(e) => {
-                    const headerString = e.target.value;
-                    const headers = {};
-                    if (headerString.trim()) {
-                      headerString.split(';').forEach(pair => {
-                        const [key, value] = pair.split(':').map(s => s.trim());
-                        if (key && value) {
-                          headers[key] = value;
+                    type="text"
+                    value={formData.headers ? Object.entries(formData.headers).map(([key, value]) => `${key}: ${value}`).join('; ') : 'Content-Type: application/json; anthropic-version: 2023-06-01'}
+                    onChange={(e) => {
+                      const headerString = e.target.value;
+                      const headers = {};
+                      if (headerString.trim()) {
+                        headerString.split(';').forEach(pair => {
+                          const [key, value] = pair.split(':').map(s => s.trim());
+                          if (key && value) {
+                            headers[key] = value;
+                          }
+                        });
+                      }
+                      setFormData({
+                        ...formData,
+                        headers: Object.keys(headers).length > 0 ? headers : {
+                          'Content-Type': 'application/json',
+                          'anthropic-version': '2023-06-01'
                         }
                       });
-                    }
-                    setFormData({
-                      ...formData,
-                      headers: Object.keys(headers).length > 0 ? headers : {
-                        'Content-Type': 'application/json',
-                        'anthropic-version': '2023-06-01'
-                      }
-                    });
-                  }}
-                  placeholder="Content-Type: application/json; anthropic-version: 2023-06-01"
-                />
-                <Form.Text className="text-muted">
-                  Enter headers in format "key: value; key2: value2". The anthropic-version header is required for Claude.
-                </Form.Text>
-              </Form.Group>
-            </>
-          )}
-        </Modal.Body>
-        <Modal.Footer className="d-flex justify-content-between">
-          <div>
-            <Button 
-              variant="secondary" 
-              onClick={onHide}
-              className="btn-cancel"
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-          </div>
-          <div className="d-flex gap-2">
-            <Button 
-              variant="outline-secondary" 
-              onClick={() => setFormData({
-                ...initialFormData,
-                team: team.name,
-                teamId: team.id
-              })}
-              disabled={loading}
-            >
-              Reset
-            </Button>
-            <Button 
-              variant="primary" 
-              type="submit"
-              className="btn-save"
-              loading={loading}
-              disabled={existingConfigs.some(config => config.modelName === formData.modelName)}
-            >
-              Save Configuration
-            </Button>
-          </div>
-        </Modal.Footer>
-      </Form>
-      <hr />
-      
-      {/* Existing Configurations */}
-      <div className="p-3">
-        <h5>Existing Claude Configurations</h5>
-        {loadingConfigs ? (
-          <div className="text-center py-4">
-            <Spinner animation="border" size="sm" /> Loading configurations...
-          </div>
-        ) : existingConfigs.length === 0 ? (
-          <p className="text-muted">No Claude configurations for this team yet.</p>
-        ) : (
-          <Table hover className="mt-3">
-            <thead>
-              <tr>
-                <th>Model Category</th>
-                <th>Model Type</th>
-                <th>Endpoint</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {existingConfigs.map(config => (
-                <tr 
-                  key={config.id}
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleModelNameChange(config.modelName)}
-                >
-                  <td>{config.modelCategory || 'claude'}</td>
-                  <td>{config.modelName || 'N/A'}</td>
-                  <td>
-                    {config.endpoint && config.endpoint.length > 50 ? (
-                      <OverlayTrigger
-                        placement="top"
-                        overlay={<Tooltip>{config.endpoint}</Tooltip>}
-                      >
-                        <code className="text-truncate d-block" style={{maxWidth: '200px'}}>
-                          {config.endpoint}
-                        </code>
-                      </OverlayTrigger>
-                    ) : (
-                      <code>{config.endpoint}</code>
-                    )}
-                  </td>   
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <Button
-                      variant="outline-danger"
-                      size="sm"
-                      onClick={() => handleDeleteClick(config)}
-                      disabled={loading}
-                      className="d-flex align-items-center gap-2"
-                    >
-                      <HiTrash size={16} />
-                      Remove
-                    </Button>
-                  </td>
+                    }}
+                    placeholder="Content-Type: application/json; anthropic-version: 2023-06-01"
+                  />
+                  <Form.Text className="text-muted">
+                    Enter headers in format "key: value; key2: value2". The anthropic-version header is required for Claude.
+                  </Form.Text>
+                </Form.Group>
+              </>
+            )}
+          </Modal.Body>
+          <Modal.Footer className="d-flex justify-content-between">
+            <div>
+              <Button
+                variant="secondary"
+                onClick={onHide}
+                className="btn-cancel"
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+            </div>
+            <div className="d-flex gap-2">
+              <Button
+                variant="outline-secondary"
+                onClick={() => setFormData({
+                  ...initialFormData,
+                  team: team.name,
+                  teamId: team.id
+                })}
+                disabled={loading}
+              >
+                Reset
+              </Button>
+              <Button
+                variant="primary"
+                type="submit"
+                className="btn-save"
+                loading={loading}
+                disabled={existingConfigs.some(config => config.modelName === formData.modelName)}
+              >
+                Save Configuration
+              </Button>
+            </div>
+          </Modal.Footer>
+        </Form>
+        <hr />
+
+        {/* Existing Configurations */}
+        <div className="p-3">
+          <h5>Existing Claude Configurations</h5>
+          {loadingConfigs ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" size="sm" /> Loading configurations...
+            </div>
+          ) : existingConfigs.length === 0 ? (
+            <p className="text-muted">No Claude configurations for this team yet.</p>
+          ) : (
+            <Table hover className="mt-3">
+              <thead>
+                <tr>
+                  <th>Model Category</th>
+                  <th>Model Type</th>
+                  <th>Endpoint</th>
+                  <th>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </Table>
-        )}
-      </div>
-      
-      <ConfirmationModal
-        show={showConfirmRemove}
-        onHide={() => {
-          setShowConfirmRemove(false);
-          setConfigToRemove(null);
-        }}
-        onConfirm={handleConfirmDelete}
-        title="Remove Configuration"
-        message={configToRemove ? 
-          `Are you sure you want to remove the ${configToRemove.modelName} (${configToRemove.modelCategory}) configuration?` 
-          : ''
-        }
-        confirmLabel="Remove"
-        variant="danger"
-      />
-    </Modal>
+              </thead>
+              <tbody>
+                {existingConfigs.map(config => (
+                  <tr
+                    key={config.id}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => handleModelNameChange(config.modelName)}
+                  >
+                    <td>{config.modelCategory || 'claude'}</td>
+                    <td>{config.modelName || 'N/A'}</td>
+                    <td>
+                      {config.endpoint && config.endpoint.length > 50 ? (
+                        <OverlayTrigger
+                          placement="top"
+                          overlay={<Tooltip>{config.endpoint}</Tooltip>}
+                        >
+                          <code className="text-truncate d-block" style={{ maxWidth: '200px' }}>
+                            {config.endpoint}
+                          </code>
+                        </OverlayTrigger>
+                      ) : (
+                        <code>{config.endpoint}</code>
+                      )}
+                    </td>
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() => handleDeleteClick(config)}
+                        disabled={loading}
+                        className="d-flex align-items-center gap-2"
+                      >
+                        <HiTrash size={16} />
+                        Remove
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </div>
+
+        <ConfirmationModal
+          show={showConfirmRemove}
+          onHide={() => {
+            setShowConfirmRemove(false);
+            setConfigToRemove(null);
+          }}
+          onConfirm={handleConfirmDelete}
+          title="Remove Configuration"
+          message={configToRemove ?
+            `Are you sure you want to remove the ${configToRemove.modelName} (${configToRemove.modelCategory}) configuration?`
+            : ''
+          }
+          confirmLabel="Remove"
+          variant="danger"
+        />
+      </Modal>
     </>
   );
 };

@@ -1193,14 +1193,12 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                     // in 46.912382516s")
                     Duration delay = Duration.ofSeconds(3); // Default delay for non-rate-limit errors
                     // Check if this is an HTTP 400 error due to invalid max_tokens configuration
-                    boolean isMaxTokensError = false;
                     String errorMsg = error.getMessage();
                     if (errorMsg != null && errorMsg.contains("HTTP 400")) {
                         // Check if it's a max_tokens error
                         if (errorMsg.contains("too many tokens") ||
                                 errorMsg.contains("max tokens must be less than") ||
                                 errorMsg.contains("maximum output length")) {
-                            isMaxTokensError = true;
                             log.warn(
                                     "⚠️ Invalid max_tokens configuration for model {} (HTTP 400). Error: {}. Skipping this model and trying next...",
                                     category, errorMsg);

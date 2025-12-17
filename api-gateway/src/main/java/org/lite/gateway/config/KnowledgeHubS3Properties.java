@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
 
+
 @Configuration
 @ConfigurationProperties(prefix = "linqra.knowledgehub.s3")
 @Data

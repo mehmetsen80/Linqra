@@ -75,129 +75,133 @@ function Home() {
         </div>
 
         {/* Row 1 */}
-        <OverlayTrigger
-          placement="top"
-          overlay={
-            <Tooltip id="tooltip-soc2">
-              <strong>Service Organization Control 2 (SOC 2)</strong><br />
-              A gold standard for SaaS security.<br /><br />
-              <strong>Why Linqra is Ready:</strong> We implement strict access controls (RBAC), immutable audit logs, and encrypted backups to satisfy Trust Services Criteria.
-            </Tooltip>
-          }
-        >
-          <div className="trust-badge">
-            <i className="fas fa-file-contract"></i> SOC 2 Ready
-          </div>
-        </OverlayTrigger>
+        <div className="trust-row">
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="tooltip-soc2">
+                <strong>Service Organization Control 2 (SOC 2)</strong><br />
+                A gold standard for SaaS security.<br /><br />
+                <strong>Why Linqra is Ready:</strong> We implement strict access controls (RBAC), immutable audit logs, and encrypted backups to satisfy Trust Services Criteria.
+              </Tooltip>
+            }
+          >
+            <div className="trust-badge">
+              <i className="fas fa-file-contract"></i> SOC 2 Ready
+            </div>
+          </OverlayTrigger>
 
-        <OverlayTrigger
-          placement="top"
-          overlay={
-            <Tooltip id="tooltip-hipaa">
-              <strong>HIPAA (Healthcare)</strong><br />
-              Protects sensitive patient health information (PHI).<br /><br />
-              <strong>Why Linqra is Compliant:</strong> We isolate PHI using per-team encryption keys (AES-256) and sign Business Associate Agreements (BAA).
-            </Tooltip>
-          }
-        >
-          <div className="trust-badge">
-            <i className="fas fa-heartbeat"></i> HIPAA Compliant
-          </div>
-        </OverlayTrigger>
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="tooltip-hipaa">
+                <strong>HIPAA (Healthcare)</strong><br />
+                Protects sensitive patient health information (PHI).<br /><br />
+                <strong>Why Linqra is Compliant:</strong> We isolate PHI using per-team encryption keys (AES-256) and sign Business Associate Agreements (BAA).
+              </Tooltip>
+            }
+          >
+            <div className="trust-badge">
+              <i className="fas fa-heartbeat"></i> HIPAA Compliant
+            </div>
+          </OverlayTrigger>
 
-        <OverlayTrigger
-          placement="top"
-          overlay={
-            <Tooltip id="tooltip-gdpr">
-              <strong>GDPR (Europe)</strong><br />
-              The toughest privacy and security law in the world.<br /><br />
-              <strong>Why Linqra is Ready:</strong> We support "Right to be Forgotten" via crypto-shredding and enforce strict data residency controls.
-            </Tooltip>
-          }
-        >
-          <div className="trust-badge">
-            <i className="fas fa-globe-europe"></i> GDPR Ready
-          </div>
-        </OverlayTrigger>
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="tooltip-gdpr">
+                <strong>GDPR (Europe)</strong><br />
+                The toughest privacy and security law in the world.<br /><br />
+                <strong>Why Linqra is Ready:</strong> We support "Right to be Forgotten" via crypto-shredding and enforce strict data residency controls.
+              </Tooltip>
+            }
+          >
+            <div className="trust-badge">
+              <i className="fas fa-globe-europe"></i> GDPR Ready
+            </div>
+          </OverlayTrigger>
 
-        <OverlayTrigger
-          placement="top"
-          overlay={
-            <Tooltip id="tooltip-glba">
-              <strong>GLBA (Financial Services)</strong><br />
-              Requires financial institutions to protect customer data.<br /><br />
-              <strong>Why Linqra is Ready:</strong> We enforce strict separation of duties and financial-grade encryption for all data at rest and in transit.
-            </Tooltip>
-          }
-        >
-          <div className="trust-badge">
-            <i className="fas fa-university"></i> GLBA Ready
-          </div>
-        </OverlayTrigger>
-
-        {/* Force new row */}
-        <div style={{ width: '100%', height: '0' }}></div>
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="tooltip-glba">
+                <strong>GLBA (Financial Services)</strong><br />
+                Requires financial institutions to protect customer data.<br /><br />
+                <strong>Why Linqra is Ready:</strong> We enforce strict separation of duties and financial-grade encryption for all data at rest and in transit.
+              </Tooltip>
+            }
+          >
+            <div className="trust-badge">
+              <i className="fas fa-university"></i> GLBA Ready
+            </div>
+          </OverlayTrigger>
+        </div>
 
         {/* Row 2 */}
-        <OverlayTrigger
-          placement="top"
-          overlay={
-            <Tooltip id="tooltip-ferpa">
-              <strong>FERPA (Education)</strong><br />
-              Protects student education records access and privacy.<br /><br />
-              <strong>Why Linqra is Ready:</strong> We act as a "School Official" with legitimate educational interest, securing records with encryption and RBAC.
-            </Tooltip>
-          }
-        >
-          <div className="trust-badge">
-            <i className="fas fa-user-graduate"></i> FERPA Ready
-          </div>
-        </OverlayTrigger>
+        <div className="trust-row">
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="tooltip-ferpa">
+                <strong>FERPA (Education)</strong><br />
+                Protects student education records access and privacy.<br /><br />
+                <strong>Why Linqra is Ready:</strong> We act as a "School Official" with legitimate educational interest, securing records with encryption and RBAC.
+              </Tooltip>
+            }
+          >
+            <div className="trust-badge">
+              <i className="fas fa-user-graduate"></i> FERPA Ready
+            </div>
+          </OverlayTrigger>
 
-        <OverlayTrigger
-          placement="top"
-          overlay={
-            <Tooltip id="tooltip-aba">
-              <strong>ABA Model Rules (Legal)</strong><br />
-              Requires lawyers to protect client confidentiality.<br /><br />
-              <strong>Why Linqra is Ready:</strong> Our "blind" architecture ensures attorney-client privilege is preserved—even we cannot see your data.
-            </Tooltip>
-          }
-        >
-          <div className="trust-badge">
-            <i className="fas fa-balance-scale"></i> ABA Ready
-          </div>
-        </OverlayTrigger>
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="tooltip-aba">
+                <strong>ABA Model Rules (Legal)</strong><br />
+                Ethical duty for lawyers to protect client confidentiality.<br /><br />
+                <strong>Why Linqra is Ready:</strong> We provide "reasonable efforts" to secure client data via end-to-end encryption and audit trails.
+              </Tooltip>
+            }
+          >
+            <div className="trust-badge">
+              <i className="fas fa-gavel"></i> ABA Ready
+            </div>
+          </OverlayTrigger>
 
-        <OverlayTrigger
-          placement="top"
-          overlay={
-            <Tooltip id="tooltip-iso">
-              <strong>ISO 27001</strong><br />
-              International standard for Information Security Management.<br /><br />
-              <strong>Why Linqra is Aligned:</strong> Our security policies, risk management, and operational controls are built on the ISO 27001 framework.
-            </Tooltip>
-          }
-        >
-          <div className="trust-badge">
-            <i className="fas fa-shield-alt"></i> ISO 27001 Aligned
-          </div>
-        </OverlayTrigger>
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="tooltip-iso">
+                <strong>ISO 27001</strong><br />
+                International standard for Information Security Management.<br /><br />
+                <strong>Why Linqra is Aligned:</strong> Our security policies, risk management, and operational controls are built on the ISO 27001 framework.
+              </Tooltip>
+            }
+          >
+            <div className="trust-badge">
+              <i className="fas fa-shield-alt"></i> ISO 27001 Aligned
+            </div>
+          </OverlayTrigger>
 
-        <OverlayTrigger
-          placement="top"
-          overlay={
-            <Tooltip id="tooltip-ccpa">
-              <strong>CCPA (California)</strong><br />
-              Gives consumers control over their personal information.<br /><br />
-              <strong>Why Linqra is Ready:</strong> We provide detailed data mapping and automated "Do Not Sell" compliance features.
-            </Tooltip>
-          }
-        >
-          <div className="trust-badge">
-            <i className="fas fa-landmark"></i> CCPA Ready
-          </div>
-        </OverlayTrigger>
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="tooltip-ccpa">
+                <strong>CCPA (California)</strong><br />
+                Gives consumers control over their personal information.<br /><br />
+                <strong>Why Linqra is Ready:</strong> We provide detailed data mapping and automated "Do Not Sell" compliance features.
+              </Tooltip>
+            }
+          >
+            <div className="trust-badge">
+              <i className="fas fa-landmark"></i> CCPA Ready
+            </div>
+          </OverlayTrigger>
+
+        </div>
+
+
       </div>
 
       <div className="orchestration-section">

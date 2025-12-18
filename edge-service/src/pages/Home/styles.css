@@ -1738,10 +1738,18 @@ html {
   background: #f1f5f9;
   padding: 1.5rem 0;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.trust-row {
+  display: flex;
   justify-content: center;
   flex-wrap: wrap;
   gap: 2rem;
-  border-bottom: 1px solid #e2e8f0;
+  width: 100%;
 }
 
 .trust-title {

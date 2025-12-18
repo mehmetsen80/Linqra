@@ -316,6 +316,17 @@ const ExecutionMonitoring = () => {
         try {
             await agentTaskService.cancelExecution(executionToCancel.executionId);
             setCancelDialogOpen(false);
+
+            // Update the execution in the local state to reflect cancellation immediately
+            setRecentExecutions(prev => prev.map(ex =>
+                ex.executionId === executionToCancel.executionId
+                    ? { ...ex, status: 'CANCELLED' }
+                    : ex
+            ));
+
+            // Also refresh the full list to get updated data
+            loadRecentExecutions();
+
             setExecutionToCancel(null);
         } catch (error) {
             console.error('Failed to cancel execution:', error);
@@ -818,6 +829,18 @@ const ExecutionMonitoring = () => {
                                         </TableCell>
                                         <TableCell>
                                             <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                                <IconButton
+                                                    size="small"
+                                                    disabled={['COMPLETED', 'FAILED', 'CANCELLED'].includes(execution.status)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation(); // Prevent row click
+                                                        handleCancelExecution(execution);
+                                                    }}
+                                                    title="Cancel Execution"
+                                                    color="error"
+                                                >
+                                                    <Stop />
+                                                </IconButton>
                                                 <IconButton
                                                     size="small"
                                                     onClick={(e) => {

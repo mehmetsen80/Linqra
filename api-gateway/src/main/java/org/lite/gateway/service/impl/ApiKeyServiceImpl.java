@@ -30,21 +30,22 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     @Override
     public Mono<ApiKey> createApiKey(String name, String teamId, String createdBy, Long expiresInDays) {
         return apiKeyRepository.findByTeamId(teamId)
-            .flatMap(existingKey -> Mono.<ApiKey>error(new IllegalStateException("Team already has an active API key")))
-            .switchIfEmpty(Mono.<ApiKey>defer(() -> {
-                ApiKey apiKey = new ApiKey();
-                apiKey.setKey(generateApiKey());
-                apiKey.setName(name);
-                apiKey.setTeamId(teamId);
-                apiKey.setCreatedBy(createdBy);
-                apiKey.setCreatedAt(Instant.now());
-                
-                if (expiresInDays != null) {
-                    apiKey.setExpiresAt(Instant.now().plus(expiresInDays, ChronoUnit.DAYS));
-                }
+                .flatMap(existingKey -> Mono
+                        .<ApiKey>error(new IllegalStateException("Team already has an active API key")))
+                .switchIfEmpty(Mono.<ApiKey>defer(() -> {
+                    ApiKey apiKey = new ApiKey();
+                    apiKey.setKey(generateApiKey());
+                    apiKey.setName(name);
+                    apiKey.setTeamId(teamId);
+                    apiKey.setCreatedBy(createdBy);
+                    apiKey.setCreatedAt(Instant.now());
 
-                return apiKeyRepository.save(apiKey);
-            }));
+                    if (expiresInDays != null) {
+                        apiKey.setExpiresAt(Instant.now().plus(expiresInDays, ChronoUnit.DAYS));
+                    }
+
+                    return apiKeyRepository.save(apiKey);
+                }));
     }
 
     private String generateApiKey() {
@@ -55,12 +56,12 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     public Mono<ApiKey> validateApiKey(String apiKey) {
         String cacheKey = API_KEY_CACHE_PREFIX + apiKey;
         String cachedValue = redisTemplate.opsForValue().get(cacheKey);
-        
+
         if (cachedValue != null) {
             try {
                 ApiKey cached = objectMapper.readValue(cachedValue, ApiKey.class);
-                if (cached.isEnabled() && (cached.getExpiresAt() == null || 
-                    cached.getExpiresAt().isAfter(Instant.now()))) {
+                if (cached.isEnabled() && (cached.getExpiresAt() == null ||
+                        cached.getExpiresAt().isAfter(Instant.now()))) {
                     return Mono.just(cached);
                 }
                 // If key is expired or disabled, remove from cache
@@ -69,41 +70,41 @@ public class ApiKeyServiceImpl implements ApiKeyService {
                 log.error("Error deserializing cached API key", e);
             }
         }
-        
+
         return apiKeyRepository.findByKey(apiKey)
-            .flatMap(key -> {
-                if (!key.isEnabled()) {
-                    log.warn("API key is disabled: {}", apiKey);
-                    return Mono.error(new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED, "API key is disabled"));
-                }
-                if (key.getExpiresAt() != null && key.getExpiresAt().isBefore(Instant.now())) {
-                    String errorMessage = String.format("API key expired at %s", key.getExpiresAt());
-                    log.warn("{}: {}", errorMessage, apiKey);
-                    return Mono.error(new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED, errorMessage));
-                }
-                return Mono.just(key);
-            })
-            .doOnNext(validKey -> {
-                try {
-                    String value = objectMapper.writeValueAsString(validKey);
-                    redisTemplate.opsForValue().set(cacheKey, value, CACHE_DURATION);
-                } catch (Exception e) {
-                    log.error("Error caching API key", e);
-                }
-            });
+                .flatMap(key -> {
+                    if (!key.isEnabled()) {
+                        log.warn("API key is disabled: {}", apiKey);
+                        return Mono.error(new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED, "API key is disabled"));
+                    }
+                    if (key.getExpiresAt() != null && key.getExpiresAt().isBefore(Instant.now())) {
+                        String errorMessage = String.format("API key expired at %s", key.getExpiresAt());
+                        log.warn("{}: {}", errorMessage, apiKey);
+                        return Mono.error(new ResponseStatusException(
+                                HttpStatus.UNAUTHORIZED, errorMessage));
+                    }
+                    return Mono.just(key);
+                })
+                .doOnNext(validKey -> {
+                    try {
+                        String value = objectMapper.writeValueAsString(validKey);
+                        redisTemplate.opsForValue().set(cacheKey, value, CACHE_DURATION);
+                    } catch (Exception e) {
+                        log.error("Error caching API key", e);
+                    }
+                });
     }
 
     @Override
     public Mono<Void> revokeApiKey(String id) {
         return apiKeyRepository.findById(id)
-            .flatMap(apiKey -> {
-                apiKey.setEnabled(false);
-                invalidateKeyCache(apiKey.getKey());
-                return apiKeyRepository.save(apiKey);
-            })
-            .then();
+                .flatMap(apiKey -> {
+                    apiKey.setEnabled(false);
+                    invalidateKeyCache(apiKey.getKey());
+                    return apiKeyRepository.save(apiKey);
+                })
+                .then();
     }
 
     // Method to invalidate cache when key is revoked/deleted
@@ -114,7 +115,9 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     @Override
     public Mono<ApiKey> getDefaultApiKeyForTeam(String teamId) {
         return apiKeyRepository.findByTeamId(teamId)
-            .filter(key -> key.isEnabled() && (key.getExpiresAt() == null || key.getExpiresAt().isAfter(Instant.now())))
-            .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No valid API key found for team")));
+                .filter(key -> key.isEnabled()
+                        && (key.getExpiresAt() == null || key.getExpiresAt().isAfter(Instant.now())))
+                .switchIfEmpty(Mono.error(
+                        new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No valid API key found for team")));
     }
-} 
+}

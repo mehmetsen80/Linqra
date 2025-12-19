@@ -22,61 +22,77 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class TeamEncryptionController {
 
-    private final ChunkEncryptionService chunkEncryptionService;
-    private final TeamContextService teamContextService;
-    private final UserContextService userContextService;
-    private final UserService userService;
-    private final TeamService teamService;
+        private final ChunkEncryptionService chunkEncryptionService;
+        private final TeamContextService teamContextService;
+        private final UserContextService userContextService;
+        private final UserService userService;
+        private final TeamService teamService;
 
-    @GetMapping("/keys/active")
-    public Mono<ResponseEntity<Map<String, String>>> getActiveKeyVersion(
-            @PathVariable String teamId,
-            ServerWebExchange exchange) {
+        @GetMapping("/keys/active")
+        public Mono<ResponseEntity<Map<String, String>>> getActiveKeyVersion(
+                        @PathVariable String teamId,
+                        ServerWebExchange exchange) {
 
-        log.info("Fetching active encryption key version for team: {}", teamId);
+                log.info("Fetching active encryption key version for team: {}", teamId);
 
-        return Mono.zip(
-                teamContextService.getTeamFromContext(exchange),
-                userContextService.getCurrentUsername(exchange))
-                .flatMap(tuple -> {
-                    String contextTeamId = tuple.getT1();
-                    String username = tuple.getT2();
+                return Mono.zip(
+                                teamContextService.getTeamFromContext(exchange),
+                                userContextService.getCurrentUsername(exchange))
+                                .flatMap(tuple -> {
+                                        String contextTeamId = tuple.getT1();
+                                        String username = tuple.getT2();
 
-                    // Require ADMIN role or SUPER_ADMIN
-                    return userService.findByUsername(username)
-                            .flatMap(user -> teamService.hasRole(contextTeamId, user.getId(), "ADMIN")
-                                    .filter(isAdmin -> isAdmin || user.getRoles().contains("SUPER_ADMIN"))
-                                    .switchIfEmpty(Mono.error(new AccessDeniedException(
-                                            "Admin access required for team " + contextTeamId)))
-                                    .then(chunkEncryptionService.getCurrentKeyVersion(contextTeamId)))
-                            .map(version -> ResponseEntity.ok(Map.of("version", version)));
-                });
-    }
+                                        // Require ADMIN role or SUPER_ADMIN
+                                        return userService.findByUsername(username)
+                                                        .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                                                        "User not found: " + username)))
+                                                        .flatMap(user -> teamService
+                                                                        .hasRole(contextTeamId, user.getId(), "ADMIN")
+                                                                        .filter(isAdmin -> isAdmin || user.getRoles()
+                                                                                        .contains("SUPER_ADMIN"))
+                                                                        .switchIfEmpty(Mono.error(
+                                                                                        new AccessDeniedException(
+                                                                                                        "Admin access required for team "
+                                                                                                                        + contextTeamId)))
+                                                                        .then(chunkEncryptionService
+                                                                                        .getCurrentKeyVersion(
+                                                                                                        contextTeamId)))
+                                                        .map(version -> ResponseEntity.ok(Map.of("version", version)));
+                                });
+        }
 
-    @PostMapping("/keys/rotate")
-    public Mono<ResponseEntity<Map<String, String>>> rotateKey(
-            @PathVariable String teamId,
-            ServerWebExchange exchange) {
+        @PostMapping("/keys/rotate")
+        public Mono<ResponseEntity<Map<String, String>>> rotateKey(
+                        @PathVariable String teamId,
+                        ServerWebExchange exchange) {
 
-        log.info("Rotating encryption key for team: {}", teamId);
+                log.info("Rotating encryption key for team: {}", teamId);
 
-        return Mono.zip(
-                teamContextService.getTeamFromContext(exchange),
-                userContextService.getCurrentUsername(exchange))
-                .flatMap(tuple -> {
-                    String contextTeamId = tuple.getT1();
-                    String username = tuple.getT2();
+                return Mono.zip(
+                                teamContextService.getTeamFromContext(exchange),
+                                userContextService.getCurrentUsername(exchange))
+                                .flatMap(tuple -> {
+                                        String contextTeamId = tuple.getT1();
+                                        String username = tuple.getT2();
 
-                    // Require ADMIN role or SUPER_ADMIN
-                    return userService.findByUsername(username)
-                            .flatMap(user -> teamService.hasRole(contextTeamId, user.getId(), "ADMIN")
-                                    .filter(isAdmin -> isAdmin || user.getRoles().contains("SUPER_ADMIN"))
-                                    .switchIfEmpty(Mono.error(new AccessDeniedException(
-                                            "Admin access required for team " + contextTeamId)))
-                                    .then(chunkEncryptionService.rotateKey(contextTeamId)))
-                            .map(newVersion -> ResponseEntity.ok(Map.of(
-                                    "message", "Key rotation initiated successfully",
-                                    "version", newVersion)));
-                });
-    }
+                                        // Require ADMIN role or SUPER_ADMIN
+                                        return userService.findByUsername(username)
+                                                        .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                                                        "User not found: " + username)))
+                                                        .flatMap(user -> teamService
+                                                                        .hasRole(contextTeamId, user.getId(), "ADMIN")
+                                                                        .filter(isAdmin -> isAdmin || user.getRoles()
+                                                                                        .contains("SUPER_ADMIN"))
+                                                                        .switchIfEmpty(Mono.error(
+                                                                                        new AccessDeniedException(
+                                                                                                        "Admin access required for team "
+                                                                                                                        + contextTeamId)))
+                                                                        .then(chunkEncryptionService
+                                                                                        .rotateKey(contextTeamId)))
+                                                        .map(newVersion -> ResponseEntity.ok(Map.of(
+                                                                        "message",
+                                                                        "Key rotation initiated successfully",
+                                                                        "version", newVersion)));
+                                });
+        }
 }

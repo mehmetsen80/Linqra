@@ -282,7 +282,7 @@ function KnowledgeHub() {
 
     try {
       setLoading(true);
-      const { data, error } = await knowledgeHubCollectionService.getAllCollections();
+      const { data, error } = await knowledgeHubCollectionService.getAllCollections(currentTeam.id);
       if (error) throw new Error(error);
       setCollections(data || []);
       setLoading(false);
@@ -446,7 +446,11 @@ function KnowledgeHub() {
 
     try {
       setOperationLoading(true);
-      const { error } = await knowledgeHubCollectionService.assignMilvusCollection(selectedCollectionForMilvus.id, payload);
+      const { error } = await knowledgeHubCollectionService.assignMilvusCollection(
+        selectedCollectionForMilvus.id,
+        payload,
+        currentTeam?.id
+      );
       if (error) throw new Error(error);
       showSuccessToast('RAG collection assigned successfully');
       setShowMilvusModal(false);

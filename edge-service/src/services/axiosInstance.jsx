@@ -20,7 +20,7 @@ axiosInstance.interceptors.request.use(
         const decoded = jwtDecode(authData.token);
         const currentTime = Date.now() / 1000;
         const timeUntilExpiry = decoded.exp - currentTime;
-        
+
         // If token will expire in less than 30 seconds, refresh it
         if (timeUntilExpiry < 30 && !config.url.includes('/api/auth/')) {
           try {
@@ -75,13 +75,13 @@ axiosInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
-    if (error.response?.status === 401 && 
-        !originalRequest._retry && 
-        !originalRequest.url.includes('/api/auth/')) {
-      
+
+    if (error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url.includes('/api/auth/')) {
+
       originalRequest._retry = true;
-      
+
       try {
         const authData = JSON.parse(localStorage.getItem('authState') || '{}');
         if (!authData.refreshToken) {
@@ -97,11 +97,11 @@ axiosInstance.interceptors.response.use(
             isAuthenticated: true
           };
           localStorage.setItem('authState', JSON.stringify(newAuthState));
-          
+
           // Update headers for the retry
           axiosInstance.defaults.headers.Authorization = `Bearer ${data.token}`;
           originalRequest.headers.Authorization = `Bearer ${data.token}`;
-          
+
           // Retry the original request
           return axiosInstance(originalRequest);
         } else {

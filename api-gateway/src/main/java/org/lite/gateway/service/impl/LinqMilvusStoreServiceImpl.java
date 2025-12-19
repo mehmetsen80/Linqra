@@ -1740,15 +1740,13 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 return Mono.just(errorResponse);
             }
 
+            DescribeCollectionResponse collectionData = describeResponse.getData();
+
             // Log collection schema for debugging
-            log.info("Collection schema for {}: {}", collectionName, describeResponse.getData().getSchema());
-            log.info("Available fields:");
-            for (io.milvus.grpc.FieldSchema field : describeResponse.getData().getSchema().getFieldsList()) {
-                log.info("  - {}: {} (primary: {})", field.getName(), field.getDataType(), field.getIsPrimaryKey());
-            }
+            log.info("Collection schema for {}: {}", collectionName, collectionData.getSchema());
 
             boolean teamIdMatches = false;
-            for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
+            for (KeyValuePair property : collectionData.getPropertiesList()) {
                 if ("teamId".equals(property.getKey()) && teamId.equals(property.getValue())) {
                     teamIdMatches = true;
                     break;
@@ -1778,7 +1776,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .flatMap(searchEmbedding -> {
                         try {
                             // Build dynamic out fields and get available fields list
-                            List<String> availableFields = describeResponse.getData().getSchema().getFieldsList()
+                            List<String> availableFields = collectionData.getSchema().getFieldsList()
                                     .stream()
                                     .map(io.milvus.grpc.FieldSchema::getName)
                                     .collect(Collectors.toList());
@@ -1789,16 +1787,16 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
                             // Build dynamic out fields (availableFields already defined above)
 
-                            String collectionType = describeResponse.getData().getPropertiesList().stream()
+                            String collectionType = collectionData.getPropertiesList().stream()
                                     .filter(property -> "collectionType".equals(property.getKey()))
                                     .map(KeyValuePair::getValue)
                                     .findFirst()
                                     .orElse(null);
 
-                            List<String> outFields = buildOutFields(textField, metadataFilters, availableFields,
+                            List<String> rawOutFields = buildOutFields(textField, metadataFilters, availableFields,
                                     collectionType);
-                            // Ensure decryption fields are included (only if they exist in the collection)
-                            outFields = ensureDecryptionFields(outFields, availableFields);
+                            // Ensure decryption fields are included and variable is final for lambda use
+                            final List<String> outFields = ensureDecryptionFields(rawOutFields, availableFields);
 
                             // Use vector search to find similar records
                             SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
@@ -1824,7 +1822,6 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
                             if (results == null || results.getResults().getNumQueries() == 0) {
                                 log.info("No results found in semantic search");
-                                // Return consistent structure with null/empty values for missing data
                                 Map<String, Object> noResultsResponse = new HashMap<>();
                                 noResultsResponse.put("found", false);
                                 noResultsResponse.put("message", "No search results found");
@@ -1843,165 +1840,130 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             }
 
                             SearchResultData resultData = results.getResults();
-                            List<Object> ids = new ArrayList<>();
-                            List<Object> documents = new ArrayList<>();
-                            List<Float> distances = new ArrayList<>();
-                            List<Map<String, Object>> metadataList = new ArrayList<>();
 
-                            // Extract results using the correct field access method
-                            for (int i = 0; i < resultData.getNumQueries(); i++) {
-                                // Get ID field
-                                var idFieldData = resultData.getFieldsDataList().stream()
-                                        .filter(f -> f.getFieldName().equals("id"))
-                                        .findFirst()
-                                        .orElse(null);
-                                if (idFieldData != null && idFieldData.getScalars().hasLongData()
-                                        && idFieldData.getScalars().getLongData().getDataCount() > i) {
-                                    ids.add(idFieldData.getScalars().getLongData().getData(i));
-                                }
-
-                                // Get and decrypt text field
-                                String decryptedText = decryptTextFromSearchResults(resultData, textField, i, teamId)
-                                        .block(); // TEMPORARY BLOCK for verifyRecord part 1 loop
-                                // Wait, verifyRecord needs to be fully refactored, not just this line.
-                                // The loop at 1907 gathers 'documents'.
-                                // Then 1988 iterates 'documents'.
-                                // I should likely rewrite the gathering loop (1907) to Flux too.
-                                // But verifyRecord has a bunch of logic.
-                                // I will change this to block() for now to make it compile, then refactor the
-                                // whole method properly?
-                                // No, blocking is bad in reactive.
-                                // But I'm already refactoring `verifyRecord` logic in chunk 2 (lines 1962+).
-                                // Chunk 2 refactors the LOGIC after gathering.
-                                // But the gathering (1907-1960) needs to be refactored too!
-                                // It builds `documents` list.
-                                // I cannot fix `decryptTextFromSearchResults` usage here without refactoring
-                                // the loop.
-                                // I will remove this chunk and refactor the GATHERING loop in a separate tool
-                                // call or do it all together.
-                                // Actually, I'll do `verifyRecord` fully in a separate replacement to be safe.
-                                // So I will ONLY do imports + `verifyRecord` gathering part?
-                                // No, I'll remove the `verifyRecord` chunk from THIS call too and do it
-                                // properly.
-
-                                documents.add(decryptedText);
-
-                                // Get distance field
-                                var distanceField = resultData.getFieldsDataList().stream()
-                                        .filter(f -> f.getFieldName().equals("distance"))
-                                        .findFirst()
-                                        .orElse(null);
-
-                                if (distanceField != null) {
-                                    log.info("Found distance field: {}", distanceField.getScalars().getDataCase());
-                                    if (distanceField.getScalars().hasFloatData()
-                                            && distanceField.getScalars().getFloatData().getDataCount() > i) {
-                                        distances.add(distanceField.getScalars().getFloatData().getData(i));
-                                    } else if (distanceField.getScalars().hasDoubleData()
-                                            && distanceField.getScalars().getDoubleData().getDataCount() > i) {
-                                        distances.add((float) distanceField.getScalars().getDoubleData().getData(i));
-                                    } else {
-                                        log.warn("Distance field found but no data available at index {}", i);
-                                        distances.add(0.0f); // Default distance
-                                    }
-                                } else {
-                                    log.warn("Distance field not found in search results");
-                                    distances.add(0.0f); // Default distance
-                                }
-
-                                // Extract metadata fields
-                                Map<String, Object> metadata = new HashMap<>();
-                                for (String fieldName : outFields) {
-                                    if (!fieldName.equals("id") && !fieldName.equals(textField)) {
-                                        var fieldData = resultData.getFieldsDataList().stream()
-                                                .filter(f -> f.getFieldName().equals(fieldName))
+                            // Use Flux to process results reactively
+                            return Flux.range(0, (int) resultData.getNumQueries())
+                                    .concatMap(i -> {
+                                        // Extract ID
+                                        Object id = null;
+                                        var idFieldData = resultData.getFieldsDataList().stream()
+                                                .filter(f -> f.getFieldName().equals("id"))
                                                 .findFirst()
                                                 .orElse(null);
-                                        if (fieldData != null) {
-                                            Object value = extractFieldValue(fieldData, i);
-                                            metadata.put(fieldName, value);
+                                        if (idFieldData != null && idFieldData.getScalars().hasLongData()
+                                                && idFieldData.getScalars().getLongData().getDataCount() > i) {
+                                            id = idFieldData.getScalars().getLongData().getData(i);
                                         }
-                                    }
-                                }
-                                metadataList.add(metadata);
-                            }
 
-                            // Find exact text match among semantic search results
-                            // Find exact text match among semantic search results
+                                        final Object fId = id;
 
-                            // Check if we have any results before processing
-                            if (ids.isEmpty() || documents.isEmpty() || distances.isEmpty()) {
-                                log.warn("No search results found - ids: {}, documents: {}, distances: {}",
-                                        ids.size(), documents.size(), distances.size());
-                                // Return consistent structure with null/empty values for missing data
-                                Map<String, Object> noResultsResponse = new HashMap<>();
-                                noResultsResponse.put("found", false);
-                                noResultsResponse.put("message", "No search results found");
-                                noResultsResponse.put("id", null);
-                                noResultsResponse.put(textField, null);
-                                noResultsResponse.put("distance", null);
-                                noResultsResponse.put("match_type", null);
-                                noResultsResponse.put("search_text", text);
-                                // Add empty metadata fields if any were requested
-                                if (metadataFilters != null) {
-                                    for (String fieldName : metadataFilters.keySet()) {
-                                        noResultsResponse.put(fieldName, null);
-                                    }
-                                }
-                                return Mono.just(noResultsResponse);
-                            }
+                                        // Extract Distance
+                                        Float distance = 0.0f;
+                                        var distanceField = resultData.getFieldsDataList().stream()
+                                                .filter(f -> f.getFieldName().equals("distance"))
+                                                .findFirst()
+                                                .orElse(null);
 
-                            // Use Flux to process documents reactively and find match
-                            return Flux.range(0, documents.size())
-                                    .concatMap(i -> {
-                                        String storedText = documents.get(i).toString();
-                                        if (storedText.equalsIgnoreCase(text)) {
-                                            Map<String, Object> match = new HashMap<>();
-                                            match.put("found", true);
-                                            match.put("id", ids.get(i));
-                                            match.put(textField, storedText);
-                                            match.put("distance", distances.get(i));
-                                            match.put("match_type", "exact");
-                                            match.put("search_text", text);
-                                            // Add metadata to response
-                                            if (i < metadataList.size()) {
-                                                match.putAll(metadataList.get(i));
+                                        if (distanceField != null) {
+                                            if (distanceField.getScalars().hasFloatData()
+                                                    && distanceField.getScalars().getFloatData().getDataCount() > i) {
+                                                distance = distanceField.getScalars().getFloatData().getData(i);
+                                            } else if (distanceField.getScalars().hasDoubleData()
+                                                    && distanceField.getScalars().getDoubleData().getDataCount() > i) {
+                                                distance = (float) distanceField.getScalars().getDoubleData()
+                                                        .getData(i);
                                             }
-                                            return Mono.just(match);
                                         }
-                                        return Mono.empty();
+                                        final Float fDistance = distance;
+
+                                        // Extract metadata
+                                        Map<String, Object> metadata = new HashMap<>();
+                                        for (String fieldName : outFields) {
+                                            if (!fieldName.equals("id") && !fieldName.equals(textField)) {
+                                                var fieldData = resultData.getFieldsDataList().stream()
+                                                        .filter(f -> f.getFieldName().equals(fieldName))
+                                                        .findFirst()
+                                                        .orElse(null);
+                                                if (fieldData != null) {
+                                                    Object value = extractFieldValue(fieldData, i);
+                                                    metadata.put(fieldName, value);
+                                                }
+                                            }
+                                        }
+
+                                        // Decrypt text reactively
+                                        return decryptTextFromSearchResults(resultData, textField, i, teamId)
+                                                .map(decryptedText -> {
+                                                    Map<String, Object> doc = new HashMap<>();
+                                                    doc.put("id", fId);
+                                                    doc.put("text", decryptedText);
+                                                    doc.put("distance", fDistance);
+                                                    doc.put("metadata", metadata);
+                                                    return doc;
+                                                });
                                     })
-                                    .next() // Get first match
-                                    .switchIfEmpty(Mono.defer(() -> {
-                                        // No exact match found, return the best semantic match
-                                        Map<String, Object> bestMatch = new HashMap<>();
-                                        bestMatch.put("found", true); // It was found semantically
-                                        bestMatch.put("id", ids.get(0));
-                                        bestMatch.put(textField, documents.get(0));
-                                        bestMatch.put("distance", distances.get(0));
-
-                                        float dist = (float) distances.get(0);
-                                        if (dist < 0.1) {
-                                            bestMatch.put("match_type", "exact"); // Should have been caught above, but
-                                                                                  // fallback
-                                        } else if (dist < 0.3) {
-                                            bestMatch.put("match_type", "high_similarity");
-                                        } else if (dist < 0.5) {
-                                            bestMatch.put("match_type", "medium_similarity");
-                                        } else {
-                                            bestMatch.put("match_type", "low_similarity");
+                                    .collectList()
+                                    .flatMap(documents -> {
+                                        // Find exact match
+                                        for (Map<String, Object> doc : documents) {
+                                            String storedText = (String) doc.get("text");
+                                            if (storedText != null && storedText.equalsIgnoreCase(text)) {
+                                                Map<String, Object> match = new HashMap<>();
+                                                match.put("found", true);
+                                                match.put("id", doc.get("id"));
+                                                match.put(textField, storedText);
+                                                match.put("distance", doc.get("distance"));
+                                                match.put("match_type", "exact");
+                                                match.put("search_text", text);
+                                                match.putAll((Map<String, Object>) doc.get("metadata"));
+                                                return Mono.just(match);
+                                            }
                                         }
 
-                                        bestMatch.put("search_text", text);
-                                        bestMatch.put("message",
-                                                "Exact match not found, returning best semantic match");
+                                        // If no exact match, return best semantic match
+                                        if (!documents.isEmpty()) {
+                                            Map<String, Object> bestDoc = documents.get(0);
+                                            Map<String, Object> bestMatch = new HashMap<>();
+                                            bestMatch.put("found", true);
+                                            bestMatch.put("id", bestDoc.get("id"));
+                                            bestMatch.put(textField, bestDoc.get("text"));
+                                            bestMatch.put("distance", bestDoc.get("distance"));
 
-                                        if (!metadataList.isEmpty()) {
-                                            bestMatch.putAll(metadataList.get(0));
+                                            float dist = (Float) bestDoc.get("distance");
+                                            if (dist < 0.1) {
+                                                bestMatch.put("match_type", "exact_semantic");
+                                            } else if (dist < 0.3) {
+                                                bestMatch.put("match_type", "high_similarity");
+                                            } else if (dist < 0.5) {
+                                                bestMatch.put("match_type", "medium_similarity");
+                                            } else {
+                                                bestMatch.put("match_type", "low_similarity");
+                                            }
+
+                                            bestMatch.put("search_text", text);
+                                            bestMatch.put("message",
+                                                    "Exact match not found, returning best semantic match");
+                                            bestMatch.putAll((Map<String, Object>) bestDoc.get("metadata"));
+                                            return Mono.just(bestMatch);
                                         }
-                                        return Mono.just(bestMatch);
-                                    }))
-                                    .map(match -> (Map<String, Object>) match); // Cast to expected return type
+
+                                        Map<String, Object> noResultsResponse = new HashMap<>();
+                                        noResultsResponse.put("found", false);
+                                        noResultsResponse.put("message", "No search results found");
+                                        noResultsResponse.put("id", null);
+                                        noResultsResponse.put(textField, null);
+                                        noResultsResponse.put("distance", null);
+                                        noResultsResponse.put("match_type", null);
+                                        noResultsResponse.put("search_text", text);
+                                        // Add empty metadata fields if any were requested
+                                        if (metadataFilters != null) {
+                                            for (String fieldName : metadataFilters.keySet()) {
+                                                noResultsResponse.put(fieldName, null);
+                                            }
+                                        }
+                                        return Mono.just(noResultsResponse);
+                                    });
+
                         } catch (Exception e) {
                             log.error("Failed to perform semantic search: {}", e.getMessage(), e);
                             return Mono.error(e);
@@ -2757,11 +2719,6 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
         }
 
-        // If no encryption key version, assume unencrypted legacy data
-        if (keyVersion == null || keyVersion.isEmpty()) {
-            return Mono.just(encryptedText); // Return as-is for unencrypted data
-        }
-
         // Get teamId
         String recordTeamId = defaultTeamId;
         var teamIdFieldData = resultData.getFieldsDataList().stream()
@@ -2778,12 +2735,28 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
         }
 
-        // Decrypt text (only if we have an encryption key version)
         final String fEncryptedText = encryptedText;
         final String fTeamId = recordTeamId;
+
+        Mono<String> decryptionMono;
+
+        // If no encryption key version, try to decrypt with current key, or assume
+        // unencrypted legacy data
+        if (keyVersion == null || keyVersion.isEmpty()) {
+            decryptionMono = chunkEncryptionService.getCurrentKeyVersion(recordTeamId)
+                    .flatMap(currentVersion -> chunkEncryptionService.decryptChunkText(fEncryptedText, fTeamId,
+                            currentVersion))
+                    .onErrorResume(e -> {
+                        // If decryption fails with current key, assume it was plaintext
+                        return Mono.just(fEncryptedText);
+                    });
+        } else {
+            decryptionMono = chunkEncryptionService.decryptChunkText(fEncryptedText, recordTeamId, keyVersion);
+        }
+
         final String fVersion = keyVersion;
 
-        return chunkEncryptionService.decryptChunkText(encryptedText, recordTeamId, keyVersion)
+        return decryptionMono
                 .onErrorResume(e -> {
                     log.warn(
                             "Failed to decrypt chunk text for team {} with key version {}: {}. Returning encrypted text.",

@@ -2,9 +2,10 @@ import axiosInstance from './axiosInstance';
 
 export const knowledgeHubCollectionService = {
   // Get all knowledge collections for current team
-  getAllCollections: async () => {
+  getAllCollections: async (teamId) => {
     try {
-      const response = await axiosInstance.get('/api/knowledge/collections');
+      const queryString = teamId ? `?teamId=${teamId}` : '';
+      const response = await axiosInstance.get(`/api/knowledge/collections${queryString}`);
       return {
         success: true,
         data: response.data
@@ -101,9 +102,10 @@ export const knowledgeHubCollectionService = {
   },
 
   // Assign Milvus collection to knowledge collection
-  assignMilvusCollection: async (collectionId, payload) => {
+  assignMilvusCollection: async (collectionId, payload, teamId) => {
     try {
-      const response = await axiosInstance.put(`/api/knowledge/collections/${collectionId}/milvus`, payload);
+      const queryString = teamId ? `?teamId=${teamId}` : '';
+      const response = await axiosInstance.put(`/api/knowledge/collections/${collectionId}/milvus${queryString}`, payload);
       return {
         success: true,
         data: response.data

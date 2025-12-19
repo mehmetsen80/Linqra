@@ -32,7 +32,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 @Slf4j
 public class TeamServiceImpl implements TeamService {
-    
+
     private final TeamRepository teamRepository;
     private final TeamMemberRepository teamMemberRepository;
     private final TeamRouteRepository teamRouteRepository;
@@ -47,155 +47,152 @@ public class TeamServiceImpl implements TeamService {
 
     private OrganizationDTO convertToOrganizationDTO(Organization org) {
         return OrganizationDTO.builder()
-            .id(org.getId())
-            .name(org.getName())
-            .description(org.getDescription())
-            .createdAt(org.getCreatedAt())
-            .updatedAt(org.getUpdatedAt())
-            .createdBy(org.getCreatedBy())
-            .updatedBy(org.getUpdatedBy())
-            .build();
+                .id(org.getId())
+                .name(org.getName())
+                .description(org.getDescription())
+                .createdAt(org.getCreatedAt())
+                .updatedAt(org.getUpdatedAt())
+                .createdBy(org.getCreatedBy())
+                .updatedBy(org.getUpdatedBy())
+                .build();
     }
 
     public Mono<TeamDTO> convertToDTO(Team team) {
         Mono<List<TeamMemberDTO>> membersListMono = teamMemberRepository
-            .findByTeamId(team.getId())
-            .flatMap(member -> userService.findById(member.getUserId())
-                .map(user -> convertToMemberDTO(member, user)))
-            .collectList()
-            .map(members -> members.stream()
-                .sorted((a, b) -> a.getUsername().compareToIgnoreCase(b.getUsername()))
-                .collect(java.util.stream.Collectors.toList()));
-        
+                .findByTeamId(team.getId())
+                .flatMap(member -> userService.findById(member.getUserId())
+                        .map(user -> convertToMemberDTO(member, user)))
+                .collectList()
+                .map(members -> members.stream()
+                        .sorted((a, b) -> a.getUsername().compareToIgnoreCase(b.getUsername()))
+                        .collect(java.util.stream.Collectors.toList()));
+
         Mono<OrganizationDTO> orgMono = organizationRepository.findById(team.getOrganizationId())
-            .map(this::convertToOrganizationDTO);
+                .map(this::convertToOrganizationDTO);
 
         Mono<List<TeamRouteDTO>> routesListMono = teamRouteRepository
-            .findByTeamId(team.getId())
-            .<TeamRouteDTO>flatMap(teamRoute -> 
-                apiRouteRepository.findById(teamRoute.getRouteId())
-                    .zipWith(orgMono)
-                    .map(tuple -> {
-                        ApiRoute route = tuple.getT1();
-                        OrganizationDTO org = tuple.getT2();
+                .findByTeamId(team.getId())
+                .<TeamRouteDTO>flatMap(teamRoute -> apiRouteRepository.findById(teamRoute.getRouteId())
+                        .zipWith(orgMono)
+                        .map(tuple -> {
+                            ApiRoute route = tuple.getT1();
+                            OrganizationDTO org = tuple.getT2();
 
-                        TeamInfoDTO teamInfo = TeamInfoDTO.builder()
-                            .teamId(team.getId())
-                            .teamName(team.getName())
-                            .organizationId(org.getId())
-                            .organizationName(org.getName())
-                            .build();
-
-                        return TeamRouteDTO.builder()
-                            .id(teamRoute.getId())
-                            .team(teamInfo)
-                            .routeId(teamRoute.getRouteId())
-                            .routeIdentifier(route.getRouteIdentifier())
-                            .path(route.getPath())
-                            .version(route.getVersion())
-                            .healthCheckEnabled(route.getHealthCheck().isEnabled())
-                            .maxCallsPerDay(route.getMaxCallsPerDay())
-                            .uri(route.getUri())
-                            .methods(route.getMethods())
-                            .filters(route.getFilters())
-                            .permissions(teamRoute.getPermissions())
-                            .assignedAt(teamRoute.getAssignedAt())
-                            .assignedBy(teamRoute.getAssignedBy())
-                            .build();
-                    })
-                    .switchIfEmpty(Mono.<TeamRouteDTO>defer(() -> 
-                        orgMono.map(org -> {
                             TeamInfoDTO teamInfo = TeamInfoDTO.builder()
-                                .teamId(team.getId())
-                                .teamName(team.getName())
-                                .organizationId(org.getId())
-                                .organizationName(org.getName())
-                                .build();
+                                    .teamId(team.getId())
+                                    .teamName(team.getName())
+                                    .organizationId(org.getId())
+                                    .organizationName(org.getName())
+                                    .build();
 
                             return TeamRouteDTO.builder()
-                                .id(teamRoute.getId())
-                                .team(teamInfo)
-                                .routeId(teamRoute.getRouteId())
-                                .permissions(teamRoute.getPermissions())
-                                .assignedAt(teamRoute.getAssignedAt())
-                                .assignedBy(teamRoute.getAssignedBy())
-                                .build();
+                                    .id(teamRoute.getId())
+                                    .team(teamInfo)
+                                    .routeId(teamRoute.getRouteId())
+                                    .routeIdentifier(route.getRouteIdentifier())
+                                    .path(route.getPath())
+                                    .version(route.getVersion())
+                                    .healthCheckEnabled(route.getHealthCheck().isEnabled())
+                                    .maxCallsPerDay(route.getMaxCallsPerDay())
+                                    .uri(route.getUri())
+                                    .methods(route.getMethods())
+                                    .filters(route.getFilters())
+                                    .permissions(teamRoute.getPermissions())
+                                    .assignedAt(teamRoute.getAssignedAt())
+                                    .assignedBy(teamRoute.getAssignedBy())
+                                    .build();
                         })
-                    ))
-            )
-            .collectList()
-            .map(routes -> routes.stream()
-                .sorted((a, b) -> {
-                    // First sort by routeIdentifier, then by version
-                    int nameCompare = a.getRouteIdentifier().compareToIgnoreCase(b.getRouteIdentifier());
-                    if (nameCompare != 0) return nameCompare;
-                    return Integer.compare(a.getVersion(), b.getVersion());
-                })
-                .collect(java.util.stream.Collectors.toList()));
+                        .switchIfEmpty(Mono.<TeamRouteDTO>defer(() -> orgMono.map(org -> {
+                            TeamInfoDTO teamInfo = TeamInfoDTO.builder()
+                                    .teamId(team.getId())
+                                    .teamName(team.getName())
+                                    .organizationId(org.getId())
+                                    .organizationName(org.getName())
+                                    .build();
+
+                            return TeamRouteDTO.builder()
+                                    .id(teamRoute.getId())
+                                    .team(teamInfo)
+                                    .routeId(teamRoute.getRouteId())
+                                    .permissions(teamRoute.getPermissions())
+                                    .assignedAt(teamRoute.getAssignedAt())
+                                    .assignedBy(teamRoute.getAssignedBy())
+                                    .build();
+                        }))))
+                .collectList()
+                .map(routes -> routes.stream()
+                        .sorted((a, b) -> {
+                            // First sort by routeIdentifier, then by version
+                            int nameCompare = a.getRouteIdentifier().compareToIgnoreCase(b.getRouteIdentifier());
+                            if (nameCompare != 0)
+                                return nameCompare;
+                            return Integer.compare(a.getVersion(), b.getVersion());
+                        })
+                        .collect(java.util.stream.Collectors.toList()));
 
         Mono<ApiKeyDTO> apiKeyMono = apiKeyRepository
-            .findByTeamId(team.getId())
-            .map(apiKey -> ApiKeyDTO.builder()
-                .name(apiKey.getName())
-                .key(apiKey.getKey())
-                .createdBy(apiKey.getCreatedBy())
-                .createdAt(apiKey.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime())
-                .build());
+                .findByTeamId(team.getId())
+                .map(apiKey -> ApiKeyDTO.builder()
+                        .name(apiKey.getName())
+                        .key(apiKey.getKey())
+                        .createdBy(apiKey.getCreatedBy())
+                        .createdAt(apiKey.getCreatedAt().atZone(ZoneId.systemDefault()).toLocalDateTime())
+                        .build());
 
         Mono<List<LinqLlmModelDTO>> linqLlmModelsMono = linqLlmModelRepository
-            .findByTeamId(team.getId())
-            .map(llmModel -> LinqLlmModelDTO.builder()
-                .id(llmModel.getId())
-                .modelCategory(llmModel.getModelCategory())
-                .modelName(llmModel.getModelName())
-                .endpoint(llmModel.getEndpoint())
-                .method(llmModel.getMethod())
-                .headers(llmModel.getHeaders())
-                .authType(llmModel.getAuthType())
-                .apiKey(llmModel.getApiKey())
-                .supportedIntents(llmModel.getSupportedIntents())
-                .team(llmModel.getTeamId())
-                .build())
-            .collectList();
+                .findByTeamId(team.getId())
+                .map(llmModel -> LinqLlmModelDTO.builder()
+                        .id(llmModel.getId())
+                        .modelCategory(llmModel.getModelCategory())
+                        .modelName(llmModel.getModelName())
+                        .endpoint(llmModel.getEndpoint())
+                        .method(llmModel.getMethod())
+                        .headers(llmModel.getHeaders())
+                        .authType(llmModel.getAuthType())
+                        .apiKey(llmModel.getApiKey())
+                        .supportedIntents(llmModel.getSupportedIntents())
+                        .team(llmModel.getTeamId())
+                        .build())
+                .collectList();
 
         return Mono.zip(membersListMono, routesListMono, orgMono, linqLlmModelsMono)
-            .flatMap(tuple -> {
-                TeamDTO.TeamDTOBuilder builder = TeamDTO.builder()
-                    .id(team.getId())
-                    .name(team.getName())
-                    .description(team.getDescription())
-                    .status(team.getStatus())
-                    .createdAt(team.getCreatedAt())
-                    .updatedAt(team.getUpdatedAt())
-                    .createdBy(team.getCreatedBy())
-                    .updatedBy(team.getUpdatedBy())
-                    .members(tuple.getT1())
-                    .routes(tuple.getT2())
-                    .organization(tuple.getT3())
-                    .linqLlmModels(tuple.getT4());
+                .flatMap(tuple -> {
+                    TeamDTO.TeamDTOBuilder builder = TeamDTO.builder()
+                            .id(team.getId())
+                            .name(team.getName())
+                            .description(team.getDescription())
+                            .status(team.getStatus())
+                            .createdAt(team.getCreatedAt())
+                            .updatedAt(team.getUpdatedAt())
+                            .createdBy(team.getCreatedBy())
+                            .updatedBy(team.getUpdatedBy())
+                            .members(tuple.getT1())
+                            .routes(tuple.getT2())
+                            .organization(tuple.getT3())
+                            .linqLlmModels(tuple.getT4());
 
-                return apiKeyMono
-                    .map(apiKey -> builder.apiKey(apiKey).build())
-                    .defaultIfEmpty(builder.apiKey(null).build());
-            });
+                    return apiKeyMono
+                            .map(apiKey -> builder.apiKey(apiKey).build())
+                            .defaultIfEmpty(builder.apiKey(null).build());
+                });
     }
 
     private TeamMemberDTO convertToMemberDTO(TeamMember member, User user) {
         return TeamMemberDTO.builder()
-            .id(member.getId())
-            .teamId(member.getTeamId())
-            .userId(member.getUserId())
-            .username(user.getUsername())
-            .role(member.getRole())
-            .status(member.getStatus())
-            .joinedAt(member.getJoinedAt())
-            .lastActiveAt(member.getLastActiveAt())
-            .build();
+                .id(member.getId())
+                .teamId(member.getTeamId())
+                .userId(member.getUserId())
+                .username(user.getUsername())
+                .role(member.getRole())
+                .status(member.getStatus())
+                .joinedAt(member.getJoinedAt())
+                .lastActiveAt(member.getLastActiveAt())
+                .build();
     }
 
     public Mono<TeamDTO> getTeamById(String id) {
         return teamRepository.findById(id)
-            .flatMap(this::convertToDTO);
+                .flatMap(this::convertToDTO);
     }
 
     @Override
@@ -206,278 +203,271 @@ public class TeamServiceImpl implements TeamService {
         team.setStatus(TeamStatus.ACTIVE);
         team.setCreatedAt(LocalDateTime.now());
         team.setUpdatedAt(LocalDateTime.now());
-        
+
         return transactionalOperator.transactional(
-            userRepository.findByUsername(username)
-                .switchIfEmpty(Mono.error(new TeamOperationException("User not found")))
-                .flatMap(user -> 
-                    teamRepository.save(team)
-                        .flatMap(savedTeam -> {
-                            if (user.getRoles().contains(UserRole.SUPER_ADMIN.getValue())) {
-                                return convertToDTO(savedTeam);
-                            }
-                            return addMemberToTeam(savedTeam.getId(), user.getUsername(), UserRole.ADMIN)
-                                .then(convertToDTO(savedTeam));
-                        })
-                )
-                .doOnNext(dto -> log.debug("Created team DTO: {}", dto))
-        );
+                userRepository.findByUsername(username)
+                        .switchIfEmpty(Mono.error(new TeamOperationException("User not found")))
+                        .flatMap(user -> teamRepository.save(team)
+                                .flatMap(savedTeam -> {
+                                    if (user.getRoles().contains(UserRole.SUPER_ADMIN.getValue())) {
+                                        return convertToDTO(savedTeam);
+                                    }
+                                    return addMemberToTeam(savedTeam.getId(), user.getUsername(), UserRole.ADMIN)
+                                            .then(convertToDTO(savedTeam));
+                                }))
+                        .doOnNext(dto -> log.debug("Created team DTO: {}", dto)));
     }
 
     public Mono<TeamMember> addMemberToTeam(String teamId, String username, UserRole role) {
         return transactionalOperator.transactional(
-            teamRepository.findById(teamId)
-                .switchIfEmpty(Mono.error(new TeamOperationException("Team not found")))
-                .flatMap(team -> userRepository.findByUsername(username)
-                    .switchIfEmpty(Mono.error(new TeamOperationException(
-                        String.format("User '%s' does not exist", username)
-                    )))
-                    .flatMap(user -> {
-                        // Check if member already exists
-                        return teamMemberRepository.findByTeamIdAndUserId(team.getId(), user.getId())
-                            .hasElement()
-                            .flatMap(exists -> {
-                                if (exists) {
-                                    return Mono.error(new TeamOperationException("User is already a member of this team"));
-                                }
-                                TeamMember member = TeamMember.builder()
-                                    .teamId(team.getId())
-                                    .userId(user.getId())
-                                    .role(role)
-                                    .status(TeamMemberStatus.ACTIVE)
-                                    .build();
-                                return teamMemberRepository.save(member);
-                            });
-                    }))
-        );
+                teamRepository.findById(teamId)
+                        .switchIfEmpty(Mono.error(new TeamOperationException("Team not found")))
+                        .flatMap(team -> userRepository.findByUsername(username)
+                                .switchIfEmpty(Mono.error(new TeamOperationException(
+                                        String.format("User '%s' does not exist", username))))
+                                .flatMap(user -> {
+                                    // Check if member already exists
+                                    return teamMemberRepository.findByTeamIdAndUserId(team.getId(), user.getId())
+                                            .hasElement()
+                                            .flatMap(exists -> {
+                                                if (exists) {
+                                                    return Mono.error(new TeamOperationException(
+                                                            "User is already a member of this team"));
+                                                }
+                                                TeamMember member = TeamMember.builder()
+                                                        .teamId(team.getId())
+                                                        .userId(user.getId())
+                                                        .role(role)
+                                                        .status(TeamMemberStatus.ACTIVE)
+                                                        .build();
+                                                return teamMemberRepository.save(member);
+                                            });
+                                })));
     }
 
     @Override
     public Flux<TeamDTO> getTeamsByUserId(String userId) {
         return teamMemberRepository.findByUserId(userId)
-            .flatMap(member -> teamRepository.findById(member.getTeamId()))
-            .flatMap(this::convertToDTO);
+                .flatMap(member -> teamRepository.findById(member.getTeamId()))
+                .flatMap(this::convertToDTO);
     }
 
     public Flux<TeamMember> getTeamMembers(String teamId) {
         return teamMemberRepository.findByTeamId(teamId)
-            .flatMap(member -> userService.findById(member.getUserId())
-                .map(user -> {
-                    member.setUsername(user.getUsername());
-                    return member;
-                }));
+                .flatMap(member -> userService.findById(member.getUserId())
+                        .map(user -> {
+                            member.setUsername(user.getUsername());
+                            return member;
+                        }));
     }
 
     public Mono<TeamMember> updateMemberRole(String teamId, String userId, UserRole newRole) {
         return transactionalOperator.transactional(
-            teamMemberRepository.findByTeamIdAndUserId(teamId, userId)
-                .flatMap(member -> {
-                    member.setRole(newRole);
-                    return teamMemberRepository.save(member);
-                })
-        );
+                teamMemberRepository.findByTeamIdAndUserId(teamId, userId)
+                        .flatMap(member -> {
+                            member.setRole(newRole);
+                            return teamMemberRepository.save(member);
+                        }));
     }
 
     public Mono<Void> removeMemberFromTeam(String teamId, String userId) {
         return transactionalOperator.transactional(
-            teamMemberRepository.deleteByTeamIdAndUserId(teamId, userId)
-        );
+                teamMemberRepository.deleteByTeamIdAndUserId(teamId, userId));
     }
 
     public Mono<Void> deleteTeam(String teamId) {
         log.debug("Attempting to delete team with id: {}", teamId);
         return transactionalOperator.transactional(
-            teamRepository.findById(teamId)
-                .flatMap(team -> {
-                    if (team.getStatus() == TeamStatus.ACTIVE) {
-                        log.warn("Cannot delete active team: {}", teamId);
-                        return Mono.error(new TeamOperationException(
-                            "Cannot delete an active team. Please deactivate it first."
-                        ));
-                    }
-                    
-                    // Capture team details for audit logging
-                    String teamName = team.getName();
-                    String organizationId = team.getOrganizationId();
-                    TeamStatus teamStatus = team.getStatus();
-                    
-                    return Mono.zip(
-                        teamMemberRepository.findByTeamId(teamId).collectList(),
-                        teamRouteRepository.findByTeamId(teamId).collectList()
-                    ).flatMap(tuple -> {
-                        List<TeamMember> members = tuple.getT1();
-                        List<TeamRoute> routes = tuple.getT2();
-                        
-                        if (!routes.isEmpty()) {
-                            log.warn("Cannot delete team {} with {} routes", teamId, routes.size());
-                            return Mono.error(new TeamOperationException(
-                                "Cannot delete team with assigned routes. Please remove all routes first."
-                            ));
-                        }
-                        
-                        log.debug("Deleting team members for team: {}", teamId);
-                        int memberCount = members.size();
-                        
-                        // Build detailed audit context
-                        Map<String, Object> auditContext = new HashMap<>();
-                        auditContext.put("teamName", teamName);
-                        auditContext.put("organizationId", organizationId);
-                        auditContext.put("teamStatus", teamStatus != null ? teamStatus.name() : null);
-                        auditContext.put("membersDeleted", memberCount);
-                        auditContext.put("routesChecked", routes.size());
-                        auditContext.put("deletionTimestamp", LocalDateTime.now().toString());
-                        
-                        String auditReason = String.format("Team deletion: %s (ID: %s) with %d members and %d routes", 
-                            teamName, teamId, memberCount, routes.size());
-                        
-                        return teamMemberRepository.deleteByTeamId(teamId)
-                            .doOnSuccess(v -> log.debug("Successfully deleted {} team members", memberCount))
-                            .then(teamRepository.deleteById(teamId))
-                            .doOnSuccess(v -> log.info("Successfully deleted team: {} (name: {}, members: {})", 
-                                teamId, teamName, memberCount))
-                            .then(auditLogHelper.logDetailedEvent(
-                                AuditEventType.TEAM_DELETED,
-                                AuditActionType.DELETE,
-                                AuditResourceType.TEAM,
-                                teamId,
-                                auditReason,
-                                auditContext
-                            ));
-                    });
-                })
-                .switchIfEmpty(Mono.<Void>defer(() -> {
-                    log.warn("Team not found for deletion: {}", teamId);
-                    // If team doesn't exist, consider it as already deleted
-                    return Mono.empty();
-                }))
-        );
+                teamRepository.findById(teamId)
+                        .flatMap(team -> {
+                            if (team.getStatus() == TeamStatus.ACTIVE) {
+                                log.warn("Cannot delete active team: {}", teamId);
+                                return Mono.error(new TeamOperationException(
+                                        "Cannot delete an active team. Please deactivate it first."));
+                            }
+
+                            // Capture team details for audit logging
+                            String teamName = team.getName();
+                            String organizationId = team.getOrganizationId();
+                            TeamStatus teamStatus = team.getStatus();
+
+                            return Mono.zip(
+                                    teamMemberRepository.findByTeamId(teamId).collectList(),
+                                    teamRouteRepository.findByTeamId(teamId).collectList()).flatMap(tuple -> {
+                                        List<TeamMember> members = tuple.getT1();
+                                        List<TeamRoute> routes = tuple.getT2();
+
+                                        if (!routes.isEmpty()) {
+                                            log.warn("Cannot delete team {} with {} routes", teamId, routes.size());
+                                            return Mono.error(new TeamOperationException(
+                                                    "Cannot delete team with assigned routes. Please remove all routes first."));
+                                        }
+
+                                        log.debug("Deleting team members for team: {}", teamId);
+                                        int memberCount = members.size();
+
+                                        // Build detailed audit context
+                                        Map<String, Object> auditContext = new HashMap<>();
+                                        auditContext.put("teamName", teamName);
+                                        auditContext.put("organizationId", organizationId);
+                                        auditContext.put("teamStatus", teamStatus != null ? teamStatus.name() : null);
+                                        auditContext.put("membersDeleted", memberCount);
+                                        auditContext.put("routesChecked", routes.size());
+                                        auditContext.put("deletionTimestamp", LocalDateTime.now().toString());
+
+                                        String auditReason = String.format(
+                                                "Team deletion: %s (ID: %s) with %d members and %d routes",
+                                                teamName, teamId, memberCount, routes.size());
+
+                                        return teamMemberRepository.deleteByTeamId(teamId)
+                                                .doOnSuccess(v -> log.debug("Successfully deleted {} team members",
+                                                        memberCount))
+                                                .then(teamRepository.deleteById(teamId))
+                                                .doOnSuccess(v -> log.info(
+                                                        "Successfully deleted team: {} (name: {}, members: {})",
+                                                        teamId, teamName, memberCount))
+                                                .then(auditLogHelper.logDetailedEvent(
+                                                        AuditEventType.TEAM_DELETED,
+                                                        AuditActionType.DELETE,
+                                                        AuditResourceType.TEAM,
+                                                        teamId,
+                                                        auditReason,
+                                                        auditContext));
+                                    });
+                        })
+                        .switchIfEmpty(Mono.<Void>defer(() -> {
+                            log.warn("Team not found for deletion: {}", teamId);
+                            // If team doesn't exist, consider it as already deleted
+                            return Mono.empty();
+                        })));
     }
-    
+
     public Mono<Boolean> isUserTeamAdmin(String teamId, String userId) {
         return teamMemberRepository.findByTeamIdAndUserId(teamId, userId)
-            .map(member -> member.getRole() == UserRole.ADMIN)
-            .defaultIfEmpty(false);
+                .map(member -> member.getRole() == UserRole.ADMIN)
+                .defaultIfEmpty(false);
     }
 
     public Flux<TeamDTO> searchTeams(String query) {
         return teamRepository.findByNameContainingIgnoreCase(query)
-            .flatMap(this::convertToDTO);
+                .flatMap(this::convertToDTO);
     }
 
-    public Mono<TeamRoute> assignRouteToTeam(String teamId, String routeId, String assignedBy, Set<RoutePermission> permissions) {
+    public Mono<TeamRoute> assignRouteToTeam(String teamId, String routeId, String assignedBy,
+            Set<RoutePermission> permissions) {
         return teamRepository.findById(teamId)
-            .switchIfEmpty(Mono.error(new TeamOperationException("Team not found")))
-            .flatMap(team -> {
-                String teamName = team.getName();
-                
-                return apiRouteRepository.findByRouteIdentifier(routeId)
-                    .switchIfEmpty(Mono.error(new TeamOperationException(
-                        String.format("Route '%s' does not exist", routeId)
-                    )))
-                    .flatMap(route -> {
-                        String routeIdentifier = route.getRouteIdentifier();
-                        int routeVersion = route.getVersion();
-                        
-                        return teamRouteRepository.findByTeamIdAndRouteId(teamId, route.getId())
-                            .hasElement()
-                            .flatMap(exists -> {
-                                if (exists) {
-                                    return Mono.error(new TeamOperationException(
-                                        String.format("Route '%s' (v%d) is already assigned to this team", 
-                                            routeIdentifier, routeVersion)
-                                    ));
-                                }
-                                TeamRoute teamRoute = TeamRoute.builder()
-                                    .teamId(teamId)
-                                    .routeId(route.getId())
-                                    .assignedAt(LocalDateTime.now())
-                                    .assignedBy(assignedBy)
-                                    .permissions(permissions)
-                                    .build();
-                                
-                                return teamRouteRepository.save(teamRoute)
-                                    .flatMap(savedTeamRoute -> {
-                                        // Build detailed audit context
-                                        Map<String, Object> auditContext = new HashMap<>();
-                                        auditContext.put("teamName", teamName);
-                                        auditContext.put("routeIdentifier", routeIdentifier);
-                                        auditContext.put("routeVersion", routeVersion);
-                                        auditContext.put("routePath", route.getPath());
-                                        auditContext.put("permissions", permissions != null ? 
-                                            permissions.stream().map(Enum::name).collect(java.util.stream.Collectors.toList()) : 
-                                            java.util.Collections.emptyList());
-                                        auditContext.put("assignedBy", assignedBy);
-                                        auditContext.put("assignedAt", savedTeamRoute.getAssignedAt().toString());
-                                        
-                                        String auditReason = String.format("Route '%s' (v%d) assigned to team '%s' with permissions: %s", 
-                                            routeIdentifier, routeVersion, teamName, permissions);
-                                        
-                                        // Log detailed audit event
-                                        return auditLogHelper.logDetailedEvent(
-                                            AuditEventType.API_ROUTE_UPDATED,
-                                            AuditActionType.CREATE,
-                                            AuditResourceType.API_ROUTE,
-                                            route.getId(), // resourceId - the route ID
-                                            auditReason,
-                                            auditContext
-                                        ).thenReturn(savedTeamRoute);
-                                    });
+                .switchIfEmpty(Mono.error(new TeamOperationException("Team not found")))
+                .flatMap(team -> {
+                    String teamName = team.getName();
+
+                    return apiRouteRepository.findByRouteIdentifier(routeId)
+                            .switchIfEmpty(Mono.error(new TeamOperationException(
+                                    String.format("Route '%s' does not exist", routeId))))
+                            .flatMap(route -> {
+                                String routeIdentifier = route.getRouteIdentifier();
+                                int routeVersion = route.getVersion();
+
+                                return teamRouteRepository.findByTeamIdAndRouteId(teamId, route.getId())
+                                        .hasElement()
+                                        .flatMap(exists -> {
+                                            if (exists) {
+                                                return Mono.error(new TeamOperationException(
+                                                        String.format(
+                                                                "Route '%s' (v%d) is already assigned to this team",
+                                                                routeIdentifier, routeVersion)));
+                                            }
+                                            TeamRoute teamRoute = TeamRoute.builder()
+                                                    .teamId(teamId)
+                                                    .routeId(route.getId())
+                                                    .assignedAt(LocalDateTime.now())
+                                                    .assignedBy(assignedBy)
+                                                    .permissions(permissions)
+                                                    .build();
+
+                                            return teamRouteRepository.save(teamRoute)
+                                                    .flatMap(savedTeamRoute -> {
+                                                        // Build detailed audit context
+                                                        Map<String, Object> auditContext = new HashMap<>();
+                                                        auditContext.put("teamName", teamName);
+                                                        auditContext.put("routeIdentifier", routeIdentifier);
+                                                        auditContext.put("routeVersion", routeVersion);
+                                                        auditContext.put("routePath", route.getPath());
+                                                        auditContext.put("permissions",
+                                                                permissions != null
+                                                                        ? permissions.stream().map(Enum::name).collect(
+                                                                                java.util.stream.Collectors.toList())
+                                                                        : java.util.Collections.emptyList());
+                                                        auditContext.put("assignedBy", assignedBy);
+                                                        auditContext.put("assignedAt",
+                                                                savedTeamRoute.getAssignedAt().toString());
+
+                                                        String auditReason = String.format(
+                                                                "Route '%s' (v%d) assigned to team '%s' with permissions: %s",
+                                                                routeIdentifier, routeVersion, teamName, permissions);
+
+                                                        // Log detailed audit event
+                                                        return auditLogHelper.logDetailedEvent(
+                                                                AuditEventType.API_ROUTE_UPDATED,
+                                                                AuditActionType.CREATE,
+                                                                AuditResourceType.API_ROUTE,
+                                                                route.getId(), // resourceId - the route ID
+                                                                auditReason,
+                                                                auditContext).thenReturn(savedTeamRoute);
+                                                    });
+                                        });
                             });
-                    });
-            });
+                });
     }
 
     @Override
     public Flux<TeamRouteDTO> getTeamRoutes(String teamId) {
         return teamRouteRepository.findByTeamId(teamId)
-            .flatMap(this::buildTeamRouteDTO);
+                .flatMap(this::buildTeamRouteDTO);
     }
 
     private Mono<TeamRouteDTO> buildTeamRouteDTO(TeamRoute teamRoute) {
         return Mono.zip(
-            apiRouteRepository.findById(teamRoute.getRouteId())
-                .defaultIfEmpty(new ApiRoute()),
-            userRepository.findByUsername(teamRoute.getAssignedBy())
-                .map(User::getUsername)
-                .defaultIfEmpty("Unknown User"),
-            teamRepository.findById(teamRoute.getTeamId())
-                .flatMap(team -> organizationRepository.findById(team.getOrganizationId())
-                    .map(org -> TeamInfoDTO.builder()
-                        .teamId(team.getId())
-                        .teamName(team.getName())
-                        .organizationId(org.getId())
-                        .organizationName(org.getName())
-                        .build()
-                    ))
-        )
-        .map(tuple -> {
-            ApiRoute apiRoute = tuple.getT1();
-            String assignedByUsername = tuple.getT2();
-            TeamInfoDTO teamInfo = tuple.getT3();
-            
-            return TeamRouteDTO.builder()
-                .id(teamRoute.getId())
-                .team(teamInfo)
-                .routeId(teamRoute.getRouteId())
-                .routeIdentifier(apiRoute.getRouteIdentifier())
-                .path(apiRoute.getPath())
-                .version(apiRoute.getVersion())
-                .permissions(teamRoute.getPermissions())
-                .assignedAt(teamRoute.getAssignedAt())
-                .assignedBy(assignedByUsername)
-                .methods(apiRoute.getMethods())
-                .filters(apiRoute.getFilters())
-                .uri(apiRoute.getUri())
-                .maxCallsPerDay(apiRoute.getMaxCallsPerDay())
-                .healthCheckEnabled(apiRoute.getHealthCheck().isEnabled())
-                .build();
-        });
+                apiRouteRepository.findById(teamRoute.getRouteId())
+                        .defaultIfEmpty(new ApiRoute()),
+                userRepository.findByUsername(teamRoute.getAssignedBy())
+                        .map(User::getUsername)
+                        .defaultIfEmpty("Unknown User"),
+                teamRepository.findById(teamRoute.getTeamId())
+                        .flatMap(team -> organizationRepository.findById(team.getOrganizationId())
+                                .map(org -> TeamInfoDTO.builder()
+                                        .teamId(team.getId())
+                                        .teamName(team.getName())
+                                        .organizationId(org.getId())
+                                        .organizationName(org.getName())
+                                        .build())))
+                .map(tuple -> {
+                    ApiRoute apiRoute = tuple.getT1();
+                    String assignedByUsername = tuple.getT2();
+                    TeamInfoDTO teamInfo = tuple.getT3();
+
+                    return TeamRouteDTO.builder()
+                            .id(teamRoute.getId())
+                            .team(teamInfo)
+                            .routeId(teamRoute.getRouteId())
+                            .routeIdentifier(apiRoute.getRouteIdentifier())
+                            .path(apiRoute.getPath())
+                            .version(apiRoute.getVersion())
+                            .permissions(teamRoute.getPermissions())
+                            .assignedAt(teamRoute.getAssignedAt())
+                            .assignedBy(assignedByUsername)
+                            .methods(apiRoute.getMethods())
+                            .filters(apiRoute.getFilters())
+                            .uri(apiRoute.getUri())
+                            .maxCallsPerDay(apiRoute.getMaxCallsPerDay())
+                            .healthCheckEnabled(apiRoute.getHealthCheck().isEnabled())
+                            .build();
+                });
     }
 
     public Mono<Boolean> hasRouteAccess(String teamId, String routeId, RoutePermission permission) {
         return teamRouteRepository.findByTeamIdAndRouteId(teamId, routeId)
-            .map(teamRoute -> teamRoute.getPermissions().contains(permission))
-            .defaultIfEmpty(false);
+                .map(teamRoute -> teamRoute.getPermissions().contains(permission))
+                .defaultIfEmpty(false);
     }
 
     public Mono<Void> removeRouteFromTeam(String teamId, String routeId) {
@@ -486,208 +476,201 @@ public class TeamServiceImpl implements TeamService {
 
     public Mono<TeamRoute> updateRoutePermissions(String teamId, String routeId, Set<RoutePermission> permissions) {
         return teamRouteRepository.findByTeamIdAndRouteId(teamId, routeId)
-            .flatMap(teamRoute -> {
-                teamRoute.setPermissions(permissions);
-                return teamRouteRepository.save(teamRoute);
-            });
+                .flatMap(teamRoute -> {
+                    teamRoute.setPermissions(permissions);
+                    return teamRouteRepository.save(teamRoute);
+                });
     }
 
     @Override
     public Flux<TeamDTO> getAllTeams() {
         return teamRepository.findAll(Sort.by(Sort.Direction.ASC, "createdAt"))
-            .flatMap(this::convertToDTO);
+                .flatMap(this::convertToDTO);
     }
 
     @Override
-    public Mono<TeamDTO> addTeamRoute(String teamId, String routeId, String assignedBy, Set<RoutePermission> permissions) {
+    public Mono<TeamDTO> addTeamRoute(String teamId, String routeId, String assignedBy,
+            Set<RoutePermission> permissions) {
         return assignRouteToTeam(teamId, routeId, assignedBy, permissions)
-            .then(teamRepository.findById(teamId))
-            .flatMap(this::convertToDTO);
+                .then(teamRepository.findById(teamId))
+                .flatMap(this::convertToDTO);
     }
 
     @Override
     public Mono<TeamDTO> removeTeamRoute(String teamId, String routeId) {
         return transactionalOperator.transactional(
-            removeRouteFromTeam(teamId, routeId)
-                .then(teamRepository.findById(teamId))
-                .flatMap(this::convertToDTO)
-        );
+                removeRouteFromTeam(teamId, routeId)
+                        .then(teamRepository.findById(teamId))
+                        .flatMap(this::convertToDTO));
     }
 
     @Override
     public Mono<TeamDTO> deactivateTeam(String teamId) {
         return transactionalOperator.transactional(
-            teamRepository.findById(teamId)
-                .flatMap(team -> {
-                    team.setStatus(TeamStatus.INACTIVE);
-                    team.setUpdatedAt(LocalDateTime.now());
-                    return teamRepository.save(team);
-                })
-                .flatMap(this::convertToDTO)
-                .switchIfEmpty(Mono.error(new TeamOperationException("Team not found")))
-        );
+                teamRepository.findById(teamId)
+                        .flatMap(team -> {
+                            team.setStatus(TeamStatus.INACTIVE);
+                            team.setUpdatedAt(LocalDateTime.now());
+                            return teamRepository.save(team);
+                        })
+                        .flatMap(this::convertToDTO)
+                        .switchIfEmpty(Mono.error(new TeamOperationException("Team not found"))));
     }
 
     @Override
     public Mono<TeamDTO> activateTeam(String teamId) {
         return transactionalOperator.transactional(
-            teamRepository.findById(teamId)
-                .flatMap(team -> {
-                    team.setStatus(TeamStatus.ACTIVE);
-                    team.setUpdatedAt(LocalDateTime.now());
-                    return teamRepository.save(team);
-                })
-                .flatMap(this::convertToDTO)
-                .switchIfEmpty(Mono.error(new TeamOperationException("Team not found")))
-        );
+                teamRepository.findById(teamId)
+                        .flatMap(team -> {
+                            team.setStatus(TeamStatus.ACTIVE);
+                            team.setUpdatedAt(LocalDateTime.now());
+                            return teamRepository.save(team);
+                        })
+                        .flatMap(this::convertToDTO)
+                        .switchIfEmpty(Mono.error(new TeamOperationException("Team not found"))));
     }
 
     @Override
     public Mono<TeamDTO> updateTeam(String id, Team team) {
         return transactionalOperator.transactional(
-            teamRepository.findById(id)
-                .flatMap(existingTeam -> {
-                    existingTeam.setName(team.getName());
-                    existingTeam.setDescription(team.getDescription());
-                    existingTeam.setOrganizationId(team.getOrganizationId());
-                    existingTeam.setUpdatedAt(LocalDateTime.now());
-                    existingTeam.setUpdatedBy(team.getUpdatedBy());
-                    return teamRepository.save(existingTeam);
-                })
-                .flatMap(this::convertToDTO)
-                .switchIfEmpty(Mono.error(new ResourceNotFoundException(
-                    String.format("Team with id %s not found", id),
-                    ErrorCode.TEAM_NOT_FOUND
-                )))
-        );
+                teamRepository.findById(id)
+                        .flatMap(existingTeam -> {
+                            existingTeam.setName(team.getName());
+                            existingTeam.setDescription(team.getDescription());
+                            existingTeam.setOrganizationId(team.getOrganizationId());
+                            existingTeam.setUpdatedAt(LocalDateTime.now());
+                            existingTeam.setUpdatedBy(team.getUpdatedBy());
+                            return teamRepository.save(existingTeam);
+                        })
+                        .flatMap(this::convertToDTO)
+                        .switchIfEmpty(Mono.error(new ResourceNotFoundException(
+                                String.format("Team with id %s not found", id),
+                                ErrorCode.TEAM_NOT_FOUND))));
     }
 
     private Mono<TeamDTO> buildTeamDTO(Team team, String role, LocalDateTime lastActiveAt) {
         TeamDTO teamDTO = TeamDTO.builder()
-            .id(team.getId())
-            .name(team.getName())
-            .description(team.getDescription())
-            .createdAt(team.getCreatedAt())
-            .updatedAt(team.getUpdatedAt())
-            .createdBy(team.getCreatedBy())
-            .updatedBy(team.getUpdatedBy())
-            .roles(List.of(role))
-            .lastActiveAt(lastActiveAt)
-            .build();
+                .id(team.getId())
+                .name(team.getName())
+                .description(team.getDescription())
+                .createdAt(team.getCreatedAt())
+                .updatedAt(team.getUpdatedAt())
+                .createdBy(team.getCreatedBy())
+                .updatedBy(team.getUpdatedBy())
+                .roles(List.of(role))
+                .lastActiveAt(lastActiveAt)
+                .build();
 
         Mono<OrganizationDTO> orgMono = organizationRepository.findById(team.getOrganizationId())
-            .map(this::convertToOrganizationDTO);
+                .map(this::convertToOrganizationDTO);
 
         Mono<List<TeamRouteDTO>> routesMono = teamRouteRepository.findByTeamId(team.getId())
-            .flatMap(teamRoute -> 
-                Mono.zip(
-                    apiRouteRepository.findById(teamRoute.getRouteId()),
-                    orgMono
-                )
-                .map(tuple -> {
-                    ApiRoute route = tuple.getT1();
-                    OrganizationDTO org = tuple.getT2();
+                .flatMap(teamRoute -> Mono.zip(
+                        apiRouteRepository.findById(teamRoute.getRouteId()),
+                        orgMono)
+                        .map(tuple -> {
+                            ApiRoute route = tuple.getT1();
+                            OrganizationDTO org = tuple.getT2();
 
-                    return TeamRouteDTO.builder()
-                        .id(teamRoute.getId())
-                        .team(TeamInfoDTO.builder()
-                            .teamId(teamDTO.getId())
-                            .teamName(teamDTO.getName())
-                            .organizationId(org.getId())
-                            .organizationName(org.getName())
-                            .build())
-                        .routeId(teamRoute.getRouteId())
-                        .routeIdentifier(route.getRouteIdentifier())
-                        .path(route.getPath())
-                        .methods(route.getMethods())
-                        .filters(route.getFilters())
-                        .version(route.getVersion())
-                        .uri(route.getUri())
-                        .maxCallsPerDay(route.getMaxCallsPerDay())
-                        .healthCheckEnabled(route.getHealthCheck().isEnabled())
-                        .permissions(teamRoute.getPermissions())
-                        .assignedAt(teamRoute.getAssignedAt())
-                        .assignedBy(teamRoute.getAssignedBy())
-                        .build();
-                })
-                .switchIfEmpty(
-                    orgMono.map(org -> TeamRouteDTO.builder()
-                        .id(teamRoute.getId())
-                        .team(TeamInfoDTO.builder()
-                            .teamId(teamDTO.getId())
-                            .teamName(teamDTO.getName())
-                            .organizationId(org.getId())
-                            .organizationName(org.getName())
-                            .build())
-                        .routeId(teamRoute.getRouteId())
-                        .permissions(teamRoute.getPermissions())
-                        .assignedAt(teamRoute.getAssignedAt())
-                        .assignedBy(teamRoute.getAssignedBy())
-                        .build())
-                )
-            )
-            .collectList();
+                            return TeamRouteDTO.builder()
+                                    .id(teamRoute.getId())
+                                    .team(TeamInfoDTO.builder()
+                                            .teamId(teamDTO.getId())
+                                            .teamName(teamDTO.getName())
+                                            .organizationId(org.getId())
+                                            .organizationName(org.getName())
+                                            .build())
+                                    .routeId(teamRoute.getRouteId())
+                                    .routeIdentifier(route.getRouteIdentifier())
+                                    .path(route.getPath())
+                                    .methods(route.getMethods())
+                                    .filters(route.getFilters())
+                                    .version(route.getVersion())
+                                    .uri(route.getUri())
+                                    .maxCallsPerDay(route.getMaxCallsPerDay())
+                                    .healthCheckEnabled(route.getHealthCheck().isEnabled())
+                                    .permissions(teamRoute.getPermissions())
+                                    .assignedAt(teamRoute.getAssignedAt())
+                                    .assignedBy(teamRoute.getAssignedBy())
+                                    .build();
+                        })
+                        .switchIfEmpty(
+                                orgMono.map(org -> TeamRouteDTO.builder()
+                                        .id(teamRoute.getId())
+                                        .team(TeamInfoDTO.builder()
+                                                .teamId(teamDTO.getId())
+                                                .teamName(teamDTO.getName())
+                                                .organizationId(org.getId())
+                                                .organizationName(org.getName())
+                                                .build())
+                                        .routeId(teamRoute.getRouteId())
+                                        .permissions(teamRoute.getPermissions())
+                                        .assignedAt(teamRoute.getAssignedAt())
+                                        .assignedBy(teamRoute.getAssignedBy())
+                                        .build())))
+                .collectList();
 
         Mono<List<TeamMemberDTO>> membersListMono = teamMemberRepository
-            .findByTeamId(team.getId())
-            .flatMap(member -> userService.findById(member.getUserId())
-                .map(user -> convertToMemberDTO(member, user)))
-            .collectList();
+                .findByTeamId(team.getId())
+                .flatMap(member -> userService.findById(member.getUserId())
+                        .map(user -> convertToMemberDTO(member, user)))
+                .collectList();
 
         return Mono.zip(orgMono, routesMono, membersListMono)
-            .map(tuple -> {
-                teamDTO.setOrganization(tuple.getT1());
-                teamDTO.setRoutes(tuple.getT2());
-                teamDTO.setMembers(tuple.getT3());
-                return teamDTO;
-            })
-            .defaultIfEmpty(teamDTO);
+                .map(tuple -> {
+                    teamDTO.setOrganization(tuple.getT1());
+                    teamDTO.setRoutes(tuple.getT2());
+                    teamDTO.setMembers(tuple.getT3());
+                    return teamDTO;
+                })
+                .defaultIfEmpty(teamDTO);
     }
 
     @Override
     public Flux<TeamDTO> getTeamsByUsername(String username) {
         return userRepository.findByUsername(username)
-            .flatMapMany(user -> teamMemberRepository.findByUserIdAndStatus(user.getId(), TeamMemberStatus.ACTIVE)
-                .flatMap(teamMember -> teamRepository.findById(teamMember.getTeamId())
-                    .flatMap(team -> buildTeamDTO(team, teamMember.getRole().toString(), teamMember.getLastActiveAt()))));
+                .flatMapMany(user -> teamMemberRepository.findByUserIdAndStatus(user.getId(), TeamMemberStatus.ACTIVE)
+                        .flatMap(teamMember -> teamRepository.findById(teamMember.getTeamId())
+                                .flatMap(team -> buildTeamDTO(team, teamMember.getRole().toString(),
+                                        teamMember.getLastActiveAt()))));
     }
 
     @Override
     public Mono<Boolean> hasRole(String teamId, String userId, String role) {
-        log.info("Checking if user {} has role {} in team {}", userId, role, teamId);
-        return teamMemberRepository.findByTeamIdAndUserIdAndRole(
-                teamId, 
-                userId, 
-                UserRole.valueOf(role)
-            )
-            .map(member -> true)
-            .defaultIfEmpty(false);
+        try {
+            UserRole requiredRole = UserRole.valueOf(role);
+            return teamMemberRepository.findByTeamIdAndUserId(teamId, userId)
+                    .map(member -> member.getRole().ordinal() <= requiredRole.ordinal())
+                    .defaultIfEmpty(false);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid role check requested: {}", role);
+            return Mono.just(false);
+        }
     }
 
     @Override
     public Flux<TeamRouteDTO> getAllTeamRoutes(String username) {
         return userRepository.findByUsername(username)
-            .flatMapMany(user -> {
-                if (user.getRoles().contains("SUPER_ADMIN")) {
-                    return teamRouteRepository.findAll()
-                        .flatMap(this::buildTeamRouteDTO);
-                }
-                return Flux.empty();
-            })
-            .switchIfEmpty(Mono.error(new InvalidAuthenticationException("User not found or not authorized")));
+                .flatMapMany(user -> {
+                    if (user.getRoles().contains("SUPER_ADMIN")) {
+                        return teamRouteRepository.findAll()
+                                .flatMap(this::buildTeamRouteDTO);
+                    }
+                    return Flux.empty();
+                })
+                .switchIfEmpty(Mono.error(new InvalidAuthenticationException("User not found or not authorized")));
     }
 
     @Override
     public Mono<Void> updateMemberLastActiveAt(String teamId, String username) {
         return userRepository.findByUsername(username)
-            .switchIfEmpty(Mono.error(new TeamOperationException("User not found")))
-            .flatMap(user -> teamMemberRepository.findByTeamIdAndUserId(teamId, user.getId())
-                .switchIfEmpty(Mono.error(new TeamOperationException("User is not a member of this team")))
-                .flatMap(member -> {
-                    member.setLastActiveAt(LocalDateTime.now());
-                    return teamMemberRepository.save(member);
-                })
-                .then()
-            );
+                .switchIfEmpty(Mono.error(new TeamOperationException("User not found")))
+                .flatMap(user -> teamMemberRepository.findByTeamIdAndUserId(teamId, user.getId())
+                        .switchIfEmpty(Mono.error(new TeamOperationException("User is not a member of this team")))
+                        .flatMap(member -> {
+                            member.setLastActiveAt(LocalDateTime.now());
+                            return teamMemberRepository.save(member);
+                        })
+                        .then());
     }
-} 
+}

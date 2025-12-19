@@ -52,15 +52,15 @@ public class JwtServiceImpl implements JwtService {
         claims.put("typ", "Refresh");
         claims.put("sub", username);
         claims.put("username", username);
-        
+
         // Get user roles from repository
         return userRepository.findByUsername(username)
-            .map(user -> {
-                claims.put("roles", user.getRoles());
-                return generateToken(claims, username, true);
-            })
-            .switchIfEmpty(Mono.just(generateToken(claims, username, true)))
-            .block();
+                .map(user -> {
+                    claims.put("roles", user.getRoles());
+                    return generateToken(claims, username, true);
+                })
+                .switchIfEmpty(Mono.just(generateToken(claims, username, true)))
+                .block();
     }
 
     @Override
@@ -68,32 +68,33 @@ public class JwtServiceImpl implements JwtService {
         Map<String, Object> claims = new HashMap<>();
         claims.put("teamId", teamId);
         claims.put("teams", List.of(teamId)); // For backward compatibility - will be replaced
-        
+
         // Get user roles and teams from repository
         return userRepository.findByUsername(username)
-            .flatMap(user -> {
-                claims.put("roles", user.getRoles());
-                claims.put("username", username);
-                claims.put("email", user.getEmail());
-                
-                // Get all teams for the user
-                return teamMemberRepository.findByUserIdAndStatus(user.getId(), TeamMemberStatus.ACTIVE)
-                    .map(member -> member.getTeamId())
-                    .collectList()
-                    .map(teamIds -> {
-                        if (teamIds.isEmpty()) {
-                            teamIds = List.of(teamId);
-                        }
-                        claims.put("teams", teamIds);
-                        return generateToken(claims, username, false);
-                    });
-            })
-            .switchIfEmpty(Mono.just(generateToken(claims, username, false)))
-            .block();
+                .flatMap(user -> {
+                    claims.put("roles", user.getRoles());
+                    claims.put("username", username);
+                    claims.put("email", user.getEmail());
+
+                    // Get all teams for the user
+                    return teamMemberRepository.findByUserIdAndStatus(user.getId(), TeamMemberStatus.ACTIVE)
+                            .map(member -> member.getTeamId())
+                            .collectList()
+                            .map(teamIds -> {
+                                if (teamIds.isEmpty()) {
+                                    teamIds = List.of(teamId);
+                                }
+                                claims.put("teams", teamIds);
+                                return generateToken(claims, username, false);
+                            });
+                })
+                .switchIfEmpty(Mono.just(generateToken(claims, username, false)))
+                .block();
     }
 
     private String generateToken(Map<String, Object> extraClaims, String username, boolean isRefresh) {
-        long expirationTime = isRefresh ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000; // 7 days for refresh, 24h for access
+        long expirationTime = isRefresh ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000; // 7 days for refresh, 24h for
+                                                                                         // access
 
         return Jwts.builder()
                 .setClaims(extraClaims)
@@ -110,7 +111,7 @@ public class JwtServiceImpl implements JwtService {
             // For Keycloak tokens, use a different validation approach
             if (userContextService.isKeycloakToken(token)) {
                 // Let the Keycloak decoder handle validation
-                return true;  // The security filter will validate it
+                return true; // The security filter will validate it
             }
 
             // For standard tokens, validate using our secret
@@ -172,7 +173,8 @@ public class JwtServiceImpl implements JwtService {
                         claims.put("realm_access", objectMapper.convertValue(jsonNode.get("realm_access"), Map.class));
                     }
                     if (jsonNode.has("resource_access")) {
-                        claims.put("resource_access", objectMapper.convertValue(jsonNode.get("resource_access"), Map.class));
+                        claims.put("resource_access",
+                                objectMapper.convertValue(jsonNode.get("resource_access"), Map.class));
                     }
                 }
                 // Standard token (HS256 algorithm)
@@ -181,8 +183,18 @@ public class JwtServiceImpl implements JwtService {
                     claims.put("preferred_username", username);
                     claims.put("email", findEmailForUser(username));
                     claims.put("realm_access", Map.of("roles", getUserRoles(username)));
-                }
-                else {
+
+                    if (jsonNode.has("teamId")) {
+                        claims.put("teamId", jsonNode.get("teamId").asText());
+                    }
+                    if (jsonNode.has("teams")) {
+                        try {
+                            claims.put("teams", objectMapper.convertValue(jsonNode.get("teams"), List.class));
+                        } catch (IllegalArgumentException e) {
+                            log.warn("Could not convert teams claim to List: {}", e.getMessage());
+                        }
+                    }
+                } else {
                     throw new RuntimeException("Unknown token algorithm: " + headerNode.get("alg"));
                 }
 
@@ -200,7 +212,7 @@ public class JwtServiceImpl implements JwtService {
         // You can autowire UserRepository and use it here
         return userRepository.findByUsername(username)
                 .map(User::getEmail)
-                .block();  // Note: blocking call, consider restructuring if needed
+                .block(); // Note: blocking call, consider restructuring if needed
     }
 
     // Helper method to get user roles
@@ -208,6 +220,6 @@ public class JwtServiceImpl implements JwtService {
         return userRepository.findByUsername(username)
                 .map(User::getRoles)
                 .defaultIfEmpty(Collections.emptySet())
-                .block();  // Note: blocking call, consider restructuring if needed
+                .block(); // Note: blocking call, consider restructuring if needed
     }
 }

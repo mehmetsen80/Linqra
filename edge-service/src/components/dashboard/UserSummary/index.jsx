@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card } from 'react-bootstrap';
-import { HiClock, HiCalendar, HiKey, HiViewGrid, HiDocumentText, HiUserGroup, HiOfficeBuilding, HiShieldCheck, HiHashtag, HiSparkles, HiCollection, HiDatabase, HiChatAlt, HiLightBulb } from 'react-icons/hi';
+import { HiClock, HiCalendar, HiKey, HiViewGrid, HiDocumentText, HiUserGroup, HiOfficeBuilding, HiShieldCheck, HiHashtag, HiSparkles, HiCollection, HiDatabase, HiChatAlt, HiLightBulb, HiHome, HiClipboardList } from 'react-icons/hi';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTeam } from '../../../contexts/TeamContext';
 import { useEnvironment } from '../../../contexts/EnvironmentContext';
@@ -35,84 +35,93 @@ const UserSummary = () => {
   return (
     <Card className="user-summary mb-4 p-2">
       <Card.Body>
-        <div className="d-flex justify-content-between align-items-center">
-          <div className="user-info">
-            <h4>Welcome back, {user?.username || 'User'}</h4>
+        <div className="user-info mb-4">
+          <h4>Welcome back, {user?.username || 'User'}</h4>
+          <div className="d-flex gap-4 flex-wrap">
             <div className="text-muted d-flex align-items-center gap-2">
               <HiClock /> Last login: {formattedLastLogin}
             </div>
-            <div className="text-muted d-flex align-items-center gap-2 mt-1">
+            <div className="text-muted d-flex align-items-center gap-2">
               <HiCalendar /> Current team: {currentTeam?.name || 'No team selected'}
             </div>
             {currentTeam?.id && (
-              <div className="text-muted d-flex align-items-center gap-2 mt-1">
+              <div className="text-muted d-flex align-items-center gap-2">
                 <HiHashtag /> Team ID: {currentTeam.id}
               </div>
             )}
-            <div className="text-muted d-flex align-items-center gap-2 mt-1">
+            <div className="text-muted d-flex align-items-center gap-2">
               <HiShieldCheck /> Role: {currentTeam?.roles?.[0] || 'USER'}
             </div>
           </div>
+        </div>
 
-          <div className="quick-actions">
-            <div className="quick-actions-row">
-              {/* First Row */}
-              <div className="quick-actions-group">
-                {!isProd() && (
-                  <div className="token-section">
-                    {renderEnvironmentBadge()}
-                    <Link to="/view-token" className="quick-action-button">
-                      <HiKey />
-                      <span>View Token</span>
-                    </Link>
-                  </div>
-                )}
-                <Link to="/api-routes" className="quick-action-button">
-                  <HiViewGrid />
-                  <span>Applications</span>
-                </Link>
-                <Link to="/service-status" className="quick-action-button">
-                  <HiDocumentText />
-                  <span>Service Status</span>
-                </Link>
-                <Link to="/ai-assistants" className="quick-action-button">
-                  <HiChatAlt />
-                  <span>AI Assistants</span>
-                </Link>
-                <Link to="/knowledge-hub" className="quick-action-button">
-                  <HiLightBulb />
-                  <span>Knowledge Hub</span>
-                </Link>
-              </div>
+        <h5 className="mb-3 text-start mt-5">Quick Actions</h5>
+        <div className="quick-actions">
+          <div className="quick-actions-row">
+            {/* First Row */}
+            <div className="quick-actions-group">
+              {(!isProd() || canAccessAdminFeatures) && (
+                <div className="token-section">
+                  {renderEnvironmentBadge()}
+                  <Link to="/view-token" className="quick-action-button">
+                    <HiKey />
+                    <span>View Token</span>
+                  </Link>
+                </div>
+              )}
+              <Link to="/" className="quick-action-button">
+                <HiHome />
+                <span>Home</span>
+              </Link>
+              <Link to="/api-routes" className="quick-action-button">
+                <HiViewGrid />
+                <span>Applications</span>
+              </Link>
+              <Link to="/service-status" className="quick-action-button">
+                <HiDocumentText />
+                <span>Service Status</span>
+              </Link>
+              <Link to="/ai-assistants" className="quick-action-button">
+                <HiChatAlt />
+                <span>AI Assistants</span>
+              </Link>
+              <Link to="/knowledge-hub" className="quick-action-button">
+                <HiLightBulb />
+                <span>Knowledge Hub</span>
+              </Link>
             </div>
-            {/* Second Row - LLM Models, RAG, and Admin Features */}
-            <div className="quick-actions-row">
-              <div className="quick-actions-group">
-                <Link to="/llm-models" className="quick-action-button">
-                  <HiSparkles />
-                  <span>LLM Models</span>
-                </Link>
-                <Link to="/llm-usage" className="quick-action-button">
-                  <HiCollection />
-                  <span>LLM Usage</span>
-                </Link>
-                <Link to="/rag" className="quick-action-button">
-                  <HiDatabase />
-                  <span>RAG Collections</span>
-                </Link>
-                {canAccessAdminFeatures && (
-                  <>
-                    <Link to="/teams" className="quick-action-button">
-                      <HiUserGroup />
-                      <span>Teams</span>
-                    </Link>
-                    <Link to="/organizations" className="quick-action-button">
-                      <HiOfficeBuilding />
-                      <span>Organizations</span>
-                    </Link>
-                  </>
-                )}
-              </div>
+          </div>
+          {/* Second Row - LLM Models, RAG, and Admin Features */}
+          <div className="quick-actions-row">
+            <div className="quick-actions-group">
+              <Link to="/audits" className="quick-action-button">
+                <HiClipboardList />
+                <span>Audits</span>
+              </Link>
+              <Link to="/llm-models" className="quick-action-button">
+                <HiSparkles />
+                <span>LLM Models</span>
+              </Link>
+              <Link to="/llm-usage" className="quick-action-button">
+                <HiCollection />
+                <span>LLM Usage</span>
+              </Link>
+              <Link to="/rag" className="quick-action-button">
+                <HiDatabase />
+                <span>RAG Collections</span>
+              </Link>
+              {canAccessAdminFeatures && (
+                <>
+                  <Link to="/teams" className="quick-action-button">
+                    <HiUserGroup />
+                    <span>Teams</span>
+                  </Link>
+                  <Link to="/organizations" className="quick-action-button">
+                    <HiOfficeBuilding />
+                    <span>Organizations</span>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -51,6 +51,7 @@ const EditAIAssistantModal = ({
         name: assistant.name || '',
         description: assistant.description || '',
         status: assistant.status || 'DRAFT',
+        category: assistant.category || 'CHAT',
         defaultModel: assistant.defaultModel || {
           provider: 'openai',
           modelName: '',
@@ -308,6 +309,19 @@ const EditAIAssistantModal = ({
                   <option value="DRAFT">Draft</option>
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Category</Form.Label>
+                <Form.Select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                >
+                  <option value="CHAT">Chat</option>
+                  <option value="REVIEW_DOC">Document Review</option>
                 </Form.Select>
               </Form.Group>
             </Col>

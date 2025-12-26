@@ -1,0 +1,23 @@
+.view-assistant-page {
+  padding: 20px;
+}
+
+.view-assistant-page .breadcrumb-card {
+  background-color: transparent;
+  padding: 0;
+  margin-bottom: 2rem;
+}
+
+.view-assistant-page .breadcrumb {
+  margin-bottom: 0;
+  padding: 0;
+}
+
+.view-assistant-page .breadcrumb-item a {
+  color: var(--primary-color, #0d6efd);
+  text-decoration: none;
+}
+
+.view-assistant-page .breadcrumb-item.active {
+  color: #6c757d;
+}

@@ -177,6 +177,10 @@ function AIAssistants() {
         }
     };
 
+    const handleViewAssistant = (assistant) => {
+        navigate(`/ai-assistants/${assistant.id}`);
+    };
+
 
     if (teamLoading || loading) {
         return <LoadingSpinner />;
@@ -239,6 +243,7 @@ function AIAssistants() {
                                 <tr>
                                     <th>Name</th>
                                     <th>Description</th>
+                                    <th>Category</th>
                                     <th>Status</th>
                                     <th>Access</th>
                                     <th>Tasks</th>
@@ -251,7 +256,7 @@ function AIAssistants() {
                                 {assistants.map((assistant) => (
                                     <tr
                                         key={assistant.id}
-                                        onClick={() => navigate(`/ai-assistants/${assistant.id}`)}
+                                        onClick={() => handleViewAssistant(assistant)}
                                         style={{ cursor: 'pointer' }}
                                     >
                                         <td>
@@ -264,6 +269,13 @@ function AIAssistants() {
                                             <div className="assistant-description">
                                                 {assistant.description || 'No description'}
                                             </div>
+                                        </td>
+                                        <td>
+                                            <Badge bg={
+                                                assistant.category === 'REVIEW_DOC' ? 'primary' : 'info'
+                                            }>
+                                                {assistant.category || 'CHAT'}
+                                            </Badge>
                                         </td>
                                         <td>
                                             <Badge bg={
@@ -300,7 +312,10 @@ function AIAssistants() {
                                                 <Button
                                                     variant="link"
                                                     size="sm"
-                                                    onClick={() => navigate(`/ai-assistants/${assistant.id}`)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleViewAssistant(assistant);
+                                                    }}
                                                     title="View & Chat"
                                                 >
                                                     <HiEye />

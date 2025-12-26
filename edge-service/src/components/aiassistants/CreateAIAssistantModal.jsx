@@ -17,6 +17,7 @@ const CreateAIAssistantModal = ({
     name: '',
     description: '',
     status: 'DRAFT',
+    category: 'CHAT',
     defaultModel: {
       provider: 'openai',
       modelName: '',
@@ -296,6 +297,19 @@ const CreateAIAssistantModal = ({
                   <option value="DRAFT">Draft</option>
                   <option value="ACTIVE">Active</option>
                   <option value="INACTIVE">Inactive</option>
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Category</Form.Label>
+                <Form.Select
+                  name="category"
+                  value={formData.category}
+                  onChange={handleInputChange}
+                >
+                  <option value="CHAT">Chat</option>
+                  <option value="REVIEW_DOC">Document Review</option>
                 </Form.Select>
               </Form.Group>
             </Col>

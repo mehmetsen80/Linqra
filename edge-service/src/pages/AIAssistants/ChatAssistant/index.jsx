@@ -35,14 +35,17 @@ import { HiX } from 'react-icons/hi';
 import Footer from '../../../components/common/Footer';
 import './styles.css';
 
-function ViewAssistant() {
-    const { assistantId } = useParams();
+function ChatAssistant({ assistantId: propAssistantId, assistant: propAssistant, embedded = false }) {
+    const { assistantId: paramAssistantId } = useParams();
+    const assistantId = propAssistantId || paramAssistantId;
     const navigate = useNavigate();
     const { currentTeam } = useTeam();
     const { user } = useAuth();
     const messagesEndRef = useRef(null);
-    const [assistant, setAssistant] = useState(null);
-    const [loading, setLoading] = useState(true);
+    const [assistant, setAssistant] = useState(propAssistant || null);
+    const [loading, setLoading] = useState(!propAssistant);
+    // ... rest of the component
+
     const [error, setError] = useState(null);
     const [conversationId, setConversationId] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -66,10 +69,20 @@ function ViewAssistant() {
 
     useEffect(() => {
         if (assistantId && currentTeam) {
-            loadAssistant();
+            if (!propAssistant) {
+                loadAssistant();
+            }
             loadConversations();
         }
-    }, [assistantId, currentTeam]);
+    }, [assistantId, currentTeam, propAssistant]);
+
+    useEffect(() => {
+        // Update local state if prop updates
+        if (propAssistant) {
+            setAssistant(propAssistant);
+            setLoading(false);
+        }
+    }, [propAssistant]);
 
     useEffect(() => {
         // Skip auto-scroll and auto-expand if we're loading older messages
@@ -685,35 +698,36 @@ function ViewAssistant() {
     const currentConversation = conversations.find(c => c.id === selectedConversationId) || null;
 
     return (
-        <div className="view-assistant-page">
-            {/* Header */}
-            <Card className="mb-4 border-0">
-                <Card.Body>
-                    <div className="d-flex align-items-center gap-2 mb-2">
-                        <Button
-                            variant="link"
-                            onClick={() => navigate('/ai-assistants')}
-                            className="p-0"
-                        >
-                            <HiArrowLeft className="text-primary" size={24} />
-                        </Button>
-                        <h4 className="mb-0">
-                            {assistant.name}
-                        </h4>
-                        <Badge bg={assistant.status === 'ACTIVE' ? 'success' : assistant.status === 'INACTIVE' ? 'secondary' : 'warning'}>
-                            {assistant.status || 'DRAFT'}
-                        </Badge>
-                        <Badge bg={isPublic ? 'info' : 'secondary'}>
-                            {isPublic ? 'Public' : 'Private'}
-                        </Badge>
-                    </div>
-                    {assistant.description && (
-                        <div className="text-muted text-start">
-                            {assistant.description}
+        <div className={embedded ? "chat-assistant-embedded h-100" : "view-assistant-page"}>
+            {!embedded && (
+                <Card className="mb-4 border-0">
+                    <Card.Body>
+                        <div className="d-flex align-items-center gap-2 mb-2">
+                            <Button
+                                variant="link"
+                                onClick={() => navigate('/ai-assistants')}
+                                className="p-0"
+                            >
+                                <HiArrowLeft className="text-primary" size={24} />
+                            </Button>
+                            <h4 className="mb-0">
+                                {assistant.name}
+                            </h4>
+                            <Badge bg={assistant.status === 'ACTIVE' ? 'success' : assistant.status === 'INACTIVE' ? 'secondary' : 'warning'}>
+                                {assistant.status || 'DRAFT'}
+                            </Badge>
+                            <Badge bg={isPublic ? 'info' : 'secondary'}>
+                                {isPublic ? 'Public' : 'Private'}
+                            </Badge>
                         </div>
-                    )}
-                </Card.Body>
-            </Card>
+                        {assistant.description && (
+                            <div className="text-muted text-start">
+                                {assistant.description}
+                            </div>
+                        )}
+                    </Card.Body>
+                </Card>
+            )}
 
             {/* Tabs */}
             <Tabs activeKey={activeTab} onSelect={(k) => setActiveTab(k)} className="mb-3">
@@ -1296,5 +1310,5 @@ function ViewAssistant() {
     );
 }
 
-export default ViewAssistant;
+export default ChatAssistant;
 

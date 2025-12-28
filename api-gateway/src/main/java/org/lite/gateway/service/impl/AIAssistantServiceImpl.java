@@ -11,6 +11,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Map;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -20,6 +21,7 @@ public class AIAssistantServiceImpl implements AIAssistantService {
 
     private final AIAssistantRepository aiAssistantRepository;
     private final LinqLlmModelRepository linqLlmModelRepository;
+    private final org.lite.gateway.repository.AgentTaskRepository agentTaskRepository;
 
     @Override
     public Mono<AIAssistant> createAssistant(AIAssistant assistant, String teamId, String createdBy) {
@@ -202,7 +204,8 @@ public class AIAssistantServiceImpl implements AIAssistantService {
     @Override
     public Mono<AIAssistant> getAssistantById(String assistantId) {
         return aiAssistantRepository.findById(assistantId)
-                .switchIfEmpty(Mono.error(new RuntimeException("AI Assistant not found")));
+                .switchIfEmpty(Mono.error(new RuntimeException("AI Assistant not found")))
+                .flatMap(this::enrichAssistantWithTaskSteps);
     }
 
     @Override
@@ -372,6 +375,74 @@ public class AIAssistantServiceImpl implements AIAssistantService {
         existingAssistant.setUpdatedBy(updatedBy);
 
         return aiAssistantRepository.save(existingAssistant);
+    }
+
+    /**
+     * Enriches the assistant with detailed steps for each selected task
+     */
+    private Mono<AIAssistant> enrichAssistantWithTaskSteps(AIAssistant assistant) {
+        if (assistant.getSelectedTasks() == null || assistant.getSelectedTasks().isEmpty()) {
+            return Mono.just(assistant);
+        }
+
+        log.info("Enriching assistant {} with task steps for {} tasks", assistant.getName(),
+                assistant.getSelectedTasks().size());
+        return Flux.fromIterable(assistant.getSelectedTasks())
+                .flatMap(selectedTask -> {
+                    if (selectedTask.getTaskId() == null) {
+                        return Mono.just(selectedTask);
+                    }
+                    log.info("Processing task ID: {}", selectedTask.getTaskId());
+                    return agentTaskRepository.findById(selectedTask.getTaskId())
+                            .doOnSuccess(task -> {
+                                if (task == null)
+                                    log.warn("Task NOT FOUND for ID: {}", selectedTask.getTaskId());
+                                else
+                                    log.info("Task FOUND for ID: {}", selectedTask.getTaskId());
+                            })
+                            .map(agentTask -> {
+                                // Extract steps from linqConfig if available (WORKFLOW_EMBEDDED)
+                                Map<String, Object> linqConfig = agentTask.getLinqConfig();
+                                if (linqConfig == null) {
+                                    log.warn("Task {} has NULL linqConfig", selectedTask.getTaskName());
+                                    return selectedTask;
+                                }
+
+                                Object queryObj = linqConfig.get("query");
+                                if (queryObj instanceof Map) {
+                                    Map<String, Object> query = (Map<String, Object>) queryObj;
+                                    if (query.containsKey("workflow")) {
+                                        Object workflowObj = query.get("workflow");
+                                        if (workflowObj instanceof Map) {
+                                            // Structure: workflow -> steps -> [...]
+                                            Map<String, Object> workflow = (Map<String, Object>) workflowObj;
+                                            if (workflow.containsKey("steps")) {
+                                                Object stepsObj = workflow.get("steps");
+                                                if (stepsObj instanceof List) {
+                                                    List<Map<String, Object>> steps = (List<Map<String, Object>>) stepsObj;
+                                                    selectedTask.setSteps(steps);
+                                                }
+                                            }
+                                        } else if (workflowObj instanceof List) {
+                                            // Structure: workflow -> [...] (Direct list of steps)
+                                            List<Map<String, Object>> steps = (List<Map<String, Object>>) workflowObj;
+                                            selectedTask.setSteps(steps);
+                                        }
+                                    } else {
+                                        log.warn("Task {} query has no 'workflow' key", selectedTask.getTaskName());
+                                    }
+                                } else {
+                                    log.warn("Task {} linqConfig has no 'query' Map", selectedTask.getTaskName());
+                                }
+                                return selectedTask;
+                            })
+                            .defaultIfEmpty(selectedTask);
+                })
+                .collectList()
+                .map(tasks -> {
+                    assistant.setSelectedTasks(tasks);
+                    return assistant;
+                });
     }
 
     /**

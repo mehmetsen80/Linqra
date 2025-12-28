@@ -141,13 +141,13 @@ function ViewAIAssistant() {
 
             {/* Configuration Details Card */}
             <Card className="mb-4">
-                <Card.Header>
+                <Card.Header className="text-start">
                     <h5 className="mb-0">Configuration Summary</h5>
                 </Card.Header>
                 <Card.Body>
-                    <div className="row mb-4">
+                    <div className="row mb-4 mt-2">
                         <div className="col-md-6">
-                            <h6 className="fw-bold text-muted mb-3">Model Configuration</h6>
+                            <h6 className="fw-bold text-muted mb-3 ms-3 text-start">Model Configuration</h6>
                             <Table size="sm" borderless className="small">
                                 <tbody>
                                     <tr>
@@ -170,7 +170,7 @@ function ViewAIAssistant() {
                             </Table>
                         </div>
                         <div className="col-md-6">
-                            <h6 className="fw-bold text-muted mb-3">Context & Security</h6>
+                            <h6 className="fw-bold text-muted mb-3 text-start ms-3">Context & Security</h6>
                             <Table size="sm" borderless className="small">
                                 <tbody>
                                     <tr>
@@ -213,26 +213,34 @@ function ViewAIAssistant() {
                             </Table>
                         </div>
                     </div>
+                </Card.Body>
+            </Card>
 
-                    {assistant.selectedTasks && assistant.selectedTasks.length > 0 && (
-                        <div className="mb-4">
-                            <h6 className="fw-bold text-muted mb-2">Enabled Agent Tasks</h6>
-                            <div className="d-flex flex-wrap gap-2">
-                                {assistant.selectedTasks.map((task, idx) => (
-                                    <Badge key={idx} bg="light" text="dark" className="border fw-normal">
-                                        <HiDatabase className="me-1 text-muted" />
-                                        {task.taskName}
-                                    </Badge>
-                                ))}
-                            </div>
+            {assistant.selectedTasks && assistant.selectedTasks.length > 0 && (
+                <Card className="mb-4">
+                    <Card.Header className="text-start">
+                        <h5 className="mb-0">Enabled Agent Tasks</h5>
+                    </Card.Header>
+                    <Card.Body className="px-0">
+                        <div className="d-flex flex-wrap gap-2">
+                            {assistant.selectedTasks.map((task, idx) => (
+                                <Badge key={idx} bg="light" text="dark" className="border fw-normal">
+                                    <HiDatabase className="me-1 text-muted" />
+                                    {task.taskName}
+                                </Badge>
+                            ))}
                         </div>
-                    )}
+                    </Card.Body>
+                </Card>
+            )}
 
-                    <div>
-                        <h6 className="fw-bold text-muted mb-2">System Personality & Instructions</h6>
-                        <div className="bg-light p-3 rounded small text-start border">
-                            <ReactMarkdown>{assistant.systemPrompt || 'No prompt configured.'}</ReactMarkdown>
-                        </div>
+            <Card className="mb-4">
+                <Card.Header className="text-start">
+                    <h5 className="mb-0">System Personality & Instructions</h5>
+                </Card.Header>
+                <Card.Body className="px-0">
+                    <div className="bg-light p-3 rounded small text-start border">
+                        <ReactMarkdown>{assistant.systemPrompt || 'No prompt configured.'}</ReactMarkdown>
                     </div>
                 </Card.Body>
             </Card>

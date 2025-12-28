@@ -135,6 +135,14 @@ const AppRoutes = () => {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/ai-assistants/:assistantId/chat"
+        element={
+          <ProtectedRoute>
+            <ChatAssistant />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Protected Routes - All under AdminLayout */}
       <Route
@@ -155,7 +163,7 @@ const AppRoutes = () => {
         <Route path="/agents/:agentId/tasks/:taskId" element={<ViewAgentTask />} />
         <Route path="/ai-assistants" element={<AIAssistants />} />
         <Route path="/ai-assistants/:assistantId" element={<ViewAIAssistant />} />
-        <Route path="/ai-assistants/:assistantId/chat" element={<ChatAssistant />} />
+
         <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
         <Route path="/llm-usage" element={<LlmUsage />} />
         <Route path="/execution-monitoring" element={<ExecutionMonitoring />} />

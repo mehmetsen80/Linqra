@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Form, Spinner } from 'react-bootstrap';
 import Button from '../../../../components/common/Button';
-import { HiPaperAirplane, HiInformationCircle, HiClock } from 'react-icons/hi';
+import { HiPaperAirplane, HiInformationCircle, HiClock, HiCode, HiDownload } from 'react-icons/hi';
 import docReviewService from '../../../../services/docReviewService';
 import { toast } from 'react-toastify';
 import DocReviewHistoryModal from './DocReviewHistoryModal';
@@ -73,14 +73,14 @@ const ChatPane = ({ assistant, reviewSession, onSessionUpdate, onLoadSession }) 
                     documentId: reviewSession.documentId
                 });
 
-                const { conversationId, message: aiContent } = response.data;
+                const { conversationId, message: aiContent, metadata } = response.data;
 
                 // Update review session with new conversationId
                 await docReviewService.updateReview(reviewSession.id, {
                     conversationId: conversationId
                 });
 
-                const aiMsg = { role: 'assistant', content: aiContent, timestamp: new Date().toISOString() };
+                const aiMsg = { role: 'assistant', content: aiContent, timestamp: new Date().toISOString(), metadata };
                 setMessages(prev => [...prev, aiMsg]);
 
                 if (onSessionUpdate) {
@@ -90,8 +90,8 @@ const ChatPane = ({ assistant, reviewSession, onSessionUpdate, onLoadSession }) 
                 // Continue EXISTING conversation
                 response = await docReviewService.sendReviewMessage(reviewSession.conversationId, userMsg.content);
 
-                const { message: aiContent } = response.data;
-                const aiMsg = { role: 'assistant', content: aiContent, timestamp: new Date().toISOString() };
+                const { message: aiContent, metadata } = response.data;
+                const aiMsg = { role: 'assistant', content: aiContent, timestamp: new Date().toISOString(), metadata };
                 setMessages(prev => [...prev, aiMsg]);
             }
 
@@ -143,6 +143,34 @@ const ChatPane = ({ assistant, reviewSession, onSessionUpdate, onLoadSession }) 
                                 style={{ maxWidth: '85%' }}
                             >
                                 {msg.content}
+                                {/* Document Source Attachments */}
+                                {msg.metadata?.documents && msg.metadata.documents.length > 0 && (
+                                    <div className={`mt-3 pt-2 border-top ${msg.role === 'user' ? 'border-primary-light text-white-50' : 'border-light'}`}>
+                                        <h6 className="small fw-bold mb-2">Sources:</h6>
+                                        <div className="d-flex flex-column gap-2">
+                                            {msg.metadata.documents.map((doc, i) => (
+                                                <div key={i} className={`d-flex align-items-center justify-content-between p-2 rounded small ${msg.role === 'user' ? 'bg-primary-dark' : 'bg-light'}`}>
+                                                    <div className="d-flex align-items-center text-truncate">
+                                                        <HiCode className="me-2 opacity-75" />
+                                                        <span className="text-truncate" title={doc.name}>{doc.name}</span>
+                                                    </div>
+                                                    <Button
+                                                        variant="link"
+                                                        size="sm"
+                                                        className={`p-0 ms-2 ${msg.role === 'user' ? 'text-white' : ''}`}
+                                                        title="Download"
+                                                        onClick={() => {
+                                                            if (doc.url) window.open(doc.url, '_blank');
+                                                            // For now assuming doc.url or future download handler
+                                                        }}
+                                                    >
+                                                        <HiDownload />
+                                                    </Button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ))}
                         {loadingHistory && <div className="text-center"><Spinner size="sm" animation="border" /></div>}

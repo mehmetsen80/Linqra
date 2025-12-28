@@ -119,22 +119,7 @@ const aiAssistantService = {
         }
     },
 
-    getWidgetScript: async (assistantId) => {
-        try {
-            const response = await axiosInstance.get(`/api/ai-assistants/${assistantId}/widget-script`);
-            return {
-                success: true,
-                data: response.data,
-                scriptUrl: response.data.scriptUrl
-            };
-        } catch (error) {
-            console.error('Error fetching widget script:', error);
-            return {
-                success: false,
-                error: error.response?.data?.message || 'Failed to fetch widget script'
-            };
-        }
-    },
+
 
     updateWidgetConfig: async (assistantId, widgetConfig) => {
         try {

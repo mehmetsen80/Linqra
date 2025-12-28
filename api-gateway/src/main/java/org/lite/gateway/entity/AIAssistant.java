@@ -93,6 +93,7 @@ public class AIAssistant {
     public static class SelectedTask {
         private String taskId; // Agent Task ID
         private String taskName; // Denormalized task name
+        private List<Map<String, Object>> steps; // Enriched step details (transient/populated on read)
     }
 
     @Data

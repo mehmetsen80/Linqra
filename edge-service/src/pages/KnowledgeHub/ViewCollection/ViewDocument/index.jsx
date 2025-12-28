@@ -110,7 +110,7 @@ function ViewDocument() {
 
   const handleOpenPropertiesModal = async (title, entityType, entityName, properties, fromEntity = null, toEntity = null) => {
     const isAdmin = isSuperAdmin(user) || hasAdminAccess(user, currentTeam);
-    
+
     if (isAdmin) {
       // For admin users, decrypt properties and entity names before showing
       setPropertiesModal({
@@ -125,7 +125,7 @@ function ViewDocument() {
       try {
         // Build a combined properties map that includes entity names and encryption version markers for decryption
         const propertiesToDecrypt = { ...(properties || {}) };
-        
+
         // Build entity name properties with encryption version markers
         const fromEntityProps = {};
         if (fromEntity?.name) {
@@ -137,7 +137,7 @@ function ViewDocument() {
             fromEntityProps['encryptionKeyVersion'] = fromEntity.encryptionKeyVersion;
           }
         }
-        
+
         const toEntityProps = {};
         if (toEntity?.name) {
           toEntityProps['name'] = toEntity.name;
@@ -148,31 +148,31 @@ function ViewDocument() {
             toEntityProps['encryptionKeyVersion'] = toEntity.encryptionKeyVersion;
           }
         }
-        
+
         // Determine if this is a relationship (has fromEntity and toEntity) or an entity
         const isRelationship = fromEntity !== null && toEntity !== null;
-        
+
         let updatedEntityName = entityName; // Default to the passed entityName
-        
+
         if (isRelationship) {
           // Decrypt relationship entity names separately if they exist
           let decryptedFromName = fromEntity?.name || fromEntity?.id || 'N/A';
           let decryptedToName = toEntity?.name || toEntity?.id || 'N/A';
-          
+
           if (Object.keys(fromEntityProps).length > 0) {
             const fromNameResult = await knowledgeHubGraphService.decryptProperties(fromEntityProps);
             if (fromNameResult.success && fromNameResult.data?.name) {
               decryptedFromName = fromNameResult.data.name;
             }
           }
-          
+
           if (Object.keys(toEntityProps).length > 0) {
             const toNameResult = await knowledgeHubGraphService.decryptProperties(toEntityProps);
             if (toNameResult.success && toNameResult.data?.name) {
               decryptedToName = toNameResult.data.name;
             }
           }
-          
+
           // Update subtitle with decrypted names for relationships
           const fromType = fromEntity?.type || 'Unknown';
           const toType = toEntity?.type || 'Unknown';
@@ -189,7 +189,7 @@ function ViewDocument() {
             } else if (properties.encryptionKeyVersion) {
               entityNameProps['encryptionKeyVersion'] = properties.encryptionKeyVersion;
             }
-            
+
             if (Object.keys(entityNameProps).length > 1) { // Has name + encryption version
               const entityNameResult = await knowledgeHubGraphService.decryptProperties(entityNameProps);
               if (entityNameResult.success && entityNameResult.data?.name) {
@@ -201,7 +201,7 @@ function ViewDocument() {
             }
           }
         }
-        
+
         // Decrypt relationship properties if they exist
         if (Object.keys(propertiesToDecrypt).length > 0) {
           const result = await knowledgeHubGraphService.decryptProperties(propertiesToDecrypt);
@@ -275,19 +275,19 @@ function ViewDocument() {
     if (currentTeam?.id && documentId) {
       fetchDocument();
     }
-    
+
     // Connect to WebSocket for document processing
     knowledgeHubWebSocketService.connect();
-    
+
     // Connect to WebSocket for graph extraction updates
     knowledgeHubGraphWebSocketService.connect();
-    
+
     // Subscribe to graph extraction updates
     const unsubscribeGraphExtraction = knowledgeHubGraphWebSocketService.subscribe((update) => {
       // Only process updates for the current document
       if (update.documentId === documentId) {
         console.log('Received graph extraction update:', update);
-        
+
         setCurrentJob({
           jobId: update.jobId,
           documentId: update.documentId,
@@ -304,7 +304,7 @@ function ViewDocument() {
           startedAt: update.startedAt,
           completedAt: update.completedAt
         });
-        
+
         // Update extracting state based on job status
         const status = update.status;
         if (status === 'QUEUED' || status === 'RUNNING') {
@@ -319,7 +319,7 @@ function ViewDocument() {
         } else {
           // Job completed, failed, or cancelled
           setExtracting({ entities: false, relationships: false, all: false });
-          
+
           if (status === 'COMPLETED') {
             showSuccessToast(
               `Extraction completed: ${update.totalEntities || 0} entities, ${update.totalRelationships || 0} relationships`
@@ -338,17 +338,17 @@ function ViewDocument() {
         }
       }
     });
-    
+
     // Subscribe to document status updates
     const unsubscribe = knowledgeHubWebSocketService.subscribe((statusUpdate) => {
       // Only process updates for the current document
       if (statusUpdate.documentId === documentId) {
         console.log('Received document status update:', statusUpdate);
-        
+
         // Update document state with the new status
         setDocument(prevDoc => {
           if (!prevDoc) return prevDoc;
-          
+
           return {
             ...prevDoc,
             status: statusUpdate.status,
@@ -360,33 +360,33 @@ function ViewDocument() {
             errorMessage: statusUpdate.errorMessage
           };
         });
-        
+
         setEmbedding(prev => ({
           running: statusUpdate.status === 'EMBEDDING',
           progress: statusUpdate.totalEmbeddings !== undefined ? statusUpdate.totalEmbeddings : (prev?.progress ?? null)
         }));
-        
+
         // Update fileExists based on status (file exists if status is not PENDING_UPLOAD)
         // FAILED status could still have the file if upload succeeded but processing failed
         setFileExists(statusUpdate.status !== 'PENDING_UPLOAD');
-        
+
         // Fetch chunk statistics if document is now processed
         if (statusUpdate.status === 'PROCESSED' && statusUpdate.processedS3Key) {
           fetchChunkStatistics(statusUpdate.processedS3Key);
         }
-        
-      // Fetch metadata if document status is METADATA_EXTRACTION or beyond
-      if (['METADATA_EXTRACTION', 'EMBEDDING', 'AI_READY'].includes(statusUpdate.status)) {
-        fetchMetadata();
-      }
-      
-      // Reset extraction states if extraction completes
-      if (statusUpdate.status === 'AI_READY') {
-        setExtracting({ entities: false, relationships: false, all: false });
-      }
+
+        // Fetch metadata if document status is METADATA_EXTRACTION or beyond
+        if (['METADATA_EXTRACTION', 'EMBEDDING', 'AI_READY'].includes(statusUpdate.status)) {
+          fetchMetadata();
+        }
+
+        // Reset extraction states if extraction completes
+        if (statusUpdate.status === 'AI_READY') {
+          setExtracting({ entities: false, relationships: false, all: false });
+        }
       }
     });
-    
+
     return () => {
       // Unsubscribe and disconnect on unmount
       unsubscribe();
@@ -409,7 +409,7 @@ function ViewDocument() {
         // Don't show error toast - this is optional information
       }
     };
-    
+
     if (currentTeam?.id) {
       fetchCurrentEncryptionVersion();
     }
@@ -434,14 +434,14 @@ function ViewDocument() {
         });
       }
     };
-    
+
     checkVaultHealth();
   }, []);
 
   // Fetch document entities when entity type selection changes
   useEffect(() => {
-    if (currentTeam?.id && documentId && document && 
-        (document.status === 'PROCESSED' || document.status === 'AI_READY')) {
+    if (currentTeam?.id && documentId && document &&
+      (document.status === 'PROCESSED' || document.status === 'AI_READY')) {
       fetchDocumentEntities();
       fetchDocumentRelationships();
     }
@@ -453,11 +453,11 @@ function ViewDocument() {
       const { data, error } = await knowledgeHubDocumentService.getDocumentById(documentId);
       if (error) throw new Error(error);
       setDocument(data);
-      
+
       // Default fileExists based on status - file exists if status is not PENDING_UPLOAD
       // (FAILED status could still have the file if upload succeeded but processing failed)
       setFileExists(data.status !== 'PENDING_UPLOAD');
-      
+
       // Fetch collection details
       if (data.collectionId) {
         const collectionResult = await knowledgeHubCollectionService.getCollectionById(data.collectionId);
@@ -465,17 +465,17 @@ function ViewDocument() {
           setCollection(collectionResult.data);
         }
       }
-      
+
       // Fetch chunk statistics if document is processed or AI ready
       if ((data.status === 'PROCESSED' || data.status === 'AI_READY') && data.processedS3Key) {
         fetchChunkStatistics(data.processedS3Key);
       }
-      
+
       // Fetch metadata if document has metadata extraction status or beyond
       if (['METADATA_EXTRACTION', 'EMBEDDING', 'AI_READY'].includes(data.status)) {
         fetchMetadata();
       }
-      
+
       // Fetch graph entity/relationship counts if document is processed or AI ready
       if (data.status === 'PROCESSED' || data.status === 'AI_READY') {
         fetchGraphCounts();
@@ -488,7 +488,7 @@ function ViewDocument() {
           fetchDocumentRelationships();
         }
       }
-      
+
       if (data.totalEmbeddings !== undefined) {
         setEmbedding({
           running: data.status === 'EMBEDDING',
@@ -508,11 +508,11 @@ function ViewDocument() {
     try {
       setDownloading(true);
       const result = await knowledgeHubDocumentService.downloadDocument(documentId, document?.fileName);
-      
+
       if (!result.success) {
         throw new Error(result.error || 'Failed to download document');
       }
-      
+
       // File download triggered automatically via blob URL
       // Note: Browser's download dialog will appear, so we don't need a success toast
     } catch (err) {
@@ -525,16 +525,16 @@ function ViewDocument() {
 
   const fetchChunkStatistics = async (processedS3Key) => {
     if (!processedS3Key) return;
-    
+
     try {
       setLoadingChunkStats(true);
       const { data, error } = await knowledgeHubDocumentService.generateProcessedJsonDownloadUrl(documentId);
       if (error) throw new Error(error);
-      
+
       // Download and parse the processed JSON to get statistics
       const response = await fetch(data.downloadUrl);
       if (!response.ok) throw new Error('Failed to download processed JSON');
-      
+
       const processedJson = await response.json();
       if (processedJson.statistics) {
         setChunkStats({
@@ -554,12 +554,12 @@ function ViewDocument() {
 
   const fetchMetadata = async () => {
     if (!documentId) return;
-    
+
     try {
       setLoadingMetadata(true);
       const { data, error } = await knowledgeHubDocumentService.getMetadata(documentId);
       if (error) throw new Error(error);
-      
+
       if (data) {
         // Debug: Log metadata to check if it's encrypted
         console.log('Metadata received from API:', {
@@ -584,7 +584,7 @@ function ViewDocument() {
       setHardDeleting(true);
       const { error } = await knowledgeHubDocumentService.hardDeleteDocument(documentId);
       if (error) throw new Error(error);
-      
+
       showSuccessToast('Document deleted successfully');
       navigate(`/knowledge-hub/collection/${document.collectionId}`);
     } catch (err) {
@@ -692,7 +692,7 @@ function ViewDocument() {
     // If status is FAILED, determine the last successful step and allow clicking next step
     if (document.status === 'FAILED') {
       let lastSuccessfulIndex = -1;
-      
+
       // Determine last successful status based on document state
       if (document.processedAt) {
         // Got processed, so at least PROCESSED was reached
@@ -704,15 +704,15 @@ function ViewDocument() {
         // Only created, not uploaded
         lastSuccessfulIndex = statusOrder.indexOf('PENDING_UPLOAD');
       }
-      
+
       return steps.map((step, index) => {
         const stepIndex = statusOrder.indexOf(step.key);
         const isCompleted = index <= lastSuccessfulIndex;
         const isCurrent = step.key === document.status;
         // Allow clicking the next step after the last successful one (not last step)
-        const isClickable = !isCompleted && index < steps.length - 1 && 
-                           stepIndex === lastSuccessfulIndex + 1;
-        
+        const isClickable = !isCompleted && index < steps.length - 1 &&
+          stepIndex === lastSuccessfulIndex + 1;
+
         return {
           ...step,
           completed: isCompleted,
@@ -732,9 +732,9 @@ function ViewDocument() {
       // Check if this step is the current status
       const isCurrent = step.key === document.status;
       // A step is clickable if it's the next step after the current one (not completed, not current, not last)
-      const isClickable = !isCompleted && !isCurrent && index < steps.length - 1 && 
-                         (currentStatusIndex < 0 || stepIndex === currentStatusIndex + 1);
-      
+      const isClickable = !isCompleted && !isCurrent && index < steps.length - 1 &&
+        (currentStatusIndex < 0 || stepIndex === currentStatusIndex + 1);
+
       return {
         ...step,
         completed: isCompleted,
@@ -744,12 +744,12 @@ function ViewDocument() {
       };
     });
   };
-  
+
   const handleNodeClick = (step) => {
     if (!step.clickable || !document || !currentTeam?.id) {
       return;
     }
-    
+
     // Route to appropriate WebSocket method based on status
     if (step.key === 'PARSING' || step.key === 'PROCESSED') {
       // Send document processing command for parsing and processing steps
@@ -781,10 +781,10 @@ function ViewDocument() {
         currentTeam.id
       );
     }
-    
+
     // Show feedback
     showSuccessToast(`Triggering ${step.label}...`);
-    
+
     // Refresh document after a short delay to show status change
     setTimeout(() => {
       fetchDocument();
@@ -808,9 +808,9 @@ function ViewDocument() {
 
   const showExtractionConfirmModal = (type) => {
     if (!document || !canExtractGraph()) return;
-    setExtractionConfirmModal(prev => ({ 
-      ...prev, 
-      show: true, 
+    setExtractionConfirmModal(prev => ({
+      ...prev,
+      show: true,
       type,
       // Preserve force value when opening modal
       force: prev.force || false
@@ -818,9 +818,9 @@ function ViewDocument() {
   };
 
   const closeExtractionConfirmModal = () => {
-    setExtractionConfirmModal(prev => ({ 
-      ...prev, 
-      show: false, 
+    setExtractionConfirmModal(prev => ({
+      ...prev,
+      show: false,
       type: null,
       // Don't reset force - user might want to keep it selected
     }));
@@ -832,11 +832,11 @@ function ViewDocument() {
 
   const handleExtractEntitiesConfirm = async () => {
     if (!document || !canExtractGraph()) return;
-    
+
     try {
       const { force } = extractionConfirmModal;
       closeExtractionConfirmModal();
-      
+
       const { data, error } = await knowledgeHubGraphService.extractEntitiesFromDocument(document.documentId, force);
       if (error) {
         // Check if it's an idempotency error (entities already extracted)
@@ -851,7 +851,7 @@ function ViewDocument() {
         }
         throw new Error(error);
       }
-      
+
       if (data?.jobId) {
         // Set initial job state - WebSocket will update it
         setCurrentJob({
@@ -881,11 +881,11 @@ function ViewDocument() {
 
   const handleExtractRelationshipsConfirm = async () => {
     if (!document || !canExtractGraph()) return;
-    
+
     try {
       const { force } = extractionConfirmModal;
       closeExtractionConfirmModal();
-      
+
       const { data, error } = await knowledgeHubGraphService.extractRelationshipsFromDocument(document.documentId, force);
       if (error) {
         if (error.includes('already extracted') && !force) {
@@ -899,7 +899,7 @@ function ViewDocument() {
         }
         throw new Error(error);
       }
-      
+
       if (data?.jobId) {
         // Set initial job state - WebSocket will update it
         setCurrentJob({
@@ -929,11 +929,11 @@ function ViewDocument() {
 
   const handleExtractAllConfirm = async () => {
     if (!document || !canExtractGraph()) return;
-    
+
     try {
       const { force } = extractionConfirmModal;
       closeExtractionConfirmModal();
-      
+
       const { data, error } = await knowledgeHubGraphService.extractAllFromDocument(document.documentId, force);
       if (error) {
         if (error.includes('already extracted') && !force) {
@@ -947,7 +947,7 @@ function ViewDocument() {
         }
         throw new Error(error);
       }
-      
+
       if (data?.jobId) {
         // Set initial job state - WebSocket will update it
         setCurrentJob({
@@ -974,15 +974,15 @@ function ViewDocument() {
       }
     }
   };
-  
+
   const handleAlreadyExtractedModalClose = () => {
     setAlreadyExtractedModal({ show: false, message: null, extractionType: null });
   };
-  
+
   const handleAlreadyExtractedForceRetry = () => {
     const { extractionType } = alreadyExtractedModal;
     handleAlreadyExtractedModalClose();
-    
+
     // Enable force and retry the extraction
     setExtractionConfirmModal(prev => ({
       ...prev,
@@ -994,11 +994,11 @@ function ViewDocument() {
 
   const handleCancelJob = async () => {
     if (!currentJob?.jobId) return;
-    
+
     try {
       const { data, error } = await knowledgeHubGraphService.cancelJob(currentJob.jobId);
       if (error) throw new Error(error);
-      
+
       if (data?.cancelled) {
         showSuccessToast('Extraction job cancelled');
         setCurrentJob(null);
@@ -1026,7 +1026,7 @@ function ViewDocument() {
     const configs = {
       entities: {
         title: 'Extract Entities',
-        message: force 
+        message: force
           ? 'This will re-extract entities from this document using AI. This will incur additional LLM costs. Continue?'
           : 'This will extract entities (Forms, Organizations, People, Dates, Locations, etc.) from this document using AI. This may take several minutes and will incur LLM costs. Continue?',
         confirmLabel: 'Extract Entities'
@@ -1052,33 +1052,33 @@ function ViewDocument() {
 
   const fetchGraphCounts = async () => {
     if (!documentId || !currentTeam?.id) return;
-    
+
     try {
       setLoadingGraphCounts(true);
       const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
-      
+
       // Fetch entities for each type filtered by documentId
-        const entityPromises = entityTypes.map(type => 
-          knowledgeHubGraphService.findEntities(type, { documentId, teamId: currentTeam.id })
-        );
-      
+      const entityPromises = entityTypes.map(type =>
+        knowledgeHubGraphService.findEntities(type, { documentId, teamId: currentTeam.id })
+      );
+
       const entityResults = await Promise.all(entityPromises);
       const totalEntities = entityResults.reduce((sum, result) => {
         return sum + (result.success && Array.isArray(result.data) ? result.data.length : 0);
       }, 0);
-      
+
       setGraphEntityCount(totalEntities);
-      
+
       // Fetch relationships filtered by documentId
-      const relationshipResult = await knowledgeHubGraphService.findRelationships({ 
-        documentId, 
-        teamId: currentTeam.id 
+      const relationshipResult = await knowledgeHubGraphService.findRelationships({
+        documentId,
+        teamId: currentTeam.id
       });
-      
-      const totalRelationships = relationshipResult.success && Array.isArray(relationshipResult.data) 
-        ? relationshipResult.data.length 
+
+      const totalRelationships = relationshipResult.success && Array.isArray(relationshipResult.data)
+        ? relationshipResult.data.length
         : 0;
-      
+
       setGraphRelationshipCount(totalRelationships);
     } catch (err) {
       console.error('Error fetching graph counts:', err);
@@ -1093,17 +1093,17 @@ function ViewDocument() {
       setDocumentEntities([]);
       return;
     }
-    
+
     try {
       setLoadingDocumentEntities(true);
-      
+
       if (selectedDocumentEntityType === 'All') {
         // Fetch all entity types and combine them
         const entityTypes = ['Form', 'Organization', 'Person', 'Date', 'Location', 'Document'];
-        const entityPromises = entityTypes.map(type => 
+        const entityPromises = entityTypes.map(type =>
           knowledgeHubGraphService.findEntities(type, { documentId, teamId: currentTeam.id })
         );
-        
+
         const entityResults = await Promise.all(entityPromises);
         const allEntities = entityResults.reduce((acc, result, index) => {
           if (result.success && Array.isArray(result.data)) {
@@ -1117,12 +1117,12 @@ function ViewDocument() {
           }
           return acc;
         }, []);
-        
+
         setDocumentEntities(allEntities);
       } else {
         // Fetch entities for specific type
         const { data, error } = await knowledgeHubGraphService.findEntities(
-          selectedDocumentEntityType, 
+          selectedDocumentEntityType,
           { documentId, teamId: currentTeam.id }
         );
         if (error) throw new Error(error);
@@ -1151,15 +1151,15 @@ function ViewDocument() {
 
     try {
       setLoadingDocumentRelationships(true);
-      const filters = { 
+      const filters = {
         teamId: currentTeam.id,
         documentId: documentId
       };
-      
+
       if (selectedDocumentRelationshipType && selectedDocumentRelationshipType !== 'All') {
         filters.relationshipType = selectedDocumentRelationshipType;
       }
-      
+
       const { data, error } = await knowledgeHubGraphService.findRelationships(filters);
       if (error) throw new Error(error);
       setDocumentRelationships(Array.isArray(data) ? data : []);
@@ -1174,11 +1174,11 @@ function ViewDocument() {
 
   const getGraphExtractionInfo = () => {
     if (!metadata?.customMetadata?.graphExtraction && graphEntityCount === null) return null;
-    
+
     const graphExtraction = metadata?.customMetadata?.graphExtraction;
     const entityExtraction = graphExtraction?.entityExtraction;
     const relationshipExtraction = graphExtraction?.relationshipExtraction;
-    
+
     // Debug logging to help troubleshoot model info display
     if (graphExtraction) {
       console.log('Graph Extraction Metadata:', {
@@ -1196,18 +1196,18 @@ function ViewDocument() {
         } : null
       });
     }
-    
+
     // Use graphEntityCount from Neo4j query if available, otherwise 0
     const entityCount = graphEntityCount !== null ? graphEntityCount : 0;
     const relationshipCount = graphRelationshipCount !== null ? graphRelationshipCount : 0;
     const entityCost = entityExtraction?.costUsd || 0;
     const relationshipCost = relationshipExtraction?.costUsd || 0;
     const totalCost = entityCost + relationshipCost;
-    
+
     const hasData = entityCount > 0 || relationshipCount > 0 || entityExtraction || relationshipExtraction;
-    
+
     if (!hasData) return null;
-    
+
     return {
       entityCount,
       relationshipCount,
@@ -1240,29 +1240,29 @@ function ViewDocument() {
 
   const calculateUploadDuration = () => {
     if (!document.createdAt || !document.uploadedAt) return null;
-    
+
     try {
       // Handle array format from LocalDateTime serialization
       let createdDate, uploadedDate;
-      
+
       if (Array.isArray(document.createdAt)) {
         const [year, month, day, hour, minute, second, nano] = document.createdAt;
         createdDate = new Date(year, month - 1, day, hour, minute, second, Math.floor(nano / 1000000));
       } else {
         createdDate = new Date(document.createdAt);
       }
-      
+
       if (Array.isArray(document.uploadedAt)) {
         const [year, month, day, hour, minute, second, nano] = document.uploadedAt;
         uploadedDate = new Date(year, month - 1, day, hour, minute, second, Math.floor(nano / 1000000));
       } else {
         uploadedDate = new Date(document.uploadedAt);
       }
-      
+
       const diffMs = uploadedDate.getTime() - createdDate.getTime();
       const diffSeconds = Math.floor(diffMs / 1000);
       const diffMinutes = Math.floor(diffSeconds / 60);
-      
+
       if (diffSeconds < 60) {
         return `${diffSeconds} second${diffSeconds !== 1 ? 's' : ''}`;
       } else if (diffMinutes < 60) {
@@ -1306,7 +1306,7 @@ function ViewDocument() {
           heading="Vault Decryption Failed"
           message={
             <>
-              <strong>Warning:</strong> The vault file cannot be decrypted. This usually means the <code>VAULT_MASTER_KEY</code> has changed. 
+              <strong>Warning:</strong> The vault file cannot be decrypted. This usually means the <code>VAULT_MASTER_KEY</code> has changed.
               The vault file needs to be re-encrypted with the new key. Until this is fixed, secrets cannot be read from the vault and many features may not work.
               <br /><br />
               <strong>To fix:</strong>
@@ -1318,21 +1318,21 @@ function ViewDocument() {
           }
         />
       )}
-      
+
       {/* Header */}
       <Card className="mb-4 border-0">
         <Card.Body>
           <div className="d-flex align-items-center justify-content-between">
             <div className="d-flex align-items-center gap-2">
-              <Button 
-                variant="link" 
+              <Button
+                variant="link"
                 className="p-0"
                 onClick={() => navigate(`/knowledge-hub/collection/${document.collectionId}`)}
               >
                 <HiArrowLeft className="text-primary" size={24} />
               </Button>
               <h4 className="mb-0">{document.fileName}</h4>
-              <Badge 
+              <Badge
                 bg={getStatusBadgeVariant(document.status)}
                 className={isProcessingStatus(document.status) ? 'status-processing' : ''}
               >
@@ -1349,7 +1349,7 @@ function ViewDocument() {
                   show={fileExists === false ? true : false}
                 >
                   <span>
-                    <Button 
+                    <Button
                       variant="primary"
                       onClick={handleDownload}
                       disabled={downloading || fileExists === false}
@@ -1359,7 +1359,7 @@ function ViewDocument() {
                   </span>
                 </OverlayTrigger>
               ) : null}
-              <Button 
+              <Button
                 variant="outline-danger"
                 onClick={() => setShowDeleteModal(true)}
                 disabled={hardDeleting}
@@ -1388,14 +1388,14 @@ function ViewDocument() {
               const isLast = index === array.length - 1;
               const nextStepCompleted = index < array.length - 1 && array[index + 1]?.completed;
               const connectorCompleted = step.completed;
-              
+
               return (
                 <React.Fragment key={step.key}>
-                  <div 
+                  <div
                     className={step.current && isProcessingStatus(document.status) ? 'status-step-processing' : ''}
-                    style={{ 
-                      display: 'flex', 
-                      flexDirection: 'column', 
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
                       alignItems: 'center',
                       flex: 1,
                       minWidth: '100px',
@@ -1408,7 +1408,7 @@ function ViewDocument() {
                     onClick={() => handleNodeClick(step)}
                   >
                     {/* Step Icon */}
-                    <div style={{ 
+                    <div style={{
                       position: 'relative',
                       marginBottom: '8px',
                       zIndex: 3,
@@ -1416,22 +1416,22 @@ function ViewDocument() {
                       transition: 'opacity 0.2s'
                     }}>
                       {step.completed ? (
-                        <HiCheckCircle 
-                          className="text-success" 
-                          size={36} 
-                          style={{ 
-                            backgroundColor: 'white', 
+                        <HiCheckCircle
+                          className="text-success"
+                          size={36}
+                          style={{
+                            backgroundColor: 'white',
                             borderRadius: '50%',
                             padding: '2px'
-                          }} 
+                          }}
                         />
                       ) : step.failed ? (
-                        <div 
+                        <div
                           className="rounded-circle bg-danger d-flex align-items-center justify-content-center text-white"
-                          style={{ 
-                            width: '36px', 
-                            height: '36px', 
-                            fontSize: '22px', 
+                          style={{
+                            width: '36px',
+                            height: '36px',
+                            fontSize: '22px',
                             fontWeight: 'bold',
                             lineHeight: '36px'
                           }}
@@ -1439,11 +1439,11 @@ function ViewDocument() {
                           ✕
                         </div>
                       ) : (
-                        <div 
+                        <div
                           className={`rounded-circle border d-flex align-items-center justify-content-center`}
-                          style={{ 
-                            width: '36px', 
-                            height: '36px', 
+                          style={{
+                            width: '36px',
+                            height: '36px',
                             fontSize: '14px',
                             borderWidth: '2px',
                             borderColor: '#dee2e6',
@@ -1456,19 +1456,18 @@ function ViewDocument() {
                         </div>
                       )}
                     </div>
-                    
+
                     {/* Step Label */}
                     <div style={{ textAlign: 'center' }}>
-                      <span 
-                        className={`${
-                          step.completed 
-                            ? 'text-success fw-semibold' 
-                            : step.clickable 
-                              ? 'text-primary fw-semibold' 
-                              : step.failed && step.current
-                                ? 'text-danger fw-semibold' 
-                                : 'text-muted'
-                        }`}
+                      <span
+                        className={`${step.completed
+                          ? 'text-success fw-semibold'
+                          : step.clickable
+                            ? 'text-primary fw-semibold'
+                            : step.failed && step.current
+                              ? 'text-danger fw-semibold'
+                              : 'text-muted'
+                          }`}
                         style={{ fontSize: '12px', display: 'block', lineHeight: '1.4' }}
                       >
                         {step.label}
@@ -1485,10 +1484,10 @@ function ViewDocument() {
                       )}
                     </div>
                   </div>
-                  
+
                   {/* Connector Line */}
                   {!isLast && (
-                    <div 
+                    <div
                       style={{
                         flex: 1,
                         height: '3px',
@@ -1558,18 +1557,18 @@ function ViewDocument() {
                   <span className="text-muted h6">Encryption Key Version</span>
                   <div className="d-flex align-items-center gap-2">
                     {document.encryptionKeyVersion ? (
-                      currentEncryptionKeyVersion && 
-                      compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
+                      currentEncryptionKeyVersion &&
+                        compareVersion(document.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
                         <OverlayTrigger
                           placement="top"
                           overlay={
                             <Tooltip>
-                              This file is encrypted with an older key version ({document.encryptionKeyVersion}). 
+                              This file is encrypted with an older key version ({document.encryptionKeyVersion}).
                               Current version is {currentEncryptionKeyVersion}. Re-upload the file to encrypt with the latest version.
                             </Tooltip>
                           }
                         >
-                          <Badge 
+                          <Badge
                             bg="warning"
                             style={{ cursor: 'help' }}
                           >
@@ -1577,7 +1576,7 @@ function ViewDocument() {
                           </Badge>
                         </OverlayTrigger>
                       ) : (
-                        <Badge 
+                        <Badge
                           bg="info"
                           title={`File encrypted with key version ${document.encryptionKeyVersion}`}
                         >
@@ -1594,7 +1593,7 @@ function ViewDocument() {
               )}
               <div className="d-flex justify-content-between align-items-center">
                 <span className="text-muted h6">Status</span>
-                <Badge 
+                <Badge
                   bg={getStatusBadgeVariant(document.status)}
                   className={isProcessingStatus(document.status) ? 'status-processing' : ''}
                 >
@@ -1865,18 +1864,18 @@ function ViewDocument() {
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <span className="text-muted h6">Encryption Key Version</span>
                         <div className="d-flex align-items-center gap-2">
-                          {currentEncryptionKeyVersion && 
-                           compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
+                          {currentEncryptionKeyVersion &&
+                            compareVersion(chunkStats.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
                             <OverlayTrigger
                               placement="top"
                               overlay={
                                 <Tooltip>
-                                  This processed data is encrypted with an older key version ({chunkStats.encryptionKeyVersion}). 
+                                  This processed data is encrypted with an older key version ({chunkStats.encryptionKeyVersion}).
                                   Current version is {currentEncryptionKeyVersion}. Re-process the document to encrypt with the latest version.
                                 </Tooltip>
                               }
                             >
-                              <Badge 
+                              <Badge
                                 bg="warning"
                                 style={{ cursor: 'help' }}
                               >
@@ -1884,7 +1883,7 @@ function ViewDocument() {
                               </Badge>
                             </OverlayTrigger>
                           ) : (
-                            <Badge 
+                            <Badge
                               bg="info"
                               title={`Processed data encrypted with key version ${chunkStats.encryptionKeyVersion}`}
                             >
@@ -1954,7 +1953,7 @@ function ViewDocument() {
                         <span className="text-secondary">{metadata.keywords}</span>
                       </div>
                     )}
-                    
+
                     {/* Document Statistics */}
                     <hr className="my-3" />
                     {metadata.documentType && (
@@ -1993,7 +1992,7 @@ function ViewDocument() {
                         <span className="text-secondary">{metadata.characterCount.toLocaleString()}</span>
                       </div>
                     )}
-                    
+
                     {/* Additional Metadata */}
                     {(metadata.creator || metadata.producer) && (
                       <>
@@ -2012,7 +2011,7 @@ function ViewDocument() {
                         )}
                       </>
                     )}
-                    
+
                     {/* Extraction Info */}
                     <hr className="my-3" />
                     {metadata.extractedAt && (
@@ -2021,7 +2020,7 @@ function ViewDocument() {
                         <span className="text-secondary small">{formatDateTime(metadata.extractedAt)}</span>
                       </div>
                     )}
-                    
+
                     {/* Encryption Info */}
                     <hr className="my-3" />
                     <div className="d-flex justify-content-between align-items-center mb-3">
@@ -2044,18 +2043,18 @@ function ViewDocument() {
                       <div className="d-flex justify-content-between align-items-center">
                         <span className="text-muted h6">Encryption Key Version</span>
                         <div className="d-flex align-items-center gap-2">
-                          {currentEncryptionKeyVersion && 
-                           compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
+                          {currentEncryptionKeyVersion &&
+                            compareVersion(metadata.encryptionKeyVersion, currentEncryptionKeyVersion) ? (
                             <OverlayTrigger
                               placement="top"
                               overlay={
                                 <Tooltip>
-                                  This metadata is encrypted with an older key version ({metadata.encryptionKeyVersion}). 
+                                  This metadata is encrypted with an older key version ({metadata.encryptionKeyVersion}).
                                   Current version is {currentEncryptionKeyVersion}. Re-extract metadata to encrypt with the latest version.
                                 </Tooltip>
                               }
                             >
-                              <Badge 
+                              <Badge
                                 bg="warning"
                                 style={{ cursor: 'help' }}
                               >
@@ -2063,7 +2062,7 @@ function ViewDocument() {
                               </Badge>
                             </OverlayTrigger>
                           ) : (
-                            <Badge 
+                            <Badge
                               bg="info"
                               title={`Metadata encrypted with key version ${metadata.encryptionKeyVersion}`}
                             >
@@ -2109,7 +2108,7 @@ function ViewDocument() {
                     <HiCube className="me-1" /> View in Neo4j
                   </Button>
                 </div>
-                
+
                 {loadingGraphCounts ? (
                   <div className="text-center py-3 mb-3">
                     <Spinner animation="border" size="sm" />
@@ -2129,7 +2128,7 @@ function ViewDocument() {
                           <span className="text-secondary fw-semibold">${graphInfo.totalCost.toFixed(6)}</span>
                         </div>
                       )}
-                      
+
                       {/* Entities Section */}
                       {(graphInfo.entityCount > 0 || graphInfo.entityStartedAt || graphInfo.entityModelName || graphInfo.entityProvider || graphInfo.entityExtraction) && (
                         <div className="mb-3 pb-3 border-bottom">
@@ -2180,7 +2179,7 @@ function ViewDocument() {
                           )}
                         </div>
                       )}
-                      
+
                       {/* Relationships Section */}
                       {(graphInfo.relationshipCount > 0 || graphInfo.relationshipStartedAt || graphInfo.relationshipModelName || graphInfo.relationshipProvider || graphInfo.relationshipExtraction) && (
                         <div className="mb-3">
@@ -2231,7 +2230,7 @@ function ViewDocument() {
                           )}
                         </div>
                       )}
-                      
+
                       {/* Fallback to old extractedAt for backwards compatibility */}
                       {!graphInfo.entityStartedAt && !graphInfo.relationshipStartedAt && graphInfo.extractedAt && (
                         <div className="d-flex justify-content-between align-items-center mb-2">
@@ -2366,12 +2365,12 @@ function ViewDocument() {
                               Relationships extracted: {currentJob.totalRelationships}
                             </small>
                           )}
-                          {currentJob.processedBatches === null && currentJob.totalBatches === null && 
-                           currentJob.totalEntities === null && currentJob.totalRelationships === null && (
-                            <small className="text-muted d-block">
-                              Starting extraction...
-                            </small>
-                          )}
+                          {currentJob.processedBatches === null && currentJob.totalBatches === null &&
+                            currentJob.totalEntities === null && currentJob.totalRelationships === null && (
+                              <small className="text-muted d-block">
+                                Starting extraction...
+                              </small>
+                            )}
                         </>
                       )}
                     </div>
@@ -2437,7 +2436,7 @@ function ViewDocument() {
                   </div>
                 ) : documentEntities.length === 0 ? (
                   <div className="text-center py-4 text-muted">
-                    {selectedDocumentEntityType === 'All' 
+                    {selectedDocumentEntityType === 'All'
                       ? 'No entities found for this document'
                       : `No ${selectedDocumentEntityType} entities found for this document`}
                   </div>
@@ -2456,15 +2455,20 @@ function ViewDocument() {
                       <tbody>
                         {documentEntities.slice(0, 100).map((entity, idx) => {
                           // Filter out system fields - same list used in both count and extraction
-                          const excludedKeys = ['id', 'name', 'type', 'teamId', 'documentId', 'extractedAt', 'createdAt', 'updatedAt'];
-                          const propertyCount = Object.keys(entity).filter(k => !excludedKeys.includes(k)).length;
+                          const excludedKeys = ['id', 'name', 'type', 'teamId', 'documentId', 'extractedAt', 'createdAt', 'updatedAt', 'encryptionKeyVersion', 'name_encryption_version'];
+
+                          const isPropertyVisible = (key) => {
+                            return !excludedKeys.includes(key) && !key.endsWith('_encryption_version');
+                          };
+
+                          const propertyCount = Object.keys(entity).filter(isPropertyVisible).length;
                           const entityProperties = Object.entries(entity)
-                            .filter(([key]) => !excludedKeys.includes(key))
+                            .filter(([key]) => isPropertyVisible(key))
                             .reduce((acc, [key, value]) => {
                               acc[key] = value;
                               return acc;
                             }, {});
-                          
+
                           // Include name with encryption info for decryption in the modal
                           const propertiesWithName = {
                             ...entityProperties,
@@ -2472,9 +2476,9 @@ function ViewDocument() {
                             ...(entity.name_encryption_version && { name_encryption_version: entity.name_encryption_version }),
                             ...(entity.encryptionKeyVersion && { encryptionKeyVersion: entity.encryptionKeyVersion })
                           };
-                          
+
                           return (
-                            <tr 
+                            <tr
                               key={entity.id || idx}
                               style={{ cursor: 'pointer' }}
                               onClick={() => handleOpenPropertiesModal(
@@ -2502,7 +2506,7 @@ function ViewDocument() {
                                   const entityVersion = getEntityEncryptionVersion(entity);
                                   const isOutdated = isOutdatedEncryption(entity);
                                   const displayVersion = entityVersion || 'none';
-                                  
+
                                   if (isOutdated && currentEncryptionKeyVersion) {
                                     return (
                                       <div>
@@ -2515,7 +2519,7 @@ function ViewDocument() {
                                       </div>
                                     );
                                   }
-                                  
+
                                   return (
                                     <Badge bg={entityVersion ? "success" : "secondary"} title={entityVersion ? `Encrypted with ${displayVersion}` : 'Not encrypted (legacy)'}>
                                       {displayVersion}
@@ -2591,7 +2595,7 @@ function ViewDocument() {
                   </div>
                 ) : documentRelationships.length === 0 ? (
                   <div className="text-center py-4 text-muted">
-                    {selectedDocumentRelationshipType === 'All' 
+                    {selectedDocumentRelationshipType === 'All'
                       ? 'No relationships found for this document'
                       : `No ${selectedDocumentRelationshipType} relationships found for this document`}
                   </div>
@@ -2617,9 +2621,9 @@ function ViewDocument() {
                           const toEntityName = relationship.toEntity?.name || relationship.toEntity?.id || 'N/A';
                           const relationshipTitle = `${relationship.relationshipType || 'Unknown'} Relationship`;
                           const relationshipSubtitle = `${relationship.fromEntity?.type || 'Unknown'}:${fromEntityName} → ${relationship.toEntity?.type || 'Unknown'}:${toEntityName}`;
-                          
+
                           return (
-                            <tr 
+                            <tr
                               key={idx}
                               style={{ cursor: 'pointer' }}
                               onClick={() => handleOpenPropertiesModal(
@@ -2647,7 +2651,7 @@ function ViewDocument() {
                                   const fromVersion = getEntityEncryptionVersion(relationship.fromEntity);
                                   const fromOutdated = relationship.fromEntity && isOutdatedEncryption(relationship.fromEntity);
                                   const fromDisplayVersion = fromVersion || 'none';
-                                  
+
                                   if (fromOutdated && currentEncryptionKeyVersion) {
                                     return (
                                       <div>
@@ -2658,7 +2662,7 @@ function ViewDocument() {
                                       </div>
                                     );
                                   }
-                                  
+
                                   return (
                                     <Badge bg={fromVersion ? "success" : "secondary"} title={fromVersion ? `Encrypted with ${fromDisplayVersion}` : 'Not encrypted (legacy)'}>
                                       {fromDisplayVersion}
@@ -2679,7 +2683,7 @@ function ViewDocument() {
                                   const toVersion = getEntityEncryptionVersion(relationship.toEntity);
                                   const toOutdated = relationship.toEntity && isOutdatedEncryption(relationship.toEntity);
                                   const toDisplayVersion = toVersion || 'none';
-                                  
+
                                   if (toOutdated && currentEncryptionKeyVersion) {
                                     return (
                                       <div>
@@ -2690,7 +2694,7 @@ function ViewDocument() {
                                       </div>
                                     );
                                   }
-                                  
+
                                   return (
                                     <Badge bg={toVersion ? "success" : "secondary"} title={toVersion ? `Encrypted with ${toDisplayVersion}` : 'Not encrypted (legacy)'}>
                                       {toDisplayVersion}
@@ -2766,7 +2770,7 @@ function ViewDocument() {
           loading={extracting.entities || extracting.relationships || extracting.all}
         />
       )}
-      
+
       {/* Already Extracted Modal */}
       <AlertMessageModal
         show={alreadyExtractedModal.show}

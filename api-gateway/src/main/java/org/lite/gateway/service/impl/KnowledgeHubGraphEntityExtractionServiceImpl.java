@@ -274,7 +274,7 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                                                                             // Add delay between batches to respect rate
                                                                             // limits
                                                                             return batchIndex > 0
-                                                                                    ? Mono.delay(Duration.ofSeconds(3))
+                                                                                    ? Mono.delay(Duration.ofSeconds(10))
                                                                                             .then(extractEntitiesFromTextWithCostTracking(
                                                                                                     batchText,
                                                                                                     documentId, teamId))
@@ -506,6 +506,16 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
 
                     // Execute LLM request
                     return linqLlmModelService.executeLlmRequest(request, llmModel)
+                            .retryWhen(reactor.util.retry.Retry.backoff(3, Duration.ofSeconds(5))
+                                    .filter(throwable -> {
+                                        // Retry on 429 (Rate Limit) or 5xx (Server Error)
+                                        String msg = throwable.getMessage();
+                                        return msg != null && (msg.contains("429") || msg.contains("rate limit") ||
+                                                msg.contains("500") || msg.contains("502") || msg.contains("503"));
+                                    })
+                                    .doBeforeRetry(retrySignal -> log.warn(
+                                            "⚠️ Retrying entity extraction due to error: {} (attempt {}/3)",
+                                            retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1)))
                             .flatMap(response -> {
                                 try {
                                     // Extract and log token usage and cost

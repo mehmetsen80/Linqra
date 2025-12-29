@@ -21,6 +21,7 @@ import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -797,66 +798,46 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 log.info("Building Gemini embedding payload - text: {}, model: {}", geminiText, geminiModel);
                 break;
             case "cohere-chat":
-                // Cohere Chat API format - requires message field (converted from messages
-                // array)
+                // Cohere V2 Chat API format - requires messages array
                 String cohereModel = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel()
                         : "command-r-08-2024";
                 payload.put("model", cohereModel);
 
-                // Handle messages array from payload - convert to Cohere format
-                StringBuilder cohereMessage = new StringBuilder();
-                StringBuilder coherePreamble = new StringBuilder();
+                List<Map<String, Object>> cohereMessages = new ArrayList<>();
 
                 if (request.getQuery().getPayload() instanceof List) {
                     @SuppressWarnings("unchecked")
                     List<Map<String, Object>> messages = (List<Map<String, Object>>) request.getQuery().getPayload();
 
-                    // Convert messages array to Cohere format
-                    // System messages go to preamble, user/assistant messages go to message
                     for (Map<String, Object> message : messages) {
                         String role = (String) message.get("role");
                         Object contentObj = message.get("content");
                         String content = contentObj != null ? contentObj.toString() : "";
 
                         if (content.trim().isEmpty()) {
-                            continue; // Skip empty messages
+                            continue;
                         }
 
-                        if ("system".equals(role)) {
-                            // System messages go to preamble
-                            if (coherePreamble.length() > 0) {
-                                coherePreamble.append("\n\n");
-                            }
-                            coherePreamble.append(content);
-                        } else if ("user".equals(role)) {
-                            // User messages go to message field
-                            if (cohereMessage.length() > 0) {
-                                cohereMessage.append("\n\nUser: ");
-                            } else {
-                                cohereMessage.append("User: ");
-                            }
-                            cohereMessage.append(content);
-                        } else if ("assistant".equals(role)) {
-                            // Assistant messages go to message field
-                            if (cohereMessage.length() > 0) {
-                                cohereMessage.append("\n\nAssistant: ");
-                            } else {
-                                cohereMessage.append("Assistant: ");
-                            }
-                            cohereMessage.append(content);
+                        // Map roles to Cohere V2 roles
+                        // system -> system
+                        // user -> user
+                        // assistant -> assistant
+                        Map<String, Object> cohereMsg = new HashMap<>();
+                        if ("system".equalsIgnoreCase(role)) {
+                            cohereMsg.put("role", "system");
+                        } else if ("assistant".equalsIgnoreCase(role)) {
+                            cohereMsg.put("role", "assistant");
+                        } else {
+                            cohereMsg.put("role", "user");
                         }
+                        cohereMsg.put("content", content);
+                        cohereMessages.add(cohereMsg);
                     }
                 } else if (request.getQuery().getPayload() instanceof Map) {
-                    // If payload is a Map, check for message/preamble or messages array
+                    // Handle Map payload
                     Map<String, Object> coherePayload = (Map<String, Object>) request.getQuery().getPayload();
-                    if (coherePayload.containsKey("message")) {
-                        payload.put("message", coherePayload.get("message"));
-                    }
-                    if (coherePayload.containsKey("preamble")) {
-                        payload.put("preamble", coherePayload.get("preamble"));
-                    }
+
                     if (coherePayload.containsKey("messages")) {
-                        // Convert messages array
                         @SuppressWarnings("unchecked")
                         List<Map<String, Object>> messages = (List<Map<String, Object>>) coherePayload.get("messages");
                         for (Map<String, Object> message : messages) {
@@ -864,33 +845,29 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             Object contentObj = message.get("content");
                             String content = contentObj != null ? contentObj.toString() : "";
 
-                            if (content.trim().isEmpty()) {
+                            if (content.trim().isEmpty())
                                 continue;
-                            }
 
-                            if ("system".equals(role)) {
-                                if (coherePreamble.length() > 0) {
-                                    coherePreamble.append("\n\n");
-                                }
-                                coherePreamble.append(content);
-                            } else if ("user".equals(role)) {
-                                if (cohereMessage.length() > 0) {
-                                    cohereMessage.append("\n\nUser: ");
-                                } else {
-                                    cohereMessage.append("User: ");
-                                }
-                                cohereMessage.append(content);
-                            } else if ("assistant".equals(role)) {
-                                if (cohereMessage.length() > 0) {
-                                    cohereMessage.append("\n\nAssistant: ");
-                                } else {
-                                    cohereMessage.append("Assistant: ");
-                                }
-                                cohereMessage.append(content);
+                            Map<String, Object> cohereMsg = new HashMap<>();
+                            if ("system".equalsIgnoreCase(role)) {
+                                cohereMsg.put("role", "system");
+                            } else if ("assistant".equalsIgnoreCase(role)) {
+                                cohereMsg.put("role", "assistant");
+                            } else {
+                                cohereMsg.put("role", "user");
                             }
+                            cohereMsg.put("content", content);
+                            cohereMessages.add(cohereMsg);
                         }
+                    } else if (coherePayload.containsKey("message")) {
+                        // Backwards compatibility for single message
+                        Map<String, Object> cohereMsg = new HashMap<>();
+                        cohereMsg.put("role", "user");
+                        cohereMsg.put("content", coherePayload.get("message"));
+                        cohereMessages.add(cohereMsg);
                     }
-                    // Add any other fields from the payload (excluding message/preamble/messages)
+
+                    // Add any other fields (excluding message/preamble/messages)
                     coherePayload.forEach((key, value) -> {
                         if (!key.equals("message") && !key.equals("preamble") && !key.equals("messages")) {
                             payload.put(key, value);
@@ -898,20 +875,21 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     });
                 }
 
-                // Set message and preamble if we built them from messages array
-                if (cohereMessage.length() > 0) {
-                    payload.put("message", cohereMessage.toString());
-                }
-                if (coherePreamble.length() > 0) {
-                    payload.put("preamble", coherePreamble.toString());
-                }
+                payload.put("messages", cohereMessages);
 
                 // Add settings from llmConfig
                 if (llmConfig != null && llmConfig.getSettings() != null) {
-                    payload.putAll(llmConfig.getSettings());
+                    Map<String, Object> settings = new HashMap<>(llmConfig.getSettings());
+
+                    // Map max.tokens to max_tokens
+                    if (settings.containsKey("max.tokens")) {
+                        Object val = settings.remove("max.tokens");
+                        settings.put("max_tokens", val);
+                    }
+
+                    payload.putAll(settings);
                 }
-                log.info("Building Cohere payload for model: {} with message length: {}", cohereModel,
-                        cohereMessage.length() > 0 ? cohereMessage.length() : 0);
+                log.info("Building Cohere payload for model: {} with {} messages", cohereModel, cohereMessages.size());
                 break;
             case "cohere-embed":
                 // Cohere Embed API format
@@ -982,8 +960,9 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             });
                 })
                 .bodyToMono(Object.class)
+                .timeout(Duration.ofSeconds(120)) // 2-minute timeout to prevent indefinite hanging
                 .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
-                .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage()));
+                .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage(), error));
     }
 
     @Override

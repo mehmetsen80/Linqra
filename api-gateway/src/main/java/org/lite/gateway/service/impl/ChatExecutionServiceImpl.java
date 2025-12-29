@@ -137,7 +137,8 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                                         // duplicate assistant messages on the frontend.
 
                                                         // Save user message
-                                                        return saveUserMessage(conversation, message, chat.getContext(), assistant, request.getExecutedBy())
+                                                        return saveUserMessage(conversation, message, chat.getContext(),
+                                                                assistant, request.getExecutedBy())
                                                                 .flatMap(savedUserMessage -> {
                                                                     // Publish user message saved update
                                                                     publishChatUpdate("MESSAGE_SAVED", Map.of(
@@ -147,7 +148,8 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
 
                                                                     // Save assistant response
                                                                     return saveAssistantMessage(conversation,
-                                                                            chatResponse, assistant, request.getExecutedBy())
+                                                                            chatResponse, assistant,
+                                                                            request.getExecutedBy())
                                                                             .map(savedAssistantMessage -> {
                                                                                 // Publish assistant message saved
                                                                                 // update
@@ -249,7 +251,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
         int maxMessages = assistant.getContextManagement() != null
                 && assistant.getContextManagement().getMaxRecentMessages() != null
                         ? assistant.getContextManagement().getMaxRecentMessages()
-                        : 10;
+                        : 20;
 
         return conversationService.getRecentMessages(conversation.getId(), maxMessages)
                 .collectList()
@@ -293,7 +295,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
         String assistantId = assistant.getId();
         String teamId = assistant.getTeamId();
         String executedBy = request.getExecutedBy();
-        
+
         // Check if audit logging is enabled for this assistant
         final boolean auditLoggingEnabled = assistant.getGuardrails() != null &&
                 Boolean.TRUE.equals(assistant.getGuardrails().getAuditLoggingEnabled());
@@ -311,7 +313,8 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
             startContext.put("teamId", teamId);
             startContext.put("hasSelectedTasks",
                     assistant.getSelectedTasks() != null && !assistant.getSelectedTasks().isEmpty());
-            startContext.put("taskCount", assistant.getSelectedTasks() != null ? assistant.getSelectedTasks().size() : 0);
+            startContext.put("taskCount",
+                    assistant.getSelectedTasks() != null ? assistant.getSelectedTasks().size() : 0);
             startContext.put("startTimestamp", startTime.toString());
             if (executedBy != null) {
                 startContext.put("executedBy", executedBy);
@@ -498,6 +501,14 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                                 chatRequest.setQuery(query);
                                                 chatRequest.setExecutedBy(request.getExecutedBy());
 
+                                                // Publish LLM call started event
+                                                Map<String, Object> llmStartData = new HashMap<>();
+                                                llmStartData.put("conversationId", conversation.getId());
+                                                llmStartData.put("modelName", modelName);
+                                                llmStartData.put("modelCategory", finalModelCategory);
+                                                llmStartData.put("provider", llmModel.getProvider());
+                                                publishChatUpdate("LLM_CALL_STARTED", llmStartData);
+
                                                 // Execute LLM request
                                                 return linqLlmModelService.executeLlmRequest(chatRequest, llmModel)
                                                         .flatMap(response -> {
@@ -566,6 +577,9 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                                                         Map<String, Object> formatted = new HashMap<>();
                                                                         formatted.put("documentId", docId);
                                                                         formatted.put("fileName", fileName);
+                                                                        formatted.put("name", fileName); // Frontend
+                                                                                                         // expects
+                                                                                                         // 'name'
 
                                                                         // Use fileName as the primary identifier and
                                                                         // title
@@ -584,7 +598,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                                                 // Convert to list
                                                                 List<Map<String, Object>> formattedDocs = new ArrayList<>(
                                                                         uniqueDocs.values());
-                                                                metadata.put("knowledgeGraphDocuments", formattedDocs);
+                                                                metadata.put("documents", formattedDocs);
 
                                                                 // Also add to taskResults so frontend can display them
                                                                 // alongside RAG documents
@@ -652,10 +666,12 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                                             }
 
                                                             // Log audit event only if audit logging is enabled
-                                                            boolean isAuditEnabled = assistant.getGuardrails() != null &&
-                                                                    Boolean.TRUE.equals(assistant.getGuardrails().getAuditLoggingEnabled());
-                                                            Mono<Void> completionAuditLog = isAuditEnabled ?
-                                                                    auditLogHelper.logDetailedEvent(
+                                                            boolean isAuditEnabled = assistant.getGuardrails() != null
+                                                                    &&
+                                                                    Boolean.TRUE.equals(assistant.getGuardrails()
+                                                                            .getAuditLoggingEnabled());
+                                                            Mono<Void> completionAuditLog = isAuditEnabled
+                                                                    ? auditLogHelper.logDetailedEvent(
                                                                             AuditEventType.CHAT_EXECUTION_COMPLETED,
                                                                             AuditActionType.READ,
                                                                             AuditResourceType.CHAT,
@@ -669,10 +685,11 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                                                             AuditResultType.SUCCESS)
                                                                             .doOnError(auditError -> log.error(
                                                                                     "Failed to log audit event (chat execution completed): {}",
-                                                                                    auditError.getMessage(), auditError))
+                                                                                    auditError.getMessage(),
+                                                                                    auditError))
                                                                             .onErrorResume(auditError -> Mono.empty())
                                                                     : Mono.empty();
-                                                            
+
                                                             return completionAuditLog.thenReturn(chatResponse);
                                                         })
                                                         .onErrorResume(error -> {
@@ -697,27 +714,31 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                                             }
 
                                                             // Log audit event only if audit logging is enabled
-                                                            boolean isAuditEnabled = assistant.getGuardrails() != null &&
-                                                                    Boolean.TRUE.equals(assistant.getGuardrails().getAuditLoggingEnabled());
-                                                            Mono<Void> failureAuditLog = isAuditEnabled ?
-                                                                    auditLogHelper.logDetailedEvent(
+                                                            boolean isAuditEnabled = assistant.getGuardrails() != null
+                                                                    &&
+                                                                    Boolean.TRUE.equals(assistant.getGuardrails()
+                                                                            .getAuditLoggingEnabled());
+                                                            Mono<Void> failureAuditLog = isAuditEnabled
+                                                                    ? auditLogHelper.logDetailedEvent(
                                                                             AuditEventType.CHAT_EXECUTION_FAILED,
                                                                             AuditActionType.READ,
                                                                             AuditResourceType.CHAT,
                                                                             conversationId,
                                                                             String.format(
                                                                                     "Chat execution failed for assistant '%s': %s",
-                                                                                    assistant.getName(), error.getMessage()),
+                                                                                    assistant.getName(),
+                                                                                    error.getMessage()),
                                                                             errorContext,
                                                                             null,
                                                                             null,
                                                                             AuditResultType.FAILED)
                                                                             .doOnError(auditError -> log.error(
                                                                                     "Failed to log audit event (chat execution failed): {}",
-                                                                                    auditError.getMessage(), auditError))
+                                                                                    auditError.getMessage(),
+                                                                                    auditError))
                                                                             .onErrorResume(auditError -> Mono.empty())
                                                                     : Mono.empty();
-                                                            
+
                                                             return failureAuditLog.then(Mono.error(error));
                                                         });
                                             });
@@ -824,25 +845,6 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
             enrichedContext.append(systemPrompt).append("\n\n");
         }
 
-        // Add document visibility guidance
-        enrichedContext.append("**Document Visibility Guidance**: ")
-                .append("Knowledge Hub documents may be available for download. Only mention or reference documents when: ")
-                .append("1) The user explicitly requests them (e.g., 'download', 'show me the form', 'give me the document'), ")
-                .append("OR 2) The documents directly contain the answer to the user's question and would be helpful. ")
-                .append("If documents don't contain relevant information, do NOT mention them. ")
-                .append("Focus on answering the question directly using your knowledge and the provided context snippets.\n\n");
-
-        // Add formatting guidance for lists and tables
-        enrichedContext.append("**Response Formatting Guidelines**: ")
-                .append("When presenting multiple items (e.g., forms, prices, requirements), use clear, structured formatting:\n")
-                .append("- For lists of forms with prices or fees, present them in a **markdown table format** with columns for Form Number, Form Name, Price/Fee, and other relevant details.\n")
-                .append("- For lists of requirements or documents, use numbered or bulleted lists for clarity.\n")
-                .append("- When comparing multiple options or items, tables are preferred over paragraph text.\n")
-                .append("- Example table format for forms:\n")
-                .append("| Form Number | Form Name | Fee |\n")
-                .append("|-------------|-----------|-----|\n")
-                .append("| I-130 | Petition for Alien Relative | $535 |\n\n");
-
         // Add Knowledge Graph context if available
         if (graphContext != null && !graphContext.isEmpty()) {
             Integer entityCount = (Integer) graphContext.getOrDefault("entityCount", 0);
@@ -870,12 +872,17 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                         // Add key properties (exclude system fields)
                         entity.entrySet().stream()
                                 .filter(e -> !isSystemField(e.getKey()))
-                                .limit(3) // Limit to 3 key properties
                                 .forEach(e -> {
                                     Object value = e.getValue();
-                                    if (value != null && !(value instanceof List) && !(value instanceof Map)) {
-                                        enrichedContext.append("  - ").append(e.getKey()).append(": ").append(value)
-                                                .append("\n");
+                                    if (value != null && !(value instanceof Map)) {
+                                        // Handle List values (arrays) by converting to string representation
+                                        if (value instanceof List) {
+                                            enrichedContext.append("  - ").append(e.getKey()).append(": ").append(value)
+                                                    .append("\n");
+                                        } else {
+                                            enrichedContext.append("  - ").append(e.getKey()).append(": ").append(value)
+                                                    .append("\n");
+                                        }
                                     }
                                 });
                     }
@@ -922,12 +929,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                         }
                         enrichedContext.append("\n");
                     }
-                    enrichedContext.append(
-                            "\n**IMPORTANT**: Only mention or reference these documents if they are actually relevant to answering the user's question. ")
-                            .append("If the documents do not contain the information the user is asking for, do NOT mention them. ")
-                            .append("If the user explicitly asks for documents (e.g., 'download the form', 'show me the document', 'give me the file'), ")
-                            .append("then provide references to the relevant documents from the list above. ")
-                            .append("Otherwise, focus on answering the question directly without unnecessary document references.\n\n");
+
                 }
                 enrichedContext.append("\n");
             }
@@ -1390,20 +1392,17 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
             }
 
             // Try Claude/Anthropic format: { "content": [ { "text": "..." } ] } or {
-            // "content": "..." } (direct string)
-            // Also handles cases where result itself is a message object with content field
+            // "content": "..." }
             if (result.containsKey("content")) {
                 Object contentObj = result.get("content");
                 if (contentObj == null) {
                     log.warn("Content field exists but is null in response with keys: {}", result.keySet());
                 } else if (contentObj instanceof String) {
-                    // Content is a direct string
                     String contentStr = (String) contentObj;
                     if (!contentStr.trim().isEmpty()) {
                         return contentStr;
                     }
                 } else if (contentObj instanceof List) {
-                    // Content is an array of objects with text field (Claude format)
                     List<?> contentList = (List<?>) contentObj;
                     if (!contentList.isEmpty()) {
                         Object firstItem = contentList.get(0);
@@ -1417,11 +1416,40 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                 }
                             }
                         } else if (firstItem instanceof String) {
-                            // Content is a list of strings
                             String text = (String) firstItem;
                             if (!text.trim().isEmpty()) {
                                 return text;
                             }
+                        }
+                    }
+                }
+            }
+
+            // Try Cohere V2 format (top-level message object)
+            if (result.containsKey("message")) {
+                Object messageObj = result.get("message");
+                if (messageObj instanceof Map) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> messageMap = (Map<String, Object>) messageObj;
+                    if (messageMap.containsKey("content")) {
+                        Object contentObj = messageMap.get("content");
+                        if (contentObj instanceof List) {
+                            List<?> contentList = (List<?>) contentObj;
+                            if (!contentList.isEmpty()) {
+                                Object firstItem = contentList.get(0);
+                                if (firstItem instanceof Map) {
+                                    @SuppressWarnings("unchecked")
+                                    Map<String, Object> firstContent = (Map<String, Object>) firstItem;
+                                    if (firstContent.containsKey("text")) {
+                                        String text = (String) firstContent.get("text");
+                                        if (text != null && !text.trim().isEmpty()) {
+                                            return text;
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (contentObj instanceof String) {
+                            return (String) contentObj;
                         }
                     }
                 }
@@ -1485,10 +1513,10 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                             : message;
 
                     // Build message metadata
-                    ConversationMessage.MessageMetadata.MessageMetadataBuilder metadataBuilder =
-                            ConversationMessage.MessageMetadata.builder()
-                                    .intent("user_query")
-                                    .piiDetected(piiResult.isPiiDetected());
+                    ConversationMessage.MessageMetadata.MessageMetadataBuilder metadataBuilder = ConversationMessage.MessageMetadata
+                            .builder()
+                            .intent("user_query")
+                            .piiDetected(piiResult.isPiiDetected());
 
                     // Add additional context data
                     Map<String, Object> additionalData = context != null ? new HashMap<>(context) : new HashMap<>();
@@ -1525,7 +1553,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
             String executedBy) {
         LinqResponse.ChatResult chatResult = chatResponse.getChatResult();
         String assistantMessageContent = chatResult.getMessage();
-        
+
         // Check if PII detection is enabled
         boolean piiDetectionEnabled = assistant.getGuardrails() != null &&
                 Boolean.TRUE.equals(assistant.getGuardrails().getPiiDetectionEnabled());
@@ -1533,6 +1561,11 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                 Boolean.TRUE.equals(assistant.getGuardrails().getAuditLoggingEnabled());
 
         if (!piiDetectionEnabled) {
+            Map<String, Object> additionalData = chatResult.getMetadata() != null
+                    ? new HashMap<>(chatResult.getMetadata())
+                    : new HashMap<>();
+            Object documents = additionalData.remove("documents"); // Extract and remove
+
             // PII detection disabled, save message as-is
             ConversationMessage.MessageMetadata metadata = ConversationMessage.MessageMetadata.builder()
                     .intent(chatResult.getIntent())
@@ -1549,7 +1582,8 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                     .costUsd(chatResult.getTokenUsage().getCostUsd())
                                     .build()
                             : null)
-                    .additionalData(chatResult.getMetadata() != null ? chatResult.getMetadata() : new HashMap<>())
+                    .additionalData(additionalData)
+                    .documents(documents)
                     .build();
 
             ConversationMessage assistantMessage = ConversationMessage.builder()
@@ -1565,53 +1599,60 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
 
         // PII detection enabled - detect and automatically redact if PII is found
         // Redaction is automatic when PII detection is enabled for compliance
-        return piiDetectionService.detectPII(assistantMessageContent, true)
-                .flatMap(piiResult -> {
-                    String finalContent = piiResult.isPiiDetected()
-                            ? piiResult.getRedactedContent()
-                            : assistantMessageContent;
+        return piiDetectionService.detectPII(assistantMessageContent, true).flatMap(piiResult ->
 
-                    // Build message metadata
-                    ConversationMessage.MessageMetadata.MessageMetadataBuilder metadataBuilder =
-                            ConversationMessage.MessageMetadata.builder()
-                                    .intent(chatResult.getIntent())
-                                    .executedTasks(chatResult.getExecutedTasks())
-                                    .taskResults(chatResult.getTaskResults())
-                                    .modelCategory(chatResult.getModelCategory())
-                                    .modelName(chatResult.getModelName())
-                                    .piiDetected(piiResult.isPiiDetected())
-                                    .tokenUsage(chatResult.getTokenUsage() != null
-                                            ? ConversationMessage.MessageMetadata.TokenUsage.builder()
-                                                    .promptTokens(chatResult.getTokenUsage().getPromptTokens())
-                                                    .completionTokens(chatResult.getTokenUsage().getCompletionTokens())
-                                                    .totalTokens(chatResult.getTokenUsage().getTotalTokens())
-                                                    .costUsd(chatResult.getTokenUsage().getCostUsd())
-                                                    .build()
-                                            : null)
-                                    .additionalData(chatResult.getMetadata() != null ? chatResult.getMetadata() : new HashMap<>());
+        {
+            String finalContent = piiResult.isPiiDetected()
+                    ? piiResult.getRedactedContent()
+                    : assistantMessageContent;
 
-                    ConversationMessage assistantMessage = ConversationMessage.builder()
-                            .conversationId(conversation.getId())
-                            .role("ASSISTANT")
-                            .content(finalContent)
-                            .timestamp(LocalDateTime.now())
-                            .metadata(metadataBuilder.build())
-                            .build();
+            Map<String, Object> additionalData = chatResult.getMetadata() != null
+                    ? new HashMap<>(chatResult.getMetadata())
+                    : new HashMap<>();
+            Object documents = additionalData.remove("documents"); // Extract and remove
 
-                    // Audit log PII detection if enabled
-                    Mono<Void> auditLogMono = Mono.empty();
-                    if (piiResult.isPiiDetected() && auditLoggingEnabled) {
-                        auditLogMono = logPIIDetection(
-                                conversation.getId(),
-                                assistant.getId(),
-                                assistant.getTeamId(),
-                                executedBy != null ? executedBy : "system",
-                                "ASSISTANT",
-                                piiResult);
-                    }
+            // Build message metadata
+            ConversationMessage.MessageMetadata.MessageMetadataBuilder metadataBuilder = ConversationMessage.MessageMetadata
+                    .builder()
+                    .intent(chatResult.getIntent())
+                    .executedTasks(chatResult.getExecutedTasks())
+                    .taskResults(chatResult.getTaskResults())
+                    .modelCategory(chatResult.getModelCategory())
+                    .modelName(chatResult.getModelName())
+                    .piiDetected(piiResult.isPiiDetected())
+                    .tokenUsage(chatResult.getTokenUsage() != null
+                            ? ConversationMessage.MessageMetadata.TokenUsage.builder()
+                                    .promptTokens(chatResult.getTokenUsage().getPromptTokens())
+                                    .completionTokens(chatResult.getTokenUsage().getCompletionTokens())
+                                    .totalTokens(chatResult.getTokenUsage().getTotalTokens())
+                                    .costUsd(chatResult.getTokenUsage().getCostUsd())
+                                    .build()
+                            : null)
+                    .additionalData(additionalData)
+                    .documents(documents);
 
-                    return auditLogMono.then(conversationService.addMessage(assistantMessage));
-                });
+            ConversationMessage assistantMessage = ConversationMessage.builder()
+                    .conversationId(conversation.getId())
+                    .role("ASSISTANT")
+                    .content(finalContent)
+                    .timestamp(LocalDateTime.now())
+                    .metadata(metadataBuilder.build())
+                    .build();
+
+            // Audit log PII detection if enabled
+            Mono<Void> auditLogMono = Mono.empty();
+            if (piiResult.isPiiDetected() && auditLoggingEnabled) {
+                auditLogMono = logPIIDetection(
+                        conversation.getId(),
+                        assistant.getId(),
+                        assistant.getTeamId(),
+                        executedBy != null ? executedBy : "system",
+                        "ASSISTANT",
+                        piiResult);
+            }
+
+            return auditLogMono.then(conversationService.addMessage(assistantMessage));
+        });
     }
 
     /**
@@ -1624,23 +1665,25 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
             String executedBy,
             String messageRole,
             PIIDetectionService.PIIDetectionResult piiResult) {
-        
+
         Map<String, Object> context = new HashMap<>();
         context.put("conversationId", conversationId);
         context.put("assistantId", assistantId);
         context.put("teamId", teamId);
         context.put("executedBy", executedBy);
         context.put("messageRole", messageRole);
-        
+
         // Add PII summary metadata (types and counts only, no actual PII values)
         Map<String, Object> piiMetadata = piiDetectionService.getPIISummaryMetadata(piiResult);
         context.putAll(piiMetadata);
-        
+
         int typeCount = piiMetadata.containsKey("piiTypes") && piiMetadata.get("piiTypes") instanceof List
-                ? ((List<?>) piiMetadata.get("piiTypes")).size() : 0;
+                ? ((List<?>) piiMetadata.get("piiTypes")).size()
+                : 0;
         int totalMatches = piiMetadata.containsKey("totalMatches") && piiMetadata.get("totalMatches") instanceof Number
-                ? ((Number) piiMetadata.get("totalMatches")).intValue() : 0;
-        
+                ? ((Number) piiMetadata.get("totalMatches")).intValue()
+                : 0;
+
         return auditLogHelper.logDetailedEvent(
                 AuditEventType.PII_DETECTED,
                 AuditActionType.READ,
@@ -1655,7 +1698,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                 .doOnError(error -> log.error("Failed to log PII detection audit event: {}", error.getMessage(), error))
                 .onErrorResume(error -> Mono.empty()); // Don't fail if audit logging fails
     }
-    
+
     /**
      * Publish chat update via WebSocket
      */

@@ -37,17 +37,17 @@ public class EmailConfig {
                 public void send(@NotNull SimpleMailMessage simpleMessage) {
                     // Do nothing - email is disabled
                 }
-                
+
                 @Override
                 public void send(@NotNull SimpleMailMessage... simpleMessages) {
                     // Do nothing - email is disabled
                 }
-                
+
                 @Override
                 public void send(@NotNull MimeMessagePreparator mimeMessagePreparator) {
                     // Do nothing - email is disabled
                 }
-                
+
                 @Override
                 public void send(@NotNull MimeMessagePreparator... mimeMessagePreparators) {
                     // Do nothing - email is disabled
@@ -70,4 +70,4 @@ public class EmailConfig {
 
         return mailSender;
     }
-} 
+}

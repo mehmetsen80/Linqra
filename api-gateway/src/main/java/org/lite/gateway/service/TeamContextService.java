@@ -36,7 +36,7 @@ public class TeamContextService {
                     if (principal instanceof Jwt jwt) {
                         // First try to get teamId from the claim
                         String teamId = jwt.getClaimAsString("teamId");
-                        log.info("Extracted teamId from JWT claim: {}", teamId);
+                        //log.info("Extracted teamId from JWT claim: {}", teamId);
                         if (teamId != null) {
                             return Mono.just(teamId);
                         }
@@ -47,7 +47,7 @@ public class TeamContextService {
                             String[] chunks = tokenValue.split("\\.");
                             String payload = new String(Base64.getDecoder().decode(chunks[1]));
                             JsonNode jsonNode = objectMapper.readTree(payload);
-                            log.info("Decoded token payload: {}", payload);
+                            //log.info("Decoded token payload: {}", payload);
 
                             if (jsonNode.has("teams")) {
                                 JsonNode teamsNode = jsonNode.get("teams");
@@ -58,7 +58,7 @@ public class TeamContextService {
                                     String firstTeam = teamsNode.get(0).asText();
                                     String normalizedTeam = firstTeam.startsWith("lm_") ? firstTeam.substring(3)
                                             : firstTeam;
-                                    log.info("Extracted first team from teams array: {}", normalizedTeam);
+                                    //log.info("Extracted first team from teams array: {}", normalizedTeam);
                                     return Mono.just(normalizedTeam);
                                 } else if (teamsNode.isTextual()) {
                                     // Handle case where teams is a single string, removing 'lm_' prefix if it
@@ -66,7 +66,7 @@ public class TeamContextService {
                                     String teamValue = teamsNode.asText();
                                     String normalizedTeam = teamValue.startsWith("lm_") ? teamValue.substring(3)
                                             : teamValue;
-                                    log.info("Extracted team from teams string: {}", normalizedTeam);
+                                    //log.info("Extracted team from teams string: {}", normalizedTeam);
                                     return Mono.just(normalizedTeam);
                                 }
                             }
@@ -104,13 +104,13 @@ public class TeamContextService {
             return decoder.decode(token)
                     .flatMap(jwt -> {
                         String teamId = jwt.getClaimAsString("teamId");
-                        log.info("Extracted teamId from X-User-Token: {}", teamId);
+                        //log.info("Extracted teamId from X-User-Token: {}", teamId);
                         if (teamId != null) {
                             return Mono.just(teamId);
                         }
 
                         // If teamId is not found in X-User-Token, fall back to Authorization header
-                        log.info("No teamId in X-User-Token, falling back to Authorization header");
+                        //log.info("No teamId in X-User-Token, falling back to Authorization header");
                         return getTeamFromContext();
                     })
                     .onErrorResume(error -> {

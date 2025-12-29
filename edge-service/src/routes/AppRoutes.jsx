@@ -12,6 +12,7 @@ import ViewTeam from '../pages/Teams/ViewTeam';
 import AdminLayout from '../layouts/AdminLayout/index';
 import ProtectedRoute from '../components/common/ProtectedRoute';
 import Organizations from '../pages/Organizations';
+import DocReviewAssistant from '../pages/AIAssistants/DocReviewAssistant';
 import ApiRoutes from '../pages/ApiRoutes';
 import ViewRoute from '../pages/ApiRoutes/ViewRoute';
 import Home from '../pages/Home';
@@ -37,7 +38,8 @@ import Agents from '../pages/Agents';
 import ViewAgent from '../pages/Agents/ViewAgent';
 import ViewAgentTask from '../pages/Agents/ViewAgentTask';
 import AIAssistants from '../pages/AIAssistants';
-import ViewAssistant from '../pages/AIAssistants/ViewAssistant';
+import ViewAIAssistant from '../pages/AIAssistants/ViewAIAssistant';
+import ChatAssistant from '../pages/AIAssistants/ChatAssistant';
 import LlmUsage from '../pages/LlmUsage';
 import LlmModels from '../pages/LlmModels';
 import ExecutionMonitoring from '../pages/ExecutionMonitoring';
@@ -124,6 +126,24 @@ const AppRoutes = () => {
         <Route path="workflow/quotes" element={<WorkflowQuotes />} />
       </Route>
 
+      {/* Doc Review - Custom Layout */}
+      <Route
+        path="/doc-review"
+        element={
+          <ProtectedRoute>
+            <DocReviewAssistant />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/ai-assistants/:assistantId/chat"
+        element={
+          <ProtectedRoute>
+            <ChatAssistant />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Protected Routes - All under AdminLayout */}
       <Route
         element={
@@ -142,7 +162,8 @@ const AppRoutes = () => {
         <Route path="/agents/:agentId" element={<ViewAgent />} />
         <Route path="/agents/:agentId/tasks/:taskId" element={<ViewAgentTask />} />
         <Route path="/ai-assistants" element={<AIAssistants />} />
-        <Route path="/ai-assistants/:assistantId" element={<ViewAssistant />} />
+        <Route path="/ai-assistants/:assistantId" element={<ViewAIAssistant />} />
+
         <Route path="/workflows/:workflowId/edit" element={<EditWorkflow />} />
         <Route path="/llm-usage" element={<LlmUsage />} />
         <Route path="/execution-monitoring" element={<ExecutionMonitoring />} />

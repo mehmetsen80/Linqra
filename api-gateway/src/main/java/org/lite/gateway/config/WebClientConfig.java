@@ -30,53 +30,51 @@ public class WebClientConfig {
     @Bean
     public WebClient.Builder webClientBuilder() {
         ObjectMapper mapper = new ObjectMapper()
-            .registerModule(new JavaTimeModule());
+                .registerModule(new JavaTimeModule());
 
         ExchangeStrategies strategies = ExchangeStrategies
-            .builder()
-            .codecs(clientCodecConfigurer -> {
-                clientCodecConfigurer.defaultCodecs().jackson2JsonDecoder(
-                    new Jackson2JsonDecoder(mapper, MediaType.APPLICATION_JSON)
-                );
-                clientCodecConfigurer.defaultCodecs().jackson2JsonEncoder(
-                    new Jackson2JsonEncoder(mapper, MediaType.APPLICATION_JSON)
-                );
-                clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024);  // Further reduced for EC2
-            })
-            .build();
+                .builder()
+                .codecs(clientCodecConfigurer -> {
+                    clientCodecConfigurer.defaultCodecs().jackson2JsonDecoder(
+                            new Jackson2JsonDecoder(mapper, MediaType.APPLICATION_JSON));
+                    clientCodecConfigurer.defaultCodecs().jackson2JsonEncoder(
+                            new Jackson2JsonEncoder(mapper, MediaType.APPLICATION_JSON));
+                    clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024); // Further reduced for EC2
+                })
+                .build();
 
         ConnectionProvider provider = ConnectionProvider
-            .builder("fixed")
-            .maxConnections(25)  // Even more conservative for EC2
-            .maxIdleTime(Duration.ofSeconds(10))  // Very short idle time
-            .maxLifeTime(Duration.ofSeconds(30))  // Very short connection lifetime
-            .pendingAcquireTimeout(Duration.ofSeconds(3))  // Very short timeout
-            .evictInBackground(Duration.ofSeconds(15))  // Very frequent eviction
-            .build();
+                .builder("fixed")
+                .maxConnections(50) // Increased for better concurrency
+                .maxIdleTime(Duration.ofSeconds(20))
+                .maxLifeTime(Duration.ofSeconds(60))
+                .pendingAcquireTimeout(Duration.ofSeconds(30)) // Increased to avoid fast failures
+                .evictInBackground(Duration.ofSeconds(30))
+                .build();
 
         HttpClient httpClient = HttpClient.create(provider)
-            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000)  // Reduced connect timeout
-            .responseTimeout(Duration.ofSeconds(30))  // Much shorter timeout
-            .option(ChannelOption.SO_REUSEADDR, true)  // Reuse addresses
-            .doOnConnected(conn -> conn
-                .addHandlerLast(new ReadTimeoutHandler(30))  // Much shorter timeout
-                .addHandlerLast(new WriteTimeoutHandler(30)))  // Much shorter timeout
-            .secure(spec -> {
-                try {
-                    spec.sslContext(SslContextBuilder
-                        .forClient()
-                        .trustManager(InsecureTrustManagerFactory.INSTANCE)
-                        .build());
-                } catch (SSLException e) {
-                    throw new RuntimeException(e);
-                }
-            })
-            .wiretap("reactor.netty.http.client.HttpClient", LogLevel.DEBUG)
-            .option(ChannelOption.SO_KEEPALIVE, true)
-            .option(ChannelOption.TCP_NODELAY, true);
+                .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000) // 10s connect timeout
+                .responseTimeout(Duration.ofSeconds(120)) // Increased for LLM generation
+                .option(ChannelOption.SO_REUSEADDR, true)
+                .doOnConnected(conn -> conn
+                        .addHandlerLast(new ReadTimeoutHandler(120)) // 120s read timeout for LLMs
+                        .addHandlerLast(new WriteTimeoutHandler(120))) // 120s write timeout
+                .secure(spec -> {
+                    try {
+                        spec.sslContext(SslContextBuilder
+                                .forClient()
+                                .trustManager(InsecureTrustManagerFactory.INSTANCE)
+                                .build());
+                    } catch (SSLException e) {
+                        throw new RuntimeException(e);
+                    }
+                })
+                .wiretap("reactor.netty.http.client.HttpClient", LogLevel.DEBUG)
+                .option(ChannelOption.SO_KEEPALIVE, true)
+                .option(ChannelOption.TCP_NODELAY, true);
 
         return WebClient.builder()
-            .exchangeStrategies(strategies)
-            .clientConnector(new ReactorClientHttpConnector(httpClient));
+                .exchangeStrategies(strategies)
+                .clientConnector(new ReactorClientHttpConnector(httpClient));
     }
 }

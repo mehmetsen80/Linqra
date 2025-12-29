@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Alert, Table, Badge, Breadcrumb, Card, Form, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Breadcrumb, Card, Form, Spinner, Row, Col } from 'react-bootstrap';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { isSuperAdmin, hasAdminAccess } from '../../utils/roleUtils';
@@ -177,6 +177,10 @@ function AIAssistants() {
         }
     };
 
+    const handleViewAssistant = (assistant) => {
+        navigate(`/ai-assistants/${assistant.id}`);
+    };
+
 
     if (teamLoading || loading) {
         return <LoadingSpinner />;
@@ -223,6 +227,7 @@ function AIAssistants() {
                     </div>
                 </Card.Header>
                 <Card.Body>
+
                     {assistants.length === 0 ? (
                         <div className="text-center py-5">
                             <HiChatAlt className="fa-3x text-muted mb-3" style={{ fontSize: '3rem' }} />
@@ -234,104 +239,111 @@ function AIAssistants() {
                             </p>
                         </div>
                     ) : (
-                        <Table hover responsive className="ai-assistants-table">
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Description</th>
-                                    <th>Status</th>
-                                    <th>Access</th>
-                                    <th>Tasks</th>
-                                    <th>Model</th>
-                                    <th>Created</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {assistants.map((assistant) => (
-                                    <tr
-                                        key={assistant.id}
-                                        onClick={() => navigate(`/ai-assistants/${assistant.id}`)}
-                                        style={{ cursor: 'pointer' }}
+                        <Row xs={1} md={2} lg={3} className="g-4">
+                            {assistants.map((assistant) => (
+                                <Col key={assistant.id}>
+                                    <Card
+                                        className="h-100 shadow assistant-card border p-2"
+                                        onClick={() => handleViewAssistant(assistant)}
+                                        style={{ cursor: 'pointer', transition: 'transform 0.2s' }}
                                     >
-                                        <td>
-                                            <div className="assistant-name">
-                                                <HiChatAlt className="me-2" />
-                                                {assistant.name}
+                                        <Card.Header className="bg-white border-bottom-0 pt-2 pb-0">
+                                            <div className="d-flex justify-content-end gap-1 mb-1">
+                                                <Badge bg={
+                                                    assistant.accessControl?.type === 'PUBLIC' ? 'success' : 'secondary'
+                                                } style={{ fontSize: '0.65rem' }}>
+                                                    {assistant.accessControl?.type === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE'}
+                                                </Badge>
+                                                <Badge bg={
+                                                    assistant.category === 'REVIEW_DOC' ? 'primary' : 'info'
+                                                } style={{ fontSize: '0.65rem' }}>
+                                                    {assistant.category || 'CHAT'}
+                                                </Badge>
+                                                <Badge bg={
+                                                    assistant.status === 'ACTIVE' ? 'success' :
+                                                        assistant.status === 'INACTIVE' ? 'secondary' :
+                                                            'warning'
+                                                } style={{ fontSize: '0.65rem' }}>
+                                                    {assistant.status || 'DRAFT'}
+                                                </Badge>
                                             </div>
-                                        </td>
-                                        <td>
-                                            <div className="assistant-description">
-                                                {assistant.description || 'No description'}
+                                            <div className="d-flex align-items-center">
+                                                <div className="rounded-circle bg-light p-2 me-2">
+                                                    <HiChatAlt className="text-primary" size={20} />
+                                                </div>
+                                                <h6 className="mb-0 fw-bold" title={assistant.name}>
+                                                    {assistant.name}
+                                                </h6>
                                             </div>
-                                        </td>
-                                        <td>
-                                            <Badge bg={
-                                                assistant.status === 'ACTIVE' ? 'success' :
-                                                    assistant.status === 'INACTIVE' ? 'secondary' :
-                                                        'warning'
-                                            }>
-                                                {assistant.status || 'DRAFT'}
-                                            </Badge>
-                                        </td>
-                                        <td>
-                                            <Badge bg={
-                                                assistant.accessControl?.type === 'PUBLIC' ? 'info' : 'secondary'
-                                            }>
-                                                {assistant.accessControl?.type === 'PUBLIC' ? 'Public' : 'Private'}
-                                            </Badge>
-                                        </td>
-                                        <td>
-                                            <Badge bg="info">
-                                                {taskCounts[assistant.id] !== undefined ? taskCounts[assistant.id] : 0}
-                                                {taskCounts[assistant.id] === 1 ? ' task' : ' tasks'}
-                                            </Badge>
-                                        </td>
-                                        <td>
-                                            <span className="text-muted small">
-                                                {assistant.defaultModel?.modelName || 'N/A'}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            {formatDate(assistant.createdAt)}
-                                        </td>
-                                        <td onClick={(e) => e.stopPropagation()}>
-                                            <div className="action-buttons d-flex gap-2">
-                                                <Button
-                                                    variant="link"
-                                                    size="sm"
-                                                    onClick={() => navigate(`/ai-assistants/${assistant.id}`)}
-                                                    title="View & Chat"
-                                                >
-                                                    <HiEye />
-                                                </Button>
-                                                {canEditAssistant && (
-                                                    <>
-                                                        <Button
-                                                            variant="link"
-                                                            size="sm"
-                                                            onClick={(e) => handleEdit(assistant, e)}
-                                                            title="Edit Assistant"
-                                                        >
-                                                            <HiPencilAlt />
-                                                        </Button>
-                                                        <Button
-                                                            variant="link"
-                                                            size="sm"
-                                                            onClick={(e) => handleDelete(assistant, e)}
-                                                            title="Delete Assistant"
-                                                            className="text-danger"
-                                                        >
-                                                            <HiTrash />
-                                                        </Button>
-                                                    </>
-                                                )}
+                                        </Card.Header>
+                                        <Card.Body className="pt-2 pb-0 d-flex flex-column">
+                                            <p className="text-muted small mb-3 flex-grow-1">
+                                                {assistant.description || 'No description provided.'}
+                                            </p>
+
+                                            <div className="d-flex flex-wrap gap-2 mb-2">
+                                                <Badge bg="light" text="dark" className="border">
+                                                    {assistant.defaultModel?.modelName || 'N/A'}
+                                                </Badge>
+                                                <Badge bg="light" text="dark" className="border">
+                                                    {taskCounts[assistant.id] !== undefined ? taskCounts[assistant.id] : 0} Tasks
+                                                </Badge>
                                             </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </Table>
+                                        </Card.Body>
+                                        <Card.Footer className="bg-white border-top-0 pt-0 pb-3 mt-auto">
+                                            <hr className="my-2" />
+                                            <div className="d-flex justify-content-between align-items-center">
+                                                <div className="d-flex flex-column">
+                                                    <span className="text-muted small" style={{ fontSize: '0.7rem' }}>
+                                                        Created: {formatDate(assistant.createdAt)}
+                                                    </span>
+                                                </div>
+
+                                                <div className="d-flex gap-1" onClick={(e) => e.stopPropagation()}>
+                                                    <Button
+                                                        variant="light"
+                                                        size="sm"
+                                                        className="btn-icon-only rounded-circle"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleViewAssistant(assistant);
+                                                        }}
+                                                        title="View & Chat"
+                                                        style={{ width: '32px', height: '32px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                    >
+                                                        <HiEye />
+                                                    </Button>
+                                                    {canEditAssistant && (
+                                                        <>
+                                                            <Button
+                                                                variant="light"
+                                                                size="sm"
+                                                                className="btn-icon-only rounded-circle"
+                                                                onClick={(e) => handleEdit(assistant, e)}
+                                                                title="Edit"
+                                                                style={{ width: '32px', height: '32px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                            >
+                                                                <HiPencilAlt />
+                                                            </Button>
+                                                            <Button
+                                                                variant="light"
+                                                                size="sm"
+                                                                className="btn-icon-only rounded-circle text-danger"
+                                                                onClick={(e) => handleDelete(assistant, e)}
+                                                                title="Delete"
+                                                                style={{ width: '32px', height: '32px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                            >
+                                                                <HiTrash />
+                                                            </Button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </Card.Footer>
+                                    </Card>
+                                </Col>
+                            ))}
+                        </Row>
                     )}
                 </Card.Body>
             </Card>

@@ -64,7 +64,7 @@ public class RedisConfig {
         template.setConnectionFactory(redisConnectionFactory);
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(new StringRedisSerializer());
-        log.info("Connecting to Redis at " + redisConnectionFactory.getConnection());
+        // log.info("Connecting to Redis at " + redisConnectionFactory.getConnection());
         return template;
     }
 }

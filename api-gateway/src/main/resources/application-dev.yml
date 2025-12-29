@@ -7,7 +7,7 @@ spring:
     web-application-type: reactive
   redis:
     host: ${vault.redis.host}
-    port: 6379
+    port: ${vault.redis.port}
     database: 0
     timeout: 60000
     connect-timeout: 60000

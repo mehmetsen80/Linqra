@@ -388,6 +388,10 @@ jobs:
               --filter='protect milvus/data/***' \
               --filter='protect etcd/data/***' \
               --filter='protect minio/data/***' \
+              --filter='protect neo4j/data/***' \
+              --filter='protect neo4j/logs/***' \
+              --filter='protect neo4j/import/***' \
+              --filter='protect neo4j/plugins/***' \
               --exclude 'mongodb/data1/' \
               --exclude 'mongodb/data2/' \
               --exclude 'mongodb/data3/' \
@@ -397,7 +401,12 @@ jobs:
               --exclude 'milvus/data/' \
               --exclude 'etcd/data/' \
               --exclude 'minio/data/' \
+              --exclude 'neo4j/data/' \
+              --exclude 'neo4j/logs/' \
+              --exclude 'neo4j/import/' \
+              --exclude 'neo4j/plugins/' \
               --rsync-path="sudo rsync" artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
+
           fi
           if [ -d "artifacts/keys-config" ]; then
             rsync -avz --delete --rsync-path="sudo rsync" artifacts/keys-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/keys/

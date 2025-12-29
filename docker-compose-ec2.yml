@@ -176,22 +176,6 @@ services:
       - linqra-network
     command: mongod --bind_ip_all --replSet rs0 --port 27019 -keyFile /data/mongo-keyfile
 
-  # redis
-  redis-service:
-    build:
-      context: .
-      dockerfile: ./.kube/redis/Dockerfile
-    environment:
-      REDIS_GATEWAY_URL: redis-service
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./.kube/redis/data/:/var/lib/redis/data
-      - ./.kube/redis/redis.conf:/usr/local/etc/redis/redis.conf
-    command: [ "redis-server", "/usr/local/etc/redis/redis.conf" ]
-    networks:
-      - linqra-network
-
   # etcd for Milvus
   etcd-service:
     image: quay.io/coreos/etcd:v3.5.5
@@ -370,12 +354,6 @@ services:
       VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
       VAULT_REQUIRED_VARS: SPRING_PROFILES_ACTIVE,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GATEWAY_TRUSTSTORE_PASSWORD
-      SPRING_REDIS_TIMEOUT: 5000
-      SPRING_REDIS_CONNECT_TIMEOUT: 5000
-      SPRING_REDIS_POOL_MAX_ACTIVE: 10
-      SPRING_REDIS_POOL_MAX_IDLE: 5
-      SPRING_REDIS_POOL_MIN_IDLE: 2
-      SPRING_REDIS_POOL_MAX_WAIT: 5000
     volumes:
       - ./keys:/app/keys
       - ./secrets:/app/secrets:ro
@@ -402,5 +380,4 @@ services:
       - mongodb2
       - mongodb3
       - keycloak-service
-      - redis-service
       - neo4j-service

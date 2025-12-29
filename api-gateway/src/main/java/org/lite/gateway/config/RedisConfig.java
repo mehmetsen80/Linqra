@@ -2,6 +2,8 @@ package org.lite.gateway.config;
 
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.listener.CustomMessageListener;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -14,6 +16,19 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Configuration
 @Slf4j
 public class RedisConfig {
+
+    @Value("${spring.redis.host}")
+    private String redisHost;
+
+    @Value("${spring.redis.port}")
+    private int redisPort;
+
+    @Bean
+    public org.springframework.data.redis.core.ReactiveStringRedisTemplate reactiveStringRedisTemplate(
+            @Qualifier("redisConnectionFactory") RedisConnectionFactory connectionFactory) {
+        return new org.springframework.data.redis.core.ReactiveStringRedisTemplate(
+                (org.springframework.data.redis.connection.ReactiveRedisConnectionFactory) connectionFactory);
+    }
 
     // Define the Redis Pub/Sub topic for route updates
     @Bean

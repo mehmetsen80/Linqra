@@ -57,77 +57,67 @@ const UserSummary = () => {
 
         <h5 className="mb-3 text-start mt-5">Quick Actions</h5>
         <div className="quick-actions">
-          <div className="quick-actions-row">
-            {/* First Row */}
-            <div className="quick-actions-group">
-              {(!isProd() || canAccessAdminFeatures) && (
-                <div className="token-section">
-                  {renderEnvironmentBadge()}
-                  <Link to="/view-token" className="quick-action-button">
-                    <HiKey />
-                    <span>View Token</span>
-                  </Link>
-                </div>
-              )}
-              <Link to="/" className="quick-action-button">
-                <HiHome />
-                <span>Home</span>
-              </Link>
-              <Link to="/api-routes" className="quick-action-button">
-                <HiViewGrid />
-                <span>Applications</span>
-              </Link>
-              <Link to="/service-status" className="quick-action-button">
-                <HiDocumentText />
-                <span>Service Status</span>
-              </Link>
-              <Link to="/ai-assistants" className="quick-action-button">
-                <HiChatAlt />
-                <span>AI Assistants</span>
-              </Link>
-              <Link to="/knowledge-hub" className="quick-action-button">
-                <HiLightBulb />
-                <span>Knowledge Hub</span>
+          {(!isProd() || canAccessAdminFeatures) && (
+            <div className="token-section">
+              {renderEnvironmentBadge()}
+              <Link to="/view-token" className="quick-action-button">
+                <HiKey />
+                <span>View Token</span>
               </Link>
             </div>
-          </div>
-          {/* Second Row - LLM Models, RAG, and Admin Features */}
-          <div className="quick-actions-row">
-            <div className="quick-actions-group">
-              <Link to="/audits" className="quick-action-button">
-                <HiClipboardList />
-                <span>Audits</span>
+          )}
+          <Link to="/" className="quick-action-button">
+            <HiHome />
+            <span>Home</span>
+          </Link>
+          <Link to="/api-routes" className="quick-action-button">
+            <HiViewGrid />
+            <span>Applications</span>
+          </Link>
+          <Link to="/service-status" className="quick-action-button">
+            <HiDocumentText />
+            <span>Service Status</span>
+          </Link>
+          <Link to="/ai-assistants" className="quick-action-button">
+            <HiChatAlt />
+            <span>AI Assistants</span>
+          </Link>
+          <Link to="/knowledge-hub" className="quick-action-button">
+            <HiLightBulb />
+            <span>Knowledge Hub</span>
+          </Link>
+          <Link to="/audits" className="quick-action-button">
+            <HiClipboardList />
+            <span>Audits</span>
+          </Link>
+          {/* <Link to="/doc-review" className="quick-action-button">
+            <HiClipboardCheck />
+            <span>Doc Review</span>
+          </Link> */}
+          <Link to="/llm-models" className="quick-action-button">
+            <HiSparkles />
+            <span>LLM Models</span>
+          </Link>
+          <Link to="/llm-usage" className="quick-action-button">
+            <HiCollection />
+            <span>LLM Usage</span>
+          </Link>
+          <Link to="/rag" className="quick-action-button">
+            <HiDatabase />
+            <span>RAG Collections</span>
+          </Link>
+          {canAccessAdminFeatures && (
+            <>
+              <Link to="/teams" className="quick-action-button">
+                <HiUserGroup />
+                <span>Teams</span>
               </Link>
-              {/* <Link to="/doc-review" className="quick-action-button">
-                <HiClipboardCheck />
-                <span>Doc Review</span>
-              </Link> */}
-              <Link to="/llm-models" className="quick-action-button">
-                <HiSparkles />
-                <span>LLM Models</span>
+              <Link to="/organizations" className="quick-action-button">
+                <HiOfficeBuilding />
+                <span>Organizations</span>
               </Link>
-              <Link to="/llm-usage" className="quick-action-button">
-                <HiCollection />
-                <span>LLM Usage</span>
-              </Link>
-              <Link to="/rag" className="quick-action-button">
-                <HiDatabase />
-                <span>RAG Collections</span>
-              </Link>
-              {canAccessAdminFeatures && (
-                <>
-                  <Link to="/teams" className="quick-action-button">
-                    <HiUserGroup />
-                    <span>Teams</span>
-                  </Link>
-                  <Link to="/organizations" className="quick-action-button">
-                    <HiOfficeBuilding />
-                    <span>Organizations</span>
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
+            </>
+          )}
         </div>
       </Card.Body>
     </Card>

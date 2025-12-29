@@ -1,0 +1,63 @@
+/*
+ * AI Conversations Dashboard Component Styles
+ */
+
+.ai-conversations-section {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.dashboard-section-title {
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-align: left;
+    padding-left: 0;
+}
+
+.ai-conversations-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+}
+
+.ai-conversations-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+.assistant-icon-brand {
+    background-color: rgba(237, 117, 52, 0.1) !important;
+    color: #ed7534 !important;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.assistant-icon-brand svg {
+    color: #ed7534 !important;
+}
+
+/* Also ensure the continue chat button uses the brand color */
+.btn-icon-brand {
+    color: #ed7534 !important;
+}
+
+.btn-icon-brand:hover {
+    background-color: rgba(237, 117, 52, 0.1) !important;
+}
+
+.text-brand {
+    color: #ed7534 !important;
+}
+
+.bg-brand {
+    background-color: #ed7534 !important;
+    color: white !important;
+}

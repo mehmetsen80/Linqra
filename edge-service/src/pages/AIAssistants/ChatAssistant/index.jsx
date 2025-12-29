@@ -499,7 +499,16 @@ function ChatAssistant({ assistantId: propAssistantId, assistant: propAssistant,
             let response;
             if (!conversationId) {
                 // Start new conversation
+                // Optimistic status update for immediate feedback
+                setStatusMessages(['Starting conversation...', 'Processing message...']);
+
                 response = await conversationService.startConversation(assistantId, userMessage);
+
+                // Clear status messages if we got a direct response (fallback flow)
+                if (response.success && (response.data?.message || response.data?.chatResult?.message)) {
+                    setStatusMessages([]);
+                }
+
                 if (response.success && response.conversationId) {
                     const newConvId = response.conversationId;
                     const nowIso = new Date().toISOString();

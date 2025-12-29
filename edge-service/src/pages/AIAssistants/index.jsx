@@ -230,7 +230,7 @@ function AIAssistants() {
 
                     {assistants.length === 0 ? (
                         <div className="text-center py-5">
-                            <HiChatAlt className="fa-3x text-muted mb-3" style={{ fontSize: '3rem' }} />
+                            <HiChatAlt className="fa-3x mb-3" style={{ fontSize: '3rem', color: '#ed7534' }} />
                             <h5 className="text-muted">No AI assistants found</h5>
                             <p className="text-muted">
                                 {canEditAssistant
@@ -268,8 +268,8 @@ function AIAssistants() {
                                                 </Badge>
                                             </div>
                                             <div className="d-flex align-items-center">
-                                                <div className="rounded-circle bg-light p-2 me-2">
-                                                    <HiChatAlt className="text-primary" size={20} />
+                                                <div className="rounded-circle me-2 d-flex align-items-center justify-content-center" style={{ backgroundColor: '#e9ecef', width: '40px', height: '40px', minWidth: '40px' }}>
+                                                    <HiChatAlt size={20} style={{ color: '#ed7534' }} />
                                                 </div>
                                                 <h6 className="mb-0 fw-bold" title={assistant.name}>
                                                     {assistant.name}

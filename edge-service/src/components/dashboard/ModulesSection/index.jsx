@@ -14,6 +14,7 @@ function ModulesSection() {
       </div>
 
       <div className="dashboard-grid">
+
         <div className="dashboard-card">
           <Link to="/api-routes" className="card-icon-link">
             <div className="card-icon">
@@ -68,6 +69,44 @@ function ModulesSection() {
 
         {isAdmin && (
           <>
+            <div className="dashboard-card">
+              <Link to="/ai-assistants" className="card-icon-link">
+                <div className="card-icon">
+                  <i className="fas fa-comments"></i>
+                </div>
+              </Link>
+              <h3>AI Assistants</h3>
+              <p>Interact with specialized AI assistants for various tasks</p>
+              <Link to="/ai-assistants" className="card-link">
+                Launch Assistants <i className="fas fa-arrow-right"></i>
+              </Link>
+            </div>
+
+            <div className="dashboard-card">
+              <Link to="/knowledge-hub" className="card-icon-link">
+                <div className="card-icon">
+                  <i className="fas fa-book-open"></i>
+                </div>
+              </Link>
+              <h3>Knowledge Hub</h3>
+              <p>Manage documents and resources for your AI context</p>
+              <Link to="/knowledge-hub" className="card-link">
+                Manage Knowledge <i className="fas fa-arrow-right"></i>
+              </Link>
+            </div>
+
+            <div className="dashboard-card">
+              <Link to="/audits" className="card-icon-link">
+                <div className="card-icon">
+                  <i className="fas fa-clipboard-list"></i>
+                </div>
+              </Link>
+              <h3>Audits</h3>
+              <p>Track and review system activities and logs</p>
+              <Link to="/audits" className="card-link">
+                View Audits <i className="fas fa-arrow-right"></i>
+              </Link>
+            </div>
             <div className="dashboard-card">
               <Link to="/teams" className="card-icon-link">
                 <div className="card-icon">

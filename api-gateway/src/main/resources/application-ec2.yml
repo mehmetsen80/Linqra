@@ -8,7 +8,6 @@ spring:
   redis:
     host: ${vault.redis.host}
     port: ${vault.redis.port}
-    ssl: true
     database: 0
     timeout: 60000
     connect-timeout: 60000

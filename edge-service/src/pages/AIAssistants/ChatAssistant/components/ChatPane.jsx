@@ -117,11 +117,37 @@ const ChatPane = ({
         setTimeout(() => setCopiedCode(false), 2000);
     };
 
-    // Helper to get documents from either location
+    // Helper to get documents from any location (direct, additionalData, or taskResults)
     const getDocuments = (msg) => {
         const directDocs = msg.metadata?.documents || [];
         const additionalDocs = msg.metadata?.additionalData?.documents || [];
-        return directDocs.length > 0 ? directDocs : additionalDocs;
+
+        // Extract documents from taskResults
+        let taskDocs = [];
+        if (msg.metadata?.taskResults) {
+            Object.values(msg.metadata.taskResults).forEach(result => {
+                if (result.documents && Array.isArray(result.documents)) {
+                    taskDocs = [...taskDocs, ...result.documents];
+                }
+            });
+        }
+
+        // Combine all unique documents (by documentId or name)
+        const allDocs = [...directDocs, ...additionalDocs, ...taskDocs];
+
+        // Deduplicate
+        const uniqueDocs = [];
+        const seenIds = new Set();
+
+        allDocs.forEach(doc => {
+            const id = doc.documentId || doc.id || doc.name;
+            if (id && !seenIds.has(id)) {
+                seenIds.add(id);
+                uniqueDocs.push(doc);
+            }
+        });
+
+        return uniqueDocs;
     };
 
     return (

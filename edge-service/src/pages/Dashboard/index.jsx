@@ -16,6 +16,8 @@ import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import Footer from '../../components/common/Footer';
 import './styles.css';
 
+import AIConversations from '../../components/dashboard/AIConversations';
+
 function Dashboard() {
   const { currentTeam, loading: teamLoading } = useTeam();
   const { user, loading: authLoading } = useAuth();
@@ -43,6 +45,7 @@ function Dashboard() {
   return (
     <div className="dashboard-container">
       <UserSummary />
+      <AIConversations />
       <StatsSection />
       <TeamRoutes />
       <LlmCosts />

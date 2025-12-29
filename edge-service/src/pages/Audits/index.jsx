@@ -66,10 +66,19 @@ const Audits = () => {
         setError(null);
 
         try {
+            // Convert local date strings to UTC for the backend
+            // This ensures "End of Today" locally covers the full UTC window
+            const startLocal = new Date(`${startDate}T00:00:00`);
+            const endLocal = new Date(`${endDate}T23:59:59`);
+
+            // Format as YYYY-MM-DDTHH:mm:ss for LocalDateTime backend parsing
+            const startTimeUtc = startLocal.toISOString().slice(0, 19);
+            const endTimeUtc = endLocal.toISOString().slice(0, 19);
+
             const request = {
                 teamId: currentTeam.id,
-                startTime: `${startDate}T00:00:00`,
-                endTime: `${endDate}T23:59:59`,
+                startTime: startTimeUtc,
+                endTime: endTimeUtc,
                 page: page,
                 size: pagination.size
             };

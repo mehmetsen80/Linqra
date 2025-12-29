@@ -251,7 +251,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
         int maxMessages = assistant.getContextManagement() != null
                 && assistant.getContextManagement().getMaxRecentMessages() != null
                         ? assistant.getContextManagement().getMaxRecentMessages()
-                        : 10;
+                        : 20;
 
         return conversationService.getRecentMessages(conversation.getId(), maxMessages)
                 .collectList()
@@ -500,6 +500,14 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
 
                                                 chatRequest.setQuery(query);
                                                 chatRequest.setExecutedBy(request.getExecutedBy());
+
+                                                // Publish LLM call started event
+                                                Map<String, Object> llmStartData = new HashMap<>();
+                                                llmStartData.put("conversationId", conversation.getId());
+                                                llmStartData.put("modelName", modelName);
+                                                llmStartData.put("modelCategory", finalModelCategory);
+                                                llmStartData.put("provider", llmModel.getProvider());
+                                                publishChatUpdate("LLM_CALL_STARTED", llmStartData);
 
                                                 // Execute LLM request
                                                 return linqLlmModelService.executeLlmRequest(chatRequest, llmModel)
@@ -837,25 +845,6 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
             enrichedContext.append(systemPrompt).append("\n\n");
         }
 
-        // Add document visibility guidance
-        enrichedContext.append("**Document Visibility Guidance**: ")
-                .append("Knowledge Hub documents may be available for download. Only mention or reference documents when: ")
-                .append("1) The user explicitly requests them (e.g., 'download', 'show me the form', 'give me the document'), ")
-                .append("OR 2) The documents directly contain the answer to the user's question and would be helpful. ")
-                .append("If documents don't contain relevant information, do NOT mention them. ")
-                .append("Focus on answering the question directly using your knowledge and the provided context snippets.\n\n");
-
-        // Add formatting guidance for lists and tables
-        enrichedContext.append("**Response Formatting Guidelines**: ")
-                .append("When presenting multiple items (e.g., forms, prices, requirements), use clear, structured formatting:\n")
-                .append("- For lists of forms with prices or fees, present them in a **markdown table format** with columns for Form Number, Form Name, Price/Fee, and other relevant details.\n")
-                .append("- For lists of requirements or documents, use numbered or bulleted lists for clarity.\n")
-                .append("- When comparing multiple options or items, tables are preferred over paragraph text.\n")
-                .append("- Example table format for forms:\n")
-                .append("| Form Number | Form Name | Fee |\n")
-                .append("|-------------|-----------|-----|\n")
-                .append("| I-130 | Petition for Alien Relative | $535 |\n\n");
-
         // Add Knowledge Graph context if available
         if (graphContext != null && !graphContext.isEmpty()) {
             Integer entityCount = (Integer) graphContext.getOrDefault("entityCount", 0);
@@ -883,12 +872,17 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                         // Add key properties (exclude system fields)
                         entity.entrySet().stream()
                                 .filter(e -> !isSystemField(e.getKey()))
-                                .limit(3) // Limit to 3 key properties
                                 .forEach(e -> {
                                     Object value = e.getValue();
-                                    if (value != null && !(value instanceof List) && !(value instanceof Map)) {
-                                        enrichedContext.append("  - ").append(e.getKey()).append(": ").append(value)
-                                                .append("\n");
+                                    if (value != null && !(value instanceof Map)) {
+                                        // Handle List values (arrays) by converting to string representation
+                                        if (value instanceof List) {
+                                            enrichedContext.append("  - ").append(e.getKey()).append(": ").append(value)
+                                                    .append("\n");
+                                        } else {
+                                            enrichedContext.append("  - ").append(e.getKey()).append(": ").append(value)
+                                                    .append("\n");
+                                        }
                                     }
                                 });
                     }
@@ -935,12 +929,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                         }
                         enrichedContext.append("\n");
                     }
-                    enrichedContext.append(
-                            "\n**IMPORTANT**: Only mention or reference these documents if they are actually relevant to answering the user's question. ")
-                            .append("If the documents do not contain the information the user is asking for, do NOT mention them. ")
-                            .append("If the user explicitly asks for documents (e.g., 'download the form', 'show me the document', 'give me the file'), ")
-                            .append("then provide references to the relevant documents from the list above. ")
-                            .append("Otherwise, focus on answering the question directly without unnecessary document references.\n\n");
+
                 }
                 enrichedContext.append("\n");
             }

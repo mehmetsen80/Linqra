@@ -186,9 +186,9 @@ function ChatAssistant({ assistantId: propAssistantId, assistant: propAssistant,
                     break;
 
                 case 'AGENT_TASKS_COMPLETED':
-                    // Add completion message and prepare for answer (avoid duplicates)
+                    // Add completion message (avoid duplicates)
                     setStatusMessages(prev => {
-                        const completionMessage = 'Agent tasks completed. Preparing answer...';
+                        const completionMessage = 'Agent tasks completed.';
                         const lastMessage = prev.length > 0 ? prev[prev.length - 1] : '';
                         // Only add if different from last message to prevent duplicates
                         if (completionMessage !== lastMessage) {
@@ -198,6 +198,19 @@ function ChatAssistant({ assistantId: propAssistantId, assistant: propAssistant,
                     });
                     isMonitoringExecutionsRef.current = false; // Stop monitoring executions
                     // console.log('✅ Agent tasks completed:', update.executedTasks);
+                    break;
+
+                case 'LLM_CALL_STARTED':
+                    // Add message indicating we're waiting for the LLM
+                    setStatusMessages(prev => {
+                        const provider = update.provider || '';
+                        const llmMessage = `Calling ${provider ? `${provider} ` : ''}${update.modelName || 'AI model'}...`;
+                        const lastMessage = prev.length > 0 ? prev[prev.length - 1] : '';
+                        if (llmMessage !== lastMessage) {
+                            return [...prev, llmMessage];
+                        }
+                        return prev;
+                    });
                     break;
 
                 default:

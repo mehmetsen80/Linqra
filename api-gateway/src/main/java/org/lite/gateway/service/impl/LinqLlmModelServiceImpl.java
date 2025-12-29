@@ -21,6 +21,7 @@ import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -959,6 +960,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             });
                 })
                 .bodyToMono(Object.class)
+                .timeout(Duration.ofSeconds(120)) // 2-minute timeout to prevent indefinite hanging
                 .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
                 .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage(), error));
     }

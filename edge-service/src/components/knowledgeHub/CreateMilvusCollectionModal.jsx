@@ -45,7 +45,8 @@ const buildSchemaFields = (dimension) => [
   { name: 'metadataOnly', dtype: 'BOOL' },
   { name: 'documentType', dtype: 'VARCHAR', max_length: 50 },
   { name: 'mimeType', dtype: 'VARCHAR', max_length: 150 },
-  { name: 'collectionType', dtype: 'VARCHAR', max_length: 50 }
+  { name: 'collectionType', dtype: 'VARCHAR', max_length: 50 },
+  { name: 'encryptionKeyVersion', dtype: 'VARCHAR', max_length: 50 }
 ];
 
 const generateSuggestedName = (teamId, providerKey, modelName, dimension) => {

@@ -41,7 +41,7 @@ const conversationService = {
     },
 
     // Get conversation messages
-    getMessages: async (conversationId, page = 0, size = 50) => {
+    getMessages: async (conversationId, page = 0, size = 1000) => {
         try {
             const response = await axiosInstance.get(`/api/conversations/${conversationId}/messages`, {
                 params: { page, size }

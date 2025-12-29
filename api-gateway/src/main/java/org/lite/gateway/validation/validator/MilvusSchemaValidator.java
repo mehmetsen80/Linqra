@@ -44,8 +44,8 @@ public class MilvusSchemaValidator {
             Map.entry("metadataOnly", "BOOL"),
             Map.entry("documentType", "VARCHAR"),
             Map.entry("mimeType", "VARCHAR"),
-            Map.entry("collectionType", "VARCHAR")
-    );
+            Map.entry("collectionType", "VARCHAR"),
+            Map.entry("encryptionKeyVersion", "VARCHAR"));
 
     public ValidationResult validate(List<Map<String, Object>> schemaFields, Integer expectedDimension) {
         if (schemaFields == null) {
@@ -58,8 +58,7 @@ public class MilvusSchemaValidator {
                 .collect(Collectors.toMap(
                         field -> String.valueOf(field.get("name")),
                         field -> field,
-                        (existing, replacement) -> replacement
-                ));
+                        (existing, replacement) -> replacement));
 
         List<String> issues = new ArrayList<>();
         Integer detectedVectorDimension = null;
@@ -76,7 +75,8 @@ public class MilvusSchemaValidator {
             String actualTypeRaw = String.valueOf(fieldInfo.get("dataType"));
             String normalizedType = normalizeType(actualTypeRaw);
             if (!Objects.equals(normalizedType, requiredField.getValue())) {
-                issues.add("Field '" + fieldName + "' must be of type " + requiredField.getValue() + " but was " + actualTypeRaw);
+                issues.add("Field '" + fieldName + "' must be of type " + requiredField.getValue() + " but was "
+                        + actualTypeRaw);
             }
 
             if (REQUIRED_VECTOR_FIELDS.contains(fieldName)) {
@@ -87,8 +87,7 @@ public class MilvusSchemaValidator {
                     typeParams = map.entrySet().stream()
                             .collect(Collectors.toMap(
                                     entry -> String.valueOf(entry.getKey()),
-                                    entry -> String.valueOf(entry.getValue())
-                            ));
+                                    entry -> String.valueOf(entry.getValue())));
                 }
 
                 if (typeParams == null || !typeParams.containsKey("dim")) {
@@ -156,4 +155,3 @@ public class MilvusSchemaValidator {
         }
     }
 }
-

@@ -119,10 +119,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             "startPosition",
             "endPosition",
             "createdAt",
+            "category",
             "metadataOnly",
             "documentType",
             "mimeType",
-            "collectionType");
+            "collectionType",
+            "encryptionKeyVersion");
 
     @Override
     public Mono<Map<String, String>> createCollection(String collectionName,
@@ -1743,7 +1745,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             DescribeCollectionResponse collectionData = describeResponse.getData();
 
             // Log collection schema for debugging
-            log.info("Collection schema for {}: {}", collectionName, collectionData.getSchema());
+            //log.info("Collection schema for {}: {}", collectionName, collectionData.getSchema());
 
             boolean teamIdMatches = false;
             for (KeyValuePair property : collectionData.getPropertiesList()) {
@@ -2163,11 +2165,11 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
 
             // Log collection schema for debugging
-            log.info("Collection schema for {}: {}", collectionName, describeResponse.getData().getSchema());
-            log.info("Available fields:");
-            for (io.milvus.grpc.FieldSchema field : describeResponse.getData().getSchema().getFieldsList()) {
-                log.info("  - {}: {} (primary: {})", field.getName(), field.getDataType(), field.getIsPrimaryKey());
-            }
+            //log.info("Collection schema for {}: {}", collectionName, describeResponse.getData().getSchema());
+            //log.info("Available fields:");
+            //for (io.milvus.grpc.FieldSchema field : describeResponse.getData().getSchema().getFieldsList()) {
+            //    log.info("  - {}: {} (primary: {})", field.getName(), field.getDataType(), field.getIsPrimaryKey());
+            //}
 
             boolean teamIdMatches = false;
             for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
@@ -2744,25 +2746,43 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         final String fEncryptedText = encryptedText;
         final String fTeamId = recordTeamId;
 
+        // Debug logging for decryption diagnostics
+        log.info("🔐 Decryption attempt: teamId={}, keyVersion={}, textLength={}, textPreview={}",
+                recordTeamId, keyVersion,
+                encryptedText != null ? encryptedText.length() : 0,
+                encryptedText != null && encryptedText.length() > 50 ? encryptedText.substring(0, 50) + "..."
+                        : encryptedText);
+
         Mono<String> decryptionMono;
 
-        // If no encryption key version, try to decrypt with current key, or assume
-        // unencrypted legacy data
+        // If no encryption key version stored, fall back to v1 (legacy data)
+        // New collections with encryptionKeyVersion field will have the version stored
         if (keyVersion == null || keyVersion.isEmpty()) {
-            decryptionMono = chunkEncryptionService.getCurrentKeyVersion(recordTeamId)
-                    .flatMap(currentVersion -> chunkEncryptionService.decryptChunkText(fEncryptedText, fTeamId,
-                            currentVersion))
+            // Legacy data: fall back to v1 (HMAC-derived key)
+            String legacyVersion = "v1";
+            log.info("🔐 No keyVersion stored in collection, using legacy v1 for team {}", fTeamId);
+            decryptionMono = chunkEncryptionService.decryptChunkText(fEncryptedText, fTeamId, legacyVersion)
                     .onErrorResume(e -> {
-                        // If decryption fails with current key, assume it was plaintext
+                        log.warn("🔐 Legacy v1 decryption failed for team {}: {}. Returning encrypted text.",
+                                fTeamId, e.getMessage());
                         return Mono.just(fEncryptedText);
                     });
         } else {
-            decryptionMono = chunkEncryptionService.decryptChunkText(fEncryptedText, recordTeamId, keyVersion);
+            log.info("🔐 Using stored keyVersion: {} for team {}", keyVersion, fTeamId);
+            decryptionMono = chunkEncryptionService.decryptChunkText(fEncryptedText, fTeamId, keyVersion);
         }
 
         final String fVersion = keyVersion;
 
         return decryptionMono
+                .doOnNext(decryptedText -> {
+                    if (decryptedText != null && decryptedText.equals(fEncryptedText)) {
+                        log.warn("🔐 Decrypted text matches encrypted text - decryption may have failed silently");
+                    } else {
+                        log.info("🔐 Decryption successful, decrypted length: {}",
+                                decryptedText != null ? decryptedText.length() : 0);
+                    }
+                })
                 .onErrorResume(e -> {
                     log.warn(
                             "Failed to decrypt chunk text for team {} with key version {}: {}. Returning encrypted text.",

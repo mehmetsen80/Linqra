@@ -168,11 +168,11 @@ logging:
 
 notifications:
   email:
-    host: in-v3.mailjet.com
-    port: 587
+    host: ${vault.smtp.host}
+    port: ${vault.smtp.port}
     username: ${vault.smtp.username}
     password: ${vault.smtp.password}
-    to: msen@dipme.com
+    to: msen@dipme.app
     enabled: ${vault.smtp.enabled}
   slack:
     webhook-url: ${vault.slack.webhook.url}

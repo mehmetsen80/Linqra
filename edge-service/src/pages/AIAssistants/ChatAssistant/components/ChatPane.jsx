@@ -31,8 +31,31 @@ const ChatPane = ({
     const [inputMessage, setInputMessage] = useState('');
     const [copiedCode, setCopiedCode] = useState(false);
     const [visibleMessageCount, setVisibleMessageCount] = useState(10);
+    const [waitingTooLong, setWaitingTooLong] = useState(false);
     const messagesEndRef = useRef(null);
     const isLoadingOlderMessagesRef = useRef(false);
+    const timeoutRef = useRef(null);
+
+    // Timeout indicator: show "Taking longer than expected..." after 30 seconds
+    useEffect(() => {
+        if (sending) {
+            setWaitingTooLong(false);
+            timeoutRef.current = setTimeout(() => {
+                setWaitingTooLong(true);
+            }, 30000); // 30 seconds
+        } else {
+            setWaitingTooLong(false);
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+                timeoutRef.current = null;
+            }
+        }
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        };
+    }, [sending]);
 
     useEffect(() => {
         if (messages.length > visibleMessageCount) {
@@ -272,6 +295,12 @@ const ChatPane = ({
                                 </div>
                             );
                         })}
+                        {waitingTooLong && sending && (
+                            <div className="text-start small my-1 ms-3 text-warning fw-medium">
+                                <HiClock className="me-2" />
+                                Taking longer than expected... The AI model is still processing your request.
+                            </div>
+                        )}
                         <div ref={messagesEndRef} />
                     </div>
                 )}

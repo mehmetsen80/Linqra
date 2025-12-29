@@ -5,18 +5,7 @@ spring:
     allow-bean-definition-overriding: true
     allow-circular-references: true
     web-application-type: reactive
-  redis:
-    host: ${vault.redis.host}
-    port: ${vault.redis.port}
-    database: 0
-    timeout: 60000
-    connect-timeout: 60000
-    lettuce:
-      pool:
-        max-active: 8
-        max-idle: 8
-        min-idle: 2
-        max-wait: -1ms
+
   session:
     store-type: none
   security:
@@ -45,6 +34,18 @@ spring:
           issuer-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/realms/Linqra
           jwk-set-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/realms/Linqra/protocol/openid-connect/certs
   data:
+    redis:
+      host: ${vault.redis.host}
+      port: ${vault.redis.port}
+      database: 0
+      timeout: 60000
+      connect-timeout: 60000
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 2
+          max-wait: -1ms
     mongodb:
       # MongoDB URI - read from vault (dev-docker has mongodb1:27017,mongodb2:27018,mongodb3:27019, dev has localhost)
       # Fallback to localhost for backward compatibility

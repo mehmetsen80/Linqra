@@ -126,8 +126,10 @@ const ChatPane = ({
         let taskDocs = [];
         if (msg.metadata?.taskResults) {
             Object.values(msg.metadata.taskResults).forEach(result => {
-                if (result.documents && Array.isArray(result.documents)) {
-                    taskDocs = [...taskDocs, ...result.documents];
+                if (result && typeof result === 'object') {
+                    if (Array.isArray(result.documents)) {
+                        taskDocs = [...taskDocs, ...result.documents];
+                    }
                 }
             });
         }
@@ -140,10 +142,14 @@ const ChatPane = ({
         const seenIds = new Set();
 
         allDocs.forEach(doc => {
-            const id = doc.documentId || doc.id || doc.name;
+            // Normalize name: use name, fileName, or title
+            const name = doc.name || doc.fileName || doc.title || 'Untitled Document';
+            const normalizedDoc = { ...doc, name };
+
+            const id = doc.documentId || doc.id || name;
             if (id && !seenIds.has(id)) {
                 seenIds.add(id);
-                uniqueDocs.push(doc);
+                uniqueDocs.push(normalizedDoc);
             }
         });
 

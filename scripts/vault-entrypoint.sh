@@ -295,13 +295,65 @@ elif [ "$1" = "java" ] && [ -n "${GATEWAY_TRUSTSTORE_PASSWORD:-}" ]; then
     # API Gateway: The Eureka Client uses Java's default SSL context, not Spring Boot's server SSL config
     # So we need to set javax.net.ssl.trustStore system properties for outbound HTTPS connections
     echo "Configuring Eureka Client SSL with custom truststore..." >&2
-    # Skip first argument ("java") - use all arguments from $2 onwards
-    # Build command with SSL properties prepended
-    exec java \
-        -Djavax.net.ssl.trustStore=/app/gateway-truststore.jks \
-        -Djavax.net.ssl.trustStorePassword="${GATEWAY_TRUSTSTORE_PASSWORD}" \
-        -Djavax.net.ssl.trustStoreType=JKS \
-        "${@:2}"
+
+    # Locate default Java cacerts
+    # Try common locations for OpenJDK/Temurin
+    CACERTS_PATH=""
+    if [ -n "$JAVA_HOME" ] && [ -f "$JAVA_HOME/lib/security/cacerts" ]; then
+        CACERTS_PATH="$JAVA_HOME/lib/security/cacerts"
+    elif [ -f "/opt/java/openjdk/lib/security/cacerts" ]; then
+        CACERTS_PATH="/opt/java/openjdk/lib/security/cacerts"
+    elif [ -f "/usr/lib/jvm/java-21-openjdk-amd64/lib/security/cacerts" ]; then
+        CACERTS_PATH="/usr/lib/jvm/java-21-openjdk-amd64/lib/security/cacerts"
+    elif [ -f "/etc/ssl/certs/java/cacerts" ]; then
+        CACERTS_PATH="/etc/ssl/certs/java/cacerts"
+    else
+        # Fallback find
+        CACERTS_PATH=$(find /usr -name cacerts -type f 2>/dev/null | head -1)
+    fi
+
+    if [ -n "$CACERTS_PATH" ] && [ -f "$CACERTS_PATH" ]; then
+        echo "Found default cacerts at: $CACERTS_PATH" >&2
+        MERGED_STORE="/app/merged-truststore.jks"
+        
+        # Copy default cacerts to a writable location
+        cp "$CACERTS_PATH" "$MERGED_STORE"
+        chmod 644 "$MERGED_STORE"
+        
+        echo "Merging custom truststore into default cacerts..." >&2
+        # Import custom truststore into the copy of cacerts
+        # Using 'changeit' as the standard password for cacerts
+        if keytool -importkeystore \
+            -srckeystore /app/gateway-truststore.jks \
+            -srcstorepass "${GATEWAY_TRUSTSTORE_PASSWORD}" \
+            -destkeystore "$MERGED_STORE" \
+            -deststorepass changeit \
+            -noprompt >/dev/null 2>&1; then
+            
+            echo "Successfully merged truststores." >&2
+            
+            # Execute with the MERGED truststore
+            exec java \
+                -Djavax.net.ssl.trustStore="$MERGED_STORE" \
+                -Djavax.net.ssl.trustStorePassword=changeit \
+                -Djavax.net.ssl.trustStoreType=JKS \
+                "${@:2}"
+        else
+            echo "WARNING: Failed to merge truststores. Falling back to custom truststore only." >&2
+            exec java \
+                -Djavax.net.ssl.trustStore=/app/gateway-truststore.jks \
+                -Djavax.net.ssl.trustStorePassword="${GATEWAY_TRUSTSTORE_PASSWORD}" \
+                -Djavax.net.ssl.trustStoreType=JKS \
+                "${@:2}"
+        fi
+    else
+        echo "WARNING: Default cacerts not found. Using custom truststore only." >&2
+        exec java \
+            -Djavax.net.ssl.trustStore=/app/gateway-truststore.jks \
+            -Djavax.net.ssl.trustStorePassword="${GATEWAY_TRUSTSTORE_PASSWORD}" \
+            -Djavax.net.ssl.trustStoreType=JKS \
+            "${@:2}"
+    fi
 elif [ $# -eq 0 ]; then
     # No arguments provided - try to find and execute default service command
     echo "WARNING: No command arguments provided. Attempting to find default service..." >&2

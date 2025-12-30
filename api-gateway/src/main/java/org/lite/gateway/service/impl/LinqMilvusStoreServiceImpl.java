@@ -3,6 +3,7 @@ package org.lite.gateway.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
+import org.springframework.beans.factory.annotation.Value;
 import org.lite.gateway.dto.MilvusCollectionInfo;
 import org.lite.gateway.dto.MilvusCollectionSchemaInfo;
 import org.lite.gateway.dto.MilvusCollectionVerificationResponse;
@@ -75,6 +76,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     private final AuditLogHelper auditLogHelper;
     private final ConcurrentHashMap<String, MilvusCollectionSchemaInfo> collectionSchemaCache = new ConcurrentHashMap<>();
 
+    @Value("${milvus.database:default}")
+    private String milvusDatabase;
+
     private static final String EMBEDDING_FIELD = "embedding";
     private static final IndexType INDEX_TYPE = IndexType.HNSW;
     private static final MetricType METRIC_TYPE = MetricType.COSINE;
@@ -139,7 +143,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         try {
             R<Boolean> hasCollection = milvusClient.hasCollection(HasCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .build());
 
             if (hasCollection.getData()) {
@@ -179,7 +183,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withDescription(description != null ? description : "")
                     .withShardsNum(SHARDS_NUM)
                     .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .withSchema(CollectionSchemaParam.newBuilder()
                             .withFieldTypes(fields)
                             .build());
@@ -199,7 +203,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withFieldName(embeddingField)
                     .withIndexType(INDEX_TYPE)
                     .withMetricType(METRIC_TYPE)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .withExtraParam(
                             "{\"M\":" + INDEX_PARAM_M + ",\"efConstruction\":" + INDEX_PARAM_EF_CONSTRUCTION + "}")
                     .build();
@@ -210,7 +214,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             // Load collection
             milvusClient.loadCollection(LoadCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .build());
             log.info("Loaded Milvus collection: {}", collectionName);
 
@@ -230,7 +234,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
             AlterCollectionParam.Builder alterBuilder = AlterCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default");
+                    .withDatabaseName(milvusDatabase);
             collectionProperties.forEach(alterBuilder::withProperty);
             milvusClient.alterCollection(alterBuilder.build());
             log.info("Set collection properties {} for {}", collectionProperties, collectionName);
@@ -310,7 +314,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                     DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-                            .withDatabaseName("default")
+                            .withDatabaseName(milvusDatabase)
                             .build());
 
             if (describeResponse.getStatus() != 0) {
@@ -506,7 +510,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<GetCollectionStatisticsResponse> statsResponse = milvusClient.getCollectionStatistics(
                     GetCollectionStatisticsParam.newBuilder()
                             .withCollectionName(collectionName)
-                            .withDatabaseName("default")
+                            .withDatabaseName(milvusDatabase)
                             .build());
             if (statsResponse.getData() != null) {
                 for (KeyValuePair stat : statsResponse.getData().getStatsList()) {
@@ -646,7 +650,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                     DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-                            .withDatabaseName("default")
+                            .withDatabaseName(milvusDatabase)
                             .build());
 
             List<InsertParam.Field> fields = new ArrayList<>();
@@ -993,7 +997,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                     DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-                            .withDatabaseName("default")
+                            .withDatabaseName(milvusDatabase)
                             .build());
 
             List<String> availableFields = new ArrayList<>();
@@ -1023,7 +1027,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withVectorFieldName(EMBEDDING_FIELD)
                     .withOutFields(outputFieldsList)
                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}")
-                    .withDatabaseName("default");
+                    .withDatabaseName(milvusDatabase);
 
             // Only add teamId filter if the field exists in the collection schema
             if (availableFields.contains("teamId") && teamId != null && !teamId.isEmpty()) {
@@ -1178,7 +1182,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         try {
             R<Boolean> hasCollection = milvusClient.hasCollection(HasCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .build());
 
             if (!hasCollection.getData()) {
@@ -1245,7 +1249,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
             milvusClient.dropCollection(DropCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .build());
             log.info("Deleted collection {}", collectionName);
 
@@ -1308,7 +1312,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         log.info("Listing collections for team {} with type filter: {}", teamId, collectionType);
         try {
             R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .build());
             List<String> allCollections = response.getData().getCollectionNamesList();
 
@@ -1320,7 +1324,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                                     DescribeCollectionParam.newBuilder()
                                             .withCollectionName(collectionName)
-                                            .withDatabaseName("default")
+                                            .withDatabaseName(milvusDatabase)
                                             .build());
 
                             // Check if collection has teamId property matching the requested teamId
@@ -1437,7 +1441,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                     DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-                            .withDatabaseName("default")
+                            .withDatabaseName(milvusDatabase)
                             .build());
 
             if (describeResponse.getStatus() != 0 || describeResponse.getData() == null) {
@@ -1547,7 +1551,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
             AlterCollectionParam.Builder alterBuilder = AlterCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default");
+                    .withDatabaseName(milvusDatabase);
 
             sanitizedMetadata.forEach((key, value) -> {
                 if (key != null && !key.isBlank() && value != null) {
@@ -1626,7 +1630,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         log.info("Listing all collections");
         try {
             R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .build());
             List<String> allCollections = response.getData().getCollectionNamesList();
 
@@ -1638,7 +1642,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                                     DescribeCollectionParam.newBuilder()
                                             .withCollectionName(collectionName)
-                                            .withDatabaseName("default")
+                                            .withDatabaseName(milvusDatabase)
                                             .build());
 
                             // Find teamId in properties
@@ -1698,7 +1702,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                     DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-                            .withDatabaseName("default")
+                            .withDatabaseName(milvusDatabase)
                             .build());
 
             // Check if describeCollection was successful
@@ -1745,7 +1749,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             DescribeCollectionResponse collectionData = describeResponse.getData();
 
             // Log collection schema for debugging
-            //log.info("Collection schema for {}: {}", collectionName, collectionData.getSchema());
+            // log.info("Collection schema for {}: {}", collectionName,
+            // collectionData.getSchema());
 
             boolean teamIdMatches = false;
             for (KeyValuePair property : collectionData.getPropertiesList()) {
@@ -1810,7 +1815,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     .withVectorFieldName(EMBEDDING_FIELD)
                                     .withOutFields(outFields)
                                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}")
-                                    .withDatabaseName("default");
+                                    .withDatabaseName(milvusDatabase);
 
                             // Only add filter expression if it's not empty
                             if (!filterExpression.isEmpty()) {
@@ -2139,7 +2144,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                     DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-                            .withDatabaseName("default")
+                            .withDatabaseName(milvusDatabase)
                             .build());
 
             // Check if describeCollection was successful
@@ -2165,11 +2170,14 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
 
             // Log collection schema for debugging
-            //log.info("Collection schema for {}: {}", collectionName, describeResponse.getData().getSchema());
-            //log.info("Available fields:");
-            //for (io.milvus.grpc.FieldSchema field : describeResponse.getData().getSchema().getFieldsList()) {
-            //    log.info("  - {}: {} (primary: {})", field.getName(), field.getDataType(), field.getIsPrimaryKey());
-            //}
+            // log.info("Collection schema for {}: {}", collectionName,
+            // describeResponse.getData().getSchema());
+            // log.info("Available fields:");
+            // for (io.milvus.grpc.FieldSchema field :
+            // describeResponse.getData().getSchema().getFieldsList()) {
+            // log.info(" - {}: {} (primary: {})", field.getName(), field.getDataType(),
+            // field.getIsPrimaryKey());
+            // }
 
             boolean teamIdMatches = false;
             for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
@@ -2222,7 +2230,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     .withVectorFieldName(EMBEDDING_FIELD)
                                     .withOutFields(outFields)
                                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}")
-                                    .withDatabaseName("default");
+                                    .withDatabaseName(milvusDatabase);
 
                             // Only add filter expression if it's not empty
                             if (!filterExpression.isEmpty()) {
@@ -2356,7 +2364,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         try {
             log.info("Calling showCollections with database 'default'");
             R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .build());
 
             log.info("ShowCollections response status: {}", response.getStatus());
@@ -2416,7 +2424,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                             DescribeCollectionParam.newBuilder()
                                     .withCollectionName(collectionName)
-                                    .withDatabaseName("default")
+                                    .withDatabaseName(milvusDatabase)
                                     .build());
 
                     Map<String, Object> collectionInfo = new HashMap<>();
@@ -2454,7 +2462,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         R<GetCollectionStatisticsResponse> statsResponse = milvusClient.getCollectionStatistics(
                                 GetCollectionStatisticsParam.newBuilder()
                                         .withCollectionName(collectionName)
-                                        .withDatabaseName("default")
+                                        .withDatabaseName(milvusDatabase)
                                         .build());
                         // Extract row count from the response
                         long rowCount = 0;
@@ -2499,7 +2507,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         try {
             DescribeCollectionParam describeParam = DescribeCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .build();
 
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(describeParam);
@@ -2548,7 +2556,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             try {
                 GetCollectionStatisticsParam statsParam = GetCollectionStatisticsParam.newBuilder()
                         .withCollectionName(collectionName)
-                        .withDatabaseName("default")
+                        .withDatabaseName(milvusDatabase)
                         .build();
                 R<GetCollectionStatisticsResponse> statsResponse = milvusClient.getCollectionStatistics(statsParam);
                 if (statsResponse.getData() != null) {
@@ -2625,7 +2633,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
             DeleteParam deleteParam = DeleteParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .withExpr(expr)
                     .build();
 
@@ -2657,7 +2665,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
             QueryParam.Builder queryBuilder = QueryParam.newBuilder()
                     .withCollectionName(collectionName)
-                    .withDatabaseName("default")
+                    .withDatabaseName(milvusDatabase)
                     .withExpr(expr);
             queryBuilder.withOutFields(Collections.singletonList("documentId"));
             QueryParam queryParam = queryBuilder.build();

@@ -370,13 +370,6 @@ services:
 #       VAULT_ENVIRONMENT: dev-docker
 #       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
 #       VAULT_REQUIRED_VARS: SPRING_PROFILES_ACTIVE,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GATEWAY_TRUSTSTORE_PASSWORD
-#       # Redis connection pool optimizations for Docker
-#       SPRING_REDIS_TIMEOUT: 5000
-#       SPRING_REDIS_CONNECT_TIMEOUT: 5000
-#       SPRING_REDIS_POOL_MAX_ACTIVE: 10
-#       SPRING_REDIS_POOL_MAX_IDLE: 5
-#       SPRING_REDIS_POOL_MIN_IDLE: 2
-#       SPRING_REDIS_POOL_MAX_WAIT: 5000
 #     volumes:
 #       - ./keys:/app/keys
 #       - ./secrets:/app/secrets:ro  # Vault file directory (read-only for security)

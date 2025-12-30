@@ -101,98 +101,98 @@ services:
       - linqra-network
 
   # etcd for Milvus
-  etcd-service:
-    image: quay.io/coreos/etcd:v3.5.5
-    environment:
-      - ETCD_AUTO_COMPACTION_MODE=revision
-      - ETCD_AUTO_COMPACTION_RETENTION=1000
-      - ETCD_QUOTA_BACKEND_BYTES=4294967296
-      - ETCD_SNAPSHOT_COUNT=50000
-    volumes:
-      - ./.kube/etcd/data:/etcd
-    command: etcd -advertise-client-urls=http://etcd-service:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
-    healthcheck:
-      test: [ "CMD", "etcdctl", "endpoint", "health" ]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-    networks:
-      - linqra-network
+  # etcd-service:
+  #   image: quay.io/coreos/etcd:v3.5.5
+  #   environment:
+  #     - ETCD_AUTO_COMPACTION_MODE=revision
+  #     - ETCD_AUTO_COMPACTION_RETENTION=1000
+  #     - ETCD_QUOTA_BACKEND_BYTES=4294967296
+  #     - ETCD_SNAPSHOT_COUNT=50000
+  #   volumes:
+  #     - ./.kube/etcd/data:/etcd
+  #   command: etcd -advertise-client-urls=http://etcd-service:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+  #   healthcheck:
+  #     test: [ "CMD", "etcdctl", "endpoint", "health" ]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 3
+  #   networks:
+  #     - linqra-network
 
   # MinIO for Milvus
-  minio-service:
-    build:
-      context: .
-      dockerfile: ./.kube/minio/Dockerfile
-    environment:
-      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
-      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
-      VAULT_REQUIRED_VARS: MINIO_ACCESS_KEY,MINIO_SECRET_KEY
-    volumes:
-      - ./.kube/minio/data:/data
-      - ./secrets:/app/secrets:ro
-    command: [ "server", "/data", "--console-address", ":9001" ]
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-    networks:
-      - linqra-network
+  # minio-service:
+  #   build:
+  #     context: .
+  #     dockerfile: ./.kube/minio/Dockerfile
+  #   environment:
+  #     VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+  #     VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+  #     VAULT_REQUIRED_VARS: MINIO_ACCESS_KEY,MINIO_SECRET_KEY
+  #   volumes:
+  #     - ./.kube/minio/data:/data
+  #     - ./secrets:/app/secrets:ro
+  #   command: [ "server", "/data", "--console-address", ":9001" ]
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 3
+  #   networks:
+  #     - linqra-network
 
   # Milvus vector database
-  milvus-service:
-    build:
-      context: .
-      dockerfile: ./.kube/milvus/Dockerfile
-    container_name: milvus-service
-    environment:
-      ETCD_ENDPOINTS: etcd-service:2379
-      MINIO_ADDRESS: minio-service:9000
-      COMMON_CFG_RETENTION_DURATION: 168h
-      COMMON_SECURITY_AUTHORIZATIONENABLED: "true"
-      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
-      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
-      VAULT_REQUIRED_VARS: MILVUS_USERNAME,MILVUS_PASSWORD,MINIO_ACCESS_KEY,MINIO_SECRET_KEY
-    volumes:
-      - ./.kube/milvus/data:/var/lib/milvus
-      - ./secrets:/app/secrets:ro
-    ports:
-      - "19530:19530"
-      - "9091:9091"
-    networks:
-      - linqra-network
-    deploy:
-      resources:
-        limits:
-          cpus: '2.0'
-          memory: 4G
-      restart_policy:
-        condition: on-failure
-    depends_on:
-      - etcd-service
-      - minio-service
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9091/api/v1/health" ]
-      interval: 10s
-      timeout: 3s
-      retries: 3
+  # milvus-service:
+  #   build:
+  #     context: .
+  #     dockerfile: ./.kube/milvus/Dockerfile
+  #   container_name: milvus-service
+  #   environment:
+  #     ETCD_ENDPOINTS: etcd-service:2379
+  #     MINIO_ADDRESS: minio-service:9000
+  #     COMMON_CFG_RETENTION_DURATION: 168h
+  #     COMMON_SECURITY_AUTHORIZATIONENABLED: "true"
+  #     VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+  #     VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+  #     VAULT_REQUIRED_VARS: MILVUS_USERNAME,MILVUS_PASSWORD,MINIO_ACCESS_KEY,MINIO_SECRET_KEY
+  #   volumes:
+  #     - ./.kube/milvus/data:/var/lib/milvus
+  #     - ./secrets:/app/secrets:ro
+  #   ports:
+  #     - "19530:19530"
+  #     - "9091:9091"
+  #   networks:
+  #     - linqra-network
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '2.0'
+  #         memory: 4G
+  #     restart_policy:
+  #       condition: on-failure
+  #   depends_on:
+  #     - etcd-service
+  #     - minio-service
+  #   healthcheck:
+  #     test: [ "CMD", "curl", "-f", "http://localhost:9091/api/v1/health" ]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 3
 
   # Attu UI for Milvus
-  attu-service:
-    build:
-      context: .
-      dockerfile: ./.kube/attu/Dockerfile
-    environment:
-      MILVUS_URL: milvus-service:19530
-      MILVUS_DATABASE: default
-      MILVUS_USE_SSL: "false"
-    ports:
-      - "8000:3000"
-    networks:
-      - linqra-network
-    depends_on:
-      - milvus-service
+  # attu-service:
+  #   build:
+  #     context: .
+  #     dockerfile: ./.kube/attu/Dockerfile
+  #   environment:
+  #     MILVUS_URL: milvus-service:19530
+  #     MILVUS_DATABASE: default
+  #     MILVUS_USE_SSL: "false"
+  #   ports:
+  #     - "8000:3000"
+  #   networks:
+  #     - linqra-network
+  #   depends_on:
+  #     - milvus-service
 
   # Neo4j Graph Database
   # Neo4j Graph Database
@@ -302,4 +302,3 @@ services:
     depends_on:
       - discovery-service
       - keycloak-service
-      # - neo4j-service

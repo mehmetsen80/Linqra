@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * 
  * Runs at 2:00 AM every day.
  */
-@Component
+// @Component
 @RequiredArgsConstructor
 @Slf4j
 public class MilvusBackupScheduler {
@@ -38,8 +38,8 @@ public class MilvusBackupScheduler {
      * Daily Milvus complete backup.
      * Cron: "0 0 2 * * ?" = At 2:00 AM every day
      */
-    @Scheduled(cron = "0 0 2 * * ?")
-    // @Scheduled(cron = "0 */2 * * * ?")
+    // @Scheduled(cron = "0 0 2 * * ?")
+    // @Scheduled(cron = "0 */2 * * * ?") just to test
     public void backupMilvus() {
         log.info("🔄 Starting daily Milvus complete backup");
 

@@ -195,6 +195,7 @@ milvus:
   password: ${vault.milvus.password}
   uri: ${vault.milvus.uri}
   token: ${vault.milvus.token}
+  database: ${vault.milvus.database}
 
 neo4j:
   uri: ${vault.neo4j.uri}

@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
  * 
  * Runs every hour at minute 0.
  */
-@Component
+// @Component
 @RequiredArgsConstructor
 @Slf4j
 public class MongoBackupScheduler {
@@ -43,7 +43,7 @@ public class MongoBackupScheduler {
      * Hourly MongoDB backup.
      * Cron: "0 0 * * * ?" = At minute 0 of every hour
      */
-    @Scheduled(cron = "0 0 * * * ?")
+    // @Scheduled(cron = "0 0 * * * ?")
     public void backupMongoDB() {
         log.info("🔄 Starting hourly MongoDB backup");
 

@@ -193,6 +193,8 @@ milvus:
   port: ${vault.milvus.port}
   username: ${vault.milvus.username}
   password: ${vault.milvus.password}
+  uri: ${vault.milvus.uri}
+  token: ${vault.milvus.token}
 
 neo4j:
   uri: ${vault.neo4j.uri}

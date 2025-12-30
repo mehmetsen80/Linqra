@@ -11,41 +11,63 @@ import org.springframework.context.annotation.Configuration;
 @Slf4j
 public class MilvusConfig {
 
-    @Value("${milvus.host}")
+    @Value("${milvus.host:localhost}")
     private String milvusHost;
 
-    @Value("${milvus.port}")
+    @Value("${milvus.port:19530}")
     private int milvusPort;
 
-    @Value("${milvus.username}")
+    @Value("${milvus.username:#{null}}")
     private String milvusUsername;
 
-    @Value("${milvus.password}")
+    @Value("${milvus.password:#{null}}")
     private String milvusPassword;
+
+    @Value("${milvus.uri:#{null}}")
+    private String milvusUri;
+
+    @Value("${milvus.token:#{null}}")
+    private String milvusToken;
 
     @Bean
     public MilvusServiceClient milvusServiceClient() {
-        log.info("Initializing Milvus client with host: {} and port: {}", milvusHost, milvusPort);
         try {
             ConnectParam.Builder builder = ConnectParam.newBuilder()
-                    .withHost(milvusHost)
-                    .withPort(milvusPort)
                     .withDatabaseName("default");
-            
-            // Add authentication if username and password are provided
-            if (milvusUsername != null && !milvusUsername.isEmpty()) {
-                builder.withAuthorization(milvusUsername, milvusPassword);
-                log.info("Using Milvus authentication with username: {}", milvusUsername);
+
+            if (milvusUri != null && !milvusUri.isBlank()) {
+                // Cloud Mode (URI-based)
+                log.info("Initializing Milvus client with URI: {}", milvusUri);
+                builder.withUri(milvusUri);
+
+                // Use Token if provided (Preferred for Cloud)
+                if (milvusToken != null && !milvusToken.isBlank()) {
+                    builder.withToken(milvusToken);
+                    log.info("Using Milvus token authentication");
+                }
+                // Fallback to User/Pass if Token missing but User/Pass present
+                else if (milvusUsername != null && !milvusUsername.isBlank()) {
+                    builder.withAuthorization(milvusUsername, milvusPassword);
+                    log.info("Using Milvus username/password authentication for Cloud");
+                }
             } else {
-                log.info("Connecting to Milvus without authentication");
+                // Local Mode (Host/Port-based)
+                log.info("Initializing Milvus client with host: {} and port: {}", milvusHost, milvusPort);
+                builder.withHost(milvusHost)
+                        .withPort(milvusPort);
+
+                if (milvusUsername != null && !milvusUsername.isBlank()) {
+                    builder.withAuthorization(milvusUsername, milvusPassword);
+                    log.info("Using Milvus username/password authentication");
+                }
             }
-            
+
             MilvusServiceClient client = new MilvusServiceClient(builder.build());
-            log.info("Successfully connected to Milvus at {}:{} with database 'default'", milvusHost, milvusPort);
+            log.info("Successfully connected to Milvus");
             return client;
         } catch (Exception e) {
             log.error("Failed to initialize Milvus client: {}", e.getMessage(), e);
             throw new RuntimeException("Milvus initialization failed", e);
         }
     }
-} 
+}

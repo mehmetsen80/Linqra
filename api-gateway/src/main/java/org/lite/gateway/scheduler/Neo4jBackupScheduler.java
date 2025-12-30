@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  * 
  * Runs at 2:30 AM every Sunday.
  */
-@Component
+// @Component
 @RequiredArgsConstructor
 @Slf4j
 public class Neo4jBackupScheduler {

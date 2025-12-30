@@ -134,8 +134,6 @@ jobs:
           
           # Create new .env file
           cat <<'EOF' > .env
-          VITE_MONGODB_URI=${{ secrets.VITE_MONGODB_URI }}
-          VITE_MONGODB_DB_NAME=${{ secrets.VITE_MONGODB_DB_NAME }}
           NODE_ENV=production
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           VITE_WS_URL=${{ secrets.VITE_WS_URL }}
@@ -456,8 +454,7 @@ jobs:
               
               # Create edge-service .env on EC2 (not stored in repo)
               if [ ! -d /var/www/linqra/edge-service ]; then echo 'edge-service directory not found at /var/www/linqra/edge-service'; exit 1; fi
-              echo "VITE_MONGODB_URI=${{ secrets.VITE_MONGODB_URI }}" > /var/www/linqra/edge-service/.env
-              echo "VITE_MONGODB_DB_NAME=${{ secrets.VITE_MONGODB_DB_NAME }}" >> /var/www/linqra/edge-service/.env
+
               echo "NODE_ENV=production" >> /var/www/linqra/edge-service/.env
               echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> /var/www/linqra/edge-service/.env
               echo "VITE_WS_URL=${{ secrets.VITE_WS_URL }}" >> /var/www/linqra/edge-service/.env

@@ -80,10 +80,14 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     @Value("${milvus.database:default}")
     private String milvusDatabase;
 
+    @Value("${milvus.uri:#{null}}")
+    private String milvusUri;
+
     @PostConstruct
     public void checkConnection() {
         try {
             log.info("🔍 Checking Milvus Connection...");
+            log.info("   URI: {}", milvusUri != null ? milvusUri : "LOCAL (null URI)");
             log.info("   Database: {}", milvusDatabase);
 
             R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()

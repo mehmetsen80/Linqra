@@ -147,7 +147,13 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .build());
 
             if (hasCollection.getData()) {
-                log.info("Collection {} already exists, skipping creation", collectionName);
+                log.info("Collection {} already exists, skipping creation but ensuring it is loaded", collectionName);
+
+                // Ensure it is loaded (critical for pre-existing/script-created collections)
+                milvusClient.loadCollection(LoadCollectionParam.newBuilder()
+                        .withCollectionName(collectionName)
+                        .withDatabaseName(milvusDatabase)
+                        .build());
 
                 // Log skipped creation attempt
                 long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
@@ -1036,7 +1042,29 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
             SearchParam searchParam = searchParamBuilder.build();
 
-            return milvusClient.search(searchParam).getData();
+            R<SearchResults> searchResponse = milvusClient.search(searchParam);
+
+            // Check for "not loaded" error and retry
+            if (searchResponse.getStatus() != 0) {
+                String msg = searchResponse.getMessage();
+                if (msg != null && (msg.contains("not loaded") || msg.contains("has not been loaded"))) {
+                    log.warn("Collection {} is not loaded. Loading now and retrying search...", collectionName);
+
+                    milvusClient.loadCollection(LoadCollectionParam.newBuilder()
+                            .withCollectionName(collectionName)
+                            .withDatabaseName(milvusDatabase)
+                            .build());
+
+                    // Retry search
+                    searchResponse = milvusClient.search(searchParam);
+                }
+            }
+
+            if (searchResponse.getStatus() != 0) {
+                throw new IllegalStateException("Search failed: " + searchResponse.getMessage());
+            }
+
+            return searchResponse.getData();
         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(results -> {
@@ -2629,6 +2657,17 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         log.info("Deleting embeddings for document {} in collection {} (team {})", documentId, collectionName, teamId);
 
         try {
+            // Check if collection exists first to avoid "collection not found" error
+            R<Boolean> hasCollection = milvusClient.hasCollection(HasCollectionParam.newBuilder()
+                    .withCollectionName(collectionName)
+                    .withDatabaseName(milvusDatabase)
+                    .build());
+
+            if (hasCollection.getData() == null || !hasCollection.getData()) {
+                log.warn("Collection {} does not exist, skipping deletion of document {}", collectionName, documentId);
+                return Mono.just(0L);
+            }
+
             String expr = String.format("documentId == \"%s\" && teamId == \"%s\"", documentId, teamId);
 
             DeleteParam deleteParam = DeleteParam.newBuilder()

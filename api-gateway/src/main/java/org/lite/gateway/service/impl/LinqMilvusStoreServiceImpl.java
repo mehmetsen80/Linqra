@@ -55,6 +55,7 @@ import io.milvus.response.MutationResultWrapper;
 import io.milvus.param.dml.QueryParam;
 import io.milvus.grpc.QueryResults;
 import io.milvus.response.QueryResultsWrapper;
+import jakarta.annotation.PostConstruct;
 import io.milvus.grpc.SearchResults;
 import org.springframework.util.StringUtils;
 import org.lite.gateway.enums.AuditActionType;
@@ -78,6 +79,42 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     @Value("${milvus.database:default}")
     private String milvusDatabase;
+
+    @PostConstruct
+    public void checkConnection() {
+        try {
+            log.info("🔍 Checking Milvus Connection...");
+            log.info("   Database: {}", milvusDatabase);
+
+            R<ShowCollectionsResponse> response = milvusClient.showCollections(ShowCollectionsParam.newBuilder()
+                    .withDatabaseName(milvusDatabase)
+                    .build());
+
+            if (response.getStatus() != 0) {
+                log.error("❌ Failed to list collections: {}", response.getMessage());
+            } else {
+                List<String> names = response.getData().getCollectionNamesList();
+                log.info("✅ Found {} collections in database '{}': {}", names.size(), milvusDatabase, names);
+
+                // Detailed check for a few
+                for (String name : names) {
+                    R<DescribeCollectionResponse> desc = milvusClient
+                            .describeCollection(DescribeCollectionParam.newBuilder()
+                                    .withCollectionName(name)
+                                    .withDatabaseName(milvusDatabase)
+                                    .build());
+                    if (desc.getStatus() == 0) {
+                        log.info("   - {} (ID: {}, Loaded: {})", name, desc.getData().getCollectionID(),
+                                desc.getData());
+                    } else {
+                        log.warn("   - {} (Describe Failed: {})", name, desc.getMessage());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("❌ Milvus connection check failed", e);
+        }
+    }
 
     private static final String EMBEDDING_FIELD = "embedding";
     private static final IndexType INDEX_TYPE = IndexType.HNSW;

@@ -20,18 +20,18 @@ spring:
             provider: keycloak
         provider:
           keycloak:
-            token-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/token
-            authorization-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/auth
-            jwk-set-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/certs
-            issuer-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra
+            token-uri: https://polaris.linqra.com/keycloak/realms/Linqra/protocol/openid-connect/token
+            authorization-uri: https://polaris.linqra.com/keycloak/realms/Linqra/protocol/openid-connect/auth
+            jwk-set-uri: https://polaris.linqra.com/keycloak/realms/Linqra/protocol/openid-connect/certs
+            issuer-uri: https://polaris.linqra.com/keycloak/realms/Linqra
       resourceserver:
         opaquetoken:
-          introspection-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/token/introspect
+          introspection-uri: https://polaris.linqra.com/keycloak/realms/Linqra/protocol/openid-connect/token/introspect
           client-id: linqra-gateway-client
           client-secret: ${vault.keycloak.client.secret}
         jwt:
-          issuer-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra
-          jwk-set-uri: http://${vault.keycloak.gateway.url}:${vault.keycloak.gateway.port}/keycloak/realms/Linqra/protocol/openid-connect/certs
+          issuer-uri: https://polaris.linqra.com/keycloak/realms/Linqra
+          jwk-set-uri: https://polaris.linqra.com/keycloak/realms/Linqra/protocol/openid-connect/certs
   data:
     redis:
       host: ${vault.redis.host}

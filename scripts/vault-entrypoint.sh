@@ -265,10 +265,9 @@ if [ -f "/startup/docker-entrypoint.sh" ]; then
     fi
     exec /startup/docker-entrypoint.sh "$@"
 # For PostgreSQL, switch to postgres user if running as root
-elif [ "$(id -u)" = "0" ] && [ "$1" = "postgres" ]; then
-    # PostgreSQL requires non-root user
-    # Use gosu (available in postgres image) to switch to postgres user
-    exec gosu postgres "$@"
+elif [ "$1" = "postgres" ] && [ -f "/usr/local/bin/docker-entrypoint.sh" ]; then
+    # Postgres: Chain to original entrypoint to handle initdb and user switching
+    exec /usr/local/bin/docker-entrypoint.sh "$@"
 # For MinIO, the command starts with "server" - find and use minio binary
 elif [ "$1" = "server" ]; then
     # MinIO: find the minio binary and execute it with the command arguments

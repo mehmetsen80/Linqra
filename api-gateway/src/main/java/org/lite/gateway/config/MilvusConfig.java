@@ -29,14 +29,10 @@ public class MilvusConfig {
     @Value("${milvus.token:#{null}}")
     private String milvusToken;
 
-    @Value("${milvus.database:default}")
-    private String milvusDatabase;
-
     @Bean
     public MilvusServiceClient milvusServiceClient() {
         try {
-            ConnectParam.Builder builder = ConnectParam.newBuilder()
-                    .withDatabaseName(milvusDatabase);
+            ConnectParam.Builder builder = ConnectParam.newBuilder();
 
             if (milvusUri != null && !milvusUri.isBlank()) {
                 // Cloud Mode (URI-based)

@@ -25,6 +25,12 @@ jobs:
           echo "$SECRETS_JSON" > secrets/secrets.json
           echo "✅ secrets.json created"
 
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
       - name: Generate vault.encrypted
         env:
           VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}

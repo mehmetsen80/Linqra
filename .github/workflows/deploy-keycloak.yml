@@ -112,7 +112,7 @@ jobs:
             export VAULT_ENVIRONMENT=ec2
 
             # Deploy
-            sudo -E docker-compose -f docker-compose-keycloak.yml down --remove-orphans || true
-            sudo -E docker-compose -f docker-compose-keycloak.yml up -d --build
+            sudo -E docker compose -f docker-compose-keycloak.yml down --remove-orphans || true
+            sudo -E docker compose -f docker-compose-keycloak.yml up -d --build
           "
           echo "✅ Deployment Complete!"

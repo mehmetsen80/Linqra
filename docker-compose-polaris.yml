@@ -1,0 +1,103 @@
+services:
+  # postgres for Keycloak
+  postgres-service:
+    build:
+      context: .
+      dockerfile: ./.kube/postgres/Dockerfile.polaris
+    container_name: postgres-service
+    command: postgres -c "max_connections=200"
+    restart: always
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - ./.kube/postgres/data/:/var/lib/postgresql/pgdata
+      - ./secrets:/app/secrets:ro
+    environment:
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD
+    networks:
+      - linqra-network
+
+  # keycloak
+  keycloak-service:
+    build:
+      context: .
+      dockerfile: ./.kube/keycloak/Dockerfile.standalone
+    environment:
+      KC_DB: postgres
+      KC_HTTP_ENABLED: true
+      KC_HTTP_PORT: 8080
+      KC_HTTP_RELATIVE_PATH: /keycloak
+
+      KC_HOSTNAME: https://polaris.linqra.com
+      KC_HOSTNAME_STRICT: true
+      KC_HOSTNAME_STRICT_HTTPS: true
+      KC_HOSTNAME_ADMIN: https://polaris.linqra.com/keycloak
+      KC_HOSTNAME_URL: https://polaris.linqra.com/keycloak
+      KC_FRONTEND_URL: https://polaris.linqra.com/keycloak
+
+      KC_PROXY: edge
+      PROXY_ADDRESS_FORWARDING: true
+
+      KC_LOG_LEVEL: info
+      KC_METRICS_ENABLED: true
+      KC_HEALTH_ENABLED: true
+      KC_FEATURES: admin
+
+      KC_SPI_RESOURCES_PUBLIC_URL: https://polaris.linqra.com/keycloak/resources
+      KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_REDIRECT_HOSTNAME: https://polaris.linqra.com/keycloak
+      KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_LEGACY_IFRAME_COMPATIBLE: "true"
+      KC_SPI_LOGIN_PROTOCOL_OPENID_CONNECT_SUPPRESS_LOGOUT_CONFIRMATION_SCREEN: "true"
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: POSTGRES_DB,POSTGRES_USER,POSTGRES_PASSWORD,KEYCLOAK_ADMIN,KEYCLOAK_ADMIN_PASSWORD
+
+    command:
+      - start
+    volumes:
+      - ./.kube/keycloak/data/import:/opt/keycloak/data/import
+      - ./.kube/keycloak/data/export:/opt/keycloak/data/export
+      - ./.kube/keycloak/themes:/opt/keycloak/themes
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      postgres-service:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "-H", "Host: localhost", "http://localhost:8080/health/ready" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    # ports:
+    #   - "8080:8080" # No longer exposed, proxied by Caddy
+    networks:
+      - linqra-network
+
+  # Caddy Reverse Proxy (HTTPS)
+  caddy:
+    image: caddy:2
+    container_name: caddy-service
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    command: caddy reverse-proxy --from https://polaris.linqra.com --to keycloak-service:8080
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - linqra-network
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+
+networks:
+  linqra-network:
+    driver: bridge

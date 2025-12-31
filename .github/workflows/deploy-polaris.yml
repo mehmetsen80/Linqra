@@ -1,10 +1,10 @@
-name: Deploy Keycloak to EC2
+name: Deploy Polaris to EC2
 
 on:
   workflow_dispatch:
 
 jobs:
-  deploy-keycloak:
+  deploy-polaris:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

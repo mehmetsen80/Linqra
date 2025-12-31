@@ -1,10 +1,10 @@
-name: Deploy Polaris to EC2
+name: Deploy Keycloak to EC2
 
 on:
   workflow_dispatch:
 
 jobs:
-  deploy-polaris:
+  deploy-keycloak:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,6 +24,12 @@ jobs:
           # Write the JSON secret to file
           echo "$SECRETS_JSON" > secrets/secrets.json
           echo "✅ secrets.json created"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
 
       - name: Generate vault.encrypted
         env:
@@ -78,8 +84,8 @@ jobs:
           rsync -avz --delete --exclude 'data/' --exclude 'themes/' --exclude 'Dockerfile' .kube/keycloak/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/keycloak/
           rsync -avz --delete --exclude 'data/' --exclude 'Dockerfile' .kube/postgres/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/postgres/
 
-          # Upload Docker Compose (Rename to standard docker-compose.yml)
-          scp docker-compose-keycloak.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose.yml
+          # Upload Docker Compose (Keep specific filename)
+          scp docker-compose-keycloak.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose-keycloak.yml
 
           # Upload Secrets
           scp secrets/vault.encrypted $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/secrets/
@@ -106,7 +112,7 @@ jobs:
             export VAULT_ENVIRONMENT=ec2
 
             # Deploy
-            sudo -E docker-compose down --remove-orphans || true
-            sudo -E docker-compose up -d --build
+            sudo -E docker-compose -f docker-compose-keycloak.yml down --remove-orphans || true
+            sudo -E docker-compose -f docker-compose-keycloak.yml up -d --build
           "
           echo "✅ Deployment Complete!"

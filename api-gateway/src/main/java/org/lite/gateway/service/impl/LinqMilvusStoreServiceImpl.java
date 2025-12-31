@@ -95,10 +95,22 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .build());
 
             if (response.getStatus() != 0) {
-                log.error("❌ Failed to list collections: {}", response.getMessage());
+                log.error("❌ Failed to list collections (with DB): {}", response.getMessage());
             } else {
                 List<String> names = response.getData().getCollectionNamesList();
                 log.info("✅ Found {} collections in database '{}': {}", names.size(), milvusDatabase, names);
+
+                if (names.isEmpty()) {
+                    log.info("⚠️  Attempting to list WITHOUT database name (to mimic script)...");
+                    R<ShowCollectionsResponse> responseNoDb = milvusClient
+                            .showCollections(ShowCollectionsParam.newBuilder().build());
+                    if (responseNoDb.getStatus() == 0) {
+                        List<String> namesNoDb = responseNoDb.getData().getCollectionNamesList();
+                        log.info("✅ Found {} collections (No DB Name): {}", namesNoDb.size(), namesNoDb);
+                    } else {
+                        log.error("❌ Failed to list collections (No DB): {}", responseNoDb.getMessage());
+                    }
+                }
 
                 // Detailed check for a few
                 for (String name : names) {

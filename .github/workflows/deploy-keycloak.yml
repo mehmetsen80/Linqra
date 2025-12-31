@@ -80,8 +80,8 @@ jobs:
           rsync -avz --delete vault-reader/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/vault-reader/
           rsync -avz --delete scripts/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/scripts/
 
-          # Upload Keycloak & Postgres Configs (Protect data/themes, exclude default Dockerfile)
-          rsync -avz --delete --exclude 'data/' --exclude 'themes/' --exclude 'Dockerfile' .kube/keycloak/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/keycloak/
+          # Upload Keycloak & Postgres Configs (Protect data, exclude default Dockerfile)
+          rsync -avz --delete --exclude 'data/' --exclude 'Dockerfile' .kube/keycloak/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/keycloak/
           rsync -avz --delete --exclude 'data/' --exclude 'Dockerfile' .kube/postgres/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/postgres/
 
           # Upload Docker Compose (Keep specific filename)
@@ -112,7 +112,7 @@ jobs:
             export VAULT_ENVIRONMENT=ec2
 
             # Deploy
-            sudo -E docker-compose -f docker-compose-keycloak.yml down --remove-orphans || true
-            sudo -E docker-compose -f docker-compose-keycloak.yml up -d --build
+            sudo -E docker compose -f docker-compose-keycloak.yml down --remove-orphans || true
+            sudo -E docker compose -f docker-compose-keycloak.yml up -d --build
           "
           echo "✅ Deployment Complete!"

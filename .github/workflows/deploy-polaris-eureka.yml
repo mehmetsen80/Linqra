@@ -70,4 +70,5 @@ jobs:
           ssh $USERNAME@$HOST "cd $TARGET_DIR && \
             export VAULT_MASTER_KEY='${{ secrets.VAULT_MASTER_KEY }}' && \
             export VAULT_ENVIRONMENT='ec2' && \
+            docker compose -f docker-compose-polaris-eureka.yml down || true
             docker compose -f docker-compose-polaris-eureka.yml up -d --build"

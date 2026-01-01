@@ -7,21 +7,22 @@ networks:
 services:
 
   # Discovery Server (Eureka)
-  discovery-service:
-    build:
-      context: .
-      dockerfile: .kube/eureka/Dockerfile
-    environment:
-      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
-      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
-    ports:
-      - "8761:8761"
-    volumes:
-      - ./discovery-server:/app/discovery-server
-      - ./keys:/app/keys
-      - ./secrets:/app/secrets:ro
-    networks:
-      - linqra-network
+  # Discovery Server (Eureka) - MIGRATED TO POLARIS
+  # discovery-service:
+  #   build:
+  #     context: .
+  #     dockerfile: .kube/eureka/Dockerfile
+  #   environment:
+  #     VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+  #     VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+  #   ports:
+  #     - "8761:8761"
+  #   volumes:
+  #     - ./discovery-server:/app/discovery-server
+  #     - ./keys:/app/keys
+  #     - ./secrets:/app/secrets:ro
+  #   networks:
+  #     - linqra-network
 
   # Load Balancer
   gateway-loadbalancer:
@@ -66,4 +67,6 @@ services:
     networks:
       - linqra-network
     depends_on:
-      - discovery-service
+    depends_on:
+      # - discovery-service
+      - gateway-loadbalancer

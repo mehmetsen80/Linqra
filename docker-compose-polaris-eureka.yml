@@ -13,6 +13,7 @@ services:
     environment:
       VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-ec2}
     ports:
       - "8761:8761"
     volumes:

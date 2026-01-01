@@ -90,8 +90,8 @@ jobs:
           rsync -avz secrets/vault.encrypted $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/secrets/
           
           # Transfer Eureka specific files
-          rsync -avz .kube/eureka/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/eureka/
-          rsync -avz discovery-server/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/discovery-server/
+          rsync -avz --delete .kube/eureka/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/eureka/
+          rsync -avz --delete discovery-server/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/discovery-server/
           
           # Transfer Docker Compose
           scp docker-compose-polaris-eureka.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose-polaris-eureka.yml

@@ -96,7 +96,7 @@ jobs:
             cd $TARGET_DIR
             
             # Setup Permissions
-            sudo chown -R ubuntu:ubuntu $TARGET_DIR
+            sudo chown -R $EC2_USERNAME: $TARGET_DIR
             sudo chmod +x scripts/*.sh
 
             # Create data dirs if missing (Persisted volumes)

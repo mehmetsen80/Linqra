@@ -40,7 +40,7 @@ public class Neo4jBackupScheduler {
      * Daily Neo4j backup.
      * Cron: "0 30 2 * * ?" = At 2:30 AM every day
      */
-    @Scheduled(cron = "0 30 2 * * ?")
+    // @Scheduled(cron = "0 30 2 * * ?")
     public void backupNeo4j() {
         log.info("🔄 Starting weekly Neo4j backup");
 

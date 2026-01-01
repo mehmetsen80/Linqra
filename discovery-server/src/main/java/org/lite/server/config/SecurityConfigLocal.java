@@ -10,8 +10,8 @@ import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 @EnableWebSecurity
-@Profile("!dev & !docker-dev")
-public class SecurityConfig {
+@Profile({ "dev", "docker-dev" })
+public class SecurityConfigLocal {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -19,8 +19,9 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/eureka/css/**", "/eureka/js/**", "/eureka/images/**").permitAll()
-                        .anyRequest().authenticated())
-                .httpBasic(org.springframework.security.config.Customizer.withDefaults());
+                        .anyRequest()
+                        .permitAll())
+                .csrf(AbstractHttpConfigurer::disable);
 
         return http.build();
     }

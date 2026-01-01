@@ -1,4 +1,4 @@
-name: Deploy Keycloak to EC2
+name: Deploy Keycloak to Polaris
 
 on:
   workflow_dispatch:
@@ -85,7 +85,7 @@ jobs:
           rsync -avz --delete --exclude 'data/' --exclude 'Dockerfile' .kube/postgres/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/postgres/
 
           # Upload Docker Compose (Keep specific filename)
-          scp docker-compose-keycloak.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose-keycloak.yml
+          scp docker-compose-polaris-keycloak.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose-polaris-keycloak.yml
 
           # Upload Secrets
           scp secrets/vault.encrypted $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/secrets/
@@ -112,7 +112,7 @@ jobs:
             export VAULT_ENVIRONMENT=ec2
 
             # Deploy
-            sudo -E docker compose -f docker-compose-keycloak.yml down --remove-orphans || true
-            sudo -E docker compose -f docker-compose-keycloak.yml up -d --build
+            sudo -E docker compose -f docker-compose-polaris-keycloak.yml down --remove-orphans || true
+            sudo -E docker compose -f docker-compose-polaris-keycloak.yml up -d --build
           "
           echo "✅ Deployment Complete!"

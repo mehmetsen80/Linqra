@@ -1,6 +1,10 @@
 spring:
   application:
     name: Eureka Server
+  security:
+    user:
+      name: ${vault.eureka.username}
+      password: ${vault.eureka.password}
 
 eureka:
   server:

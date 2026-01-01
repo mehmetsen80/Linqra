@@ -1,0 +1,35 @@
+name: Deploy Ingress (Caddy) to Polaris
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-ingress:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY_PROD }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HOST_DNS_POLARIS }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        env:
+          TARGET_DIR: ${{ secrets.TARGET_DIR_PROD }}
+          USERNAME: ${{ secrets.USERNAME_PROD }}
+          HOST: ${{ secrets.HOST_DNS_POLARIS }}
+        run: |
+          # 1. Create target directories
+          ssh $USERNAME@$HOST "mkdir -p $TARGET_DIR/.kube/caddy"
+          
+          # 2. Transfer files
+          rsync -avz .kube/caddy/Caddyfile $USERNAME@$HOST:$TARGET_DIR/.kube/caddy/
+          scp docker-compose-polaris-caddy.yml $USERNAME@$HOST:$TARGET_DIR/docker-compose-polaris-caddy.yml
+          
+          # 3. Deploy
+          ssh $USERNAME@$HOST "cd $TARGET_DIR && \
+            docker compose -f docker-compose-polaris-caddy.yml up -d --build"

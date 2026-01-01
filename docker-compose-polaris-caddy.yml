@@ -1,0 +1,25 @@
+version: '3.8'
+
+networks:
+  linqra-network:
+    driver: bridge
+
+services:
+  # Caddy Reverse Proxy (Ingress)
+  caddy:
+    image: caddy:2
+    container_name: caddy-service
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./.kube/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    networks:
+      - linqra-network
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -36,52 +36,76 @@ jobs:
       - name: Make scripts executable
         run: chmod +x scripts/*.sh
 
-      - name: Generate Vault (Encrypted)
+      - name: Generate vault.encrypted
         env:
-          VAULT_PASSWORD: ${{ secrets.VAULT_MASTER_KEY }}
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
         run: |
-          ./scripts/bootstrap-vault.sh
-          # Verify vault.encrypted was created
-          if [ ! -f secrets/vault.encrypted ]; then
-            echo "Failed to create secrets/vault.encrypted"
+          # Require VAULT_MASTER_KEY to be set in GitHub secrets
+          if [ -z "$VAULT_MASTER_KEY" ]; then
+            echo "❌ ERROR: VAULT_MASTER_KEY secret is not set"
             exit 1
           fi
+          
+          # Run bootstrap script to create vault
+          export VAULT_ENVIRONMENT=ec2
+          chmod +x scripts/bootstrap-vault.sh
+          bash scripts/bootstrap-vault.sh secrets/secrets.json ec2
+          
+          # Verify vault file was created
+          if [ ! -f secrets/vault.encrypted ]; then
+            echo "ERROR: vault.encrypted was not created"
+            exit 1
+          fi
+          
+          echo "✅ vault.encrypted created successfully"
 
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY_PROD }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.HOST_DNS_POLARIS }} >> ~/.ssh/known_hosts
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
 
-      - name: Deploy to EC2
+      - name: Deploy to Polaris EC2
         env:
+          EC2_HOST: ${{ secrets.HOST_DNS_POLARIS }}
+          EC2_USERNAME: ${{ secrets.USERNAME_PROD }}
           TARGET_DIR: ${{ secrets.TARGET_DIR_PROD }}
-          USERNAME: ${{ secrets.USERNAME_PROD }}
-          HOST: ${{ secrets.HOST_DNS_POLARIS }}
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
         run: |
-          # 1. Create target directories
-          ssh $USERNAME@$HOST "mkdir -p $TARGET_DIR/.kube/eureka"
+          # Disable strict host key checking
+          mkdir -p ~/.ssh
+          echo "StrictHostKeyChecking no" >> ~/.ssh/config
+
+          echo "🚀 Starting Deployment to $EC2_HOST..."
+
+          # 1. Create directory structure
+          ssh $EC2_USERNAME@$EC2_HOST "sudo mkdir -p $TARGET_DIR/.kube/eureka && sudo mkdir -p $TARGET_DIR/vault-reader && sudo mkdir -p $TARGET_DIR/secrets && sudo chown -R $EC2_USERNAME:$EC2_USERNAME $TARGET_DIR"
           
           # 2. Transfer files
-          # Transfer common files (pom.xml, secrets, vault-reader)
+          # Transfer common files (pom.xml, secrets, vault-reader, scripts)
           rsync -avz --exclude 'target/' --exclude 'node_modules/' \
-            pom.xml vault-reader \
-            $USERNAME@$HOST:$TARGET_DIR/
+            pom.xml vault-reader scripts \
+            $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/
             
           # Transfer secrets (Encrypted only)
-          rsync -avz secrets/vault.encrypted $USERNAME@$HOST:$TARGET_DIR/secrets/
+          rsync -avz secrets/vault.encrypted $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/secrets/
           
           # Transfer Eureka specific files
-          rsync -avz .kube/eureka/ $USERNAME@$HOST:$TARGET_DIR/.kube/eureka/
-          rsync -avz discovery-server/ $USERNAME@$HOST:$TARGET_DIR/discovery-server/
+          rsync -avz .kube/eureka/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/eureka/
+          rsync -avz discovery-server/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/discovery-server/
           
           # Transfer Docker Compose
-          scp docker-compose-polaris-eureka.yml $USERNAME@$HOST:$TARGET_DIR/docker-compose-polaris-eureka.yml
+          scp docker-compose-polaris-eureka.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose-polaris-eureka.yml
           
           # 3. Deploy
-          ssh $USERNAME@$HOST "cd $TARGET_DIR && \
-            export VAULT_MASTER_KEY='${{ secrets.VAULT_MASTER_KEY }}' && \
+            # Setup Permissions
+            sudo chown -R ubuntu:ubuntu $TARGET_DIR
+            sudo chmod +x scripts/*.sh
+
+            # Set Secrets Permissions
+            sudo chmod 644 secrets/vault.encrypted
+
+            # Export Master Key
+            export VAULT_MASTER_KEY=$VAULT_MASTER_KEY
             export VAULT_ENVIRONMENT='ec2' && \
             docker compose -f docker-compose-polaris-eureka.yml down || true
             docker compose -f docker-compose-polaris-eureka.yml up -d --build"

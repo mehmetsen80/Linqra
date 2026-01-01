@@ -5,24 +5,6 @@ networks:
       com.docker.network.driver.mtu: 1500
 
 services:
-
-  # Discovery Server (Eureka)
-  discovery-service:
-    build:
-      context: .
-      dockerfile: .kube/eureka/Dockerfile
-    environment:
-      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
-      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
-    ports:
-      - "8761:8761"
-    volumes:
-      - ./discovery-server:/app/discovery-server
-      - ./keys:/app/keys
-      - ./secrets:/app/secrets:ro
-    networks:
-      - linqra-network
-
   # Load Balancer
   gateway-loadbalancer:
     image: haproxy:2.8
@@ -66,4 +48,4 @@ services:
     networks:
       - linqra-network
     depends_on:
-      - discovery-service
+      - gateway-loadbalancer

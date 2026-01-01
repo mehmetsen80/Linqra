@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: Eureka Server
+  security:
+    user:
+      name: ${vault.eureka.username}
+      password: ${vault.eureka.password}
+  # Disable internal mTLS/SSL as Caddy handles edge termination
+  ssl:
+    bundle:
+      jks:
+        discovery-service:
+          key:
+            alias: ""
+            password: ""
+          keystore:
+            location: ""
+            password: ""
+
+eureka:
+  server:
+    response-cache-update-interval-ms: 5000
+    enable-self-preservation: false 
+  instance:
+    hostname: discovery-service # Internal hostname in docker network
+    non-secure-port-enabled: true
+    secure-port-enabled: false
+    prefer-ip-address: true
+    statusPageUrl: https://polaris.linqra.com/eureka/actuator/info
+    healthCheckUrl: https://polaris.linqra.com/eureka/actuator/health
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    serviceUrl:
+      defaultZone: http://localhost:8761/eureka/
+
+server:
+  port: 8761
+  servlet:
+    context-path: /eureka
+  ssl:
+    enabled: false
+
+# Vault Configuration
+# Default path: /app/secrets/vault.encrypted (for Docker)
+vault:
+  file:
+    path: /app/secrets/vault.encrypted
+  master:
+    key: ${VAULT_MASTER_KEY}
+
+logging:
+  level:
+    javax.net.ssl: OFF
+    org.springframework.cloud.netflix.eureka: INFO

@@ -1,0 +1,27 @@
+version: '3.8'
+
+networks:
+  linqra-network:
+    external: true
+
+services:
+  discovery-service:
+    build:
+      context: .
+      dockerfile: .kube/eureka/Dockerfile.polaris
+    container_name: discovery-service
+    environment:
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-ec2}
+    ports:
+      - "8761:8761"
+    volumes:
+      - ./discovery-server:/app/discovery-server
+      # No longer need keys volume for mTLS if we switch to Basic Auth entirely
+      # But might need it if the app still expects it for internal logic, 
+      # though we are terminating SSL at Caddy.
+      # For now, keeping it minimal.
+      - ./secrets:/app/secrets:ro
+    networks:
+      - linqra-network

@@ -47,5 +47,3 @@ services:
       - "7777"
     networks:
       - linqra-network
-    depends_on:
-      - gateway-loadbalancer

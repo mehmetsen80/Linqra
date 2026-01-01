@@ -112,6 +112,6 @@ jobs:
             export VAULT_ENVIRONMENT=ec2
 
             # Deploy
-            docker compose -f docker-compose-polaris-eureka.yml down || true
-            docker compose -f docker-compose-polaris-eureka.yml up -d --build
+            sudo -E docker compose -f docker-compose-polaris-eureka.yml down || true
+            sudo -E docker compose -f docker-compose-polaris-eureka.yml up -d --build
           "

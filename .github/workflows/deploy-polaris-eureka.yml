@@ -91,7 +91,10 @@ jobs:
           
           # Transfer Eureka specific files
           rsync -avz --delete .kube/eureka/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/eureka/
-          rsync -avz --delete discovery-server/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/discovery-server/
+          rsync -avz --delete --exclude 'application-dev.yml' discovery-server/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/discovery-server/
+          
+          # Force upload of application-ec2.yml (Just in case rsync missed it somehow)
+          scp discovery-server/src/main/resources/application-ec2.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/discovery-server/src/main/resources/application-ec2.yml
           
           # Transfer Docker Compose
           scp docker-compose-polaris-eureka.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose-polaris-eureka.yml
@@ -103,6 +106,9 @@ jobs:
             # Setup Permissions
             sudo chown -R $EC2_USERNAME $TARGET_DIR
             sudo chmod +x scripts/*.sh
+
+            # Ensure application-dev.yml is REMOVED (Production only)
+            rm -f $TARGET_DIR/discovery-server/src/main/resources/application-dev.yml
 
             # Set Secrets Permissions
             sudo chmod 644 secrets/vault.encrypted

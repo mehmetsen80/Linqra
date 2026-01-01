@@ -17,8 +17,21 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Create secrets.json
-        run: echo '${{ secrets.SECRETS_JSON }}' > secrets/secrets.json
+      - name: Create secrets.json from GitHub secret
+        env:
+          SECRETS_JSON: ${{ secrets.SECRETS_JSON }}
+        run: |
+          mkdir -p secrets
+          
+          # Check if SECRETS_JSON secret is provided
+          if [ -z "$SECRETS_JSON" ]; then
+            echo "ERROR: SECRETS_JSON GitHub secret is not set"
+            exit 1
+          fi
+          
+          # Write the JSON secret to file
+          echo "$SECRETS_JSON" > secrets/secrets.json
+          echo "✅ secrets.json created"
 
       - name: Make scripts executable
         run: chmod +x scripts/*.sh

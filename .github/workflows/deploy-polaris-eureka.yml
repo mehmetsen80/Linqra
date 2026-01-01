@@ -1,0 +1,73 @@
+name: Deploy Eureka (Discovery Server) to Polaris
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-eureka:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Install Java 21 for vault-reader build (if needed locally, or just ensuring environment matches)
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Create secrets.json
+        run: echo '${{ secrets.SECRETS_JSON }}' > secrets/secrets.json
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Generate Vault (Encrypted)
+        env:
+          VAULT_PASSWORD: ${{ secrets.VAULT_MASTER_KEY }}
+        run: |
+          ./scripts/bootstrap-vault.sh
+          # Verify vault.encrypted was created
+          if [ ! -f secrets/vault.encrypted ]; then
+            echo "Failed to create secrets/vault.encrypted"
+            exit 1
+          fi
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY_PROD }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.HOST_DNS_POLARIS }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to EC2
+        env:
+          TARGET_DIR: ${{ secrets.TARGET_DIR_PROD }}
+          USERNAME: ${{ secrets.USERNAME_PROD }}
+          HOST: ${{ secrets.HOST_DNS_POLARIS }}
+        run: |
+          # 1. Create target directories
+          ssh $USERNAME@$HOST "mkdir -p $TARGET_DIR/.kube/eureka"
+          
+          # 2. Transfer files
+          # Transfer common files (pom.xml, secrets, vault-reader)
+          rsync -avz --exclude 'target/' --exclude 'node_modules/' \
+            pom.xml vault-reader \
+            $USERNAME@$HOST:$TARGET_DIR/
+            
+          # Transfer secrets (Encrypted only)
+          rsync -avz secrets/vault.encrypted $USERNAME@$HOST:$TARGET_DIR/secrets/
+          
+          # Transfer Eureka specific files
+          rsync -avz .kube/eureka/ $USERNAME@$HOST:$TARGET_DIR/.kube/eureka/
+          rsync -avz discovery-server/ $USERNAME@$HOST:$TARGET_DIR/discovery-server/
+          
+          # Transfer Docker Compose
+          scp docker-compose-polaris-eureka.yml $USERNAME@$HOST:$TARGET_DIR/docker-compose-polaris-eureka.yml
+          
+          # 3. Deploy
+          ssh $USERNAME@$HOST "cd $TARGET_DIR && \
+            export VAULT_MASTER_KEY='${{ secrets.VAULT_MASTER_KEY }}' && \
+            export VAULT_ENVIRONMENT='ec2' && \
+            docker compose -f docker-compose-polaris-eureka.yml up -d --build"

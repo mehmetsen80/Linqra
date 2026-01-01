@@ -110,6 +110,7 @@ jobs:
             # Export Master Key
             export VAULT_MASTER_KEY=$VAULT_MASTER_KEY
             export VAULT_ENVIRONMENT=ec2
+            export SPRING_PROFILES_ACTIVE=ec2
 
             # Deploy
             sudo -E docker compose -f docker-compose-polaris-eureka.yml down || true

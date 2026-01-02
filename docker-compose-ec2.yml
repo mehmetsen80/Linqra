@@ -5,19 +5,6 @@ networks:
       com.docker.network.driver.mtu: 1500
 
 services:
-  # Load Balancer
-  gateway-loadbalancer:
-    image: haproxy:2.8
-    ports:
-      - "7777:7777"
-    volumes:
-      - ./.kube/gateway/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
-      - ./keys/haproxy/gateway-combined-container.pem:/etc/ssl/gateway-cert.pem:ro
-    networks:
-      - linqra-network
-    depends_on:
-      - api-gateway-service
-
   # API Gateway Service
   api-gateway-service:
     build:
@@ -26,7 +13,7 @@ services:
     environment:
       VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
-      VAULT_REQUIRED_VARS: SPRING_PROFILES_ACTIVE,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GATEWAY_TRUSTSTORE_PASSWORD
+      VAULT_REQUIRED_VARS: SPRING_PROFILES_ACTIVE,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,GATEWAY_TRUSTSTORE_PASSWORD,SPRING_PROFILES_ACTIVE
     volumes:
       - ./keys:/app/keys
       - ./secrets:/app/secrets:ro
@@ -43,7 +30,7 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
-    expose:
-      - "7777"
+    ports:
+      - "7777:7777"
     networks:
       - linqra-network

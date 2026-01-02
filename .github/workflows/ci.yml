@@ -24,16 +24,6 @@ jobs:
             !api-gateway/target/**
             !api-gateway/target/
 
-      # Upload Discovery Server source files
-      - name: Upload Discovery Server source
-        uses: actions/upload-artifact@v4
-        with:
-          name: discovery-server-source
-          path: |
-            discovery-server/**
-            !discovery-server/target/**
-            !discovery-server/target/
-
       # Upload docker-compose.yml
       - name: Upload docker-compose file
         uses: actions/upload-artifact@v4
@@ -341,7 +331,6 @@ jobs:
 
           # Rsync main directories (only changed/new files, with sudo on remote)
           rsync -avz --delete --rsync-path="sudo rsync" artifacts/api-gateway-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/api-gateway/
-          rsync -avz --delete --rsync-path="sudo rsync" artifacts/discovery-server-source/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/discovery-server/
           rsync -avz --delete --rsync-path="sudo rsync" artifacts/react-build/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/edge-service/
 
           # Use scp for sensitive or always-fresh files
@@ -376,35 +365,7 @@ jobs:
           # .kube, keys, and scripts (if needed, use scp or rsync as appropriate)
           # CRITICAL: Protect all data directories from deletion during rsync
           if [ -d "artifacts/kube-config" ]; then
-            rsync -avz --delete \
-              --filter='protect mongodb/data1/***' \
-              --filter='protect mongodb/data2/***' \
-              --filter='protect mongodb/data3/***' \
-              --filter='protect postgres/data/***' \
-              --filter='protect pgadmin/data/***' \
-              --filter='protect keycloak/data/***' \
-              --filter='protect milvus/data/***' \
-              --filter='protect etcd/data/***' \
-              --filter='protect minio/data/***' \
-              --filter='protect neo4j/data/***' \
-              --filter='protect neo4j/logs/***' \
-              --filter='protect neo4j/import/***' \
-              --filter='protect neo4j/plugins/***' \
-              --exclude 'mongodb/data1/' \
-              --exclude 'mongodb/data2/' \
-              --exclude 'mongodb/data3/' \
-              --exclude 'postgres/data/' \
-              --exclude 'pgadmin/data/' \
-              --exclude 'keycloak/data/' \
-              --exclude 'milvus/data/' \
-              --exclude 'etcd/data/' \
-              --exclude 'minio/data/' \
-              --exclude 'neo4j/data/' \
-              --exclude 'neo4j/logs/' \
-              --exclude 'neo4j/import/' \
-              --exclude 'neo4j/plugins/' \
-              --rsync-path="sudo rsync" artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
-
+            rsync -avz --delete --rsync-path="sudo rsync" artifacts/kube-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/.kube/
           fi
           if [ -d "artifacts/keys-config" ]; then
             rsync -avz --delete --rsync-path="sudo rsync" artifacts/keys-config/ $EC2_USERNAME@$EC2_HOST:/var/www/linqra/keys/
@@ -464,83 +425,9 @@ jobs:
               echo "REACT_APP_KEYCLOAK_CLIENT_ID=${{ secrets.REACT_APP_KEYCLOAK_CLIENT_ID }}" >> /var/www/linqra/edge-service/.env
               sudo chmod 600 /var/www/linqra/edge-service/.env
 
-            # ========================================
-            # CRITICAL: Protect data directories FIRST before any other operations
-            # ========================================
-            
-            # Ensure Postgres data directory exists with correct permissions
-            echo 'Setting up Postgres data directory'
-            if [ ! -d /var/www/linqra/.kube/postgres/data ] || [ -z \"\$(ls -A /var/www/linqra/.kube/postgres/data)\" ]; then
-              echo 'Creating new Postgres data directory'
-              sudo mkdir -p /var/www/linqra/.kube/postgres/data
-              sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
-              sudo chmod 700 /var/www/linqra/.kube/postgres/data
-            else
-              echo 'Postgres data directory exists, fixing permissions only'
-              sudo chown -R 999:999 /var/www/linqra/.kube/postgres/data
-              sudo chmod 700 /var/www/linqra/.kube/postgres/data
-            fi
-
-            # Set correct permissions for MongoDB data directories
-            for d in data1 data2 data3; do
-              if [ -d /var/www/linqra/.kube/mongodb/\$d ]; then
-                sudo chown -R 999:999 /var/www/linqra/.kube/mongodb/\$d
-              fi
-            done
-            
-            # Set correct permissions for mongo-keyfile
-            if [ -f /var/www/linqra/.kube/mongodb/mongo-keyfile ]; then
-              sudo chown 999:999 /var/www/linqra/.kube/mongodb/mongo-keyfile
-              sudo chmod 400 /var/www/linqra/.kube/mongodb/mongo-keyfile
-            fi
-
-            # Ensure PgAdmin directories exist with correct permissions
-            sudo mkdir -p /var/www/linqra/.kube/pgadmin/data
-            sudo chown -R 5050:5050 /var/www/linqra/.kube/pgadmin
-            sudo chmod -R 755 /var/www/linqra/.kube/pgadmin
-
-            # Ensure the sessions directory exists and is owned by pgadmin
-            sudo mkdir -p /var/www/linqra/.kube/pgadmin/data/sessions
-            sudo chown 5050:5050 /var/www/linqra/.kube/pgadmin/data/sessions
-            sudo chmod 700 /var/www/linqra/.kube/pgadmin/data/sessions
-
-            # Set correct permissions for Neo4j directories (Neo4j runs as UID 7474)
-            echo 'Setting Neo4j directory permissions'
-            sudo mkdir -p /var/www/linqra/.kube/neo4j/data
-            sudo mkdir -p /var/www/linqra/.kube/neo4j/logs
-            sudo mkdir -p /var/www/linqra/.kube/neo4j/import
-            sudo mkdir -p /var/www/linqra/.kube/neo4j/plugins
-            sudo chown -R 7474:7474 /var/www/linqra/.kube/neo4j/data
-            sudo chown -R 7474:7474 /var/www/linqra/.kube/neo4j/logs
-            sudo chown -R 7474:7474 /var/www/linqra/.kube/neo4j/import
-            sudo chown -R 7474:7474 /var/www/linqra/.kube/neo4j/plugins
 
             # Ensure scripts are executable
             sudo chmod +x /var/www/linqra/scripts/*.sh
-
-            # Generate certificates for services
-            # TODO: Make the new services dynamically without hardcoding, for now this is fine
-            echo 'Generating certificates for services'
-            cd /var/www/linqra/scripts
-            sudo ./generate-service-certs.sh inventory-service
-            sudo ./generate-service-certs.sh product-service
-            sudo ./generate-service-certs.sh quotes-service
-            # Add new services here
-
-            # Generate HAProxy certificates
-            echo 'Generating HAProxy certificates'
-            sudo ./generate-haproxy-certs.sh
-
-            # Verify SSL configuration
-            echo 'Verifying SSL configuration'
-            sudo ./verify-ssl-config.sh inventory-service
-            sudo ./verify-ssl-config.sh product-service
-            # Add new services here
-
-            # Ensure HAProxy cert file is readable
-            if [ -f /var/www/linqra/keys/haproxy/gateway-combined-container.pem ]; then
-              sudo chmod 644 /var/www/linqra/keys/haproxy/gateway-combined-container.pem
-            fi
 
             # Move to the deployment directory
             cd /var/www/linqra

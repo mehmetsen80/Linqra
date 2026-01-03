@@ -1,9 +1,20 @@
 #!/bin/bash
 
+# Manual Usage:
+#   ./backup-postgres-polaris.sh
+#   nohup ./backup-postgres-polaris.sh >> /var/www/linqra/logs/backup.log 2>&1 &
+
 # Configuration
 CONTAINER_NAME="postgres-service"
-DB_USER="postgres"
-DB_NAME="keycloak" # Default Keycloak DB
+# Fetch credentials from running container environment
+DB_USER=$(docker exec $CONTAINER_NAME printenv POSTGRES_USER)
+DB_PASS=$(docker exec $CONTAINER_NAME printenv POSTGRES_PASSWORD)
+DB_NAME=$(docker exec $CONTAINER_NAME printenv POSTGRES_DB)
+
+# Fallbacks
+: ${DB_USER:="keycloak"}
+: ${DB_NAME:="keycloak"}
+
 BACKUP_DIR="/var/www/linqra/.kube/postgres/backups"
 S3_BUCKET="s3://backup-linqra-postgres"
 AWS_REGION="us-east-1"
@@ -41,7 +52,7 @@ log "✅ AWS connection successful."
 # Since we are root/docker user on host, we can exec without password if pg_hba allows, 
 # but usually need env var. We'll try to rely on 'postgres' user trust within container.
 log "📦 Dumping database..."
-if docker exec "$CONTAINER_NAME" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_DIR/$BACKUP_FILE"; then
+if docker exec -e PGPASSWORD="$DB_PASS" "$CONTAINER_NAME" pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_DIR/$BACKUP_FILE"; then
     log "✅ Backup created: $BACKUP_DIR/$BACKUP_FILE"
     
     # Get size

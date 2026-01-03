@@ -10,6 +10,7 @@ services:
     build:
       context: .
       dockerfile: ./.kube/gateway/Dockerfile
+    container_name: api-gateway-service
     environment:
       VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
@@ -27,7 +28,6 @@ services:
         reservations:
           cpus: '1.0'
           memory: 1G
-      replicas: 1
       restart_policy:
         condition: on-failure
     ports:

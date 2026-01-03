@@ -101,10 +101,10 @@ When you approach a bank, law firm, or hospital, they will send a generic **Secu
         *   **Active Maintenance:** We actively patch and override vulnerable transitive dependencies to ensure we stay ahead of upstream fixes.
 11. **"Do you have a backup strategy?"**
     *   **Answer:** YES. We employ a comprehensive multi-layered backup strategy:
-        *   **MongoDB**: Hourly backups via `MongoBackupScheduler` (7-day retention) → S3
-        *   **PostgreSQL (Keycloak)**: Hourly backups via `PostgresBackupScheduler` (7-day retention) → S3
-        *   **Milvus Vector Database**: Daily complete backups via `MilvusBackupScheduler` including Milvus, etcd (metadata), and MinIO (vector storage) - all three components backed up together for consistent recovery (30-day retention) → S3
-        *   **Neo4j Knowledge Graph**: Daily backups via `Neo4jBackupScheduler` (30-day retention) → S3
+        *   **MongoDB**: **Managed Cloud Backups (Atlas)**. Automated snapshots with Continuous Cloud Backups (Point-in-Time Recovery).
+        *   **PostgreSQL (Keycloak)**: Daily off-site backups from **Dedicated Auth Server (Polaris)** to S3 via secure script (`7-day` retention).
+        *   **Milvus Vector Database**: **Managed Cloud Backups (Zilliz/Dedicated)**. Automated daily snapshots.
+        *   **Neo4j Knowledge Graph**: **Managed Cloud Backups (AuraDB)**. Automated daily snapshots.
         *   **S3 Knowledge Hub**: Hourly backups via `KnowledgeHubS3BackupScheduler`
         *   **Cross-Region Replication (CRR):** All S3 data is automatically replicated to a secondary region (us-east-1) for disaster recovery.
         *   **Versioning:** Protects against accidental deletions or overwrites.

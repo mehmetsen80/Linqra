@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -16,7 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-@Component
+// @Component
 @RequiredArgsConstructor
 @Slf4j
 public class PostgresBackupScheduler {
@@ -41,7 +40,7 @@ public class PostgresBackupScheduler {
      * Hourly PostgreSQL backup.
      * Cron: "0 0 * * * ?" = At minute 0 of every hour
      */
-    @Scheduled(cron = "0 0 * * * ?")
+    // @Scheduled(cron = "0 0 * * * ?")
     public void backupPostgres() {
         log.info("🔄 Starting hourly PostgreSQL backup");
 

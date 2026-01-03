@@ -17,9 +17,12 @@ import static org.junit.jupiter.api.Assertions.fail;
  * WARNING: This test uses real Mailjet credentials and will send real emails!
  * 
  * To use this test:
- * 1. Replace MAILJET_API_KEY and MAILJET_SECRET_KEY with your actual Mailjet credentials
- * 2. Replace TEST_RECIPIENT_EMAIL with the email address where you want to receive test emails
- * 3. Uncomment @SpringBootTest annotation if you want to use Spring context (optional)
+ * 1. Replace MAILJET_API_KEY and MAILJET_SECRET_KEY with your actual Mailjet
+ * credentials
+ * 2. Replace TEST_RECIPIENT_EMAIL with the email address where you want to
+ * receive test emails
+ * 3. Uncomment @SpringBootTest annotation if you want to use Spring context
+ * (optional)
  * 
  * Mailjet SMTP Configuration:
  * - Host: in-v3.mailjet.com
@@ -27,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.fail;
  * - Username: Your Mailjet API Key
  * - Password: Your Mailjet Secret Key
  */
-// @SpringBootTest  // Uncomment to use Spring context with EmailConfig
+// @SpringBootTest // Uncomment to use Spring context with EmailConfig
 class MailjetEmailTest {
 
     // TODO: Replace these with your actual Mailjet credentials
@@ -36,7 +39,8 @@ class MailjetEmailTest {
     private static final String MAILJET_HOST = "in-v3.mailjet.com";
     private static final int MAILJET_PORT = 587; // 587 for TLS, 465 for SSL
     private static final String TEST_RECIPIENT_EMAIL = "someone@gmail.com";
-    private static final String TEST_FROM_EMAIL = "msen@linqra.com"; // Use verified sender in Mailjet i.e. msen@dipme.app or msen@linqra.com
+    private static final String TEST_FROM_EMAIL = "msen@linqra.com"; // Use verified sender in Mailjet i.e.
+                                                                     // msen@dipme.app or msen@linqra.com
 
     /**
      * Test sending a simple text email via Mailjet
@@ -230,4 +234,3 @@ class MailjetEmailTest {
         return mailSender;
     }
 }
-

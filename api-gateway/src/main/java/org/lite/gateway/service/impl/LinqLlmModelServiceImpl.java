@@ -980,18 +980,20 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             });
                 })
                 .bodyToMono(Object.class)
+                .timeout(Duration.ofSeconds(90)) // Per-request timeout to fail fast on hanging connections
                 .retryWhen(reactor.util.retry.Retry.backoff(3, Duration.ofSeconds(5))
                         .filter(throwable -> {
-                            // Retry on HTTP 429 (Rate Limit) or HTTP 5xx (Server Error)
+                            // Retry on HTTP 429 (Rate Limit), HTTP 5xx (Server Error), or Timeout
                             String msg = throwable.getMessage();
-                            return msg != null && (msg.contains("HTTP 429") || msg.contains("rate limit") ||
-                                    msg.contains("HTTP 5"));
+                            return (msg != null && (msg.contains("HTTP 429") || msg.contains("rate limit") ||
+                                    msg.contains("HTTP 5")))
+                                    || throwable instanceof java.util.concurrent.TimeoutException;
                         })
                         .doBeforeRetry(retrySignal -> log.warn(
                                 "⚠️ Retrying LLM service call {} due to error: {} (Attempt {}/3)",
                                 url, retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1))
                         .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
-                .timeout(Duration.ofSeconds(120)) // 2-minute timeout to prevent indefinite hanging
+                .timeout(Duration.ofMinutes(5)) // Global timeout (including retries) increased to 5 minutes
                 .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
                 .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage(), error));
     }

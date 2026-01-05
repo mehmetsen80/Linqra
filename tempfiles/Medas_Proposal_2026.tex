@@ -1,0 +1,368 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{tikz}
+\usetikzlibrary{arrows, positioning}
+
+% Page setup
+\geometry{margin=1in}
+\setlength{\headheight}{13.6pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textbf{Linqra}}
+\fancyhead[R]{\textbf{Proposal for Medas Textile}}
+\fancyfoot[C]{\thepage}
+
+% Colors
+\definecolor{primaryorange}{RGB}{214,95,31}
+\definecolor{primaryblue}{RGB}{59,130,246}
+\definecolor{primarypurple}{RGB}{147,51,234}
+\definecolor{darkgray}{RGB}{55,65,81}
+
+% Title formatting
+\titleformat{\section}
+  {\Large\bfseries\color{primaryorange}}
+  {}
+  {0em}
+  {}
+
+\titleformat{\subsection}
+  {\large\bfseries\color{darkgray}}
+  {}
+  {0em}
+  {}
+
+% Document info
+\title{\textbf{Agentic Cloud Platform Implementation\\Proposal for Medas Textile}}
+\author{Linqra}
+\date{December 2025}
+
+\begin{document}
+
+% Logo at the beginning
+\begin{titlepage}
+\centering
+\includegraphics[width=0.4\textwidth]{edge-service/public/images/linqra-logo.png}\\[2cm]
+
+{\Huge\bfseries\color{primaryorange} Agentic Cloud Platform Implementation}\\[0.5cm]
+{\Large\bfseries Proposal for Medas Textile}\\[1cm]
+
+{\large Linqra}\\[0.5cm]
+{\large December 2025}
+
+\vfill
+
+\end{titlepage}
+
+\newpage
+\setcounter{page}{1}
+
+\vspace{2cm}
+
+\section*{Executive Summary}
+
+Medas Textile faces the challenge of \textbf{data sprawl} across multiple scattered technology stacks. This proposal outlines a phased approach to consolidate your data infrastructure using \textbf{Linqra}, an enterprise-grade Agentic Cloud Platform. Through structured consultation, implementation, and ongoing support, we will help Medas Textile organize, secure, and leverage their data assets effectively while maintaining the highest standards of security and compliance.
+
+\vspace{1cm}
+
+\section*{Project Objectives}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Eliminate Data Sprawl:} Consolidate scattered data sources into a unified, organized platform
+    \item \textbf{Establish Secure Data Foundation:} Implement enterprise-grade encryption and compliance-ready infrastructure
+    \item \textbf{Enable AI-Powered Insights:} Deploy AI Assistants allowing employees to interact with company data
+    \item \textbf{Future-Ready Architecture:} Create a scalable foundation for advanced Agentic Cloud Platform capabilities
+\end{itemize}
+
+\vspace{1cm}
+
+\section*{Benefits for Medas Textile}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Eliminate Data Silos:} Consolidate scattered data into a unified platform
+    \item \textbf{Improved Data Organization:} Structured approach to data management
+    \item \textbf{AI-Powered Insights:} Enable employees to query and interact with company data through AI Assistants
+    \item \textbf{Scalable Foundation:} Build upon Linqra's Agentic Cloud Platform for future AI capabilities
+    \item \textbf{Reduced IT Complexity:} Simplify technology stack management
+    \item \textbf{Enhanced Security:} Enterprise-grade encryption and compliance features
+    \item \textbf{Data Control:} Complete control over data with export and audit capabilities
+    \item \textbf{Future-Ready:} Platform designed for advanced AI and automation use cases
+\end{itemize}
+
+\vspace{1cm}
+
+\section{Project Timeline \& Deliverables}
+
+\subsection{Phase 1: Data Mapping \& Consultation (January 2026)}
+
+\textbf{Duration:} 4 weeks\\
+\textbf{Meetings:} 2 sessions per week (8 total sessions)\\
+\textbf{Investment:} \$0.00 (No charge for consultation phase)\\
+\textbf{Focus:} Data requirements analysis and architectural planning
+
+\subsubsection*{Activities:}
+\begin{enumerate}
+    \item \textbf{Data Assessment \& Mapping}
+    \begin{itemize}
+        \item Identify essential website flow data requirements
+        \item Catalog existing structured and unstructured data sources
+        \item Map data relationships and dependencies
+        \item Determine data retention and access requirements
+    \end{itemize}
+    
+    \item \textbf{Architecture Design}
+    \begin{itemize}
+        \item Design optimal data organization schema
+        \item Define data ingestion workflows
+        \item Plan integration points with existing systems
+        \item Establish data governance policies
+    \end{itemize}
+    
+    \item \textbf{Deliverables}
+    \begin{itemize}
+        \item Comprehensive data inventory documentation
+        \item Data architecture blueprint
+        \item Integration requirements specification
+        \item Phase 2 implementation roadmap
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Phase 2: Implementation \& Onboarding (February 2026)}
+
+\textbf{Duration:} 4 weeks\\
+\textbf{Investment:} \$1,500\\
+\textbf{Focus:} Backend development, data integration, and initial AI deployment
+
+\subsubsection*{Activities:}
+\begin{enumerate}
+    \item \textbf{Backend Development}
+    \begin{itemize}
+        \item Spring Boot (Java) backend implementation
+        \item MongoDB database design and schema implementation
+        \item RESTful API development for data management
+        \item Webhook endpoint creation for automated data ingestion
+    \end{itemize}
+    
+    \item \textbf{Linqra Platform Onboarding}
+    \begin{itemize}
+        \item Platform setup and configuration
+        \item User access and permission configuration
+        \item Initial data ingestion (up to 5 GB of unstructured files)
+        \item Knowledge Hub setup and organization
+    \end{itemize}
+    
+    \item \textbf{AI Agent \& Assistant Development}
+    \begin{itemize}
+        \item First custom AI Agent creation (specifications to be determined)
+        \item AI Assistant configuration for employee data interaction
+        \item Chat interface setup for querying company data
+        \item Testing and validation of AI capabilities
+    \end{itemize}
+    
+    \item \textbf{Deliverables}
+    \begin{itemize}
+        \item Fully functional backend system
+        \item Webhook endpoints for data integration
+        \item Operational Linqra Knowledge Hub (5 GB initial capacity)
+        \item Working AI Assistant for employee use
+        \item Technical documentation and API specifications
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Phase 3: Testing \& Go-Live (March 2026)}
+
+\textbf{Duration:} 4 weeks\\
+\textbf{Investment:} \$1,500\\
+\textbf{Focus:} Quality assurance, integration testing, and production deployment
+
+\subsubsection*{Activities:}
+\begin{enumerate}
+    \item \textbf{Testing \& Quality Assurance}
+    \begin{itemize}
+        \item End-to-end system testing
+        \item Integration testing with existing systems
+        \item Performance and load testing
+        \item Security and compliance validation
+    \end{itemize}
+    
+    \item \textbf{Integration \& Deployment}
+    \begin{itemize}
+        \item Production environment setup
+        \item Data migration and validation
+        \item User training and documentation
+        \item Go-live support and monitoring
+    \end{itemize}
+    
+    \item \textbf{Platform Consolidation}
+    \begin{itemize}
+        \item System optimization and tuning
+        \item Final configuration adjustments
+        \item Knowledge transfer and handover documentation
+    \end{itemize}
+    
+    \item \textbf{Deliverables}
+    \begin{itemize}
+        \item Production-ready system
+        \item Completed integration with existing infrastructure
+        \item User training materials and documentation
+        \item Ongoing support plan
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Ongoing Support \& Maintenance (Optional - April 2026 onwards)}
+
+\textbf{Note:} Ongoing support is optional. Medas Textile may choose to continue with Linqra support after Phase 3 completion, or operate independently.
+
+\textbf{Monthly Investment:} \$500/month\\
+\textbf{Includes:}
+\begin{itemize}
+    \item Platform maintenance and monitoring
+    \item Basic support and troubleshooting
+    \item Regular system updates and security patches
+    \item Access to Linqra platform features and improvements
+    \item Monthly usage reports and analytics
+\end{itemize}
+
+\textbf{Custom Development:} Additional charges apply for:
+\begin{itemize}
+    \item New feature development
+    \item Custom integrations
+    \item Additional AI Agents or Assistants
+    \item Expanded data capacity beyond initial allocation
+\end{itemize}
+
+\newpage
+
+\section{Pricing Summary}
+
+\begin{table}[h]
+\centering
+\begin{tabularx}{\textwidth}{|X|r|}
+\hline
+\textbf{Phase/Service} & \textbf{Investment} \\
+\hline
+\textbf{Phase 1: Consultation \& Data Mapping (January 2026)} & \$0.00 \\
+\hline
+\textbf{Phase 2: Implementation \& Onboarding (February 2026)} & \$1,500 \\
+\hline
+\textbf{Phase 3: Testing \& Go-Live (March 2026)} & \$1,500 \\
+\hline
+\textbf{Ongoing Support (Optional, starting April 2026)} & \$500/month \\
+\hline
+\textbf{Custom Development} & Quoted separately \\
+\hline
+\end{tabularx}
+\end{table}
+
+\vspace{1cm}
+
+\section{Security \& Compliance Features}
+
+Linqra provides enterprise-grade security and compliance capabilities:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Encryption:} All data encrypted at rest and in transit using AES-256-GCM
+    \item \textbf{Secure Access:} Role-based access control with audit logging
+    \item \textbf{Data Export:} Full data export capabilities at any time
+    \item \textbf{Audit Trails:} Comprehensive audit logging for compliance requirements
+    \item \textbf{Compliance Ready:} Built-in support for HIPAA, GDPR, SOC 2, GLBA, and other regulatory frameworks
+    \item \textbf{Data Sovereignty:} Your data remains in your control
+    \item \textbf{Immutable Audit Logs:} Tamper-proof audit trail with S3 Object Lock
+    \item \textbf{Per-Tenant Encryption Keys:} Cryptographic data isolation
+\end{itemize}
+
+\vspace{1cm}
+
+\section{Technical Specifications}
+
+\subsection{Platform Components}
+
+\begin{itemize}
+    \item \textbf{Backend:} Spring Boot (Java) with reactive programming
+    \item \textbf{Database:} MongoDB with optimized schema design
+    \item \textbf{Integration:} RESTful APIs and Webhook endpoints
+    \item \textbf{AI Platform:} Linqra Agentic Cloud Platform
+    \item \textbf{Knowledge Hub:} Vector database for unstructured data
+    \item \textbf{AI Assistants:} LLM-powered chat interfaces
+\end{itemize}
+
+\subsection{Initial Capacity}
+
+\begin{itemize}
+    \item \textbf{Data Storage:} Up to 5 GB of unstructured files (expandable)
+    \item \textbf{AI Agents:} 1 initial Agent (customizable)
+    \item \textbf{AI Assistants:} 1 Assistant for employee data interaction
+    \item \textbf{Users:} Based on Medas Textile requirements
+\end{itemize}
+
+\vspace{1cm}
+
+\section{Next Steps}
+
+To proceed with this proposal:
+
+\begin{enumerate}
+    \item Review and approve the proposed timeline and pricing
+    \item Schedule kickoff meeting for January 2026
+    \item Provide access to key stakeholders for consultation sessions
+    \item Share initial data inventory and integration requirements
+\end{enumerate}
+
+\vspace{1cm}
+
+\section*{Contact Information}
+
+\vspace{0.5cm}
+
+\textbf{For questions or to discuss this proposal, please contact:}
+
+\vspace{0.8cm}
+
+\begin{tabular}{@{}ll@{}}
+\textbf{Contact:} & Linqra Team\\[0.4cm]
+\textbf{Email:} & \href{mailto:msen@dipme.app}{msen@dipme.app}\\[0.4cm]
+\textbf{Website:} & \href{https://linqra.com}{https://linqra.com}\\[0.6cm]
+\textbf{Company:} & Linqra (a project of DIPME, .CORP)\\[0.3cm]
+\textbf{Entity Type:} & C-CORP Delaware Company
+\end{tabular}
+
+\vspace{1cm}
+
+\section*{Terms \& Conditions}
+
+\begin{itemize}[leftmargin=*]
+    \item All phases are subject to scope approval and change management
+    \item Custom development work will be quoted separately
+    \item Ongoing support (optional) available from April 2026 onwards at \$500/month
+    \item Data capacity beyond 5 GB may incur additional charges
+    \item Payment terms: Net 30 days
+    \item This proposal is valid for 60 days from date of issue
+\end{itemize}
+
+\vspace{2cm}
+
+\begin{center}
+\textit{This proposal represents Linqra's commitment to helping Medas Textile achieve their data consolidation and AI enablement objectives through a secure, compliant, and scalable platform solution.}
+
+\vspace{1cm}
+
+\textbf{We look forward to partnering with Medas Textile on this transformative journey.}
+
+\vspace{0.5cm}
+
+\textit{Medas Textile Website: \href{https://medastex.eu/}{https://medastex.eu/}}
+\end{center}
+
+\end{document}
+

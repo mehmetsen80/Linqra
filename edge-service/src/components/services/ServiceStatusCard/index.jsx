@@ -2,10 +2,10 @@ import React from 'react';
 import './styles.css';
 import { Card, Tooltip, Zoom } from '@mui/material';
 
-const ServiceStatusCard = ({ 
-    service, 
+const ServiceStatusCard = ({
+    service,
     onAnalysisClick,
-    ...props 
+    ...props
 }) => {
     // If serviceHealth is null or undefined, create a default offline state
     const defaultHealth = {
@@ -35,7 +35,7 @@ const ServiceStatusCard = ({
     const uptime = health.uptime;
     const lastChecked = health.lastChecked;
 
-    const isCritical = serviceMetrics.cpu > 90 || serviceMetrics.memory > 0.9;
+    const isCritical = serviceMetrics.cpu > 90 || serviceMetrics.memory > 90;
     const hasHighLatency = serviceMetrics.responseTime > 1000; // 1 second
 
     const formatUptime = (uptimeStr) => {
@@ -53,9 +53,9 @@ const ServiceStatusCard = ({
     };
 
     return (
-        <Card 
-            sx={{ 
-                minWidth: 275, 
+        <Card
+            sx={{
+                minWidth: 275,
                 padding: '20px',
                 backgroundColor: '#fff',
                 borderRadius: '10px',
@@ -118,18 +118,18 @@ const ServiceStatusCard = ({
                 </span>
             </div>
             <div className="metrics-grid">
-                <MetricItem 
-                    label="CPU" 
+                <MetricItem
+                    label="CPU"
                     value={serviceMetrics.cpu != null ? `${serviceMetrics.cpu.toFixed(1)}%` : 'N/A'}
                     trend={trends.cpu || { direction: '⬇️', percentageChange: 0 }}
                 />
-                <MetricItem 
-                    label="Memory" 
-                    value={serviceMetrics.memory != null ? `${(serviceMetrics.memory * 100).toFixed(1)}%` : 'N/A'}
+                <MetricItem
+                    label="Memory"
+                    value={serviceMetrics.memory != null ? `${serviceMetrics.memory.toFixed(1)}%` : 'N/A'}
                     trend={trends.memory || { direction: '⬇️', percentageChange: 0 }}
                 />
-                <MetricItem 
-                    label="Response Time" 
+                <MetricItem
+                    label="Response Time"
                     value={serviceMetrics.responseTime != null ? `${serviceMetrics.responseTime}ms` : 'N/A'}
                     trend={trends.responseTime || { direction: '⬇️', percentageChange: 0 }}
                 />
@@ -143,7 +143,7 @@ const ServiceStatusCard = ({
 };
 
 const MetricItem = ({ label, value, trend }) => (
-    <Tooltip 
+    <Tooltip
         title={`Current ${label}: ${value}
 Trend: ${trend.direction} (${trend.percentageChange > 0 ? '+' : ''}${trend.percentageChange.toFixed(1)}%)`}
         TransitionComponent={Zoom}

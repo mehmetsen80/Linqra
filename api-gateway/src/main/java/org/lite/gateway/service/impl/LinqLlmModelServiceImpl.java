@@ -819,9 +819,6 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         }
 
                         // Map roles to Cohere V2 roles
-                        // system -> system
-                        // user -> user
-                        // assistant -> assistant
                         Map<String, Object> cohereMsg = new HashMap<>();
                         if ("system".equalsIgnoreCase(role)) {
                             cohereMsg.put("role", "system");
@@ -861,10 +858,15 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         }
                     } else if (coherePayload.containsKey("message")) {
                         // Backwards compatibility for single message
-                        Map<String, Object> cohereMsg = new HashMap<>();
-                        cohereMsg.put("role", "user");
-                        cohereMsg.put("content", coherePayload.get("message"));
-                        cohereMessages.add(cohereMsg);
+                        Object contentObj = coherePayload.get("message");
+                        String content = contentObj != null ? contentObj.toString() : "";
+
+                        if (!content.trim().isEmpty()) {
+                            Map<String, Object> cohereMsg = new HashMap<>();
+                            cohereMsg.put("role", "user");
+                            cohereMsg.put("content", content);
+                            cohereMessages.add(cohereMsg);
+                        }
                     }
 
                     // Add any other fields (excluding message/preamble/messages)
@@ -873,6 +875,24 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             payload.put(key, value);
                         }
                     });
+                }
+
+                // Fallback: If no messages yet, check for 'prompt' parameter
+                if (cohereMessages.isEmpty()) {
+                    String prompt = request.getQuery().getParams().getOrDefault("prompt", "").toString();
+                    if (!prompt.trim().isEmpty()) {
+                        Map<String, Object> cohereMsg = new HashMap<>();
+                        cohereMsg.put("role", "user");
+                        cohereMsg.put("content", prompt);
+                        cohereMessages.add(cohereMsg);
+                        log.debug("Using fallback prompt for Cohere payload");
+                    }
+                }
+
+                // Final validation
+                if (cohereMessages.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Cohere Chat API requires at least one non-empty message in the payload");
                 }
 
                 payload.put("messages", cohereMessages);
@@ -960,6 +980,17 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             });
                 })
                 .bodyToMono(Object.class)
+                .retryWhen(reactor.util.retry.Retry.backoff(3, Duration.ofSeconds(5))
+                        .filter(throwable -> {
+                            // Retry on HTTP 429 (Rate Limit) or HTTP 5xx (Server Error)
+                            String msg = throwable.getMessage();
+                            return msg != null && (msg.contains("HTTP 429") || msg.contains("rate limit") ||
+                                    msg.contains("HTTP 5"));
+                        })
+                        .doBeforeRetry(retrySignal -> log.warn(
+                                "⚠️ Retrying LLM service call {} due to error: {} (Attempt {}/3)",
+                                url, retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1))
+                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
                 .timeout(Duration.ofSeconds(120)) // 2-minute timeout to prevent indefinite hanging
                 .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
                 .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage(), error));

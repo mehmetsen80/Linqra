@@ -948,8 +948,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     @Override
     public Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId) {
-        log.debug("Getting embedding for text: {} with modelCategory: {} and model name: {} for team: {}", text,
-                modelCategory, modelName, teamId);
+        log.info("Generating embedding for text length: {} using model: {}/{}", text.length(), modelCategory,
+                modelName);
         LinqRequest request = new LinqRequest();
         LinqRequest.Link link = new LinqRequest.Link();
         link.setTarget(modelCategory);
@@ -966,10 +966,16 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         request.setQuery(query);
 
         return linqLlmModelService.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId)
+                .doOnNext(m -> log.info("Found LLM Model config for {}", modelName))
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Embedding modelCategory " + modelCategory
                         + " with model name " + modelName + " not found for team: " + teamId)))
-                .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(request, llmModel))
+                .flatMap(llmModel -> {
+                    log.info("Executing LLM request for embedding...");
+                    return linqLlmModelService.executeLlmRequest(request, llmModel);
+                })
+                .doOnError(e -> log.error("Embedding generation failed: {}", e.getMessage()))
                 .map(response -> {
+                    log.info("Received embedding response. Parsing...");
                     Map<String, Object> result = (Map<String, Object>) response.getResult();
                     if (result == null) {
                         throw new IllegalStateException("Received null result from embedding service");
@@ -985,6 +991,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             throw new IllegalStateException("No data received from OpenAI embedding service");
                         }
                         List<Object> rawEmbedding = (List<Object>) data.getFirst().get("embedding");
+                        log.info("Successfully parsed OpenAI embedding (dim: {})", rawEmbedding.size());
                         return rawEmbedding.stream()
                                 .map(value -> ((Number) value).floatValue())
                                 .collect(Collectors.toList());
@@ -2226,15 +2233,14 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         "results", new ArrayList<>()));
             }
 
-            // Log collection schema for debugging
-            // log.info("Collection schema for {}: {}", collectionName,
-            // describeResponse.getData().getSchema());
-            // log.info("Available fields:");
-            // for (io.milvus.grpc.FieldSchema field :
-            // describeResponse.getData().getSchema().getFieldsList()) {
-            // log.info(" - {}: {} (primary: {})", field.getName(), field.getDataType(),
-            // field.getIsPrimaryKey());
-            // }
+            // Log collection properties for debugging
+            log.info("Inspecting properties for collection: {}", collectionName);
+            if (describeResponse.getData().getPropertiesList().isEmpty()) {
+                log.warn("⚠️ Collection {} has NO properties!", collectionName);
+            }
+            for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
+                log.info("   -> Property: {} = {}", property.getKey(), property.getValue());
+            }
 
             boolean teamIdMatches = false;
             for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
@@ -2245,6 +2251,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
 
             if (!teamIdMatches) {
+                log.error(
+                        "🚨 ABORTING SEARCH: Team ID mismatch! Collection properties do not contain teamId={} (or property not found)",
+                        teamId);
                 return Mono.just(Map.of(
                         "found", false,
                         "message", "Collection does not belong to team " + teamId,

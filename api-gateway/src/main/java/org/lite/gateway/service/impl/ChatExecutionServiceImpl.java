@@ -356,7 +356,8 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                     .toList());
             publishChatUpdate("AGENT_TASKS_EXECUTING", executingData);
 
-            taskResultsMono = executeAgentTasks(assistant.getSelectedTasks(), userMessage, assistant.getTeamId(),
+            taskResultsMono = executeAgentTasks(assistant.getSelectedTasks(), messages, userMessage,
+                    assistant.getTeamId(),
                     request.getExecutedBy())
                     .doOnSuccess(taskResults -> {
                         // Publish agent tasks completed update
@@ -753,6 +754,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
      */
     private Mono<Map<String, Object>> executeAgentTasks(
             List<AIAssistant.SelectedTask> selectedTasks,
+            List<Map<String, Object>> messages,
             String userMessage,
             String teamId,
             String executedBy) {
@@ -783,7 +785,8 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                 return agentRepository.findById(task.getAgentId())
                                         .flatMap(agent -> {
                                             // Execute task with proper AgentExecution tracking
-                                            return executeTaskWithTracking(task, agent, userMessage, teamId, executedBy)
+                                            return executeTaskWithTracking(task, agent, messages, userMessage, teamId,
+                                                    executedBy)
                                                     .map(result -> {
                                                         log.info(
                                                                 "Task {} executed successfully with proper tracking, result: {}",
@@ -994,6 +997,7 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
     private Mono<Object> executeTaskWithTracking(
             AgentTask task,
             Agent agent,
+            List<Map<String, Object>> messages,
             String userMessage,
             String teamId,
             String executedBy) {
@@ -1002,6 +1006,25 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
         Map<String, Object> inputOverrides = new HashMap<>();
         if (userMessage != null && !userMessage.trim().isEmpty()) {
             inputOverrides.put("question", userMessage);
+        }
+
+        // Inject formatted conversation context
+        if (messages != null && !messages.isEmpty()) {
+            StringBuilder historyBuilder = new StringBuilder();
+            for (Map<String, Object> msg : messages) {
+                String role = (String) msg.get("role");
+                Object contentObj = msg.get("content");
+                if (role != null && contentObj != null) {
+                    // Skip system messages and ensure content is a string
+                    if (!"system".equalsIgnoreCase(role)) {
+                        String content = contentObj.toString();
+                        historyBuilder.append(role.toUpperCase()).append(": ").append(content).append("\n\n");
+                    }
+                }
+            }
+            if (historyBuilder.length() > 0) {
+                inputOverrides.put("chatHistory", historyBuilder.toString());
+            }
         }
 
         // Use startTaskExecution for proper validation, tracking, and execution flow

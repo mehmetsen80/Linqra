@@ -1037,14 +1037,13 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                     DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-
                             .build());
 
             List<String> availableFields = new ArrayList<>();
             if (describeResponse.getStatus() == 0 && describeResponse.getData() != null) {
                 availableFields = describeResponse.getData().getSchema().getFieldsList().stream()
                         .map(io.milvus.grpc.FieldSchema::getName)
-                        .collect(Collectors.toList());
+                        .toList();
             }
 
             // Ensure encryptionKeyVersion and teamId are included for decryption (only if
@@ -1085,7 +1084,6 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
                     milvusClient.loadCollection(LoadCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-
                             .build());
 
                     // Retry search
@@ -2300,6 +2298,64 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             log.info("Executing semantic search for text: {} with filter: {} and nResults: {}",
                                     text, filterExpression.isEmpty() ? "none" : filterExpression, nResults);
                             SearchResults results = milvusClient.search(searchParam).getData();
+
+                            // --- DIAGNOSTIC START ---
+                            if ((results == null || results.getResults().getNumQueries() == 0)
+                                    && !filterExpression.isEmpty() && filterExpression.contains("teamId")) {
+                                log.warn(
+                                        "⚠️ No results found with normal filter. Running DIAGNOSTIC search (ignoring Team ID)...");
+                                try {
+                                    // List all collections to verify visibility
+                                    R<ShowCollectionsResponse> allCollections = milvusClient
+                                            .showCollections(ShowCollectionsParam.newBuilder().build());
+                                    if (allCollections.getStatus() == 0) {
+                                        log.info("ℹ️ Total Collections visible in this DB: {}",
+                                                allCollections.getData().getCollectionNamesList());
+                                    } else {
+                                        log.error("❌ Failed to list collections: {}", allCollections.getMessage());
+                                    }
+
+                                    String diagnosticFilter = buildFilterExpression(null, metadataFilters,
+                                            availableFields);
+                                    SearchParam.Builder diagBuilder = SearchParam.newBuilder()
+                                            .withCollectionName(collectionName)
+                                            .withFloatVectors(List.of(searchEmbedding))
+                                            .withLimit(3L) // Just need a few to verify
+                                            .withMetricType(METRIC_TYPE)
+                                            .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
+                                            .withVectorFieldName(EMBEDDING_FIELD)
+                                            .withOutFields(List.of("teamId", "documentId")) // Inspect these
+                                            .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
+
+                                    if (!diagnosticFilter.isEmpty()) {
+                                        diagBuilder.withExpr(diagnosticFilter);
+                                    }
+
+                                    SearchResults diagResults = milvusClient.search(diagBuilder.build()).getData();
+                                    if (diagResults != null && diagResults.getResults().getNumQueries() > 0) {
+                                        log.error("🚨 DIAGNOSTIC RESULT: Found {} records when IGNORING teamId!",
+                                                diagResults.getResults().getNumQueries());
+                                        // Print the teamId of the first match
+                                        var fields = diagResults.getResults().getFieldsDataList();
+                                        fields.stream()
+                                                .filter(f -> f.getFieldName().equals("teamId"))
+                                                .findFirst()
+                                                .ifPresent(f -> {
+                                                    if (f.getScalars().getStringData().getDataCount() > 0) {
+                                                        log.error(
+                                                                "🚨 MISMATCH DETECTED! Record belongs to Team ID: [{}] but you searched for Team ID: [{}]",
+                                                                f.getScalars().getStringData().getData(0), teamId);
+                                                    }
+                                                });
+                                    } else {
+                                        log.info(
+                                                "ℹ️ Diagnostic search also returned 0 results. The vectors might simply not match or not exist.");
+                                    }
+                                } catch (Exception diagEx) {
+                                    log.warn("Diagnostic search failed", diagEx);
+                                }
+                            }
+                            // --- DIAGNOSTIC END ---
 
                             if (results == null || results.getResults().getNumQueries() == 0) {
                                 log.info("No results found in semantic search");

@@ -948,7 +948,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     @Override
     public Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId) {
-        log.info("Generating embedding for text length: {} using model: {}/{}", text.length(), modelCategory,
+        log.debug("Generating embedding for text length: {} using model: {}/{}", text.length(), modelCategory,
                 modelName);
         LinqRequest request = new LinqRequest();
         LinqRequest.Link link = new LinqRequest.Link();
@@ -966,16 +966,15 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         request.setQuery(query);
 
         return linqLlmModelService.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId)
-                .doOnNext(m -> log.info("Found LLM Model config for {}", modelName))
+                .doOnNext(m -> log.debug("Found LLM Model config for {}", modelName))
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Embedding modelCategory " + modelCategory
                         + " with model name " + modelName + " not found for team: " + teamId)))
                 .flatMap(llmModel -> {
-                    log.info("Executing LLM request for embedding...");
+                    log.debug("Executing LLM request for embedding...");
                     return linqLlmModelService.executeLlmRequest(request, llmModel);
                 })
                 .doOnError(e -> log.error("Embedding generation failed: {}", e.getMessage()))
                 .map(response -> {
-                    log.info("Received embedding response. Parsing...");
                     Map<String, Object> result = (Map<String, Object>) response.getResult();
                     if (result == null) {
                         throw new IllegalStateException("Received null result from embedding service");
@@ -991,7 +990,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             throw new IllegalStateException("No data received from OpenAI embedding service");
                         }
                         List<Object> rawEmbedding = (List<Object>) data.getFirst().get("embedding");
-                        log.info("Successfully parsed OpenAI embedding (dim: {})", rawEmbedding.size());
+                        log.debug("Successfully parsed OpenAI embedding (dim: {})", rawEmbedding.size());
                         return rawEmbedding.stream()
                                 .map(value -> ((Number) value).floatValue())
                                 .collect(Collectors.toList());
@@ -2238,57 +2237,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             if (describeResponse.getData().getPropertiesList().isEmpty()) {
                 log.warn("⚠️ Collection {} has NO properties!", collectionName);
             }
-            for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
-                log.info("   -> Property: {} = {}", property.getKey(), property.getValue());
-            }
-
-            // Verify Team ID ownership
-            boolean teamIdMatches = false;
-            boolean teamIdPropertyExists = false;
-
-            for (KeyValuePair property : describeResponse.getData().getPropertiesList()) {
-                if ("teamId".equals(property.getKey())) {
-                    teamIdPropertyExists = true;
-                    if (teamId.equals(property.getValue())) {
-                        teamIdMatches = true;
-                    }
-                    break;
-                }
-            }
-
-            if (!teamIdMatches) {
-                if (!teamIdPropertyExists) {
-                    log.warn(
-                            "⚠️ Collection {} exists but is missing 'teamId' property. Attempting SELF-HEALING by assigning to current team: {}",
-                            collectionName, teamId);
-                    try {
-                        milvusClient.alterCollection(AlterCollectionParam.newBuilder()
-                                .withCollectionName(collectionName)
-                                .withProperty("teamId", teamId)
-                                .build());
-                        log.info("✅ Self-healing successful: assigned collection {} to team {}", collectionName,
-                                teamId);
-                        teamIdMatches = true;
-                    } catch (Exception e) {
-                        log.error("❌ Self-healing failed: {}", e.getMessage());
-                        return Mono.just(Map.of(
-                                "found", false,
-                                "message",
-                                "Collection ownership verification failed and self-healing failed: " + e.getMessage(),
-                                "search_text", text,
-                                "total_results", 0,
-                                "results", new ArrayList<>()));
-                    }
-                } else {
-                    log.error("🚨 ABORTING SEARCH: Team ID mismatch! Collection belongs to a different team.");
-                    return Mono.just(Map.of(
-                            "found", false,
-                            "message", "Collection does not belong to team " + teamId,
-                            "search_text", text,
-                            "total_results", 0,
-                            "results", new ArrayList<>()));
-                }
-            }
+            describeResponse.getData().getPropertiesList()
+                    .forEach(p -> log.debug("   -> Property: {} = {}", p.getKey(), p.getValue()));
 
             // Get embedding for the search text using dynamic tool and model
             return getEmbedding(text, target, modelName, teamId)

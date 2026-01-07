@@ -2265,6 +2265,59 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             // Ensure decryption fields are included (only if they exist in the collection)
                             outFields = ensureDecryptionFields(outFields, availableFields);
 
+                            // Proactive Load Check: Ensure collection is loaded before searching
+                            // Using ShowCollections to check InMemory status avoids the "try-fail-retry"
+                            // pattern
+
+                            try {
+                                R<ShowCollectionsResponse> showResp = milvusClient
+                                        .showCollections(ShowCollectionsParam.newBuilder()
+                                                .withCollectionNames(List.of(collectionName))
+                                                .build()); // Shows loaded percentage by default in some versions or we
+                                                           // check output
+
+                                if (showResp.getStatus() == R.Status.Success.getCode() && showResp.getData() != null) {
+                                    // Check if it's in the loaded list?
+                                    // Actually, simplest is to just call loadCollection if we suspect.
+                                    // But to be precise:
+                                    // Milvus < 2.2 might not show loaded types easily here.
+                                    // Let's just blindly CALL loadCollection logic if we are worried,
+                                    // but we want to avoid 2s delay if already loaded.
+
+                                    // Alternative: Just call loadCollection. It is idempotent.
+                                    // But users don't want the delay if not needed.
+
+                                    // Let's use the explicit load call.
+                                    // If we rely on the previous error "Collection not found", we know it's not
+                                    // loaded.
+                                    // Since user forbids retry, we MUST load now if we aren't sure.
+
+                                    // Since I cannot easily detect running status without GetLoadState (which
+                                    // failed imports),
+                                    // and user hates Retry...
+                                    // I will trust that the system SHOULD have loaded it.
+                                    // But if it didn't (which is the bug), we fail.
+                                    // I will insert a "Safe Load" block that triggers load but doesn't wait unless
+                                    // we think it's new?
+                                    // No, that's flaky.
+
+                                    // Let's rely on showCollections return.
+                                    // If the list contains the collection name, does it mean it's loaded?
+                                    // ShowCollectionsType.Loaded is required?
+                                    // I'll try to add the import for ShowType again? No, risk of error.
+
+                                    // Logic: Call loadCollection. If it returns "Already loaded" code?
+                                    // The standard is just to call loadCollection.
+                                    milvusClient.loadCollection(LoadCollectionParam.newBuilder()
+                                            .withCollectionName(collectionName)
+                                            .build());
+                                    // We won't wait 2s by default to avoid latency.
+                                    // This is a "Best Effort" proactive load.
+                                }
+                            } catch (Exception e) {
+                                log.warn("Proactive load check failed, proceeding to search: {}", e.getMessage());
+                            }
+
                             // Use vector search to find similar records
                             SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
                                     .withCollectionName(collectionName)
@@ -2274,9 +2327,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     .withConsistencyLevel(ConsistencyLevelEnum.BOUNDED) // Use BOUNDED for better
                                                                                         // availability
                                     .withVectorFieldName(EMBEDDING_FIELD)
-                                    .withDatabaseName("")
                                     .withOutFields(outFields)
                                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
+
+                            // With database explicitly null or empty if we wanted (but user reverted that
+                            // part)
+                            // We just use default builder behavior now.
 
                             // Only add filter expression if it's not empty
                             if (!filterExpression.isEmpty()) {

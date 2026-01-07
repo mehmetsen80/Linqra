@@ -57,6 +57,9 @@ import io.milvus.grpc.QueryResults;
 import io.milvus.response.QueryResultsWrapper;
 import jakarta.annotation.PostConstruct;
 import io.milvus.grpc.SearchResults;
+import io.milvus.param.collection.GetLoadStateParam;
+import io.milvus.grpc.GetLoadStateResponse;
+import io.milvus.grpc.LoadState;
 
 import org.springframework.util.StringUtils;
 import org.lite.gateway.enums.AuditActionType;
@@ -2266,54 +2269,55 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             outFields = ensureDecryptionFields(outFields, availableFields);
 
                             // Proactive Load Check: Ensure collection is loaded before searching
-                            // Using ShowCollections to check InMemory status avoids the "try-fail-retry"
-                            // pattern
-
+                            // Using GetLoadState to verify the collection is actually queryable in Query
+                            // Nodes
                             try {
-                                R<ShowCollectionsResponse> showResp = milvusClient
-                                        .showCollections(ShowCollectionsParam.newBuilder()
-                                                .withCollectionNames(List.of(collectionName))
-                                                .build()); // Shows loaded percentage by default in some versions or we
-                                                           // check output
+                                boolean isLoaded = false;
+                                int maxRetries = 10;
+                                int retryCount = 0;
 
-                                if (showResp.getStatus() == R.Status.Success.getCode() && showResp.getData() != null) {
-                                    // Check if it's in the loaded list?
-                                    // Actually, simplest is to just call loadCollection if we suspect.
-                                    // But to be precise:
-                                    // Milvus < 2.2 might not show loaded types easily here.
-                                    // Let's just blindly CALL loadCollection logic if we are worried,
-                                    // but we want to avoid 2s delay if already loaded.
+                                while (!isLoaded && retryCount < maxRetries) {
+                                    R<GetLoadStateResponse> loadStateR = milvusClient
+                                            .getLoadState(GetLoadStateParam.newBuilder()
+                                                    .withCollectionName(collectionName)
+                                                    .build());
 
-                                    // Alternative: Just call loadCollection. It is idempotent.
-                                    // But users don't want the delay if not needed.
-
-                                    // Let's use the explicit load call.
-                                    // If we rely on the previous error "Collection not found", we know it's not
-                                    // loaded.
-                                    // Since user forbids retry, we MUST load now if we aren't sure.
-
-                                    // Since I cannot easily detect running status without GetLoadState (which
-                                    // failed imports),
-                                    // and user hates Retry...
-                                    // I will trust that the system SHOULD have loaded it.
-                                    // But if it didn't (which is the bug), we fail.
-                                    // I will insert a "Safe Load" block that triggers load but doesn't wait unless
-                                    // we think it's new?
-                                    // No, that's flaky.
-
-                                    // Let's rely on showCollections return.
-                                    // If the list contains the collection name, does it mean it's loaded?
-                                    // ShowCollectionsType.Loaded is required?
-                                    // I'll try to add the import for ShowType again? No, risk of error.
-
-                                    // Logic: Call loadCollection. If it returns "Already loaded" code?
-                                    // The standard is just to call loadCollection.
-                                    milvusClient.loadCollection(LoadCollectionParam.newBuilder()
-                                            .withCollectionName(collectionName)
-                                            .build());
-                                    // We won't wait 2s by default to avoid latency.
-                                    // This is a "Best Effort" proactive load.
+                                    if (loadStateR.getStatus() == R.Status.Success.getCode()) {
+                                        LoadState state = loadStateR.getData().getState();
+                                        if (state == LoadState.LoadStateLoaded) {
+                                            isLoaded = true;
+                                            log.debug("Collection {} is fully loaded.", collectionName);
+                                        } else {
+                                            log.info("Collection {} state is [{}]. Triggering load/wait...",
+                                                    collectionName, state);
+                                            // Trigger Load if not loaded (idempotent-ish)
+                                            if (state != LoadState.LoadStateLoaded || retryCount == 0) {
+                                                milvusClient.loadCollection(LoadCollectionParam.newBuilder()
+                                                        .withCollectionName(collectionName)
+                                                        .build());
+                                            }
+                                            // Wait for propagation
+                                            Thread.sleep(500);
+                                        }
+                                    } else {
+                                        log.warn("Failed to get load state for {}: {}", collectionName,
+                                                loadStateR.getMessage());
+                                        // If we can't check state, maybe just try loading once and break?
+                                        milvusClient.loadCollection(LoadCollectionParam.newBuilder()
+                                                .withCollectionName(collectionName)
+                                                .build());
+                                        Thread.sleep(500); // Give it a moment blind
+                                        break; // Don't loop infinitely if we can't read state
+                                    }
+                                    retryCount++;
                                 }
+
+                                if (!isLoaded) {
+                                    log.warn(
+                                            "⚠️ Collection {} could not be confirmed as LOADED after {} retries. Search may fail.",
+                                            collectionName, maxRetries);
+                                }
+
                             } catch (Exception e) {
                                 log.warn("Proactive load check failed, proceeding to search: {}", e.getMessage());
                             }

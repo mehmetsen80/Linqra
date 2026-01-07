@@ -2270,7 +2270,8 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     .withFloatVectors(List.of(searchEmbedding))
                                     .withLimit((long) nResults)
                                     .withMetricType(METRIC_TYPE)
-                                    .withConsistencyLevel(ConsistencyLevelEnum.STRONG)
+                                    .withConsistencyLevel(ConsistencyLevelEnum.BOUNDED) // Use BOUNDED for better
+                                                                                        // availability
                                     .withVectorFieldName(EMBEDDING_FIELD)
                                     .withOutFields(outFields)
                                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
@@ -2284,7 +2285,27 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
                             log.info("Executing semantic search for text: {} with filter: {} and nResults: {}",
                                     text, filterExpression.isEmpty() ? "none" : filterExpression, nResults);
-                            SearchResults results = milvusClient.search(searchParam).getData();
+
+                            SearchResults results;
+                            try {
+                                results = milvusClient.search(searchParam).getData();
+                            } catch (Exception e) { // Catch "Collection not found" or "not loaded"
+                                log.warn(
+                                        "⚠️ Initial search failed for {}: {}. Attempting to LOAD collection and RETRY...",
+                                        collectionName, e.getMessage());
+                                try {
+                                    // Explicitly load the collection
+                                    milvusClient.loadCollection(LoadCollectionParam.newBuilder()
+                                            .withCollectionName(collectionName)
+                                            .build());
+                                    log.info("✅ Collection {} loaded successfully. Retrying search...", collectionName);
+                                    // Retry search
+                                    results = milvusClient.search(searchParam).getData();
+                                } catch (Exception retryEx) {
+                                    log.error("❌ Retry search failed after loading: {}", retryEx.getMessage());
+                                    throw retryEx;
+                                }
+                            }
 
                             if (results == null || results.getResults().getNumQueries() == 0) {
                                 log.info("No results found in semantic search");

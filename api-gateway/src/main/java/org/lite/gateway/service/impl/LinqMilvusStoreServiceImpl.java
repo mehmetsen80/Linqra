@@ -2286,28 +2286,46 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             log.info("Executing semantic search for text: {} with filter: {} and nResults: {}",
                                     text, filterExpression.isEmpty() ? "none" : filterExpression, nResults);
 
-                            SearchResults results;
-                            try {
-                                results = milvusClient.search(searchParam).getData();
-                            } catch (Exception e) { // Catch "Collection not found" or "not loaded"
+                            // Initial search
+                            R<SearchResults> searchResponse = milvusClient.search(searchParam);
+                            SearchResults finalResults = null;
+
+                            // Check for failure in the response wrapper
+                            if (searchResponse.getStatus() != R.Status.Success.getCode()) {
                                 log.warn(
-                                        "⚠️ Initial search failed for {}: {}. Attempting to LOAD collection and RETRY...",
-                                        collectionName, e.getMessage());
+                                        "⚠️ Initial search failed for {}: [{}] {}. Attempting to LOAD collection and RETRY...",
+                                        collectionName, searchResponse.getStatus(), searchResponse.getMessage());
+
                                 try {
                                     // Explicitly load the collection
                                     milvusClient.loadCollection(LoadCollectionParam.newBuilder()
                                             .withCollectionName(collectionName)
                                             .build());
                                     log.info("✅ Collection {} loaded successfully. Retrying search...", collectionName);
+
                                     // Retry search
-                                    results = milvusClient.search(searchParam).getData();
+                                    R<SearchResults> retryResponse = milvusClient.search(searchParam);
+
+                                    if (retryResponse.getStatus() != R.Status.Success.getCode()) {
+                                        log.error("❌ Retry search failed: [{}] {}", retryResponse.getStatus(),
+                                                retryResponse.getMessage());
+                                        throw new RuntimeException(
+                                                "Milvus search failed: " + retryResponse.getMessage());
+                                    }
+
+                                    // Use success retry results
+                                    finalResults = retryResponse.getData();
+
                                 } catch (Exception retryEx) {
-                                    log.error("❌ Retry search failed after loading: {}", retryEx.getMessage());
-                                    throw retryEx;
+                                    log.error("❌ Retry logic failed: {}", retryEx.getMessage());
+                                    return Mono.error(retryEx);
                                 }
+                            } else {
+                                // Use initial success results
+                                finalResults = searchResponse.getData();
                             }
 
-                            if (results == null || results.getResults().getNumQueries() == 0) {
+                            if (finalResults == null || finalResults.getResults().getNumQueries() == 0) {
                                 log.info("No results found in semantic search");
                                 // Return consistent structure for no results
                                 Map<String, Object> noResultsResponse = new HashMap<>();
@@ -2320,7 +2338,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             }
 
                             // Process search results reactively
-                            SearchResultData resultData = results.getResults();
+                            SearchResultData resultData = finalResults.getResults();
                             List<Long> topKs = resultData.getTopksList();
 
                             final List<String> finalOutFields = outFields;
@@ -2399,16 +2417,16 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     .collectList()
                                     .flatMap(searchResults -> {
                                         // Build the final response
-                                        Map<String, Object> searchResponse = new HashMap<>();
-                                        searchResponse.put("found", true);
-                                        searchResponse.put("search_text", text);
-                                        searchResponse.put("total_results", searchResults.size());
-                                        searchResponse.put("results", searchResults);
-                                        searchResponse.put("message",
+                                        Map<String, Object> finalResponseMap = new HashMap<>();
+                                        finalResponseMap.put("found", true);
+                                        finalResponseMap.put("search_text", text);
+                                        finalResponseMap.put("total_results", searchResults.size());
+                                        finalResponseMap.put("results", searchResults);
+                                        finalResponseMap.put("message",
                                                 String.format("Found %d relevant records", searchResults.size()));
 
                                         log.info("Successfully searched records with {} results", searchResults.size());
-                                        return Mono.just(searchResponse);
+                                        return Mono.just(finalResponseMap);
                                     });
                         } catch (Exception e) {
                             log.error("Failed to perform semantic search: {}", e.getMessage(), e);

@@ -2269,8 +2269,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             outFields = ensureDecryptionFields(outFields, availableFields);
 
                             // Proactive Load Check: Ensure collection is loaded before searching
-                            // Using GetLoadState to verify the collection is actually queryable in Query
-                            // Nodes
+                            log.info("🔍 Verifying LoadState for collection: {}", collectionName);
                             try {
                                 boolean isLoaded = false;
                                 int maxRetries = 10;
@@ -2286,11 +2285,13 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                         LoadState state = loadStateR.getData().getState();
                                         if (state == LoadState.LoadStateLoaded) {
                                             isLoaded = true;
-                                            log.debug("Collection {} is fully loaded.", collectionName);
+                                            log.info("✅ Collection {} is confirmed FULLY LOADED.", collectionName);
                                         } else {
-                                            log.info("Collection {} state is [{}]. Triggering load/wait...",
-                                                    collectionName, state);
-                                            // Trigger Load if not loaded (idempotent-ish)
+                                            log.info(
+                                                    "⏳ Collection {} state is [{}]. Triggering load/wait (attempt {}/{})...",
+                                                    collectionName, state, retryCount + 1, maxRetries);
+
+                                            // Trigger Load if not loaded
                                             if (state != LoadState.LoadStateLoaded || retryCount == 0) {
                                                 milvusClient.loadCollection(LoadCollectionParam.newBuilder()
                                                         .withCollectionName(collectionName)
@@ -2300,26 +2301,25 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                             Thread.sleep(500);
                                         }
                                     } else {
-                                        log.warn("Failed to get load state for {}: {}", collectionName,
+                                        log.warn("⚠️ Failed to get load state for {}: {}", collectionName,
                                                 loadStateR.getMessage());
-                                        // If we can't check state, maybe just try loading once and break?
                                         milvusClient.loadCollection(LoadCollectionParam.newBuilder()
                                                 .withCollectionName(collectionName)
                                                 .build());
-                                        Thread.sleep(500); // Give it a moment blind
-                                        break; // Don't loop infinitely if we can't read state
+                                        Thread.sleep(500);
+                                        break;
                                     }
                                     retryCount++;
                                 }
 
                                 if (!isLoaded) {
-                                    log.warn(
-                                            "⚠️ Collection {} could not be confirmed as LOADED after {} retries. Search may fail.",
+                                    log.error(
+                                            "❌ Collection {} could not be confirmed as LOADED after {} retries. Search may generate 'Collection Not Found'.",
                                             collectionName, maxRetries);
                                 }
 
-                            } catch (Exception e) {
-                                log.warn("Proactive load check failed, proceeding to search: {}", e.getMessage());
+                            } catch (Throwable e) {
+                                log.error("❌ Proactive load check crashed: {}", e.getMessage(), e);
                             }
 
                             // Use vector search to find similar records
@@ -2328,8 +2328,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     .withFloatVectors(List.of(searchEmbedding))
                                     .withLimit((long) nResults)
                                     .withMetricType(METRIC_TYPE)
-                                    .withConsistencyLevel(ConsistencyLevelEnum.BOUNDED) // Use BOUNDED for better
-                                                                                        // availability
+                                    .withConsistencyLevel(ConsistencyLevelEnum.STRONG) // Use STRONG for definitive
+                                                                                       // consistency check
+                                                                                       // availability
                                     .withVectorFieldName(EMBEDDING_FIELD)
                                     .withOutFields(outFields)
                                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");

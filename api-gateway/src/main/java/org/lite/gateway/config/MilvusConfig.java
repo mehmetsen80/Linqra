@@ -61,6 +61,10 @@ public class MilvusConfig {
                 }
             }
 
+            // Explicitly set database name to empty string to avoid "default" fallback
+            // which causes "Collection Not Found" on Milvus Cloud (Cluster mode)
+            builder.withDatabaseName("");
+
             MilvusServiceClient client = new MilvusServiceClient(builder.build());
             log.info("Successfully connected to Milvus");
             return client;

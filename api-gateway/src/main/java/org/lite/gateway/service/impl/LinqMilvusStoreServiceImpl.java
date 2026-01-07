@@ -57,6 +57,7 @@ import io.milvus.grpc.QueryResults;
 import io.milvus.response.QueryResultsWrapper;
 import jakarta.annotation.PostConstruct;
 import io.milvus.grpc.SearchResults;
+
 import org.springframework.util.StringUtils;
 import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditEventType;
@@ -2273,6 +2274,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     .withConsistencyLevel(ConsistencyLevelEnum.BOUNDED) // Use BOUNDED for better
                                                                                         // availability
                                     .withVectorFieldName(EMBEDDING_FIELD)
+                                    .withDatabaseName("")
                                     .withOutFields(outFields)
                                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
 
@@ -2292,38 +2294,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
                             // Check for failure in the response wrapper
                             if (searchResponse.getStatus() != R.Status.Success.getCode()) {
-                                log.warn(
-                                        "⚠️ Initial search failed for {}: [{}] {}. Attempting to LOAD collection and RETRY...",
-                                        collectionName, searchResponse.getStatus(), searchResponse.getMessage());
-
-                                try {
-                                    // Explicitly load the collection
-                                    milvusClient.loadCollection(LoadCollectionParam.newBuilder()
-                                            .withCollectionName(collectionName)
-                                            .build());
-                                    log.info("✅ Collection {} loaded successfully. Retrying search...", collectionName);
-
-                                    // Retry search
-                                    R<SearchResults> retryResponse = milvusClient.search(searchParam);
-
-                                    if (retryResponse.getStatus() != R.Status.Success.getCode()) {
-                                        log.error("❌ Retry search failed: [{}] {}", retryResponse.getStatus(),
-                                                retryResponse.getMessage());
-                                        throw new RuntimeException(
-                                                "Milvus search failed: " + retryResponse.getMessage());
-                                    }
-
-                                    // Use success retry results
-                                    finalResults = retryResponse.getData();
-
-                                } catch (Exception retryEx) {
-                                    log.error("❌ Retry logic failed: {}", retryEx.getMessage());
-                                    return Mono.error(retryEx);
-                                }
-                            } else {
-                                // Use initial success results
-                                finalResults = searchResponse.getData();
+                                log.error("❌ Search failed for {}: [{}] {}", collectionName, searchResponse.getStatus(),
+                                        searchResponse.getMessage());
+                                throw new RuntimeException("Milvus search failed: " + searchResponse.getMessage());
                             }
+
+                            finalResults = searchResponse.getData();
 
                             if (finalResults == null || finalResults.getResults().getNumQueries() == 0) {
                                 log.info("No results found in semantic search");

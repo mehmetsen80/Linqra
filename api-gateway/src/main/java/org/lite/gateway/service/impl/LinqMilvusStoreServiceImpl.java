@@ -2414,27 +2414,50 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                             log.debug("🔄 Re-ranking {} results based on keywords: {}",
                                                     finalResultsList.size(), keywords);
                                             for (Map<String, Object> record : finalResultsList) {
+                                                float currentScore = record.containsKey("distance")
+                                                        ? ((Number) record.get("distance")).floatValue()
+                                                        : 0.0f;
+                                                float boost = 0.0f;
+                                                Set<String> matchedFields = new HashSet<>();
+
+                                                // 1. Check Content (Text)
                                                 String recordText = (String) record.get(textField);
                                                 if (recordText != null) {
-                                                    float currentScore = record.containsKey("distance")
-                                                            ? ((Number) record.get("distance")).floatValue()
-                                                            : 0.0f;
-                                                    float boost = 0.0f;
-
-                                                    // Simple boolean match for now - could be frequency based
                                                     for (String keyword : keywords) {
                                                         if (recordText.contains(keyword)) {
-                                                            boost += 0.15f; // Significant boost for exact phrase match
+                                                            boost += 0.15f;
+                                                            matchedFields.add("text");
                                                         }
                                                     }
+                                                }
 
-                                                    if (boost > 0) {
-                                                        record.put("start_score", currentScore);
-                                                        float newScore = currentScore + boost;
-                                                        record.put("distance", newScore);
-                                                        record.put("keyword_boost", boost);
-                                                        record.put("match_type", "keyword_boosted");
+                                                // 2. Check Metadata (Title, FileName, Subject)
+                                                // This helps distinguish "Form I-485" from "I-485 Instructions" if the
+                                                // filename/title matches exactly
+                                                String[] metaFields = { "title", "fileName", "subject" };
+                                                for (String fieldName : metaFields) {
+                                                    if (record.containsKey(fieldName)) {
+                                                        Object val = record.get(fieldName);
+                                                        if (val != null) {
+                                                            String metaVal = val.toString();
+                                                            for (String keyword : keywords) {
+                                                                if (metaVal.contains(keyword)) {
+                                                                    boost += 0.25f; // Higher boost for metadata match
+                                                                                    // (Title is very strong signal)
+                                                                    matchedFields.add(fieldName);
+                                                                }
+                                                            }
+                                                        }
                                                     }
+                                                }
+
+                                                if (boost > 0) {
+                                                    record.put("start_score", currentScore);
+                                                    float newScore = currentScore + boost;
+                                                    record.put("distance", newScore);
+                                                    record.put("keyword_boost", boost);
+                                                    record.put("match_type", "keyword_boosted");
+                                                    record.put("matched_fields", matchedFields);
                                                 }
                                             }
 

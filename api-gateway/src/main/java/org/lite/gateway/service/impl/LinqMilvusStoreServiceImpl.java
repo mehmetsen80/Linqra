@@ -2203,6 +2203,19 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         log.info(
                 "Searching records in collection {} for team {} with text: {} using target: {} and model: {} with filters: {} and nResults: {}",
                 collectionName, teamId, text, target, modelName, metadataFilters, nResults);
+
+        // Hybrid Search: Extract significant keywords for re-ranking
+        Set<String> keywords = extractKeywords(text);
+        final int effectiveTopK;
+        if (!keywords.isEmpty()) {
+            // Oversample to get better recall for specific terms
+            effectiveTopK = Math.min(nResults * 5, 100);
+            log.info("🚀 Hybrid Search Active: Extracted keywords {} - Oversampling topK from {} to {}", keywords,
+                    nResults, effectiveTopK);
+        } else {
+            effectiveTopK = nResults;
+        }
+
         try {
             // First verify the collection belongs to the team
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
@@ -2269,7 +2282,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
                                     .withCollectionName(collectionName)
                                     .withFloatVectors(List.of(searchEmbedding))
-                                    .withLimit((long) nResults)
+                                    .withLimit((long) effectiveTopK)
                                     .withMetricType(METRIC_TYPE)
                                     .withConsistencyLevel(ConsistencyLevelEnum.BOUNDED) // Reverted to BOUNDED for
                                                                                         // better
@@ -2285,8 +2298,10 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
                             SearchParam searchParam = searchParamBuilder.build();
 
-                            log.info("Executing semantic search for text: {} with filter: {} and nResults: {}",
-                                    text, filterExpression.isEmpty() ? "none" : filterExpression, nResults);
+                            log.info(
+                                    "Executing semantic search for text: {} with filter: {} and nResults: {} (effective: {})",
+                                    text, filterExpression.isEmpty() ? "none" : filterExpression, nResults,
+                                    effectiveTopK);
 
                             // Initial search
                             R<SearchResults> searchResponse = milvusClient.search(searchParam);
@@ -2392,16 +2407,63 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     })
                                     .collectList()
                                     .flatMap(searchResults -> {
+                                        List<Map<String, Object>> finalResultsList = new ArrayList<>(searchResults);
+
+                                        // Hybrid Search: Client-side Re-ranking
+                                        if (!keywords.isEmpty() && !finalResultsList.isEmpty()) {
+                                            log.debug("🔄 Re-ranking {} results based on keywords: {}",
+                                                    finalResultsList.size(), keywords);
+                                            for (Map<String, Object> record : finalResultsList) {
+                                                String recordText = (String) record.get(textField);
+                                                if (recordText != null) {
+                                                    float currentScore = record.containsKey("distance")
+                                                            ? ((Number) record.get("distance")).floatValue()
+                                                            : 0.0f;
+                                                    float boost = 0.0f;
+
+                                                    // Simple boolean match for now - could be frequency based
+                                                    for (String keyword : keywords) {
+                                                        if (recordText.contains(keyword)) {
+                                                            boost += 0.15f; // Significant boost for exact phrase match
+                                                        }
+                                                    }
+
+                                                    if (boost > 0) {
+                                                        record.put("start_score", currentScore);
+                                                        float newScore = currentScore + boost;
+                                                        record.put("distance", newScore);
+                                                        record.put("keyword_boost", boost);
+                                                        record.put("match_type", "keyword_boosted");
+                                                    }
+                                                }
+                                            }
+
+                                            // Re-sort by new distance (descending)
+                                            finalResultsList.sort((r1, r2) -> {
+                                                float s1 = ((Number) r1.getOrDefault("distance", 0.0f)).floatValue();
+                                                float s2 = ((Number) r2.getOrDefault("distance", 0.0f)).floatValue();
+                                                return Float.compare(s2, s1);
+                                            });
+
+                                            // Truncate to original requested nResults
+                                            if (finalResultsList.size() > nResults) {
+                                                log.debug("✂️ Truncating re-ranked results from {} to {}",
+                                                        finalResultsList.size(), nResults);
+                                                finalResultsList = finalResultsList.subList(0, nResults);
+                                            }
+                                        }
+
                                         // Build the final response
                                         Map<String, Object> finalResponseMap = new HashMap<>();
                                         finalResponseMap.put("found", true);
                                         finalResponseMap.put("search_text", text);
-                                        finalResponseMap.put("total_results", searchResults.size());
-                                        finalResponseMap.put("results", searchResults);
+                                        finalResponseMap.put("total_results", finalResultsList.size());
+                                        finalResponseMap.put("results", finalResultsList);
                                         finalResponseMap.put("message",
-                                                String.format("Found %d relevant records", searchResults.size()));
+                                                String.format("Found %d relevant records", finalResultsList.size()));
 
-                                        log.info("Successfully searched records with {} results", searchResults.size());
+                                        log.info("Successfully searched records with {} results",
+                                                finalResultsList.size());
                                         return Mono.just(finalResponseMap);
                                     });
                         } catch (Exception e) {
@@ -2885,5 +2947,51 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             }
         }
         return fields;
+    }
+
+    /**
+     * Helper method to extract significant keywords/phrases from a query.
+     * Extracts:
+     * 1. Quoted text (e.g. "Biographic Information")
+     * 2. Capitalized phrases (e.g. Part 7, General Instructions)
+     * 3. Alphanumeric identifiers (e.g. I-485)
+     */
+    private Set<String> extractKeywords(String query) {
+        if (query == null || query.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        Set<String> keywords = new HashSet<>();
+
+        // 1. Extract Quoted Text
+        java.util.regex.Matcher quotedMatcher = java.util.regex.Pattern.compile("\"([^\"]+)\"").matcher(query);
+        while (quotedMatcher.find()) {
+            keywords.add(quotedMatcher.group(1));
+        }
+
+        // 2. Extract Capitalized Phrases (sequences of Capitalized Words, excluding
+        // common stop words if needed, but keeping simple for now)
+        // Improved Regex: Allows subsequent words to be numbers (e.g. "Part 7")
+        // Pattern: \b[A-Z][a-zA-Z0-9]*(?:\s+([A-Z][a-zA-Z0-9]*|[0-9]+))+\b
+        java.util.regex.Matcher capitalizedMatcher = java.util.regex.Pattern
+                .compile("\\b[A-Z][a-zA-Z0-9]*(?:\\s+(?:[A-Z][a-zA-Z0-9]*|[0-9]+))+\\b").matcher(query);
+        while (capitalizedMatcher.find()) {
+            String phrase = capitalizedMatcher.group();
+            // Filter out single short words (like "The", "A") unless they are part of a
+            // phrase or look like an ID
+            // The regex enforces at least 2 tokens, so single words are already excluded.
+            keywords.add(phrase);
+        }
+
+        // 3. Extract Alphanumeric Identifiers (e.g. I-485, N-400) - specifically
+        // looking for letter-number patterns
+        // \b[A-Za-z]+-\d+\b
+        java.util.regex.Matcher idMatcher = java.util.regex.Pattern.compile("\\b[A-Za-z]+-\\d+\\b").matcher(query);
+        while (idMatcher.find()) {
+            keywords.add(idMatcher.group());
+        }
+
+        log.debug("Extracted keywords from query '{}': {}", query, keywords);
+        return keywords;
     }
 }

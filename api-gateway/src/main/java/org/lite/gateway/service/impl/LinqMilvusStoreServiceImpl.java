@@ -57,9 +57,6 @@ import io.milvus.grpc.QueryResults;
 import io.milvus.response.QueryResultsWrapper;
 import jakarta.annotation.PostConstruct;
 import io.milvus.grpc.SearchResults;
-import io.milvus.param.collection.GetLoadStateParam;
-import io.milvus.grpc.GetLoadStateResponse;
-import io.milvus.grpc.LoadState;
 
 import org.springframework.util.StringUtils;
 import org.lite.gateway.enums.AuditActionType;
@@ -2268,76 +2265,18 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             // Ensure decryption fields are included (only if they exist in the collection)
                             outFields = ensureDecryptionFields(outFields, availableFields);
 
-                            // Proactive Load Check: Ensure collection is loaded before searching
-                            log.info("🔍 Verifying LoadState for collection: {}", collectionName);
-                            try {
-                                boolean isLoaded = false;
-                                int maxRetries = 10;
-                                int retryCount = 0;
-
-                                while (!isLoaded && retryCount < maxRetries) {
-                                    R<GetLoadStateResponse> loadStateR = milvusClient
-                                            .getLoadState(GetLoadStateParam.newBuilder()
-                                                    .withCollectionName(collectionName)
-                                                    .build());
-
-                                    if (loadStateR.getStatus() == R.Status.Success.getCode()) {
-                                        LoadState state = loadStateR.getData().getState();
-                                        if (state == LoadState.LoadStateLoaded) {
-                                            isLoaded = true;
-                                            log.info("✅ Collection {} is confirmed FULLY LOADED.", collectionName);
-                                        } else {
-                                            log.info(
-                                                    "⏳ Collection {} state is [{}]. Triggering load/wait (attempt {}/{})...",
-                                                    collectionName, state, retryCount + 1, maxRetries);
-
-                                            // Trigger Load if not loaded
-                                            if (state != LoadState.LoadStateLoaded || retryCount == 0) {
-                                                milvusClient.loadCollection(LoadCollectionParam.newBuilder()
-                                                        .withCollectionName(collectionName)
-                                                        .build());
-                                            }
-                                            // Wait for propagation
-                                            Thread.sleep(500);
-                                        }
-                                    } else {
-                                        log.warn("⚠️ Failed to get load state for {}: {}", collectionName,
-                                                loadStateR.getMessage());
-                                        milvusClient.loadCollection(LoadCollectionParam.newBuilder()
-                                                .withCollectionName(collectionName)
-                                                .build());
-                                        Thread.sleep(500);
-                                        break;
-                                    }
-                                    retryCount++;
-                                }
-
-                                if (!isLoaded) {
-                                    log.error(
-                                            "❌ Collection {} could not be confirmed as LOADED after {} retries. Search may generate 'Collection Not Found'.",
-                                            collectionName, maxRetries);
-                                }
-
-                            } catch (Throwable e) {
-                                log.error("❌ Proactive load check crashed: {}", e.getMessage(), e);
-                            }
-
                             // Use vector search to find similar records
                             SearchParam.Builder searchParamBuilder = SearchParam.newBuilder()
                                     .withCollectionName(collectionName)
                                     .withFloatVectors(List.of(searchEmbedding))
                                     .withLimit((long) nResults)
                                     .withMetricType(METRIC_TYPE)
-                                    .withConsistencyLevel(ConsistencyLevelEnum.STRONG) // Use STRONG for definitive
-                                                                                       // consistency check
-                                                                                       // availability
+                                    .withConsistencyLevel(ConsistencyLevelEnum.BOUNDED) // Reverted to BOUNDED for
+                                                                                        // better
+                                                                                        // availability
                                     .withVectorFieldName(EMBEDDING_FIELD)
                                     .withOutFields(outFields)
                                     .withParams("{\"ef\":" + SEARCH_PARAM_EF + "}");
-
-                            // With database explicitly null or empty if we wanted (but user reverted that
-                            // part)
-                            // We just use default builder behavior now.
 
                             // Only add filter expression if it's not empty
                             if (!filterExpression.isEmpty()) {

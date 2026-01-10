@@ -138,6 +138,11 @@ public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
 
     @Override
     public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion) {
+        return decryptChunkText(encryptedText, teamId, keyVersion, true);
+    }
+
+    @Override
+    public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion, boolean logAudit) {
         if (encryptedText == null || encryptedText.isEmpty()) {
             return Mono.just(encryptedText);
         }
@@ -186,62 +191,71 @@ public class ChunkEncryptionServiceImpl implements ChunkEncryptionService {
                                 }
                             })
                             .flatMap(decrypted -> {
-                                // Log successful chunk decryption (as part of reactive chain)
-                                AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
-                                        .reason("Chunk text decrypted successfully for team: " + teamId
-                                                + " (key version: " + version + ")")
-                                        .build();
+                                if (logAudit) {
+                                    // Log successful chunk decryption (as part of reactive chain)
+                                    AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
+                                            .reason("Chunk text decrypted successfully for team: " + teamId
+                                                    + " (key version: " + version + ")")
+                                            .build();
 
-                                return auditService.logEvent(
-                                        username,
-                                        username,
-                                        effectiveTeamId,
-                                        null, // ipAddress
-                                        null, // userAgent
-                                        AuditEventType.CHUNK_DECRYPTED,
-                                        "READ",
-                                        "CHUNK",
-                                        null, // resourceId (chunk ID not available here)
-                                        null, // documentId
-                                        null, // collectionId
-                                        "SUCCESS",
-                                        metadata,
-                                        null // complianceFlags
-                                )
-                                        .doOnError(error -> log.warn("Failed to log chunk decryption audit event: {}",
-                                                error.getMessage()))
-                                        .onErrorResume(error -> Mono.empty()) // Don't fail main operation if audit
-                                                                              // logging fails
-                                        .thenReturn(decrypted); // Return the decrypted text
+                                    return auditService.logEvent(
+                                            username,
+                                            username,
+                                            effectiveTeamId,
+                                            null, // ipAddress
+                                            null, // userAgent
+                                            AuditEventType.CHUNK_DECRYPTED,
+                                            "READ",
+                                            "CHUNK",
+                                            null, // resourceId (chunk ID not available here)
+                                            null, // documentId
+                                            null, // collectionId
+                                            "SUCCESS",
+                                            metadata,
+                                            null // complianceFlags
+                                    )
+                                            .doOnError(error -> log.warn(
+                                                    "Failed to log chunk decryption audit event: {}",
+                                                    error.getMessage()))
+                                            .onErrorResume(error -> Mono.empty()) // Don't fail main operation if audit
+                                                                                  // logging fails
+                                            .thenReturn(decrypted); // Return the decrypted text
+                                }
+                                return Mono.just(decrypted);
                             })
                             .onErrorResume(error -> {
-                                // Log failed chunk decryption (as part of reactive chain)
-                                AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
-                                        .reason("Chunk text decryption failed for team: " + teamId + " (key version: "
-                                                + version + ") - " + error.getMessage())
-                                        .errorMessage(error.getMessage())
-                                        .build();
+                                if (logAudit) {
+                                    // Log failed chunk decryption (as part of reactive chain)
+                                    AuditLog.AuditMetadata metadata = AuditLog.AuditMetadata.builder()
+                                            .reason("Chunk text decryption failed for team: " + teamId
+                                                    + " (key version: "
+                                                    + version + ") - " + error.getMessage())
+                                            .errorMessage(error.getMessage())
+                                            .build();
 
-                                return auditService.logEvent(
-                                        username,
-                                        username,
-                                        effectiveTeamId,
-                                        null, // ipAddress
-                                        null, // userAgent
-                                        AuditEventType.DECRYPTION_FAILED,
-                                        "READ",
-                                        "CHUNK",
-                                        null, // resourceId
-                                        null, // documentId
-                                        null, // collectionId
-                                        "FAILED",
-                                        metadata,
-                                        null // complianceFlags
-                                )
-                                        .doOnError(e -> log.warn("Failed to log decryption failure audit event: {}",
-                                                e.getMessage()))
-                                        .onErrorResume(e -> Mono.empty()) // Don't fail if audit logging fails
-                                        .then(Mono.error(error)); // Propagate the original error
+                                    return auditService.logEvent(
+                                            username,
+                                            username,
+                                            effectiveTeamId,
+                                            null, // ipAddress
+                                            null, // userAgent
+                                            AuditEventType.DECRYPTION_FAILED,
+                                            "READ",
+                                            "CHUNK",
+                                            null, // resourceId
+                                            null, // documentId
+                                            null, // collectionId
+                                            "FAILED",
+                                            metadata,
+                                            null // complianceFlags
+                                    )
+                                            .doOnError(e -> log.warn(
+                                                    "Failed to log decryption failure audit event: {}",
+                                                    e.getMessage()))
+                                            .onErrorResume(e -> Mono.empty()) // Don't fail if audit logging fails
+                                            .then(Mono.error(error)); // Propagate the original error
+                                }
+                                return Mono.error(error);
                             });
                 })
                 .onErrorMap(e -> new RuntimeException("Failed to decrypt chunk text for team: " + teamId, e));

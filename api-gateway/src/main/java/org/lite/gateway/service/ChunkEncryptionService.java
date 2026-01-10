@@ -41,6 +41,17 @@ public interface ChunkEncryptionService {
     Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion);
 
     /**
+     * Decrypt chunk text with optional audit logging.
+     * 
+     * @param encryptedText The Base64-encoded encrypted text
+     * @param teamId        The team ID for key derivation
+     * @param keyVersion    The encryption key version used to encrypt
+     * @param logAudit      Whether to log this decryption event in the audit log
+     * @return Mono emitting Decrypted plaintext
+     */
+    Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion, boolean logAudit);
+
+    /**
      * Get the current encryption key version (for new encryptions).
      * 
      * @return Mono emitting Current key version (e.g., "v1", "v2")

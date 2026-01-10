@@ -143,6 +143,11 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
                 return Mono.just(encryptedText); // Return as-is for testing
             }
 
+            public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion,
+                    boolean logAudit) {
+                return Mono.just("decrypted");
+            }
+
             @Override
             public Mono<String> getCurrentKeyVersion(String teamId) {
                 return Mono.just("v1"); // Return default version for testing

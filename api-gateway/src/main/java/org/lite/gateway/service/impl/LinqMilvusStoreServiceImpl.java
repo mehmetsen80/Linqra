@@ -2925,7 +2925,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             // Legacy data: fall back to v1 (HMAC-derived key)
             String legacyVersion = "v1";
             log.info("🔐 No keyVersion stored in collection, using legacy v1 for team {}", fTeamId);
-            decryptionMono = chunkEncryptionService.decryptChunkText(fEncryptedText, fTeamId, legacyVersion)
+            decryptionMono = chunkEncryptionService.decryptChunkText(fEncryptedText, fTeamId, legacyVersion, false)
                     .onErrorResume(e -> {
                         log.warn("🔐 Legacy v1 decryption failed for team {}: {}. Returning encrypted text.",
                                 fTeamId, e.getMessage());
@@ -2933,7 +2933,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     });
         } else {
             log.info("🔐 Using stored keyVersion: {} for team {}", keyVersion, fTeamId);
-            decryptionMono = chunkEncryptionService.decryptChunkText(fEncryptedText, fTeamId, keyVersion);
+            decryptionMono = chunkEncryptionService.decryptChunkText(fEncryptedText, fTeamId, keyVersion, false);
         }
 
         final String fVersion = keyVersion;

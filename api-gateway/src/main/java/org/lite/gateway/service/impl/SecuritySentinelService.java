@@ -69,7 +69,7 @@ public class SecuritySentinelService {
                                     "MASS_EXFILTRATION",
                                     IncidentSeverity.CRITICAL,
                                     "Mass Data Exfiltration Detected",
-                                    String.format("User %s accessed %d documents in 1 minute.",
+                                    String.format("User %s accessed %d records in 1 minute.",
                                             logs.get(0).getUsername(), logs.size()),
                                     userId,
                                     logs.get(0).getUsername(),

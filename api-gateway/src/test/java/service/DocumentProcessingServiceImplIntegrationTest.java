@@ -175,6 +175,11 @@ class DocumentProcessingServiceImplIntegrationTest {
                 return Mono.just(encryptedText); // No decryption for tests (assumes already plaintext)
             }
 
+            public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion,
+                    boolean logAudit) {
+                return Mono.just("decrypted");
+            }
+
             @Override
             public Mono<String> getCurrentKeyVersion(String teamId) {
                 return Mono.just("v" + versionCounter.get()); // Use current version from counter

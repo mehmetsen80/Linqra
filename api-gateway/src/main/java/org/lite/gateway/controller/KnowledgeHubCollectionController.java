@@ -258,13 +258,20 @@ public class KnowledgeHubCollectionController {
                         org.springframework.web.server.ServerWebExchange exchange) {
                 log.info("Performing semantic search for collection {}", id);
 
-                return teamContextService.getTeamFromContext(exchange)
-                                .flatMap(teamId -> collectionService.searchCollection(
-                                                id,
-                                                teamId,
-                                                request.getQuery(),
-                                                request.getTopK(),
-                                                request.getMetadataFilters()))
+                return Mono.zip(
+                                teamContextService.getTeamFromContext(exchange),
+                                userContextService.getCurrentUsername(exchange).defaultIfEmpty("Unknown User"))
+                                .flatMap(tuple -> {
+                                        String teamId = tuple.getT1();
+                                        String username = tuple.getT2();
+                                        return collectionService.searchCollection(
+                                                        id,
+                                                        teamId,
+                                                        request.getQuery(),
+                                                        request.getTopK(),
+                                                        request.getMetadataFilters(),
+                                                        username);
+                                })
                                 .map(ResponseEntity::ok)
                                 .onErrorResume(error -> {
                                         log.error("Error searching collection {}: {}", id, error.getMessage());

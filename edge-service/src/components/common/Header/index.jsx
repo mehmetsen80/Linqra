@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
+import { isSuperAdmin } from '../../../utils/roleUtils';
 import './styles.css';
 import { Navbar, Container, Nav, Dropdown } from 'react-bootstrap';
 import UserTeamMenu from './UserTeamMenu';
@@ -18,7 +19,6 @@ const SecurityBell = () => {
     const checkIncidents = async () => {
       try {
         const incidents = await securityIncidentService.getAllIncidents('OPEN');
-        // Check for HIGH or CRITICAL incidents
         const critical = incidents.some(i => i.severity === 'HIGH' || i.severity === 'CRITICAL');
         setHasNewIncidents(critical);
       } catch (e) {
@@ -35,7 +35,7 @@ const SecurityBell = () => {
     <div
       className="security-bell-wrapper"
       onClick={() => navigate('/security/incidents')}
-      style={{ cursor: 'pointer', position: 'relative', color: '#6b7280' }}
+      style={{ cursor: 'pointer', position: 'relative', color: 'rgba(255, 255, 255, 0.85)', display: 'flex', alignItems: 'center' }}
       title="Security Incidents"
     >
       <HiOutlineBell size={20} />
@@ -62,17 +62,16 @@ const Header = () => {
   const { currentTeam } = useTeam();
   const [showLLMDropdown, setShowLLMDropdown] = useState(false);
 
+  // Debug logging
+  // console.log('Header Render - User:', user?.username, 'Roles:', user?.roles);
+  // console.log('Is Super Admin:', isSuperAdmin(user));
+  // console.log('Location:', location.pathname);
+
   const handleNavClick = (path, e) => {
     if (e) e.preventDefault();
-    // console.log('Navigation clicked:', path);
-    // console.log('Current location:', window.location.pathname);
-    // console.log('User state:', user);
-    // console.log('Navigate function:', typeof navigate);
     navigate(path);
-    // console.log('Navigation attempted');
   };
 
-  // Check if we're on the ViewToken page
   const isViewTokenPage = location.pathname === '/view-token';
 
   return (
@@ -127,7 +126,7 @@ const Header = () => {
           </Nav>
           {user ? (
             <div className="d-flex align-items-center gap-3">
-              {user?.roles?.includes('ADMIN') && (
+              {(user?.roles?.includes('ADMIN') || isSuperAdmin(user)) && (
                 <SecurityBell />
               )}
               {isViewTokenPage && <TokenExpiryDisplay />}

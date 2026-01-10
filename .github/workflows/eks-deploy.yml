@@ -1,0 +1,187 @@
+name: Deploy to EKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deployment'
+        required: false
+        type: boolean
+
+env:
+  AWS_REGION: us-west-2
+  # You can customize these repository names or use secrets
+  ECR_REPOSITORY_BACKEND: linqra-backend
+  ECR_REPOSITORY_FRONTEND: linqra-frontend
+  EKS_CLUSTER_NAME: linqra-cluster
+
+permissions:
+  contents: read
+
+jobs:
+  # ----------------------------------------------------------------
+  # 1. BUILD HELPERS (Vault Reader)
+  # ----------------------------------------------------------------
+  build-vault-reader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Build vault-reader JAR
+        run: |
+          cd vault-reader
+          mvn clean package -DskipTests
+      - name: Upload vault-reader JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-reader-jar
+          path: vault-reader/target/vault-reader.jar
+          retention-days: 1
+
+  # ----------------------------------------------------------------
+  # 2. GENERATE VAULT FILE (From GitHub Secrets)
+  # ----------------------------------------------------------------
+  generate-vault:
+    needs: build-vault-reader
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      
+      # We need the vault-reader jar to generate the file
+      - name: Download vault-reader
+        uses: actions/download-artifact@v4
+        with:
+          name: vault-reader-jar
+          path: vault-reader/target
+
+      - name: Create secrets.json from GitHub secret
+        env:
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
+          SECRETS_JSON: ${{ secrets.SECRETS_JSON }}
+        run: |
+          mkdir -p secrets
+          if [ -z "$VAULT_MASTER_KEY" ]; then echo "❌ VAULT_MASTER_KEY missing"; exit 1; fi
+          if [ -z "$SECRETS_JSON" ]; then echo "❌ SECRETS_JSON missing"; exit 1; fi
+          echo "$SECRETS_JSON" > secrets/secrets.json
+
+      - name: Generate vault.encrypted
+        env:
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
+        run: |
+          export VAULT_ENVIRONMENT=ec2 # Using same env as before
+          chmod +x scripts/bootstrap-vault.sh
+          # Point to the downloaded jar
+          export VAULT_READER_JAR=vault-reader/target/vault-reader.jar
+          bash scripts/bootstrap-vault.sh secrets/secrets.json ec2
+          
+      - name: Upload vault file
+        uses: actions/upload-artifact@v4
+        with:
+          name: vault-encrypted
+          path: secrets/vault.encrypted
+          retention-days: 1
+
+  # ----------------------------------------------------------------
+  # 3. BUILD & DEPLOY
+  # ----------------------------------------------------------------
+  deploy:
+    name: Build & Deploy to EKS
+    needs: [generate-vault]
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    # Download the vault file we just generated
+    - name: Download vault.encrypted
+      uses: actions/download-artifact@v4
+      with:
+        name: vault-encrypted
+        path: secrets
+
+    # 1. Configure AWS Credentials
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    # 2. Login to Amazon ECR
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    # 3. Build & Push Backend
+    - name: Build, tag, and push Backend image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        # Build Java App first (Maven)
+        cd api-gateway
+        mvn clean package -DskipTests
+        cd ..
+        
+        # Build Docker Image (Context: Root)
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG -f .kube/gateway/Dockerfile .
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest -f .kube/gateway/Dockerfile .
+        
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY_BACKEND:latest
+
+    # 4. Build & Push Frontend
+    - name: Build, tag, and push Frontend image to Amazon ECR
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG -f .kube/react/Dockerfile .
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest -f .kube/react/Dockerfile .
+        
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
+
+    # 5. Deploy to EKS
+    - name: Update Kubeconfig
+      run: aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+
+    - name: Update Vault Secret in Cluster
+      env:
+        VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
+      run: |
+        # Create namespace if missing
+        kubectl create namespace linqra --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Remove old secret (optional, or use dry-run logic to update)
+        kubectl delete secret linqra-vault-secret -n linqra --ignore-not-found
+        
+        # Create new secret with fresh file and key
+        kubectl create secret generic linqra-vault-secret \
+          --namespace linqra \
+          --from-literal=master-key="$VAULT_MASTER_KEY" \
+          --from-file=vault-file=secrets/vault.encrypted
+
+    - name: Deploy Manifests
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        IMAGE_TAG: ${{ github.sha }}
+      run: |
+        kubectl apply -f .kube/eks/namespace.yaml
+        kubectl apply -f .kube/eks/backend.yaml
+        kubectl apply -f .kube/eks/frontend.yaml
+        kubectl apply -f .kube/eks/ingress.yaml
+        
+        # Force restart to pick up 'latest'
+        kubectl rollout restart deployment/linqra-backend -n linqra
+        kubectl rollout restart deployment/linqra-frontend -n linqra

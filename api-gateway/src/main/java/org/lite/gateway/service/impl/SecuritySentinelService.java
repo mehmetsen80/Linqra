@@ -34,7 +34,8 @@ public class SecuritySentinelService {
     private final NotificationService notificationService;
 
     // Thresholds
-    private static final int THRESHOLD_MASS_EXFILTRATION = 50; // docs per minute
+    private static final int THRESHOLD_MASS_EXFILTRATION = 1000; // docs per minute - increased for hybrid search
+                                                                 // oversampling
     private static final int THRESHOLD_BRUTE_FORCE = 10; // failures per 5 minutes
 
     @PostConstruct

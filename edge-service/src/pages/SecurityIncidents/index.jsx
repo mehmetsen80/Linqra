@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Table, Badge, Button, Form, Modal, Spinner } from 'react-bootstrap';
 import { HiOutlineShieldCheck, HiOutlineExclamation } from 'react-icons/hi';
 import { securityIncidentService } from '../../services/securityIncidentService';
+import { formatDateTime } from '../../utils/dateUtils';
 import './styles.css';
 
 const SecurityIncidents = () => {
@@ -105,7 +106,7 @@ const SecurityIncidents = () => {
                                     <td>{incident.ruleName}</td>
                                     <td>{incident.description}</td>
                                     <td>{incident.affectedUsername || '-'}</td>
-                                    <td>{new Date(incident.detectedAt).toLocaleString()}</td>
+                                    <td>{formatDateTime(incident.detectedAt)}</td>
                                     <td>
                                         {incident.status !== 'RESOLVED' && incident.status !== 'FALSE_POSITIVE' && (
                                             <Button

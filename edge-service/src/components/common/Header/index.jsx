@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
-import { isSuperAdmin } from '../../../utils/roleUtils';
+import { hasAdminAccess } from '../../../utils/roleUtils';
 import './styles.css';
 import { Navbar, Container, Nav, Dropdown } from 'react-bootstrap';
 import UserTeamMenu from './UserTeamMenu';
@@ -126,7 +126,7 @@ const Header = () => {
           </Nav>
           {user ? (
             <div className="d-flex align-items-center gap-3">
-              {(user?.roles?.includes('ADMIN') || isSuperAdmin(user)) && (
+              {hasAdminAccess(user, currentTeam) && (
                 <SecurityBell />
               )}
               {isViewTokenPage && <TokenExpiryDisplay />}

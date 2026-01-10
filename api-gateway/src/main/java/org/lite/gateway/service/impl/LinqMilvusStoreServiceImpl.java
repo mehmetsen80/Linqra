@@ -2209,7 +2209,9 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         final int effectiveTopK;
         if (!keywords.isEmpty()) {
             // Oversample to get better recall for specific terms
-            effectiveTopK = Math.min(nResults * 5, 100);
+            // Increased to 20x (max 500) because "Instructions" documents can drown out
+            // "Form" documents in top 100
+            effectiveTopK = Math.min(nResults * 20, 500);
             log.info("🚀 Hybrid Search Active: Extracted keywords {} - Oversampling topK from {} to {}", keywords,
                     nResults, effectiveTopK);
         } else {

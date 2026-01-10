@@ -115,6 +115,13 @@ jobs:
         name: vault-encrypted
         path: secrets
 
+    # Download the vault-reader JAR for the Docker build
+    - name: Download vault-reader JAR
+      uses: actions/download-artifact@v4
+      with:
+        name: vault-reader-jar
+        path: vault-reader/target
+
     # 1. Configure AWS Credentials
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4

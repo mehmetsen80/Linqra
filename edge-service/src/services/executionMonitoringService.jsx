@@ -8,7 +8,8 @@ class ExecutionMonitoringWebSocket {
         this.maxReconnectAttempts = 10;
         this.reconnectDelay = 2000; // Start with 2 seconds
         this.maxReconnectDelay = 30000; // Max 30 seconds
-        this.wsUrl = import.meta.env.VITE_WS_URL || 'wss://localhost:7777/ws-linqra';
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}/ws-linqra`;
         this.ws = null;
         this.connected = false;
         this.connectionStatus = 'disconnected';
@@ -34,7 +35,7 @@ class ExecutionMonitoringWebSocket {
         try {
             console.log(`Attempting to connect to ${this.wsUrl}`);
             this.setConnectionStatus('connecting');
-            
+
             this.ws = new WebSocket(this.wsUrl);
             this.setupWebSocket();
         } catch (error) {
@@ -47,7 +48,7 @@ class ExecutionMonitoringWebSocket {
         this.ws.onopen = () => {
             console.log('Execution Monitoring WebSocket Connected');
             this.reconnectAttempts = 0;
-            
+
             // Send STOMP CONNECT frame
             setTimeout(() => {
                 if (this.ws.readyState === WebSocket.OPEN) {
@@ -62,12 +63,12 @@ class ExecutionMonitoringWebSocket {
 
         this.ws.onmessage = (event) => {
             const frame = this.parseStompFrame(event.data);
-            
+
             if (frame.command === 'CONNECTED') {
                 console.log('Execution Monitoring STOMP Connected');
                 this.connected = true;
                 this.setConnectionStatus('connected');
-                
+
                 // Subscribe to execution updates
                 const subscribeFrame = 'SUBSCRIBE\n' +
                     'id:exec-sub-0\n' +
@@ -138,12 +139,12 @@ class ExecutionMonitoringWebSocket {
                 this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts),
                 this.maxReconnectDelay
             );
-            
+
             setTimeout(() => {
                 this.reconnectAttempts++;
                 this.connect();
             }, delay);
-            
+
             this.connectionStatus = 'reconnecting';
             this.notifyConnectionSubscribers();
         } else {

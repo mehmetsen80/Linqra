@@ -513,14 +513,14 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.setItem('oauth_state', JSON.stringify(stateData));
 
     // Get environment variables
-    const keycloakUrl = import.meta.env.REACT_APP_KEYCLOAK_URL;
-    const clientId = import.meta.env.REACT_APP_KEYCLOAK_CLIENT_ID;
+    const keycloakUrl = import.meta.env.REACT_APP_KEYCLOAK_URL || 'https://polaris.linqra.com/keycloak';
+    const clientId = import.meta.env.REACT_APP_KEYCLOAK_CLIENT_ID || 'linqra-gateway-client';
     const redirectUri = encodeURIComponent(window.location.origin + '/callback');
     // console.log('Redirect URI:', {
     //   original: window.location.origin + '/callback',
     //   encoded: redirectUri
     // });
-    const realm = import.meta.env.REACT_APP_KEYCLOAK_REALM;
+    const realm = import.meta.env.REACT_APP_KEYCLOAK_REALM || 'Linqra';
 
     // Build auth URL with state parameter and timestamp
     const authUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&state=${state}&scope=openid&timestamp=${timestamp}`;

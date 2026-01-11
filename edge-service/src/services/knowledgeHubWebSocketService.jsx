@@ -3,7 +3,8 @@ class KnowledgeHubWebSocketService {
         this.ws = null;
         this.connected = false;
         this.connectionStatus = 'disconnected';
-        this.wsUrl = import.meta.env.VITE_WS_URL || 'wss://localhost:7777/ws-linqra';
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}/ws-linqra`;
         this.subscribers = new Set();
         this.subscriptionId = null;
     }
@@ -28,7 +29,7 @@ class KnowledgeHubWebSocketService {
         this.ws.onopen = () => {
             console.log('Knowledge Hub WebSocket Connected');
             this.connectionStatus = 'connected';
-            
+
             // Send STOMP CONNECT frame
             setTimeout(() => {
                 if (this.ws.readyState === WebSocket.OPEN) {
@@ -43,11 +44,11 @@ class KnowledgeHubWebSocketService {
 
         this.ws.onmessage = (event) => {
             const frame = this.parseStompFrame(event.data);
-            
+
             if (frame.command === 'CONNECTED') {
                 console.log('Knowledge Hub STOMP Connected');
                 this.connected = true;
-                
+
                 // Subscribe to document status updates via /topic/execution
                 const subscribeFrame = 'SUBSCRIBE\n' +
                     'id:doc-status-sub-0\n' +
@@ -58,7 +59,7 @@ class KnowledgeHubWebSocketService {
             } else if (frame.command === 'MESSAGE') {
                 try {
                     const payload = JSON.parse(frame.body);
-                    
+
                     // Only process document status updates (filter by type)
                     if (payload.type === 'DOCUMENT_STATUS_UPDATE') {
                         console.log('Received document status update:', payload);

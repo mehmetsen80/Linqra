@@ -15,7 +15,18 @@ RUN npm install --legacy-peer-deps
 COPY edge-service/ .
 
 # Build for production
-ENV NODE_ENV=production
+# Inject Environment Variables at Build Time
+ARG NODE_ENV=production
+ENV NODE_ENV=$NODE_ENV
+
+ARG REACT_APP_KEYCLOAK_URL
+ARG REACT_APP_KEYCLOAK_REALM
+ARG REACT_APP_KEYCLOAK_CLIENT_ID
+
+ENV REACT_APP_KEYCLOAK_URL=$REACT_APP_KEYCLOAK_URL
+ENV REACT_APP_KEYCLOAK_REALM=$REACT_APP_KEYCLOAK_REALM
+ENV REACT_APP_KEYCLOAK_CLIENT_ID=$REACT_APP_KEYCLOAK_CLIENT_ID
+
 RUN npm run build
 
 # ========================================================

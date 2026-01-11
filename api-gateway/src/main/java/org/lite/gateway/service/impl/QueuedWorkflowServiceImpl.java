@@ -18,6 +18,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Sort;
 import lombok.Getter;
 
@@ -33,7 +34,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     private static final String QUEUE_KEY = "async:step:queue";
-    
+
     private final ReactiveRedisTemplate<String, String> asyncStepQueueRedisTemplate;
     private final ReactiveRedisTemplate<String, QueuedWorkflowStep> asyncStepStatusRedisTemplate;
     private final ObjectMapper objectMapper;
@@ -47,46 +48,46 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
         try {
             // Generate a unique execution ID for this step
             String executionId = UUID.randomUUID().toString();
-            
+
             // Set the execution ID in the step object
             step.setExecutionId(executionId);
-            
+
             // Create the step execution with the unique ID
             QueuedWorkflowStep stepExecution = new QueuedWorkflowStep();
-            stepExecution.setWorkflowId(workflowId);  // Set the workflowId
+            stepExecution.setWorkflowId(workflowId); // Set the workflowId
             stepExecution.setStepId(String.valueOf(stepNumber)); // Use step number as stepId
             stepExecution.setStatus("queued");
             stepExecution.setQueuedAt(LocalDateTime.now());
-            stepExecution.setExecutionId(executionId);  // Add the execution ID
-            
+            stepExecution.setExecutionId(executionId); // Add the execution ID
+
             // Use workflowId:stepNumber:executionId as the Redis key
             String redisKey = String.format("%s:%d:%s", workflowId, stepNumber, executionId);
-            
+
             // Create the task to be queued
             AsyncStepTask task = new AsyncStepTask(
-                workflowId,
-                String.valueOf(stepNumber), // Use step number as stepId
-                step,
-                step.getParams(),
-                step.getAction(),
-                step.getIntent(),
-                teamId
-            );
-            
+                    workflowId,
+                    String.valueOf(stepNumber), // Use step number as stepId
+                    step,
+                    step.getParams(),
+                    step.getAction(),
+                    step.getIntent(),
+                    teamId);
+
             // First store the status
             return asyncStepStatusRedisTemplate.opsForValue()
                     .set(redisKey, stepExecution, Duration.ofHours(24))
-                    .doOnSuccess(v -> log.info("Queued async step for workflow {} step {} with execution ID {}", 
-                        workflowId, stepNumber, executionId))
-                    .doOnError(e -> log.error("Failed to queue async step for workflow {} step {}: {}", 
-                        workflowId, stepNumber, e.getMessage(), e))
+                    .doOnSuccess(v -> log.info("Queued async step for workflow {} step {} with execution ID {}",
+                            workflowId, stepNumber, executionId))
+                    .doOnError(e -> log.error("Failed to queue async step for workflow {} step {}: {}",
+                            workflowId, stepNumber, e.getMessage(), e))
                     // Then add the task to the queue
                     .then(asyncStepQueueRedisTemplate.opsForList()
-                        .rightPush(QUEUE_KEY, objectMapper.writeValueAsString(task))
-                        .doOnSuccess(v -> log.info("Added task to queue for workflow {} step {} with execution ID {}", 
-                            workflowId, stepNumber, executionId))
-                        .doOnError(e -> log.error("Failed to add task to queue for workflow {} step {}: {}", 
-                            workflowId, stepNumber, e.getMessage(), e)))
+                            .rightPush(QUEUE_KEY, objectMapper.writeValueAsString(task))
+                            .doOnSuccess(
+                                    v -> log.info("Added task to queue for workflow {} step {} with execution ID {}",
+                                            workflowId, stepNumber, executionId))
+                            .doOnError(e -> log.error("Failed to add task to queue for workflow {} step {}: {}",
+                                    workflowId, stepNumber, e.getMessage(), e)))
                     .then();
         } catch (Exception e) {
             log.error("Failed to queue async step: {}", e.getMessage(), e);
@@ -118,7 +119,8 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
                 .collectList()
                 .flatMap(keys -> {
                     if (keys.isEmpty()) {
-                        return Mono.error(new RuntimeException("No queued step found for workflow " + workflowId + " step " + stepNumber));
+                        return Mono.error(new RuntimeException(
+                                "No queued step found for workflow " + workflowId + " step " + stepNumber));
                     }
                     // Get the most recent execution (last key in the list)
                     String latestKey = keys.get(keys.size() - 1);
@@ -144,11 +146,9 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
                     }
                     return asyncStepStatusRedisTemplate.opsForValue().multiGet(keys)
                             .map(steps -> steps.stream()
-                                .collect(Collectors.toMap(
-                                    QueuedWorkflowStep::getStepId,
-                                    step -> step
-                                ))
-                            );
+                                    .collect(Collectors.toMap(
+                                            QueuedWorkflowStep::getStepId,
+                                            step -> step)));
                 });
     }
 
@@ -163,199 +163,222 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
             log.error("No execution ID found in step for workflow {} step {}", task.getWorkflowId(), task.getStepId());
             return Mono.error(new RuntimeException("No execution ID found in step"));
         }
-        
+
         String statusKey = getStatusKey(task.getWorkflowId(), task.getStepId(), executionId);
-        log.info("Starting async step processing for workflow {} step {} with team {} and execution ID {}", 
-            task.getWorkflowId(), task.getStepId(), task.getTeamId(), executionId);
-        
+        log.info("Starting async step processing for workflow {} step {} with team {} and execution ID {}",
+                task.getWorkflowId(), task.getStepId(), task.getTeamId(), executionId);
+
         // First check if the step is already being processed or completed
         return asyncStepStatusRedisTemplate.opsForValue().get(statusKey)
-            .doOnNext(status -> log.info("Current status for workflow {} step {}: {}", 
-                task.getWorkflowId(), task.getStepId(), status.getStatus()))
-            .filter(status -> !status.getStatus().equals("processing") && !status.getStatus().equals("completed"))
-            .doOnNext(status -> log.info("Step is not processing/completed, proceeding with execution"))
-            .flatMap(status -> updateStatusToProcessing(statusKey, status))
-            .doOnNext(status -> log.info("Updated status to processing"))
-            .flatMap(status -> {
-                log.info("Executing step with team {} for workflow {} step {}", 
-                    task.getTeamId(), task.getWorkflowId(), task.getStepId());
-                return executeStepWithTeam(task.getStep(), task.getParams(), task.getAction(), task.getIntent(), task.getTeamId());
-            })
-            .doOnNext(response -> {
-                // Check if the response contains an error
-                if (response.getResult() instanceof Map<?, ?> resultMap && resultMap.containsKey("error")) {
-                    throw new RuntimeException((String) resultMap.get("error"));
-                }
-                log.info("Step execution completed with result: {}", response.getResult());
-            })
-            .flatMap(response -> {
-                log.info("Updating status to completed for workflow {} step {}", 
-                    task.getWorkflowId(), task.getStepId());
-                return updateStatusToCompleted(statusKey, response.getResult(), task.getWorkflowId(), task.getStepId());
-            })
-            .doOnNext(v -> log.info("Updated status to completed"))
-            .onErrorResume(error -> {
-                log.error("Error in async step processing: {}", error.getMessage(), error);
-                return updateStatusToFailed(statusKey, error.getMessage(), task.getWorkflowId(), task.getStepId())
-                    .then(Mono.error(error)); // Re-throw the error to ensure it's propagated
-            })
-            .then();
+                .doOnNext(status -> log.info("Current status for workflow {} step {}: {}",
+                        task.getWorkflowId(), task.getStepId(), status.getStatus()))
+                .filter(status -> !status.getStatus().equals("processing") && !status.getStatus().equals("completed"))
+                .doOnNext(status -> log.info("Step is not processing/completed, proceeding with execution"))
+                .flatMap(status -> updateStatusToProcessing(statusKey, status))
+                .doOnNext(status -> log.info("Updated status to processing"))
+                .flatMap(status -> {
+                    log.info("Executing step with team {} for workflow {} step {}",
+                            task.getTeamId(), task.getWorkflowId(), task.getStepId());
+                    return executeStepWithTeam(task.getStep(), task.getParams(), task.getAction(), task.getIntent(),
+                            task.getTeamId());
+                })
+                .doOnNext(response -> {
+                    // Check if the response contains an error
+                    if (response.getResult() instanceof Map<?, ?> resultMap && resultMap.containsKey("error")) {
+                        throw new RuntimeException((String) resultMap.get("error"));
+                    }
+                    log.info("Step execution completed with result: {}", response.getResult());
+                })
+                .flatMap(response -> {
+                    log.info("Updating status to completed for workflow {} step {}",
+                            task.getWorkflowId(), task.getStepId());
+                    return updateStatusToCompleted(statusKey, response.getResult(), task.getWorkflowId(),
+                            task.getStepId());
+                })
+                .doOnNext(v -> log.info("Updated status to completed"))
+                .onErrorResume(error -> {
+                    log.error("Error in async step processing: {}", error.getMessage(), error);
+                    return updateStatusToFailed(statusKey, error.getMessage(), task.getWorkflowId(), task.getStepId())
+                            .then(Mono.error(error)); // Re-throw the error to ensure it's propagated
+                })
+                .then();
     }
 
     private Mono<QueuedWorkflowStep> updateStatusToProcessing(String statusKey, QueuedWorkflowStep status) {
         status.setStatus("processing");
         return asyncStepStatusRedisTemplate.opsForValue()
-            .set(statusKey, status, Duration.ofHours(24))
-            .thenReturn(status);
+                .set(statusKey, status, Duration.ofHours(24))
+                .thenReturn(status);
     }
 
-    private Mono<LinqResponse> executeStepWithTeam(LinqResponse.WorkflowStep step, Map<String, Object> params, String action, String intent, String teamId) {
+    private Mono<LinqResponse> executeStepWithTeam(LinqResponse.WorkflowStep step, Map<String, Object> params,
+            String action, String intent, String teamId) {
         LinqRequest stepRequest = createStepRequest(step, params, action, intent);
-        
+
         return Mono.just(teamId)
-            .flatMap(id -> {
-                // Try to get modelName from llmConfig
-                final String modelName = (step.getLlmConfig() != null && step.getLlmConfig().getModel() != null) 
-                    ? step.getLlmConfig().getModel() : null;
-                
-                if (modelName != null) {
-                    log.info("🔍 Searching for LLM model configuration for async step {}: modelCategory={}, modelName={}, teamId={}", 
-                        step.getStep(), step.getTarget(), modelName, id);
-                    return linqLlmModelRepository.findByModelCategoryAndModelNameAndTeamId(step.getTarget(), modelName, id)
-                        .doOnNext(llmModel -> log.info("✅ Found LLM model configuration for async step {}: modelCategory={}, modelName={}", 
-                            step.getStep(), llmModel.getModelCategory(), llmModel.getModelName()))
-                        .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {} with modelName {}: {}", 
-                            step.getTarget(), modelName, error.getMessage()));
-                } else {
-                    // If no modelName is specified, we cannot find the correct configuration
-                    // since modelCategory alone can return multiple records (chat vs embed)
-                    log.warn("⚠️ No modelName specified for async step {}, cannot determine LLM model configuration", step.getStep());
-                    return Mono.empty();
-                }
-            })
-            .doOnSuccess(llmModel -> {
-                if (llmModel == null) {
-                    log.warn("⚠️ No LLM model configuration found for modelCategory: {}, will try microservice", step.getTarget());
-                }
-            })
-            .doOnNext(llmModel -> log.info("🚀 About to execute async LLM request for step {}", step.getStep()))
-            .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest, llmModel))
-            .doOnNext(stepResponse -> log.info("✅ Async LLM request executed successfully for step {}", step.getStep()))
-            .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                log.info("📡 No LLM model found for async step {}, executing microservice request for modelCategory: {}", 
-                    step.getStep(), step.getTarget());
-                return linqMicroService.execute(stepRequest);
-            }));
+                .flatMap(id -> {
+                    // Try to get modelName from llmConfig
+                    final String modelName = (step.getLlmConfig() != null && step.getLlmConfig().getModel() != null)
+                            ? step.getLlmConfig().getModel()
+                            : null;
+
+                    if (modelName != null) {
+                        log.info(
+                                "🔍 Searching for LLM model configuration for async step {}: modelCategory={}, modelName={}, teamId={}",
+                                step.getStep(), step.getTarget(), modelName, id);
+                        return linqLlmModelRepository
+                                .findByModelCategoryAndModelNameAndTeamId(step.getTarget(), modelName, id)
+                                .doOnNext(llmModel -> log.info(
+                                        "✅ Found LLM model configuration for async step {}: modelCategory={}, modelName={}",
+                                        step.getStep(), llmModel.getModelCategory(), llmModel.getModelName()))
+                                .doOnError(error -> log.error(
+                                        "❌ Error finding LLM model for modelCategory {} with modelName {}: {}",
+                                        step.getTarget(), modelName, error.getMessage()));
+                    } else {
+                        // If no modelName is specified, we cannot find the correct configuration
+                        // since modelCategory alone can return multiple records (chat vs embed)
+                        log.warn(
+                                "⚠️ No modelName specified for async step {}, cannot determine LLM model configuration",
+                                step.getStep());
+                        return Mono.empty();
+                    }
+                })
+                .doOnSuccess(llmModel -> {
+                    if (llmModel == null) {
+                        log.warn("⚠️ No LLM model configuration found for modelCategory: {}, will try microservice",
+                                step.getTarget());
+                    }
+                })
+                .doOnNext(llmModel -> log.info("🚀 About to execute async LLM request for step {}", step.getStep()))
+                .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest, llmModel))
+                .doOnNext(stepResponse -> log.info("✅ Async LLM request executed successfully for step {}",
+                        step.getStep()))
+                .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
+                    log.info(
+                            "📡 No LLM model found for async step {}, executing microservice request for modelCategory: {}",
+                            step.getStep(), step.getTarget());
+                    return linqMicroService.execute(stepRequest);
+                }));
     }
 
-    private LinqRequest createStepRequest(LinqResponse.WorkflowStep step, Map<String, Object> params, String action, String intent) {
+    private LinqRequest createStepRequest(LinqResponse.WorkflowStep step, Map<String, Object> params, String action,
+            String intent) {
         LinqRequest stepRequest = new LinqRequest();
         LinqRequest.Link stepLink = new LinqRequest.Link();
         stepLink.setTarget(step.getTarget());
         stepLink.setAction(action);
         stepRequest.setLink(stepLink);
-        
+
         LinqRequest.Query query = new LinqRequest.Query();
         query.setIntent(intent);
         query.setParams(params);
         stepRequest.setQuery(query);
-        
+
         return stepRequest;
     }
 
     private Mono<Void> updateStatusToCompleted(String statusKey, Object result, String workflowId, String stepId) {
         return asyncStepStatusRedisTemplate.opsForValue().get(statusKey)
-            .flatMap(status -> {
-                status.setStatus("completed");
-                status.setCompletedAt(LocalDateTime.now());
-                status.setResult(result);
-                return asyncStepStatusRedisTemplate.opsForValue()
-                    .set(statusKey, status, Duration.ofHours(24))
-                    .then();
-            })
-            .then(updateWorkflowExecution(workflowId, stepId, "completed", result));
+                .flatMap(status -> {
+                    status.setStatus("completed");
+                    status.setCompletedAt(LocalDateTime.now());
+                    status.setResult(result);
+                    return asyncStepStatusRedisTemplate.opsForValue()
+                            .set(statusKey, status, Duration.ofHours(24))
+                            .then();
+                })
+                .then(updateWorkflowExecution(workflowId, stepId, "completed", result));
     }
 
     private Mono<Void> updateStatusToFailed(String statusKey, String errorMessage, String workflowId, String stepId) {
         return asyncStepStatusRedisTemplate.opsForValue().get(statusKey)
-            .flatMap(status -> {
-                status.setStatus("failed");
-                status.setError(errorMessage);
-                status.setCompletedAt(LocalDateTime.now());
-                return asyncStepStatusRedisTemplate.opsForValue()
-                    .set(statusKey, status, Duration.ofHours(24))
-                    .then();
-            })
-            .then(updateWorkflowExecution(workflowId, stepId, "failed", null));
+                .flatMap(status -> {
+                    status.setStatus("failed");
+                    status.setError(errorMessage);
+                    status.setCompletedAt(LocalDateTime.now());
+                    return asyncStepStatusRedisTemplate.opsForValue()
+                            .set(statusKey, status, Duration.ofHours(24))
+                            .then();
+                })
+                .then(updateWorkflowExecution(workflowId, stepId, "failed", null));
     }
 
     private Mono<Void> updateWorkflowExecution(String workflowId, String stepId, String status, Object result) {
         return executionRepository.findByWorkflowId(workflowId, Sort.by(Sort.Direction.DESC, "executedAt"))
-            .next()
-            .flatMap(execution -> {
-                // Update the step result and status in the workflow execution
-                if (execution.getResponse() != null && 
-                    execution.getResponse().getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
-                    
-                    // Update step result
-                    workflowResult.getSteps().stream()
-                        .filter(step -> String.valueOf(step.getStep()).equals(stepId))
-                        .findFirst()
-                        .ifPresent(step -> {
-                            step.setResult(result);
-                        });
-                    
-                    // Update step metadata
-                    if (execution.getResponse().getMetadata() != null && 
-                        execution.getResponse().getMetadata().getWorkflowMetadata() != null) {
-                        
-                        execution.getResponse().getMetadata().getWorkflowMetadata().stream()
-                            .filter(meta -> String.valueOf(meta.getStep()).equals(stepId))
-                            .findFirst()
-                            .ifPresent(meta -> {
-                                meta.setStatus(status);
-                                if (status.equals("completed")) {
-                                    // Calculate duration in milliseconds
-                                    long startTime = meta.getExecutedAt().toInstant(ZoneOffset.UTC).toEpochMilli();
-                                    long endTime = System.currentTimeMillis();
-                                    meta.setDurationMs(endTime - startTime);
-                                }
-                            });
+                .next()
+                .flatMap(execution -> {
+                    // Update the step result and status in the workflow execution
+                    if (execution.getResponse() != null &&
+                            execution.getResponse().getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
+
+                        // Update step result
+                        workflowResult.getSteps().stream()
+                                .filter(step -> String.valueOf(step.getStep()).equals(stepId))
+                                .findFirst()
+                                .ifPresent(step -> {
+                                    step.setResult(result);
+                                });
+
+                        // Update step metadata
+                        if (execution.getResponse().getMetadata() != null &&
+                                execution.getResponse().getMetadata().getWorkflowMetadata() != null) {
+
+                            execution.getResponse().getMetadata().getWorkflowMetadata().stream()
+                                    .filter(meta -> String.valueOf(meta.getStep()).equals(stepId))
+                                    .findFirst()
+                                    .ifPresent(meta -> {
+                                        meta.setStatus(status);
+                                        if (status.equals("completed")) {
+                                            // Calculate duration in milliseconds
+                                            long startTime = meta.getExecutedAt().toInstant(ZoneOffset.UTC)
+                                                    .toEpochMilli();
+                                            long endTime = System.currentTimeMillis();
+                                            meta.setDurationMs(endTime - startTime);
+                                        }
+                                    });
+                        }
+
+                        // Update overall workflow status if step failed
+                        if (status.equals("failed")) {
+                            execution.getResponse().getMetadata().setStatus("error");
+                        }
                     }
 
-                    // Update overall workflow status if step failed
-                    if (status.equals("failed")) {
-                        execution.getResponse().getMetadata().setStatus("error");
-                    }
-                }
-                
-                return executionRepository.save(execution);
-            })
-            .then();
+                    return executionRepository.save(execution);
+                })
+                .then();
     }
+
+    @Value("${app.redis.listener.enabled:true}")
+    private boolean redisEnabled;
 
     @Scheduled(fixedDelay = 5000) // Poll every 5 seconds
     public void processQueue() {
+        if (!redisEnabled) {
+            // log.trace("Redis queue is disabled, skipping async step poll");
+            return;
+        }
+
         log.info("Checking async step queue...");
         asyncStepQueueRedisTemplate.opsForList().leftPop(QUEUE_KEY)
-            .doOnSubscribe(s -> log.info("Subscribing to queue processing..."))
-            .doOnNext(message -> log.info("Found message in queue: {}", message))
-            .flatMap(message -> {
-                try {
-                    AsyncStepTask task = objectMapper.readValue(message, AsyncStepTask.class);
-                    log.info("Processing async step for workflow {} step {} with team {} and execution ID {}", 
-                        task.getWorkflowId(), task.getStepId(), task.getTeamId(), task.getStep().getExecutionId());
-                    return processAsyncStep(task);
-                } catch (Exception e) {
-                    log.error("Failed to process queued task: {}", e.getMessage(), e);
-                    return Mono.error(e);
-                }
-            })
-            .doOnError(error -> log.error("Error processing queue: {}", error.getMessage(), error))
-            .subscribe(
-                null,
-                error -> log.error("Error in queue subscription: {}", error.getMessage(), error)
-            );
+                .doOnSubscribe(s -> log.info("Subscribing to queue processing..."))
+                .doOnNext(message -> log.info("Found message in queue: {}", message))
+                .flatMap(message -> {
+                    try {
+                        AsyncStepTask task = objectMapper.readValue(message, AsyncStepTask.class);
+                        log.info("Processing async step for workflow {} step {} with team {} and execution ID {}",
+                                task.getWorkflowId(), task.getStepId(), task.getTeamId(),
+                                task.getStep().getExecutionId());
+                        return processAsyncStep(task);
+                    } catch (Exception e) {
+                        log.error("Failed to process queued task: {}", e.getMessage(), e);
+                        return Mono.error(e);
+                    }
+                })
+                .doOnError(error -> log.error("Error processing queue: {}", error.getMessage(), error))
+                .subscribe(
+                        null,
+                        error -> log.error("Error in queue subscription: {}", error.getMessage(), error));
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -363,19 +386,19 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     private static class AsyncStepTask {
         @JsonProperty("workflowId")
         private final String workflowId;
-        
+
         @JsonProperty("stepId")
         private final String stepId;
-        
+
         @JsonProperty("step")
         private final LinqResponse.WorkflowStep step;
-        
+
         @JsonProperty("params")
         private final Map<String, Object> params;
-        
+
         @JsonProperty("action")
         private final String action;
-        
+
         @JsonProperty("intent")
         private final String intent;
 
@@ -384,13 +407,13 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
 
         @JsonCreator
         public AsyncStepTask(
-            @JsonProperty("workflowId") String workflowId,
-            @JsonProperty("stepId") String stepId,
-            @JsonProperty("step") LinqResponse.WorkflowStep step,
-            @JsonProperty("params") Map<String, Object> params,
-            @JsonProperty("action") String action,
-            @JsonProperty("intent") String intent,
-            @JsonProperty("teamId") String teamId) {
+                @JsonProperty("workflowId") String workflowId,
+                @JsonProperty("stepId") String stepId,
+                @JsonProperty("step") LinqResponse.WorkflowStep step,
+                @JsonProperty("params") Map<String, Object> params,
+                @JsonProperty("action") String action,
+                @JsonProperty("intent") String intent,
+                @JsonProperty("teamId") String teamId) {
             this.workflowId = workflowId;
             this.stepId = stepId;
             this.step = step;
@@ -400,4 +423,4 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
             this.teamId = teamId;
         }
     }
-} 
+}

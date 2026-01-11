@@ -76,7 +76,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
-    # ports:
-    #   - "8080:8080" # No longer exposed, proxied by Caddy
+    ports:
+      - "8080:8080" # Exposed for VPC Peering access from EKS
     networks:
       - linqra-network

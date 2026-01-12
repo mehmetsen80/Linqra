@@ -3,7 +3,8 @@ class CollectionExportWebSocketService {
         this.ws = null;
         this.connected = false;
         this.connectionStatus = 'disconnected';
-        this.wsUrl = import.meta.env.VITE_WS_URL || 'wss://localhost:7777/ws-linqra';
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}/ws-linqra`;
         this.subscribers = new Set();
         this.subscriptionId = null;
     }
@@ -28,7 +29,7 @@ class CollectionExportWebSocketService {
         this.ws.onopen = () => {
             console.log('Collection Export WebSocket Connected');
             this.connectionStatus = 'connected';
-            
+
             // Send STOMP CONNECT frame
             setTimeout(() => {
                 if (this.ws.readyState === WebSocket.OPEN) {
@@ -43,11 +44,11 @@ class CollectionExportWebSocketService {
 
         this.ws.onmessage = (event) => {
             const frame = this.parseStompFrame(event.data);
-            
+
             if (frame.command === 'CONNECTED') {
                 console.log('Collection Export STOMP Connected');
                 this.connected = true;
-                
+
                 // Subscribe to collection export updates
                 const subscribeFrame = 'SUBSCRIBE\n' +
                     'id:collection-export-sub-0\n' +
@@ -80,7 +81,7 @@ class CollectionExportWebSocketService {
             console.log('Collection Export WebSocket Closed');
             this.connected = false;
             this.connectionStatus = 'disconnected';
-            
+
             // Attempt to reconnect after 3 seconds
             setTimeout(() => {
                 if (this.connectionStatus === 'disconnected') {

@@ -3,6 +3,7 @@ package org.lite.gateway.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.ApiRoute;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -21,72 +22,99 @@ import java.util.concurrent.CopyOnWriteArraySet;
 public class DynamicRouteService {
 
     // set Initial internal whitelist paths
-    private final Set<String> whitelistedPaths = new CopyOnWriteArraySet<>() {{
-        add("/eureka/**");
-        add("/mesh/**");
-        add("/routes/**");
-        add("/health/**");
-        add("/analysis/**");
-        add("/ws-linqra/**");
-        add("/metrics/**");
-        add("/api/**");
-        add("/r/**");
-        add("/favicon.ico");
-        add("/fallback/**");
-        add("/actuator/**");
-        add("/linq/**");
-    }};
+    private final Set<String> whitelistedPaths = new CopyOnWriteArraySet<>() {
+        {
+            add("/eureka/**");
+            add("/mesh/**");
+            add("/routes/**");
+            add("/health/**");
+            add("/analysis/**");
+            add("/ws-linqra/**");
+            add("/metrics/**");
+            add("/api/**");
+            add("/r/**");
+            add("/favicon.ico");
+            add("/fallback/**");
+            add("/actuator/**");
+            add("/linq/**");
+        }
+    };
 
     private final Map<String, String> clientScopes = new ConcurrentHashMap<>();
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ChannelTopic routesTopic;
 
+    @Value("${app.redis.listener.enabled:true}")
+    private boolean redisEnabled;
+
     @EventListener(ApplicationReadyEvent.class)
     public void initialize() {
-        // Load whitelisted paths from Redis
-        Set<String> initialRoutes = redisTemplate.opsForSet().members("whitelistedPaths");
-
-        if (initialRoutes == null || initialRoutes.isEmpty()) {
-            // If Redis is empty, add all default paths to Redis
-            whitelistedPaths.forEach(path -> redisTemplate.opsForSet().add("whitelistedPaths", path));
-        } else {
-            // Otherwise, add any missing default paths to both Redis and in-memory set
-            whitelistedPaths.forEach(path -> {
-                if (!initialRoutes.contains(path)) {
-                    redisTemplate.opsForSet().add("whitelistedPaths", path);
-                }
-            });
-
-            // Add Redis-loaded paths to in-memory whitelist
-            whitelistedPaths.addAll(initialRoutes);
+        if (!redisEnabled) {
+            log.warn("Redis disabled. DynamicRouteService will run in local-only mode.");
+            return;
         }
 
-        //initialize the existing client scopes
-        for (Map.Entry<String, String> entry : clientScopes.entrySet()) {
-            redisTemplate.opsForValue().set(entry.getKey(), entry.getValue());
+        // Load whitelisted paths from Redis
+        try {
+            Set<String> initialRoutes = redisTemplate.opsForSet().members("whitelistedPaths");
+
+            if (initialRoutes == null || initialRoutes.isEmpty()) {
+                // If Redis is empty, add all default paths to Redis
+                whitelistedPaths.forEach(path -> redisTemplate.opsForSet().add("whitelistedPaths", path));
+            } else {
+                // Otherwise, add any missing default paths to both Redis and in-memory set
+                whitelistedPaths.forEach(path -> {
+                    if (!initialRoutes.contains(path)) {
+                        redisTemplate.opsForSet().add("whitelistedPaths", path);
+                    }
+                });
+
+                // Add Redis-loaded paths to in-memory whitelist
+                whitelistedPaths.addAll(initialRoutes);
+            }
+
+            // initialize the existing client scopes
+            for (Map.Entry<String, String> entry : clientScopes.entrySet()) {
+                redisTemplate.opsForValue().set(entry.getKey(), entry.getValue());
+            }
+        } catch (Exception e) {
+            log.error("Failed to initialize DynamicRouteService with Redis: {}", e.getMessage());
         }
     }
 
-    public String getClientScope(String path){
+    public String getClientScope(String path) {
         return redisTemplate.opsForValue().get(path);
     }
 
     // Add a path to the whitelist
     public void addPath(ApiRoute apiRoute) {
         // Add path to Redis and publish to notify other instances
-        redisTemplate.opsForSet().add("whitelistedPaths", apiRoute.getPath());
-        redisTemplate.convertAndSend(routesTopic.getTopic(), "ADD PATH:" + apiRoute.getPath());
+        if (redisEnabled) {
+            try {
+                redisTemplate.opsForSet().add("whitelistedPaths", apiRoute.getPath());
+                redisTemplate.convertAndSend(routesTopic.getTopic(), "ADD PATH:" + apiRoute.getPath());
+            } catch (Exception e) {
+                log.error("Failed to add path to Redis: {}", e.getMessage());
+            }
+        }
         whitelistedPaths.add(apiRoute.getPath());
     }
 
-    public void addScope(ApiRoute apiRoute){
-        redisTemplate.opsForValue().set(apiRoute.getPath(), apiRoute.getScope());
-        redisTemplate.convertAndSend(routesTopic.getTopic(), "ADD SCOPE:" + apiRoute.getScope());
+    public void addScope(ApiRoute apiRoute) {
+        if (redisEnabled) {
+            try {
+                redisTemplate.opsForValue().set(apiRoute.getPath(), apiRoute.getScope());
+                redisTemplate.convertAndSend(routesTopic.getTopic(), "ADD SCOPE:" + apiRoute.getScope());
+            } catch (Exception e) {
+                log.error("Failed to add scope to Redis: {}", e.getMessage());
+            }
+        }
         clientScopes.putIfAbsent(apiRoute.getPath(), apiRoute.getScope());
     }
 
-    // Remove a path from the whitelist, TODO: Not used right now but will add the logic to the UI
+    // Remove a path from the whitelist, TODO: Not used right now but will add the
+    // logic to the UI
     public void removePath(ApiRoute apiRoute) {
         // Remove path from Redis and publish to notify other instances
         redisTemplate.opsForSet().remove("whitelistedPaths", apiRoute.getPath());
@@ -94,7 +122,8 @@ public class DynamicRouteService {
         whitelistedPaths.remove(apiRoute.getPath());
     }
 
-    // Remove a scope from the whitelist, TODO: Not used right now but will add the logic to the UI
+    // Remove a scope from the whitelist, TODO: Not used right now but will add the
+    // logic to the UI
     public void removeScope(ApiRoute apiRoute) {
         // Remove scope from Redis and publish to notify other instances
         redisTemplate.opsForValue().set(apiRoute.getPath(), apiRoute.getScope());
@@ -106,13 +135,13 @@ public class DynamicRouteService {
     public boolean isPathWhitelisted(String path) {
         log.debug("Checking if path is whitelisted: {}", path);
         log.debug("Current whitelisted paths: {}", whitelistedPaths);
-        
+
         // First, check if the exact path is in the whitelist
         if (whitelistedPaths.contains(path)) {
             log.debug("Exact path match found for: {}", path);
             return true;
         }
-        
+
         return whitelistedPaths.stream()
                 .anyMatch(pattern -> {
                     AntPathMatcher matcher = new AntPathMatcher();

@@ -102,6 +102,12 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+
     # Download the vault file we just generated
     - name: Download vault.encrypted
       uses: actions/download-artifact@v4
@@ -109,12 +115,19 @@ jobs:
         name: vault-encrypted
         path: secrets
 
+    # Download the vault-reader JAR for the Docker build
+    - name: Download vault-reader JAR
+      uses: actions/download-artifact@v4
+      with:
+        name: vault-reader-jar
+        path: vault-reader/target
+
     # 1. Configure AWS Credentials
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-access-key-id: ${{ secrets.AWS_KEY }}
+        aws-secret-access-key: ${{ secrets.AWS_SEC }}
         aws-region: ${{ env.AWS_REGION }}
 
     # 2. Login to Amazon ECR
@@ -146,8 +159,19 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG -f .kube/react/Dockerfile .
-        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest -f .kube/react/Dockerfile .
+        docker build \
+          --build-arg NODE_ENV=${{ secrets.NODE_ENV }} \
+          --build-arg REACT_APP_KEYCLOAK_URL=${{ secrets.REACT_APP_KEYCLOAK_URL }} \
+          --build-arg REACT_APP_KEYCLOAK_REALM=${{ secrets.REACT_APP_KEYCLOAK_REALM }} \
+          --build-arg REACT_APP_KEYCLOAK_CLIENT_ID=${{ secrets.REACT_APP_KEYCLOAK_CLIENT_ID }} \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG -f .kube/react/Dockerfile .
+        
+        docker build \
+          --build-arg NODE_ENV=${{ secrets.NODE_ENV }} \
+          --build-arg REACT_APP_KEYCLOAK_URL=${{ secrets.REACT_APP_KEYCLOAK_URL }} \
+          --build-arg REACT_APP_KEYCLOAK_REALM=${{ secrets.REACT_APP_KEYCLOAK_REALM }} \
+          --build-arg REACT_APP_KEYCLOAK_CLIENT_ID=${{ secrets.REACT_APP_KEYCLOAK_CLIENT_ID }} \
+          -t $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest -f .kube/react/Dockerfile .
         
         docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:$IMAGE_TAG
         docker push $ECR_REGISTRY/$ECR_REPOSITORY_FRONTEND:latest
@@ -177,10 +201,10 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }}
       run: |
-        kubectl apply -f .kube/eks/namespace.yaml
-        kubectl apply -f .kube/eks/backend.yaml
-        kubectl apply -f .kube/eks/frontend.yaml
-        kubectl apply -f .kube/eks/ingress.yaml
+        kubectl apply -f .kube/eks/namespace.yml
+        kubectl apply -f .kube/eks/backend.yml
+        kubectl apply -f .kube/eks/frontend.yml
+        kubectl apply -f .kube/eks/ingress.yml
         
         # Force restart to pick up 'latest'
         kubectl rollout restart deployment/linqra-backend -n linqra

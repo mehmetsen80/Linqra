@@ -6,7 +6,8 @@ class ChatWebSocketService {
         this.maxReconnectAttempts = 10;
         this.reconnectDelay = 2000; // Start with 2 seconds
         this.maxReconnectDelay = 30000; // Max 30 seconds
-        this.wsUrl = import.meta.env.VITE_WS_URL || 'wss://localhost:7777/ws-linqra';
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}/ws-linqra`;
         this.ws = null;
         this.connected = false;
         this.connectionStatus = 'disconnected';
@@ -35,7 +36,7 @@ class ChatWebSocketService {
         try {
             console.log(`💬 Attempting to connect to chat WebSocket: ${this.wsUrl}`);
             this.setConnectionStatus('connecting');
-            
+
             this.ws = new WebSocket(this.wsUrl);
             this.setupWebSocket();
         } catch (error) {
@@ -48,7 +49,7 @@ class ChatWebSocketService {
         this.ws.onopen = () => {
             console.log('💬 Chat WebSocket Connected');
             this.reconnectAttempts = 0;
-            
+
             // Send STOMP CONNECT frame
             setTimeout(() => {
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -63,12 +64,12 @@ class ChatWebSocketService {
 
         this.ws.onmessage = (event) => {
             const frame = this.parseStompFrame(event.data);
-            
+
             if (frame.command === 'CONNECTED') {
                 console.log('💬 Chat STOMP Connected');
                 this.connected = true;
                 this.setConnectionStatus('connected');
-                
+
                 // Subscribe to chat updates
                 const subscribeFrame = 'SUBSCRIBE\n' +
                     'id:chat-sub-0\n' +
@@ -81,10 +82,10 @@ class ChatWebSocketService {
                 try {
                     const payload = JSON.parse(frame.body);
                     // console.log('💬 Received chat update:', payload);
-                    
+
                     // Notify all subscribers
                     this.notifySubscribers(payload);
-                    
+
                     // Notify conversation-specific subscribers
                     if (payload.conversationId) {
                         const callbacks = this.conversationSubscriptions.get(payload.conversationId);
@@ -158,12 +159,12 @@ class ChatWebSocketService {
                 this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts),
                 this.maxReconnectDelay
             );
-            
+
             setTimeout(() => {
                 this.reconnectAttempts++;
                 this.connect();
             }, delay);
-            
+
             this.setConnectionStatus('reconnecting');
         } else {
             this.setConnectionStatus('failed');
@@ -183,11 +184,11 @@ class ChatWebSocketService {
             this.conversationSubscriptions.set(conversationId, new Set());
         }
         this.conversationSubscriptions.get(conversationId).add(callback);
-        
+
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
             this.connect();
         }
-        
+
         return () => {
             const callbacks = this.conversationSubscriptions.get(conversationId);
             if (callbacks) {

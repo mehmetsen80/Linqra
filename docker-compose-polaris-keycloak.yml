@@ -43,7 +43,7 @@ services:
       KC_HTTP_RELATIVE_PATH: /keycloak
 
       KC_HOSTNAME: https://polaris.linqra.com/keycloak
-      KC_HOSTNAME_STRICT: true
+      KC_HOSTNAME_STRICT: false # Allow back-channel from VPC Peering (Private IP)
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: true
 
       # Proxy Settings (Keycloak 26+ uses proxy-headers)
@@ -76,7 +76,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
-    # ports:
-    #   - "8080:8080" # No longer exposed, proxied by Caddy
+    ports:
+      - "8080:8080" # Exposed for VPC Peering access from EKS
     networks:
       - linqra-network

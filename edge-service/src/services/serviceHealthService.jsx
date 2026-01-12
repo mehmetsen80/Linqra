@@ -8,7 +8,8 @@ class ServiceHealthWebSocket {
         this.maxReconnectAttempts = 10;
         this.reconnectDelay = 2000; // Start with 2 seconds
         this.maxReconnectDelay = 30000; // Max 30 seconds
-        this.wsUrl = import.meta.env.VITE_WS_URL || 'wss://localhost:7777/ws-linqra';
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        this.wsUrl = import.meta.env.VITE_WS_URL || `${protocol}//${window.location.host}/ws-linqra`;
         this.ws = null;
         this.connected = false;
         this.connectionStatus = 'disconnected';

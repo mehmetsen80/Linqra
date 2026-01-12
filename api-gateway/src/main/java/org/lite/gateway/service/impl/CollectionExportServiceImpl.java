@@ -104,6 +104,11 @@ public class CollectionExportServiceImpl implements CollectionExportService {
                                         teamId,
                                         exportedBy);
 
+                                if (!redisEnabled) {
+                                    log.warn("Redis disabled. Export job {} created but NOT queued.", jobId);
+                                    return Mono.just(savedJob);
+                                }
+
                                 try {
                                     String taskJson = objectMapper.writeValueAsString(task);
                                     // Add to Redis queue
@@ -161,8 +166,16 @@ public class CollectionExportServiceImpl implements CollectionExportService {
                 });
     }
 
+    @org.springframework.beans.factory.annotation.Value("${app.redis.listener.enabled:true}")
+    private boolean redisEnabled;
+
     @Scheduled(fixedDelay = 5000) // Poll every 5 seconds
     public void processQueue() {
+        if (!redisEnabled) {
+            // log.trace("Redis queue is disabled, skipping collection export poll");
+            return;
+        }
+
         asyncStepQueueRedisTemplate.opsForList().leftPop(QUEUE_KEY)
                 .doOnSubscribe(s -> log.debug("Checking collection export queue..."))
                 .doOnNext(message -> log.info("Found collection export job in queue: {}", message))

@@ -371,10 +371,16 @@ public class SecurityConfig implements BeanFactoryAware {
                                         path);
                                 return Mono.just(new AuthorizationDecision(false));
                             }
-                            // log.info("Route permission granted for: {}. Proceeding with JWT checks.",
-                            // path);
-                            // Continue with JWT checks if route permission granted
-                            return continueWithJwtChecks(authenticationMono, path, scope);
+                            // Check if identified by API Key filter
+                            return authenticationMono.flatMap(auth -> {
+                                boolean isApiKeyAuth = auth.getAuthorities().stream()
+                                        .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
+
+                                if (isApiKeyAuth) {
+                                    return Mono.just(new AuthorizationDecision(true));
+                                }
+                                return continueWithJwtChecks(Mono.just(auth), path, scope);
+                            });
                         })
                         .onErrorResume(error -> {
                             log.error("Error checking route permissions for {}: {}", path, error.getMessage(), error);
@@ -384,7 +390,15 @@ public class SecurityConfig implements BeanFactoryAware {
             }
 
             // For non-route paths, continue with normal JWT checks
-            return continueWithJwtChecks(authenticationMono, path, scope);
+            return authenticationMono.flatMap(auth -> {
+                boolean isApiKeyAuth = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
+
+                if (isApiKeyAuth) {
+                    return Mono.just(new AuthorizationDecision(true));
+                }
+                return continueWithJwtChecks(Mono.just(auth), path, scope);
+            });
         }
 
         return Mono.just(new AuthorizationDecision(false));

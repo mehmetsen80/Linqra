@@ -20,6 +20,11 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
 
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
+
 import javax.net.ssl.SSLException;
 import java.time.Duration;
 
@@ -39,7 +44,10 @@ public class WebClientConfig {
                                                         new Jackson2JsonDecoder(mapper, MediaType.APPLICATION_JSON));
                                         clientCodecConfigurer.defaultCodecs().jackson2JsonEncoder(
                                                         new Jackson2JsonEncoder(mapper, MediaType.APPLICATION_JSON));
-                                        clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024); // Further reduced for EC2
+                                        clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024); // Further
+                                                                                                                // reduced
+                                                                                                                // for
+                                                                                                                // EC2
                                 })
                                 .build();
 
@@ -54,11 +62,12 @@ public class WebClientConfig {
 
                 HttpClient httpClient = HttpClient.create(provider)
                                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000) // 10s connect timeout
-                                .responseTimeout(Duration.ofSeconds(120))  // Increased for LLM generation
+                                .responseTimeout(Duration.ofSeconds(120)) // Increased for LLM generation
                                 .option(ChannelOption.SO_REUSEADDR, true)
                                 .doOnConnected(conn -> conn
-                                                .addHandlerLast(new ReadTimeoutHandler(120)) // 120s read timeout for LLMs
-                                                .addHandlerLast(new WriteTimeoutHandler(120)))  // 120s write timeout
+                                                .addHandlerLast(new ReadTimeoutHandler(120)) // 120s read timeout for
+                                                                                             // LLMs
+                                                .addHandlerLast(new WriteTimeoutHandler(120))) // 120s write timeout
                                 .secure(spec -> {
                                         try {
                                                 // Build SSL context that trusts all certs
@@ -77,6 +86,19 @@ public class WebClientConfig {
 
                 return WebClient.builder()
                                 .exchangeStrategies(strategies)
-                                .clientConnector(new ReactorClientHttpConnector(httpClient));
+                                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                                .filter(tokenRelay());
+        }
+
+        private ExchangeFilterFunction tokenRelay() {
+                return (request, next) -> ReactiveSecurityContextHolder.getContext()
+                                .map(ctx -> ctx.getAuthentication())
+                                .filter(auth -> auth instanceof JwtAuthenticationToken)
+                                .map(auth -> ((JwtAuthenticationToken) auth).getToken().getTokenValue())
+                                .map(token -> ClientRequest.from(request)
+                                                .header("Authorization", "Bearer " + token)
+                                                .build())
+                                .defaultIfEmpty(request)
+                                .flatMap(next::exchange);
         }
 }

@@ -160,9 +160,7 @@ public class SecurityConfig implements BeanFactoryAware {
                         SecurityWebFiltersOrder.AUTHENTICATION)
                 .authorizeExchange(exchange -> exchange
                         .anyExchange()
-                        .access(this::dynamicPathAuthorization))
-                .addFilterAt(tokenRelayWebFilter(authorizedClientManager),
-                        SecurityWebFiltersOrder.SECURITY_CONTEXT_SERVER_WEB_EXCHANGE); // Dynamic authorization
+                        .access(this::dynamicPathAuthorization));
         return serverHttpSecurity.build();
     }
 
@@ -195,8 +193,11 @@ public class SecurityConfig implements BeanFactoryAware {
 
             String path = exchange.getRequest().getPath().toString();
             // Skip token relay for certain paths
+            // ADDED: /r/ to skip this filter for routed internal requests (preserves User
+            // Token)
             if (path.startsWith("/actuator") ||
-                    path.startsWith("/favicon")) {
+                    path.startsWith("/favicon") ||
+                    path.startsWith("/r/")) {
                 return chain.filter(exchange);
             }
             // log.info("TokenRelayWebFilter for path: {}", path);
@@ -306,6 +307,7 @@ public class SecurityConfig implements BeanFactoryAware {
 
         return authorizedClientManager;
     }
+
 
     private String getScopeKey(String path) {
         // Updated regex to capture prefixes that may include hyphens

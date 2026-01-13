@@ -196,8 +196,7 @@ public class SecurityConfig implements BeanFactoryAware {
             // ADDED: /r/ to skip this filter for routed internal requests (preserves User
             // Token)
             if (path.startsWith("/actuator") ||
-                    path.startsWith("/favicon") ||
-                    path.startsWith("/r/")) {
+                    path.startsWith("/favicon")) {
                 return chain.filter(exchange);
             }
             // log.info("TokenRelayWebFilter for path: {}", path);
@@ -307,7 +306,6 @@ public class SecurityConfig implements BeanFactoryAware {
 
         return authorizedClientManager;
     }
-
 
     private String getScopeKey(String path) {
         // Updated regex to capture prefixes that may include hyphens
@@ -473,6 +471,8 @@ public class SecurityConfig implements BeanFactoryAware {
                                     if (clientRoles instanceof List) {
                                         boolean isAuthorizedClient = ((List<String>) clientRoles)
                                                 .contains("gateway_admin");
+                                        log.info("Access granted: Authorized via gateway_admin role for path: {}",
+                                                path);
                                         return new AuthorizationDecision(isAuthorizedClient); // finally return the
                                                                                               // authorization decision
                                     }
@@ -480,9 +480,11 @@ public class SecurityConfig implements BeanFactoryAware {
                             }
                         }
                     }
+
+                    log.warn("Access denied: Missing required roles for path: {}", path);
                     return new AuthorizationDecision(false);
                 })
-                .defaultIfEmpty(new AuthorizationDecision(false)); // Default to unauthorized if no valid authentication
+                .defaultIfEmpty(new AuthorizationDecision(false));
     }
 
     private Mono<Boolean> checkRoutePermission(String path, ServerWebExchange exchange) {

@@ -949,6 +949,10 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     @Override
     public Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId) {
+        System.out.println(">>> ENTERING getEmbedding <<<");
+        System.out.println("Model: " + modelCategory + "/" + modelName);
+        System.out.println("Team: " + teamId);
+
         log.debug("Generating embedding for text length: {} using model: {}/{}", text.length(), modelCategory,
                 modelName);
         LinqRequest request = new LinqRequest();
@@ -967,14 +971,18 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         request.setQuery(query);
 
         return linqLlmModelService.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId)
-                .doOnNext(m -> log.debug("Found LLM Model config for {}", modelName))
+                .doOnNext(m -> System.out.println(">>> FOUND LLM MODEL CONFIG: " + m.getModelName() + " <<<"))
                 .switchIfEmpty(Mono.error(new IllegalArgumentException("Embedding modelCategory " + modelCategory
                         + " with model name " + modelName + " not found for team: " + teamId)))
                 .flatMap(llmModel -> {
-                    log.debug("Executing LLM request for embedding...");
+                    System.out.println(">>> EXECUTING LLM REQUEST <<<");
                     return linqLlmModelService.executeLlmRequest(request, llmModel);
                 })
-                .doOnError(e -> log.error("Embedding generation failed: {}", e.getMessage()))
+                .doOnError(e -> {
+                    System.out.println(">>> ERROR IN getEmbedding: " + e.getMessage() + " <<<");
+                    e.printStackTrace();
+                    log.error("Embedding generation failed: {}", e.getMessage());
+                })
                 .map(response -> {
                     Map<String, Object> result = (Map<String, Object>) response.getResult();
                     if (result == null) {

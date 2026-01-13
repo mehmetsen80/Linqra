@@ -20,11 +20,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.netty.resources.ConnectionProvider;
 
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
-import org.springframework.web.reactive.function.client.ClientRequest;
-import org.springframework.web.reactive.function.client.ExchangeFilterFunction;
-
 import javax.net.ssl.SSLException;
 import java.time.Duration;
 
@@ -44,10 +39,7 @@ public class WebClientConfig {
                                                         new Jackson2JsonDecoder(mapper, MediaType.APPLICATION_JSON));
                                         clientCodecConfigurer.defaultCodecs().jackson2JsonEncoder(
                                                         new Jackson2JsonEncoder(mapper, MediaType.APPLICATION_JSON));
-                                        clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024); // Further
-                                                                                                                // reduced
-                                                                                                                // for
-                                                                                                                // EC2
+                                        clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024); // Further reduced for EC2
                                 })
                                 .build();
 
@@ -86,19 +78,6 @@ public class WebClientConfig {
 
                 return WebClient.builder()
                                 .exchangeStrategies(strategies)
-                                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                                .filter(tokenRelay());
-        }
-
-        private ExchangeFilterFunction tokenRelay() {
-                return (request, next) -> ReactiveSecurityContextHolder.getContext()
-                                .map(ctx -> ctx.getAuthentication())
-                                .filter(auth -> auth instanceof JwtAuthenticationToken)
-                                .map(auth -> ((JwtAuthenticationToken) auth).getToken().getTokenValue())
-                                .map(token -> ClientRequest.from(request)
-                                                .header("Authorization", "Bearer " + token)
-                                                .build())
-                                .defaultIfEmpty(request)
-                                .flatMap(next::exchange);
+                                .clientConnector(new ReactorClientHttpConnector(httpClient));
         }
 }

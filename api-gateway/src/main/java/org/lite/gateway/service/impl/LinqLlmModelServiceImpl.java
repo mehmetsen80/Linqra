@@ -958,7 +958,11 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 requestSpec = requestSpec.header("User-Agent", "curl/7.64.1");
 
                 for (Map.Entry<String, String> entry : headers.entrySet()) {
-                    requestSpec = requestSpec.header(entry.getKey(), entry.getValue());
+                    // Skip Content-Type as WebClient adds it automatically with bodyValue,
+                    // and duplicate headers can cause 400 Bad Request from Cloudflare.
+                    if (!entry.getKey().equalsIgnoreCase("Content-Type")) {
+                        requestSpec = requestSpec.header(entry.getKey(), entry.getValue());
+                    }
                 }
 
                 log.info("\uD83C\uDF10 Making {} request to LLM service: {}", method, url);

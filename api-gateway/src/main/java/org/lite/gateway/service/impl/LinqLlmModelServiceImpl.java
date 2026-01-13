@@ -941,71 +941,95 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
         return payload;
     }
 
-    private Mono<Object> invokeLlmService(String method, String url, Object payload, Map<String, String> headers) {
-        WebClient webClient = webClientBuilder.build();
-        WebClient.RequestBodySpec requestSpec = webClient.method(HttpMethod.valueOf(method))
-                .uri(url)
-                .headers(httpHeaders -> headers.forEach(httpHeaders::add));
+    private Mono<Object> invokeLlmService(String method, String url, Object payload,
+            Map<String, String> headers) {
+        return Mono.defer(() -> {
+            try {
+                WebClient webClient = webClientBuilder.build();
+                WebClient.RequestHeadersSpec<?> requestSpec = switch (method) {
+                    case "GET" -> webClient.get().uri(url);
+                    case "POST" -> webClient.post().uri(url)
+                            .bodyValue(payload);
+                    case "PUT" -> webClient.put().uri(url)
+                            .bodyValue(payload);
+                    case "PATCH" -> webClient.patch().uri(url)
+                            .bodyValue(payload);
+                    default -> throw new IllegalArgumentException("Method not supported: " + method);
+                };
 
-        log.info("🌐 Making {} request to LLM service: {}", method, url);
-        if ("POST".equals(method) || "PUT".equals(method) || "PATCH".equals(method)) {
-            log.debug("Request payload: {}", payload);
-            requestSpec.bodyValue(payload);
-        }
+                // Add headers
+                // Add User-Agent to avoid Cloudflare blocks (often blocks default ReactorNetty
+                // agent)
+                requestSpec = requestSpec.header("User-Agent",
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
 
-        return requestSpec
-                .retrieve()
-                .onStatus(status -> status.isError(), response -> {
-                    return response.bodyToMono(String.class)
-                            .flatMap(body -> {
-                                log.error("❌ Error calling LLM service {}: {} - Response body: {}", url,
-                                        response.statusCode(), body);
+                for (Map.Entry<String, String> entry : headers.entrySet()) {
+                    requestSpec = requestSpec.header(entry.getKey(), entry.getValue());
+                }
 
-                                // Parse error message from response body
-                                String errorMessage = body;
-                                try {
-                                    // Try to parse JSON error body to extract error message
-                                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                                    @SuppressWarnings("unchecked")
-                                    Map<String, Object> parsedBody = mapper.readValue(body, Map.class);
-                                    if (parsedBody.containsKey("error")) {
-                                        Object errorObj = parsedBody.get("error");
-                                        if (errorObj instanceof Map) {
-                                            @SuppressWarnings("unchecked")
-                                            Map<String, Object> errorMap = (Map<String, Object>) errorObj;
-                                            if (errorMap.containsKey("message")) {
-                                                errorMessage = (String) errorMap.get("message");
+                log.info("\uD83C\uDF10 Making {} request to LLM service: {}", method, url);
+
+                return requestSpec
+                        .exchangeToMono(response -> {
+                            if (response.statusCode().is2xxSuccessful()) {
+                                return response.bodyToMono(Object.class);
+                            } else {
+                                return response.bodyToMono(String.class)
+                                        .flatMap(body -> {
+                                            log.error("❌ Error calling LLM service {}: {} - Response body: {}", url,
+                                                    response.statusCode(), body);
+
+                                            // Parse error message from response body
+                                            String errorMessage = body;
+                                            try {
+                                                // Try to parse JSON error body to extract error message
+                                                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                                                @SuppressWarnings("unchecked")
+                                                Map<String, Object> parsedBody = mapper.readValue(body, Map.class);
+                                                if (parsedBody.containsKey("error")) {
+                                                    Object errorObj = parsedBody.get("error");
+                                                    if (errorObj instanceof Map) {
+                                                        @SuppressWarnings("unchecked")
+                                                        Map<String, Object> errorMap = (Map<String, Object>) errorObj;
+                                                        if (errorMap.containsKey("message")) {
+                                                            errorMessage = (String) errorMap.get("message");
+                                                        }
+                                                    }
+                                                }
+                                            } catch (Exception e) {
+                                                // If parsing fails, use body as-is
                                             }
-                                        }
-                                    }
-                                } catch (Exception e) {
-                                    // If parsing fails, use body as-is
-                                }
 
-                                // Return Mono.error with exception
-                                return Mono.error(new RuntimeException(
-                                        String.format("HTTP %d: %s",
-                                                response.statusCode().value(),
-                                                errorMessage)));
-                            });
-                })
-                .bodyToMono(Object.class)
-                .timeout(Duration.ofSeconds(90)) // Per-request timeout to fail fast on hanging connections
-                .retryWhen(reactor.util.retry.Retry.backoff(3, Duration.ofSeconds(5))
-                        .filter(throwable -> {
-                            // Retry on HTTP 429 (Rate Limit), HTTP 5xx (Server Error), or Timeout
-                            String msg = throwable.getMessage();
-                            return (msg != null && (msg.contains("HTTP 429") || msg.contains("rate limit") ||
-                                    msg.contains("HTTP 5")))
-                                    || throwable instanceof java.util.concurrent.TimeoutException;
+                                            // Return Mono.error with exception
+                                            return Mono.error(new RuntimeException(
+                                                    String.format("HTTP %d: %s",
+                                                            response.statusCode().value(),
+                                                            errorMessage)));
+                                        });
+                            }
                         })
-                        .doBeforeRetry(retrySignal -> log.warn(
-                                "⚠️ Retrying LLM service call {} due to error: {} (Attempt {}/3)",
-                                url, retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1))
-                        .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
-                .timeout(Duration.ofMinutes(5)) // Global timeout (including retries) increased to 5 minutes
-                .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
-                .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage(), error));
+                        .timeout(Duration.ofSeconds(90)) // Per-request timeout to fail fast on hanging connections
+                        .retryWhen(reactor.util.retry.Retry.backoff(3, Duration.ofSeconds(5))
+                                .filter(throwable -> {
+                                    // Retry on HTTP 429 (Rate Limit), HTTP 5xx (Server Error), or Timeout
+                                    String msg = throwable.getMessage();
+                                    return (msg != null && (msg.contains("HTTP 429") || msg.contains("rate limit") ||
+                                            msg.contains("HTTP 5")))
+                                            || throwable instanceof java.util.concurrent.TimeoutException;
+                                })
+                                .doBeforeRetry(retrySignal -> log.warn(
+                                        "⚠️ Retrying LLM service call {} due to error: {} (Attempt {}/3)",
+                                        url, retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1))
+                                .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
+                        .timeout(Duration.ofMinutes(5)) // Global timeout (including retries) increased to 5 minutes
+                        .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
+                        .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage(),
+                                error));
+
+            } catch (Exception e) {
+                return Mono.error(e);
+            }
+        });
     }
 
     @Override

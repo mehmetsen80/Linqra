@@ -232,6 +232,10 @@ public class SecurityConfig implements BeanFactoryAware {
                                     })
                                     .build();
 
+                            // Log keys of headers being sent downstream
+                            log.info("Relaying request to: {}", path);
+                            // log.info("Request Headers: {}", request.getHeaders());
+
                             return chain.filter(exchange.mutate().request(request).build());
                         }
 

@@ -452,6 +452,16 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     headers.put("Pragma", "no-cache");
                     headers.put("Expires", "0");
 
+                    // DEBUG LOGGING
+                    log.error(">>> PREPARING LLM CALL <<<");
+                    log.error("URL: {}", url.get());
+                    log.error("Method: {}", method);
+                    log.error("Auth Type: {}", authType);
+                    log.error("Headers Keys: {}", headers.keySet());
+                    // Be careful not to log full keys in prod, but for debug:
+                    headers.forEach((k, v) -> log.error("Header '{}': '{}'", k,
+                            v.length() > 10 ? v.substring(0, 5) + "..." : v));
+
                     return invokeLlmService(method, url.get(), payload, headers);
                 })
                 .flatMap(result -> {

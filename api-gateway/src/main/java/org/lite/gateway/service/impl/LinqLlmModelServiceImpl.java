@@ -447,11 +447,6 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             break;
                     }
 
-                    // Add cache-busting headers
-                    headers.put("Cache-Control", "no-cache, no-store, must-revalidate");
-                    headers.put("Pragma", "no-cache");
-                    headers.put("Expires", "0");
-
                     // DEBUG LOGGING
                     log.error(">>> PREPARING LLM CALL <<<");
                     log.error("URL: {}", url.get());
@@ -958,16 +953,16 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 };
 
                 // Add headers
-                // Add User-Agent to avoid Cloudflare blocks (often blocks default ReactorNetty
-                // agent)
-                requestSpec = requestSpec.header("User-Agent",
-                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+                // Use curl User-Agent as manual curl tests passed.
+                // Spoofing Chrome with Java WebClient often fails JA3 fingerprint checks.
+                requestSpec = requestSpec.header("User-Agent", "curl/7.64.1");
 
                 for (Map.Entry<String, String> entry : headers.entrySet()) {
                     requestSpec = requestSpec.header(entry.getKey(), entry.getValue());
                 }
 
                 log.info("\uD83C\uDF10 Making {} request to LLM service: {}", method, url);
+                log.info("Headers: {}", headers); // Log passed headers
 
                 return requestSpec
                         .exchangeToMono(response -> {

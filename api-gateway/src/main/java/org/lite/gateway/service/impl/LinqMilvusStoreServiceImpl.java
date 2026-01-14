@@ -949,10 +949,6 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
 
     @Override
     public Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId) {
-        System.out.println(">>> ENTERING getEmbedding <<<");
-        System.out.println("Model: " + modelCategory + "/" + modelName);
-        System.out.println("Team: " + teamId);
-
         log.debug("Generating embedding for text length: {} using model: {}/{}", text.length(), modelCategory,
                 modelName);
         LinqRequest request = new LinqRequest();

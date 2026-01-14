@@ -8,6 +8,7 @@ import org.lite.gateway.repository.SecurityIncidentRepository;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -38,18 +39,19 @@ public class SecurityIncidentController {
                 .flatMapMany(user -> {
                     if (user.getRoles().contains("SUPER_ADMIN")) {
                         if (status != null) {
-                            return incidentRepository.findByStatus(status);
+                            return incidentRepository.findByStatusOrderByDetectedAtDesc(status);
                         }
-                        return incidentRepository.findAll();
+                        return incidentRepository.findAll(Sort.by(Sort.Direction.DESC, "detectedAt"));
                     }
 
                     // For regular ADMINs, filter by team
                     return teamContextService.getTeamFromContext(exchange)
                             .flatMapMany(teamId -> {
                                 if (status != null) {
-                                    return incidentRepository.findByAffectedTeamIdAndStatus(teamId, status);
+                                    return incidentRepository.findByAffectedTeamIdAndStatusOrderByDetectedAtDesc(teamId,
+                                            status);
                                 }
-                                return incidentRepository.findByAffectedTeamId(teamId);
+                                return incidentRepository.findByAffectedTeamIdOrderByDetectedAtDesc(teamId);
                             });
                 })
                 .onErrorResume(e -> {

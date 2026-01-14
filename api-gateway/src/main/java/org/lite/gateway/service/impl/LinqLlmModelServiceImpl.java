@@ -953,10 +953,6 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 };
 
                 // Add headers
-                // Use curl User-Agent as manual curl tests passed.
-                // Spoofing Chrome with Java WebClient often fails JA3 fingerprint checks.
-                requestSpec = requestSpec.header("User-Agent", "curl/7.64.1");
-
                 for (Map.Entry<String, String> entry : headers.entrySet()) {
                     // Skip Content-Type as WebClient adds it automatically with bodyValue,
                     // and duplicate headers can cause 400 Bad Request from Cloudflare.
@@ -964,9 +960,6 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         requestSpec = requestSpec.header(entry.getKey(), entry.getValue());
                     }
                 }
-
-                log.info("\uD83C\uDF10 Making {} request to LLM service: {}", method, url);
-                log.info("Headers: {}", headers); // Log passed headers
 
                 return requestSpec
                         .exchangeToMono(response -> {

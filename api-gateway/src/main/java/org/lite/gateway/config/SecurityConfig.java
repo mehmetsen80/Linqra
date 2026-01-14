@@ -119,7 +119,8 @@ public class SecurityConfig implements BeanFactoryAware {
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
             "/r/komunas-app/whatsapp/webhook",
             "/widget/**", // Public AI Assistant widget scripts (public API key based)
-            "/api/auth/**" // Public Auth Endpoints (SSO Callback, Login, Register)
+            "/api/auth/**", // Public Auth Endpoints (SSO Callback, Login, Register)
+            "/api/internal/**" // Secured by X-Change-Log-Token
     );
 
     @Bean

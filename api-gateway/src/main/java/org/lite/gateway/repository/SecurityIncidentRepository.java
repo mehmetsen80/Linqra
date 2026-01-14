@@ -9,11 +9,11 @@ import reactor.core.publisher.Flux;
 @Repository
 public interface SecurityIncidentRepository extends ReactiveMongoRepository<SecurityIncident, String> {
 
-    Flux<SecurityIncident> findByStatus(IncidentStatus status);
+    Flux<SecurityIncident> findByStatusOrderByDetectedAtDesc(IncidentStatus status);
 
-    Flux<SecurityIncident> findByAffectedTeamId(String teamId);
+    Flux<SecurityIncident> findByAffectedTeamIdOrderByDetectedAtDesc(String teamId);
 
-    Flux<SecurityIncident> findByAffectedTeamIdAndStatus(String teamId, IncidentStatus status);
+    Flux<SecurityIncident> findByAffectedTeamIdAndStatusOrderByDetectedAtDesc(String teamId, IncidentStatus status);
 
-    Flux<SecurityIncident> findByAffectedUserId(String userId);
+    Flux<SecurityIncident> findByAffectedUserIdOrderByDetectedAtDesc(String userId);
 }

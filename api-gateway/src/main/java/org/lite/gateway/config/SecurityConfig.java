@@ -119,7 +119,8 @@ public class SecurityConfig implements BeanFactoryAware {
     private static final List<String> PUBLIC_ENDPOINTS = List.of(
             "/r/komunas-app/whatsapp/webhook",
             "/widget/**", // Public AI Assistant widget scripts (public API key based)
-            "/api/auth/**" // Public Auth Endpoints (SSO Callback, Login, Register)
+            "/api/auth/**", // Public Auth Endpoints (SSO Callback, Login, Register)
+            "/api/internal/**" // Secured by X-Change-Log-Token
     );
 
     @Bean
@@ -160,9 +161,7 @@ public class SecurityConfig implements BeanFactoryAware {
                         SecurityWebFiltersOrder.AUTHENTICATION)
                 .authorizeExchange(exchange -> exchange
                         .anyExchange()
-                        .access(this::dynamicPathAuthorization))
-                .addFilterAt(tokenRelayWebFilter(authorizedClientManager),
-                        SecurityWebFiltersOrder.SECURITY_CONTEXT_SERVER_WEB_EXCHANGE); // Dynamic authorization
+                        .access(this::dynamicPathAuthorization));
         return serverHttpSecurity.build();
     }
 
@@ -195,6 +194,8 @@ public class SecurityConfig implements BeanFactoryAware {
 
             String path = exchange.getRequest().getPath().toString();
             // Skip token relay for certain paths
+            // ADDED: /r/ to skip this filter for routed internal requests (preserves User
+            // Token)
             if (path.startsWith("/actuator") ||
                     path.startsWith("/favicon")) {
                 return chain.filter(exchange);
@@ -231,6 +232,10 @@ public class SecurityConfig implements BeanFactoryAware {
                                         }
                                     })
                                     .build();
+
+                            // Log keys of headers being sent downstream
+                            log.info("Relaying request to: {}", path);
+                            // log.info("Request Headers: {}", request.getHeaders());
 
                             return chain.filter(exchange.mutate().request(request).build());
                         }
@@ -371,10 +376,16 @@ public class SecurityConfig implements BeanFactoryAware {
                                         path);
                                 return Mono.just(new AuthorizationDecision(false));
                             }
-                            // log.info("Route permission granted for: {}. Proceeding with JWT checks.",
-                            // path);
-                            // Continue with JWT checks if route permission granted
-                            return continueWithJwtChecks(authenticationMono, path, scope);
+                            // Check if identified by API Key filter
+                            return authenticationMono.flatMap(auth -> {
+                                boolean isApiKeyAuth = auth.getAuthorities().stream()
+                                        .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
+
+                                if (isApiKeyAuth) {
+                                    return Mono.just(new AuthorizationDecision(true));
+                                }
+                                return continueWithJwtChecks(Mono.just(auth), path, scope);
+                            });
                         })
                         .onErrorResume(error -> {
                             log.error("Error checking route permissions for {}: {}", path, error.getMessage(), error);
@@ -384,7 +395,15 @@ public class SecurityConfig implements BeanFactoryAware {
             }
 
             // For non-route paths, continue with normal JWT checks
-            return continueWithJwtChecks(authenticationMono, path, scope);
+            return authenticationMono.flatMap(auth -> {
+                boolean isApiKeyAuth = auth.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
+
+                if (isApiKeyAuth) {
+                    return Mono.just(new AuthorizationDecision(true));
+                }
+                return continueWithJwtChecks(Mono.just(auth), path, scope);
+            });
         }
 
         return Mono.just(new AuthorizationDecision(false));
@@ -457,6 +476,8 @@ public class SecurityConfig implements BeanFactoryAware {
                                     if (clientRoles instanceof List) {
                                         boolean isAuthorizedClient = ((List<String>) clientRoles)
                                                 .contains("gateway_admin");
+                                        log.info("Access granted: Authorized via gateway_admin role for path: {}",
+                                                path);
                                         return new AuthorizationDecision(isAuthorizedClient); // finally return the
                                                                                               // authorization decision
                                     }
@@ -464,9 +485,11 @@ public class SecurityConfig implements BeanFactoryAware {
                             }
                         }
                     }
+
+                    log.warn("Access denied: Missing required roles for path: {}", path);
                     return new AuthorizationDecision(false);
                 })
-                .defaultIfEmpty(new AuthorizationDecision(false)); // Default to unauthorized if no valid authentication
+                .defaultIfEmpty(new AuthorizationDecision(false));
     }
 
     private Mono<Boolean> checkRoutePermission(String path, ServerWebExchange exchange) {

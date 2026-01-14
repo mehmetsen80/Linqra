@@ -54,11 +54,12 @@ public class WebClientConfig {
 
                 HttpClient httpClient = HttpClient.create(provider)
                                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000) // 10s connect timeout
-                                .responseTimeout(Duration.ofSeconds(120))  // Increased for LLM generation
+                                .responseTimeout(Duration.ofSeconds(120)) // Increased for LLM generation
                                 .option(ChannelOption.SO_REUSEADDR, true)
                                 .doOnConnected(conn -> conn
-                                                .addHandlerLast(new ReadTimeoutHandler(120)) // 120s read timeout for LLMs
-                                                .addHandlerLast(new WriteTimeoutHandler(120)))  // 120s write timeout
+                                                .addHandlerLast(new ReadTimeoutHandler(120)) // 120s read timeout for
+                                                                                             // LLMs
+                                                .addHandlerLast(new WriteTimeoutHandler(120))) // 120s write timeout
                                 .secure(spec -> {
                                         try {
                                                 // Build SSL context that trusts all certs

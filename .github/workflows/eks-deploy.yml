@@ -194,6 +194,7 @@ jobs:
         kubectl create secret generic linqra-vault-secret \
           --namespace linqra \
           --from-literal=master-key="$VAULT_MASTER_KEY" \
+          --from-literal=change-log-token="${{ secrets.CHANGE_LOG_TOKEN }}" \
           --from-file=vault-file=secrets/vault.encrypted
 
     - name: Deploy Manifests
@@ -209,3 +210,30 @@ jobs:
         # Force restart to pick up 'latest'
         kubectl rollout restart deployment/linqra-backend -n linqra
         kubectl rollout restart deployment/linqra-frontend -n linqra
+        
+        # Wait for backend rollout to finish so the /system-change endpoint is available
+        kubectl rollout status deployment/linqra-backend -n linqra --timeout=300s
+
+    - name: Log Deployment
+      if: success() || failure()
+      continue-on-error: true
+      run: |
+        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        COMMIT_MSG=$(git log -1 --pretty=%s)
+        DESCRIPTION="Deployed to EKS: $COMMIT_MSG"
+        
+        curl -X POST https://linqra.com/api/internal/system-change \
+          -H "Content-Type: application/json" \
+          -H "X-Change-Log-Token: ${{ secrets.CHANGE_LOG_TOKEN }}" \
+          -d '{
+            "timestamp": "'"$TIMESTAMP"'",
+            "changeType": "DEPLOYMENT",
+            "actor": "${{ github.actor }}",
+            "commit": "${{ github.sha }}",
+            "description": "'"$DESCRIPTION"'",
+            "metadata": {
+              "commitHash": "${{ github.sha }}",
+              "workflow": "EKS Deploy",
+              "status": "${{ job.status }}"
+            }
+          }' || echo "Failed to log deployment"

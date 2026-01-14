@@ -23,6 +23,7 @@ public class SystemChangeLog {
     private LocalDateTime timestamp;
     private String changeType; // e.g., "DEPLOYMENT", "CONFIG_CHANGE"
     private String actor; // e.g., "GitHub Actions", "admin@linqra.com"
+    private String commit; // e.g., "a1b2c3d..."
     private String description;
 
     private Map<String, String> metadata; // e.g., commitHash, version, environment

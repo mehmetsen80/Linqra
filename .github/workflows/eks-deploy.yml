@@ -219,7 +219,8 @@ jobs:
       continue-on-error: true
       run: |
         TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-        DESCRIPTION="Deployed to EKS (Commit: ${{ github.sha }})"
+        COMMIT_MSG=$(git log -1 --pretty=%s)
+        DESCRIPTION="Deployed to EKS: $COMMIT_MSG"
         
         curl -X POST https://linqra.com/api/internal/system-change \
           -H "Content-Type: application/json" \
@@ -228,6 +229,7 @@ jobs:
             "timestamp": "'"$TIMESTAMP"'",
             "changeType": "DEPLOYMENT",
             "actor": "${{ github.actor }}",
+            "commit": "${{ github.sha }}",
             "description": "'"$DESCRIPTION"'",
             "metadata": {
               "commitHash": "${{ github.sha }}",

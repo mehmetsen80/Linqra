@@ -10,6 +10,8 @@ import org.lite.gateway.service.UserService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.TeamService;
 import org.lite.gateway.entity.User;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -63,30 +65,66 @@ public class AgentAuthContextServiceImpl implements AgentAuthContextService {
     public Mono<AgentAuthContext> checkTaskAuthorization(String taskId, ServerWebExchange exchange) {
         log.debug("Checking task authorization for taskId: {}", taskId);
 
-        return userContextService.getCurrentUsername(exchange)
-                .flatMap(userService::findByUsername)
-                .flatMap(user -> {
-                    // Task-specific operation: get task first, then agent
-                    return agentTaskService.getTaskById(taskId)
-                            .flatMap(task -> {
-                                String agentId = task.getAgentId();
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .flatMap(auth -> {
+                    // Check if this is an API Key authentication (ROLE_API_ACCESS)
+                    boolean isApiKeyAuth = auth.getAuthorities().stream()
+                            .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
 
-                                log.debug("Task {} belongs to agent {}", taskId, agentId);
+                    if (isApiKeyAuth) {
+                        String teamId = auth.getPrincipal().toString();
+                        log.debug("API Key auth detected for team: {}", teamId);
 
-                                // Get the agent to get the teamId
-                                return agentService.getAgentById(agentId)
-                                        .flatMap(agent -> {
-                                            String teamId = agent.getTeamId();
+                        return agentTaskService.getTaskById(taskId)
+                                .flatMap(task -> {
+                                    String agentId = task.getAgentId();
+                                    // Optimized: Use getAgentByIdAndTeam to filter in query
+                                    return agentService.getAgentByIdAndTeam(agentId, teamId)
+                                            .flatMap(agent -> {
+                                                // Agent found and belongs to team (guaranteed by query)
+                                                // Create context for API key user
+                                                return Mono.just(new AgentAuthContext(
+                                                        agentId,
+                                                        taskId,
+                                                        teamId,
+                                                        "api-key-client", // Use a generic username for API key access
+                                                        false));
+                                            })
+                                            .switchIfEmpty(Mono.defer(() -> {
+                                                log.warn(
+                                                        "API Key team {} not authorized for agent {} (Agent not found in team)",
+                                                        teamId, agentId);
+                                                return Mono.error(
+                                                        new RuntimeException("API Key not authorized for this task"));
+                                            }));
+                                });
+                    }
 
-                                            log.debug("Agent {} belongs to team {}", agentId, teamId);
+                    // Standard User Authentication flow
+                    return userContextService.getCurrentUsername(exchange)
+                            .flatMap(userService::findByUsername)
+                            .flatMap(user -> {
+                                // Task-specific operation: get task first, then agent
+                                return agentTaskService.getTaskById(taskId)
+                                        .flatMap(task -> {
+                                            String agentId = task.getAgentId();
+                                            log.debug("Task {} belongs to agent {}", taskId, agentId);
 
-                                            // Check authorization using helper method
-                                            return performAuthorizationCheck(user, agentId, taskId, teamId, "task");
+                                            // Get the agent to get the teamId
+                                            return agentService.getAgentById(agentId)
+                                                    .flatMap(agent -> {
+                                                        String teamId = agent.getTeamId();
+                                                        log.debug("Agent {} belongs to team {}", agentId, teamId);
+                                                        // Check authorization using helper method
+                                                        return performAuthorizationCheck(user, agentId, taskId, teamId,
+                                                                "task");
+                                                    });
                                         });
                             });
                 })
-                .doOnSuccess(authContext -> log.debug("Task authorization successful for user {} on task {}",
-                        authContext.getUsername(), taskId))
+                .switchIfEmpty(Mono.error(new RuntimeException("No authentication found")))
+                .doOnSuccess(authContext -> log.debug("Task authorization successful on task {}", taskId))
                 .doOnError(error -> log.warn("Task authorization failed for task {}: {}", taskId, error.getMessage()));
     }
 

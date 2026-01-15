@@ -420,27 +420,34 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                                                         executionId,
                                                                                                                                         auditError.getMessage(),
                                                                                                                                         auditError))
-                                                                                                        .thenReturn(savedExecution) // Return
-                                                                                                                                    // execution
-                                                                                                                                    // after
-                                                                                                                                    // audit
-                                                                                                                                    // log
-                                                                                                                                    // completes
-                                                                                                                                    // successfully
+                                                                                                        .then(agentExecutionRepository
+                                                                                                                        .findByExecutionId(
+                                                                                                                                        executionId)
+                                                                                                                        .switchIfEmpty(Mono
+                                                                                                                                        .just(savedExecution))) // Return
+                                                                                                                                                                // fresh
+                                                                                                                                                                // execution
+                                                                                                                                                                // with
+                                                                                                                                                                // results
                                                                                                         .onErrorResume(auditError -> {
                                                                                                                 log.error(
                                                                                                                                 "Audit logging failed for execution {}, returning execution anyway: {}",
                                                                                                                                 executionId,
                                                                                                                                 auditError.getMessage());
-                                                                                                                return Mono.just(
-                                                                                                                                savedExecution); // Always
-                                                                                                                                                 // return
-                                                                                                                                                 // execution
-                                                                                                                                                 // even
-                                                                                                                                                 // if
-                                                                                                                                                 // audit
-                                                                                                                                                 // logging
-                                                                                                                                                 // fails
+                                                                                                                // Even
+                                                                                                                // in
+                                                                                                                // error
+                                                                                                                // case,
+                                                                                                                // try
+                                                                                                                // to
+                                                                                                                // get
+                                                                                                                // fresh
+                                                                                                                // execution
+                                                                                                                return agentExecutionRepository
+                                                                                                                                .findByExecutionId(
+                                                                                                                                                executionId)
+                                                                                                                                .switchIfEmpty(Mono
+                                                                                                                                                .just(savedExecution));
                                                                                                         });
                                                                                 }))
                                                                                 .onErrorResume(error -> {
@@ -584,15 +591,15 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                         });
                                                                                 });
                                                         });
-                                })
-                                .doOnSuccess(execution -> {
+                                }).doOnSuccess(execution ->
+
+                {
                                         if (execution != null) {
                                                 log.info("Task execution started: {}", execution.getExecutionId());
                                         } else {
                                                 log.warn("Task execution completed but execution object is null");
                                         }
-                                })
-                                .onErrorResume(error -> {
+                                }).onErrorResume(error -> {
                                         log.error("Failed to start task execution: {}", error.getMessage());
 
                                         // Log error for agent/task not found or other failures before execution

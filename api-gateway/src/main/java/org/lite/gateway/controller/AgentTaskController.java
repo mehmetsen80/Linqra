@@ -30,29 +30,30 @@ import java.util.HashMap;
 @RequiredArgsConstructor
 @Slf4j
 public class AgentTaskController {
-    
+
     private final AgentExecutionService agentExecutionService;
     private final AgentTaskService agentTaskService;
     private final AgentAuthContextService agentAuthContextService;
     private final AgentTaskVersionService agentTaskVersionService;
     private final UserContextService userContextService;
     private final TeamContextService teamContextService;
-    
+
     // ==================== TASK CRUD OPERATIONS ====================
-    
+
     @PostMapping
     public Mono<ResponseEntity<Object>> createTask(
             @RequestBody AgentTask task,
             ServerWebExchange exchange) {
-        
+
         log.info("Creating task '{}' for agent {}", task.getName(), task.getAgentId());
-        
+
         return agentAuthContextService.checkAgentAuthorization(task.getAgentId(), exchange)
                 .flatMap(authContext -> {
                     // Set createdBy from the authenticated user
                     task.setCreatedBy(authContext.getUsername());
-                    
-                    // Inject default teamId and userId into linq_config params if not already present
+
+                    // Inject default teamId and userId into linq_config params if not already
+                    // present
                     if (task.getLinqConfig() != null) {
                         Map<String, Object> linqConfig = task.getLinqConfig();
                         if (linqConfig.containsKey("query")) {
@@ -73,7 +74,7 @@ public class AgentTaskController {
                             }
                         }
                     }
-                    
+
                     return agentTaskService.createTask(task);
                 })
                 .map(createdTask -> ResponseEntity.ok((Object) createdTask))
@@ -82,21 +83,20 @@ public class AgentTaskController {
                     ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                             ErrorCode.FORBIDDEN,
                             error.getMessage(),
-                            HttpStatus.FORBIDDEN.value()
-                    );
+                            HttpStatus.FORBIDDEN.value());
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.FORBIDDEN)
                             .body((Object) errorResponse));
                 });
     }
-    
+
     @GetMapping("/{taskId}")
     public Mono<ResponseEntity<Object>> getTask(
             @PathVariable String taskId,
             ServerWebExchange exchange) {
-        
+
         log.info("Getting task {}", taskId);
-        
+
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> agentTaskService.getTaskById(taskId))
                 .map(task -> ResponseEntity.ok((Object) task))
@@ -105,58 +105,54 @@ public class AgentTaskController {
                     ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                             ErrorCode.FORBIDDEN,
                             error.getMessage(),
-                            HttpStatus.FORBIDDEN.value()
-                    );
+                            HttpStatus.FORBIDDEN.value());
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.FORBIDDEN)
                             .body((Object) errorResponse));
                 });
     }
-    
 
-    
     @DeleteMapping("/{taskId}")
     public Mono<ResponseEntity<Object>> deleteTask(
             @PathVariable String taskId,
             ServerWebExchange exchange) {
-        
+
         log.info("Deleting task {} (including all version history)", taskId);
-        
+
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> {
                     // First delete all version history for this task
                     return agentTaskVersionService.deleteAllVersionsForTask(taskId)
                             .doOnSuccess(v -> log.info("Deleted all version history for task: {}", taskId))
                             .then(agentTaskService.deleteTask(taskId))
-                            .doOnSuccess(deleted -> log.info("Successfully deleted task {} and all its versions", taskId));
+                            .doOnSuccess(
+                                    deleted -> log.info("Successfully deleted task {} and all its versions", taskId));
                 })
                 .map(deleted -> ResponseEntity.ok((Object) Map.of(
                         "message", "Task and all version history deleted successfully",
                         "taskId", taskId,
-                        "deleted", deleted
-                )))
+                        "deleted", deleted)))
                 .onErrorResume(error -> {
                     log.warn("Authorization or deletion failed for deleteTask {}: {}", taskId, error.getMessage());
                     ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                             ErrorCode.FORBIDDEN,
                             error.getMessage(),
-                            HttpStatus.FORBIDDEN.value()
-                    );
+                            HttpStatus.FORBIDDEN.value());
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.FORBIDDEN)
                             .body((Object) errorResponse));
                 });
     }
-    
+
     // ==================== TASK CONTROL OPERATIONS ====================
-    
+
     @PostMapping("/{taskId}/enable")
     public Mono<ResponseEntity<Object>> enableTask(
             @PathVariable String taskId,
             ServerWebExchange exchange) {
-        
+
         log.info("Enabling task {}", taskId);
-        
+
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> {
                     return agentTaskService.getTaskById(taskId)
@@ -164,16 +160,15 @@ public class AgentTaskController {
                                 if (currentTask.isEnabled()) {
                                     return Mono.error(new IllegalArgumentException("Task is already enabled"));
                                 }
-                                
+
                                 AgentTask taskUpdates = AgentTask.builder()
                                         .enabled(true)
                                         .updatedBy(authContext.getUsername())
                                         .build();
                                 return agentTaskVersionService.createNewVersion(
-                                        taskId, 
-                                        taskUpdates, 
-                                        "Task enabled"
-                                );
+                                        taskId,
+                                        taskUpdates,
+                                        "Task enabled");
                             });
                 })
                 .map(updatedTask -> ResponseEntity.ok((Object) updatedTask))
@@ -183,8 +178,7 @@ public class AgentTaskController {
                         ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                                 ErrorCode.VALIDATION_ERROR,
                                 error.getMessage(),
-                                HttpStatus.BAD_REQUEST.value()
-                        );
+                                HttpStatus.BAD_REQUEST.value());
                         return Mono.just(ResponseEntity
                                 .status(HttpStatus.BAD_REQUEST)
                                 .body((Object) errorResponse));
@@ -193,22 +187,21 @@ public class AgentTaskController {
                         ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                                 ErrorCode.FORBIDDEN,
                                 error.getMessage(),
-                                HttpStatus.FORBIDDEN.value()
-                        );
+                                HttpStatus.FORBIDDEN.value());
                         return Mono.just(ResponseEntity
                                 .status(HttpStatus.FORBIDDEN)
                                 .body((Object) errorResponse));
                     }
                 });
     }
-    
+
     @PostMapping("/{taskId}/disable")
     public Mono<ResponseEntity<Object>> disableTask(
             @PathVariable String taskId,
             ServerWebExchange exchange) {
-        
+
         log.info("Disabling task {}", taskId);
-        
+
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .flatMap(authContext -> {
                     return agentTaskService.getTaskById(taskId)
@@ -216,16 +209,15 @@ public class AgentTaskController {
                                 if (!currentTask.isEnabled()) {
                                     return Mono.error(new IllegalArgumentException("Task is already disabled"));
                                 }
-                                
+
                                 AgentTask taskUpdates = AgentTask.builder()
                                         .enabled(false)
                                         .updatedBy(authContext.getUsername())
                                         .build();
                                 return agentTaskVersionService.createNewVersion(
-                                        taskId, 
-                                        taskUpdates, 
-                                        "Task disabled"
-                                );
+                                        taskId,
+                                        taskUpdates,
+                                        "Task disabled");
                             });
                 })
                 .map(updatedTask -> ResponseEntity.ok((Object) updatedTask))
@@ -235,8 +227,7 @@ public class AgentTaskController {
                         ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                                 ErrorCode.VALIDATION_ERROR,
                                 error.getMessage(),
-                                HttpStatus.BAD_REQUEST.value()
-                        );
+                                HttpStatus.BAD_REQUEST.value());
                         return Mono.just(ResponseEntity
                                 .status(HttpStatus.BAD_REQUEST)
                                 .body((Object) errorResponse));
@@ -245,25 +236,24 @@ public class AgentTaskController {
                         ErrorResponse errorResponse = ErrorResponse.fromErrorCode(
                                 ErrorCode.FORBIDDEN,
                                 error.getMessage(),
-                                HttpStatus.FORBIDDEN.value()
-                        );
+                                HttpStatus.FORBIDDEN.value());
                         return Mono.just(ResponseEntity
                                 .status(HttpStatus.FORBIDDEN)
                                 .body((Object) errorResponse));
                     }
                 });
     }
-    
+
     // ==================== TASK EXECUTION ====================
-    
+
     @PostMapping("/{taskId}/execute")
     public Mono<ResponseEntity<Object>> executeTask(
             @PathVariable String taskId,
             @RequestBody(required = false) Map<String, Object> payload,
             ServerWebExchange exchange) {
-        
+
         log.info("Executing task {} by user from context", taskId);
-        
+
         Map<String, Object> overrides = null;
         if (payload != null && !payload.isEmpty()) {
             Map<String, Object> sanitized = new HashMap<>();
@@ -281,33 +271,39 @@ public class AgentTaskController {
             }
         }
         final Map<String, Object> overridesFinal = overrides;
-        
+
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> 
-                    agentExecutionService.startTaskExecution(
-                            authContext.getAgentId(), 
-                            authContext.getTaskId(), 
-                            authContext.getTeamId(), 
-                            authContext.getUsername(),
-                            overridesFinal)
-                    .map(execution -> {
-                        Map<String, Object> response = Map.of(
-                                "executionId", execution.getExecutionId(),
-                                "status", execution.getStatus(),
-                                "message", "Task execution started successfully"
-                        );
-                        return ResponseEntity.ok((Object) response);
-                    })
-                    .onErrorReturn(ResponseEntity.badRequest().build())
-                )
+                .flatMap(authContext -> agentExecutionService.startTaskExecution(
+                        authContext.getAgentId(),
+                        authContext.getTaskId(),
+                        authContext.getTeamId(),
+                        authContext.getUsername(),
+                        overridesFinal)
+                        .map(execution -> {
+                            Map<String, Object> response = new HashMap<>();
+                            response.put("executionId", execution.getExecutionId());
+                            response.put("status", execution.getStatus());
+                            response.put("message", "Task execution started successfully");
+
+                            // Include results if available (for sync execution)
+                            if (execution.getOutputData() != null) {
+                                if (execution.getOutputData().containsKey("finalResult")) {
+                                    response.put("result", execution.getOutputData().get("finalResult"));
+                                }
+                                if (execution.getOutputData().containsKey("fullResult")) {
+                                    response.put("fullResult", execution.getOutputData().get("fullResult"));
+                                }
+                            }
+                            return ResponseEntity.ok((Object) response);
+                        })
+                        .onErrorReturn(ResponseEntity.badRequest().build()))
                 .onErrorResume(error -> {
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.FORBIDDEN)
                             .body((Object) ErrorResponse.fromErrorCode(
                                     ErrorCode.FORBIDDEN,
                                     error.getMessage(),
-                                    HttpStatus.FORBIDDEN.value()
-                            )));
+                                    HttpStatus.FORBIDDEN.value())));
                 })
                 .doOnSuccess(response -> log.info("Task {} execution started successfully", taskId))
                 .doOnError(error -> log.error("Failed to execute task {}: {}", taskId, error.getMessage()));
@@ -317,33 +313,29 @@ public class AgentTaskController {
     public Mono<ResponseEntity<Object>> cancelExecution(
             @PathVariable String executionId,
             ServerWebExchange exchange) {
-        
+
         log.info("Cancelling execution {} by user from context", executionId);
-        
+
         return agentAuthContextService.checkExecutionAuthorization(executionId, exchange)
-                .flatMap(authContext -> 
-                    agentExecutionService.cancelExecution(
-                            executionId, 
-                            authContext.getTeamId(), 
-                            authContext.getUsername())
-                    .map(cancelled -> {
-                        Map<String, Object> response = Map.of(
-                                "executionId", executionId,
-                                "cancelled", cancelled,
-                                "message", "Execution cancelled successfully"
-                        );
-                        return ResponseEntity.ok((Object) response);
-                    })
-                    .onErrorReturn(ResponseEntity.badRequest().build())
-                )
+                .flatMap(authContext -> agentExecutionService.cancelExecution(
+                        executionId,
+                        authContext.getTeamId(),
+                        authContext.getUsername())
+                        .map(cancelled -> {
+                            Map<String, Object> response = Map.of(
+                                    "executionId", executionId,
+                                    "cancelled", cancelled,
+                                    "message", "Execution cancelled successfully");
+                            return ResponseEntity.ok((Object) response);
+                        })
+                        .onErrorReturn(ResponseEntity.badRequest().build()))
                 .onErrorResume(error -> {
                     return Mono.just(ResponseEntity
                             .status(HttpStatus.FORBIDDEN)
                             .body((Object) ErrorResponse.fromErrorCode(
                                     ErrorCode.FORBIDDEN,
                                     error.getMessage(),
-                                    HttpStatus.FORBIDDEN.value()
-                            )));
+                                    HttpStatus.FORBIDDEN.value())));
                 })
                 .doOnSuccess(response -> log.info("Execution {} cancelled successfully", executionId))
                 .doOnError(error -> log.error("Failed to cancel execution {}: {}", executionId, error.getMessage()));
@@ -353,19 +345,17 @@ public class AgentTaskController {
     public Mono<ResponseEntity<List<AgentExecution>>> getRecentExecutions(
             @RequestParam(defaultValue = "100") int limit,
             ServerWebExchange exchange) {
-        
+
         return teamContextService.getTeamFromContext(exchange)
-                .flatMap(teamId -> 
-                    agentAuthContextService.checkTeamAuthorization(teamId, exchange)
-                            .flatMap(authContext -> 
-                                agentExecutionService.getRecentExecutions(authContext.getTeamId(), limit)
+                .flatMap(teamId -> agentAuthContextService.checkTeamAuthorization(teamId, exchange)
+                        .flatMap(
+                                authContext -> agentExecutionService.getRecentExecutions(authContext.getTeamId(), limit)
                                         .collectList()
                                         .map(executions -> {
-                                            log.info("Retrieved {} recent executions for team {}", executions.size(), authContext.getTeamId());
+                                            log.info("Retrieved {} recent executions for team {}", executions.size(),
+                                                    authContext.getTeamId());
                                             return ResponseEntity.ok(executions);
-                                        })
-                            )
-                )
+                                        })))
                 .onErrorResume(error -> {
                     log.error("Failed to get recent executions: {}", error.getMessage());
                     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
@@ -376,34 +366,35 @@ public class AgentTaskController {
     public Mono<ResponseEntity<Object>> executeAdhocTask(
             @Valid @RequestBody AgentTask agentTask,
             ServerWebExchange exchange) {
-        
+
         log.info("Executing ad-hoc task: {}", agentTask.getName());
-        
+
         return userContextService.getCurrentUsername(exchange)
                 .flatMap(username -> {
                     // Basic validation
                     if (agentTask.getTaskType() != AgentTaskType.WORKFLOW_EMBEDDED_ADHOC) {
-                        return Mono.error(new IllegalArgumentException("Only WORKFLOW_EMBEDDED_ADHOC tasks are supported for ad-hoc execution"));
+                        return Mono.error(new IllegalArgumentException(
+                                "Only WORKFLOW_EMBEDDED_ADHOC tasks are supported for ad-hoc execution"));
                     }
-                    
+
                     if (agentTask.getLinqConfig() == null) {
-                        return Mono.error(new IllegalArgumentException("Invalid workflow configuration: missing linq_config"));
+                        return Mono.error(
+                                new IllegalArgumentException("Invalid workflow configuration: missing linq_config"));
                     }
-                    
+
                     // Get current team context from JWT token
                     return teamContextService.getTeamFromContext(exchange)
-                        .flatMap(teamId -> {
-                            log.info("Using current team {} for ad-hoc execution", teamId);
-                            return agentExecutionService.executeAdhocTask(agentTask, teamId, username);
-                        })
-                        .switchIfEmpty(Mono.error(new IllegalArgumentException("No current team context found")));
+                            .flatMap(teamId -> {
+                                log.info("Using current team {} for ad-hoc execution", teamId);
+                                return agentExecutionService.executeAdhocTask(agentTask, teamId, username);
+                            })
+                            .switchIfEmpty(Mono.error(new IllegalArgumentException("No current team context found")));
                 })
                 .map(result -> {
                     Map<String, Object> response = Map.of(
                             "status", "completed",
                             "message", "Ad-hoc task executed successfully",
-                            "result", result
-                    );
+                            "result", result);
                     return ResponseEntity.ok((Object) response);
                 })
                 .onErrorResume(error -> {
@@ -413,11 +404,10 @@ public class AgentTaskController {
                             .body((Object) ErrorResponse.fromErrorCode(
                                     ErrorCode.VALIDATION_ERROR,
                                     error.getMessage(),
-                                    HttpStatus.BAD_REQUEST.value()
-                            )));
+                                    HttpStatus.BAD_REQUEST.value())));
                 })
                 .doOnSuccess(response -> log.info("Ad-hoc task executed successfully"))
                 .doOnError(error -> log.error("Failed to execute ad-hoc task: {}", error.getMessage()));
     }
-    
-} 
+
+}

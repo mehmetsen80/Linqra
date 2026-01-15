@@ -12,6 +12,7 @@ import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.LinqWorkflowService;
+import org.lite.gateway.service.ExecutionMonitoringService;
 import org.springframework.stereotype.Service;
 
 import reactor.core.publisher.Mono;
@@ -32,81 +33,97 @@ import java.util.Map;
 public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
 
     public WorkflowEmbeddedAgentTaskExecutor(LinqWorkflowService linqWorkflowService,
-                                            LinqWorkflowExecutionService workflowExecutionService,
-                                            AgentRepository agentRepository,
-                                            AgentTaskRepository agentTaskRepository,
-                                            AgentExecutionRepository agentExecutionRepository,
-                                            ObjectMapper objectMapper) {
+            LinqWorkflowExecutionService workflowExecutionService,
+            AgentRepository agentRepository,
+            AgentTaskRepository agentTaskRepository,
+            AgentExecutionRepository agentExecutionRepository,
+            ObjectMapper objectMapper,
+            ExecutionMonitoringService executionMonitoringService) {
         super(linqWorkflowService, workflowExecutionService, agentRepository,
-                agentTaskRepository, agentExecutionRepository, objectMapper);
+                agentTaskRepository, agentExecutionRepository, objectMapper, executionMonitoringService);
     }
 
     @Override
     public Mono<Void> executeTask(AgentExecution execution, AgentTask task, Agent agent) {
         log.info("Executing WORKFLOW_EMBEDDED task: {} (execution: {})", task.getName(), execution.getExecutionId());
-        
+
         try {
-            // For WORKFLOW_EMBEDDED, we don't need to extract workflowId since steps are embedded
+            // For WORKFLOW_EMBEDDED, we don't need to extract workflowId since steps are
+            // embedded
             // We can directly prepare parameters and trigger the workflow execution
             Map<String, Object> parameters = prepareWorkflowParameters(execution, task, agent);
-            
+
             // Get timeout for task type
             Duration timeout = getTimeoutForTaskType(task);
-            log.info("Triggering embedded workflow with timeout of {} minutes (adjusted for type {}) and max retries of {}", 
+            log.info(
+                    "Triggering embedded workflow with timeout of {} minutes (adjusted for type {}) and max retries of {}",
                     timeout.toMinutes(), task.getTaskType(), task.getMaxRetries());
-            
-            // For embedded workflows, we create a LinqRequest directly from the task's embedded steps
+
+            // For embedded workflows, we create a LinqRequest directly from the task's
+            // embedded steps
             return triggerWorkflow(task, parameters, execution.getTeamId(),
                     agent.getId(), task.getId(), execution)
                     .timeout(timeout)
                     .retryWhen(Retry.backoff(task.getMaxRetries(), Duration.ofSeconds(2))
                             .maxBackoff(Duration.ofMinutes(1))
                             .doBeforeRetry(retrySignal -> {
-                                log.warn("Retrying embedded workflow execution for task {} (attempt {}/{}): {}", 
-                                    task.getName(), retrySignal.totalRetries() + 1, task.getMaxRetries(), 
-                                    retrySignal.failure().getMessage());
+                                log.warn("Retrying embedded workflow execution for task {} (attempt {}/{}): {}",
+                                        task.getName(), retrySignal.totalRetries() + 1, task.getMaxRetries(),
+                                        retrySignal.failure().getMessage());
                                 execution.addRetryAttempt();
                             }))
                     .flatMap(workflowExecutionId -> {
-                        log.info("Embedded workflow triggered, checking status: {} for execution: {}", workflowExecutionId, execution.getExecutionId());
-                        
+                        log.info("Embedded workflow triggered, checking status: {} for execution: {}",
+                                workflowExecutionId, execution.getExecutionId());
+
                         // Check the workflow execution status immediately before starting monitoring
                         return workflowExecutionService.getExecution(workflowExecutionId)
                                 .flatMap(workflowExecution -> {
                                     // If workflow already failed, mark AgentExecution as failed immediately
-                                    if (org.lite.gateway.model.ExecutionStatus.FAILED.equals(workflowExecution.getStatus())) {
-                                        log.error("Workflow {} already in FAILED status, marking AgentExecution as FAILED", workflowExecutionId);
-                                        return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
+                                    if (org.lite.gateway.model.ExecutionStatus.FAILED
+                                            .equals(workflowExecution.getStatus())) {
+                                        log.error(
+                                                "Workflow {} already in FAILED status, marking AgentExecution as FAILED",
+                                                workflowExecutionId);
+                                        return updateExecutionStatus(execution, ExecutionStatus.FAILED,
                                                 "Workflow execution failed", workflowExecutionId);
                                     }
-                                    
+
                                     // Otherwise, set to RUNNING and monitor
-                                    log.info("Workflow {} status is {}, setting AgentExecution to RUNNING and starting monitoring", 
+                                    log.info(
+                                            "Workflow {} status is {}, setting AgentExecution to RUNNING and starting monitoring",
                                             workflowExecutionId, workflowExecution.getStatus());
-                                    return updateExecutionStatus(execution, ExecutionStatus.RUNNING, "Embedded workflow started", workflowExecutionId)
+                                    return updateExecutionStatus(execution, ExecutionStatus.RUNNING,
+                                            "Embedded workflow started", workflowExecutionId)
                                             .then(monitorWorkflowCompletion(workflowExecutionId, execution));
                                 });
                     })
                     .doOnError(error -> {
                         // Ensure status is marked failed immediately on any error path
-                        String msg = error.getMessage() != null ? error.getMessage() : "Embedded workflow execution error";
+                        String msg = error.getMessage() != null ? error.getMessage()
+                                : "Embedded workflow execution error";
                         execution.markAsFailed(msg, "WORKFLOW_EXECUTION_FAILED");
                     })
                     .onErrorResume(error -> {
                         if (error instanceof java.util.concurrent.TimeoutException) {
-                            log.error("Embedded workflow execution timed out after {} minutes for task: {}", timeout.toMinutes(), task.getName());
+                            log.error("Embedded workflow execution timed out after {} minutes for task: {}",
+                                    timeout.toMinutes(), task.getName());
                             execution.markAsTimeout();
                             return agentExecutionRepository.save(execution).then(Mono.error(error));
                         } else {
-                            log.error("Failed to trigger embedded workflow for task: {} after {} retries", task.getName(), task.getMaxRetries(), error);
-                            return updateExecutionStatus(execution, ExecutionStatus.FAILED, 
-                                "Embedded workflow trigger failed after " + task.getMaxRetries() + " retries: " + error.getMessage(), null);
+                            log.error("Failed to trigger embedded workflow for task: {} after {} retries",
+                                    task.getName(), task.getMaxRetries(), error);
+                            return updateExecutionStatus(execution, ExecutionStatus.FAILED,
+                                    "Embedded workflow trigger failed after " + task.getMaxRetries() + " retries: "
+                                            + error.getMessage(),
+                                    null);
                         }
                     });
-                    
+
         } catch (Exception e) {
             log.error("Error executing embedded workflow for task: {}", task.getName(), e);
-            return updateExecutionStatus(execution, ExecutionStatus.FAILED, "Embedded workflow execution error: " + e.getMessage(), null);
+            return updateExecutionStatus(execution, ExecutionStatus.FAILED,
+                    "Embedded workflow execution error: " + e.getMessage(), null);
         }
     }
 
@@ -114,9 +131,10 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
      * Trigger an embedded workflow using steps defined directly in the task
      */
     public Mono<String> triggerWorkflow(AgentTask task, Map<String, Object> parameters, String teamId,
-                                        String agentId, String agentTaskId, AgentExecution execution) {
-        log.info("Triggering embedded workflow for team {} with agent context: agent={}, task={}", teamId, agentId, agentTaskId);
-        
+            String agentId, String agentTaskId, AgentExecution execution) {
+        log.info("Triggering embedded workflow for team {} with agent context: agent={}, task={}", teamId, agentId,
+                agentTaskId);
+
         try {
             // The linq_config already contains a complete LinqRequest structure
             // We just need to convert it to a LinqRequest object and merge parameters
@@ -144,7 +162,7 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                     request.getQuery().setParams(mergedParams);
                 }
             }
-            
+
             // Add execution context for monitoring
             if (request.getQuery() != null && request.getQuery().getParams() != null) {
                 Map<String, Object> params = request.getQuery().getParams();
@@ -190,15 +208,13 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                                 "agentTaskId", agentTaskId,
                                 "agentTaskName", taskName,
                                 "executionSource", "agent_embedded",
-                                "agentExecutionId", execution.getExecutionId()
-                        );
+                                "agentExecutionId", execution.getExecutionId());
 
                         return workflowExecutionService.initializeExecutionWithAgentContext(request, agentContext)
                                 .then(workflowExecutionService.executeWorkflow(request)
-                                        .flatMap(response -> workflowExecutionService.trackExecutionWithAgentContext(request, response, agentContext)
-                                                .map(LinqWorkflowExecution::getId)
-                                        )
-                                );
+                                        .flatMap(response -> workflowExecutionService
+                                                .trackExecutionWithAgentContext(request, response, agentContext)
+                                                .map(LinqWorkflowExecution::getId)));
                     });
 
         } catch (Exception e) {

@@ -251,6 +251,18 @@
             <artifactId>spring-boot-starter-quartz</artifactId>
         </dependency>
 
+        <!-- ShedLock for Distributed Scheduling -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>6.2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-redis-spring</artifactId>
+            <version>6.2.0</version>
+        </dependency>
+
         <!-- AWS SDK v2 for S3 -->
         <dependency>
             <groupId>software.amazon.awssdk</groupId>

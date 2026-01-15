@@ -16,6 +16,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
 @Slf4j
+@net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock(defaultLockAtMostFor = "10m")
 public class RedisConfig {
 
     @Value("${spring.data.redis.host}")
@@ -68,5 +69,10 @@ public class RedisConfig {
         template.setValueSerializer(new StringRedisSerializer());
         // log.info("Connecting to Redis at " + redisConnectionFactory.getConnection());
         return template;
+    }
+
+    @Bean
+    public net.javacrumbs.shedlock.core.LockProvider lockProvider(RedisConnectionFactory connectionFactory) {
+        return new net.javacrumbs.shedlock.provider.redis.spring.RedisLockProvider(connectionFactory);
     }
 }

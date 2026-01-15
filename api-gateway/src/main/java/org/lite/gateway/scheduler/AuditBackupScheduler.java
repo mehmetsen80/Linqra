@@ -2,6 +2,8 @@ package org.lite.gateway.scheduler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+
 import org.lite.gateway.config.KnowledgeHubS3Properties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -34,6 +36,7 @@ public class AuditBackupScheduler {
      * Runs Daily at 3:00 AM.
      */
     @Scheduled(cron = "0 0 3 * * ?") // Daily at 3:00 AM
+    @SchedulerLock(name = "auditBackup", lockAtLeastFor = "1m", lockAtMostFor = "1h")
     public void syncAuditBucket() {
         log.info("🔄 Starting Daily Audit Log Integrity Sync from {} to {}",
                 s3Properties.getAuditBucketName(), s3Properties.getAuditBackupBucketName());

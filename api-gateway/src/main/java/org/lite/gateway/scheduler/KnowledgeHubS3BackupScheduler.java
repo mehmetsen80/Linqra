@@ -30,6 +30,7 @@ public class KnowledgeHubS3BackupScheduler {
      * Runs Monthly at 4:00 AM on the 1st.
      */
     @Scheduled(cron = "0 0 4 1 * ?") // Monthly at 4:00 AM on the 1st
+    @net.javacrumbs.shedlock.spring.annotation.SchedulerLock(name = "knowledgeHubBackup", lockAtLeastFor = "5m", lockAtMostFor = "4h")
     public void syncKnowledgeHubBucket() {
         log.info("🔄 Starting Monthly Knowledge Hub Backup Sync from {} to {}",
                 s3Properties.getBucketName(), s3Properties.getBackupBucketName());

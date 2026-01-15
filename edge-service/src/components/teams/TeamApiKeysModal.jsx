@@ -17,7 +17,6 @@ const EXPIRY_OPTIONS = [
 ];
 
 const TeamApiKeysModal = ({ show, onHide, team, onCreateApiKey, loading }) => {
-  const [keyName, setKeyName] = useState('');
   const [expiryDays, setExpiryDays] = useState(null);
   const [apiKeys, setApiKeys] = useState([]);
   const [fetchingKeys, setFetchingKeys] = useState(false);
@@ -25,7 +24,7 @@ const TeamApiKeysModal = ({ show, onHide, team, onCreateApiKey, loading }) => {
     show: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
     variant: 'danger'
   });
 
@@ -52,11 +51,10 @@ const TeamApiKeysModal = ({ show, onHide, team, onCreateApiKey, loading }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     await onCreateApiKey({
-      name: keyName,
       teamId: team.id,
       expiresInDays: expiryDays
     });
-    setKeyName(''); // Reset form
+    // setKeyName(''); // Removed
     fetchApiKeys(); // Refresh the list
   };
 
@@ -118,19 +116,7 @@ const TeamApiKeysModal = ({ show, onHide, team, onCreateApiKey, loading }) => {
         <Modal.Body>
           <Form onSubmit={handleSubmit}>
             <Row className="align-items-end mb-4">
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label>Key Name</Form.Label>
-                  <Form.Control
-                    type="text"
-                    placeholder="Enter key name"
-                    value={keyName}
-                    onChange={(e) => setKeyName(e.target.value)}
-                    required
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
+              <Col md={12}>
                 <Form.Group>
                   <Form.Label>Expires In</Form.Label>
                   <Form.Select
@@ -163,19 +149,36 @@ const TeamApiKeysModal = ({ show, onHide, team, onCreateApiKey, loading }) => {
               {apiKeys.map(key => (
                 <div key={key.id} className="api-key-block p-3 mb-3 border rounded">
                   <div className="d-flex justify-content-between align-items-start mb-2">
-                    <h6 className="mb-0">{key.name}</h6>
+                    <h6 className="mb-0">API Keys</h6>
                     <div className="d-flex gap-2">
                       <span className={`badge ${key.enabled ? 'bg-success' : 'bg-danger'}`}>
                         {key.enabled ? 'Active' : 'Revoked'}
                       </span>
                     </div>
                   </div>
-                  
+
                   <div className="api-key-details">
                     <div className="key-field mb-2">
                       <div className="d-flex align-items-center bg-light border rounded">
-                        <small className="text-muted ps-2 border-end py-2">API Key:</small>
-                        <code className="flex-grow-1 p-2 m-0">
+                        <small className="api-key-label text-muted border-end py-2">Key Name:</small>
+                        <code className="flex-grow-1 p-2 m-0 text-dark ps-3">
+                          {key.name}
+                        </code>
+                        <button
+                          type="button"
+                          className="action-button btn btn-link p-2"
+                          onClick={() => handleCopyToClipboard(key.name)}
+                          title="Copy key name"
+                        >
+                          <HiClipboardCopy size={20} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="key-field mb-2">
+                      <div className="d-flex align-items-center bg-light border rounded">
+                        <small className="api-key-label text-muted border-end py-2">API Key:</small>
+                        <code className="flex-grow-1 p-2 m-0 ps-3">
                           {key.key}
                         </code>
                         <button
@@ -206,7 +209,7 @@ const TeamApiKeysModal = ({ show, onHide, team, onCreateApiKey, loading }) => {
                         </button>
                       </div>
                     </div>
-                    
+
                     <Row className="mt-3">
                       <Col md={4}>
                         <small className="text-muted d-block">Created By</small>
@@ -238,7 +241,7 @@ const TeamApiKeysModal = ({ show, onHide, team, onCreateApiKey, loading }) => {
             type="submit"
             variant="primary"
             loading={loading}
-            disabled={!keyName.trim() || loading}
+            disabled={loading}
             onClick={handleSubmit}
           >
             Generate Key

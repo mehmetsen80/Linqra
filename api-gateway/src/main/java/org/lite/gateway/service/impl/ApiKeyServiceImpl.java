@@ -28,14 +28,18 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     private static final Duration CACHE_DURATION = Duration.ofMinutes(5);
 
     @Override
-    public Mono<ApiKey> createApiKey(String name, String teamId, String createdBy, Long expiresInDays) {
+    public Mono<ApiKey> createApiKey(String teamId, String createdBy, Long expiresInDays) {
         return apiKeyRepository.findByTeamId(teamId)
-                .flatMap(existingKey -> Mono
-                        .<ApiKey>error(new IllegalStateException("Team already has an active API key")))
-                .switchIfEmpty(Mono.<ApiKey>defer(() -> {
+                .filter(ApiKey::isEnabled)
+                .hasElements()
+                .flatMap(hasActiveKey -> {
+                    if (hasActiveKey) {
+                        return Mono.error(new IllegalStateException("Team already has an active API key"));
+                    }
+
                     ApiKey apiKey = new ApiKey();
                     apiKey.setKey(generateApiKey());
-                    apiKey.setName(name);
+                    apiKey.setName(generateApiKeyName());
                     apiKey.setTeamId(teamId);
                     apiKey.setCreatedBy(createdBy);
                     apiKey.setCreatedAt(Instant.now());
@@ -45,11 +49,15 @@ public class ApiKeyServiceImpl implements ApiKeyService {
                     }
 
                     return apiKeyRepository.save(apiKey);
-                }));
+                });
     }
 
     private String generateApiKey() {
         return "lm_" + UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private String generateApiKeyName() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 
     @Override
@@ -117,6 +125,7 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         return apiKeyRepository.findByTeamId(teamId)
                 .filter(key -> key.isEnabled()
                         && (key.getExpiresAt() == null || key.getExpiresAt().isAfter(Instant.now())))
+                .next()
                 .switchIfEmpty(Mono.error(
                         new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No valid API key found for team")));
     }

@@ -772,7 +772,7 @@ function ViewTeam() {
                     onConfirm: handleRotateKey
                   })}
                 >
-                  <HiSparkles className="me-1" /> Rotate Key
+                  <HiSparkles className="me-1" /> Rotate Chunk Encryption Key
                 </BootstrapButton>
               </div>
               <div className="mt-2 text-muted" style={{ fontSize: '0.75rem' }}>

@@ -34,38 +34,30 @@ public class ApiKeyController {
             @Valid @RequestBody CreateApiKeyRequest request,
             ServerWebExchange exchange) {
         return userContextService.getCurrentUsername(exchange)
-            .flatMap(userService::findByUsername)
-            .flatMap(user -> 
-                teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
-                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
-                    .switchIfEmpty(Mono.error(new AccessDeniedException(
-                        "Admin access required for team " + request.getTeamId())))
-                    .map(hasRole -> user.getUsername())
-            )
-            .flatMap(username -> apiKeyService.createApiKey(
-                request.getName(),
-                request.getTeamId(),
-                username,
-                request.getExpiresInDays()
-            ))
-            .map(this::toApiKeyResponse);
+                .flatMap(userService::findByUsername)
+                .flatMap(user -> teamService.hasRole(request.getTeamId(), user.getId(), "ADMIN")
+                        .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                        .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                "Admin access required for team " + request.getTeamId())))
+                        .map(hasRole -> user.getUsername()))
+                .flatMap(username -> apiKeyService.createApiKey(
+                        request.getTeamId(),
+                        username,
+                        request.getExpiresInDays()))
+                .map(this::toApiKeyResponse);
     }
 
     @PostMapping("/{id}/revoke")
     public Mono<Void> revokeApiKey(@PathVariable String id, ServerWebExchange exchange) {
         return apiKeyRepository.findById(id)
-            .switchIfEmpty(Mono.error(new IllegalArgumentException("API key not found")))
-            .flatMap(apiKey -> 
-                userContextService.getCurrentUsername(exchange)
-                    .flatMap(userService::findByUsername)
-                    .flatMap(user ->
-                        teamService.hasRole(apiKey.getTeamId(), user.getId(), "ADMIN")
-                            .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
-                            .switchIfEmpty(Mono.error(new AccessDeniedException(
-                                "Admin access required for team " + apiKey.getTeamId())))
-                    )
-                    .then(apiKeyService.revokeApiKey(id))
-            );
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("API key not found")))
+                .flatMap(apiKey -> userContextService.getCurrentUsername(exchange)
+                        .flatMap(userService::findByUsername)
+                        .flatMap(user -> teamService.hasRole(apiKey.getTeamId(), user.getId(), "ADMIN")
+                                .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                                .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                        "Admin access required for team " + apiKey.getTeamId()))))
+                        .then(apiKeyService.revokeApiKey(id)));
     }
 
     @GetMapping
@@ -73,45 +65,39 @@ public class ApiKeyController {
             @RequestParam String teamId,
             ServerWebExchange exchange) {
         return userContextService.getCurrentUsername(exchange)
-            .flatMap(userService::findByUsername)
-            .flatMap(user ->
-                teamService.hasRole(teamId, user.getId(), "ADMIN")
-                    .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
-                    .switchIfEmpty(Mono.error(new AccessDeniedException(
-                        "Admin access required for team " + teamId)))
-                    .thenMany(apiKeyRepository.findByTeamId(teamId))
-                    .map(this::toApiKeyResponse)
-                    .collectList()
-            );
+                .flatMap(userService::findByUsername)
+                .flatMap(user -> teamService.hasRole(teamId, user.getId(), "ADMIN")
+                        .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                        .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                "Admin access required for team " + teamId)))
+                        .thenMany(apiKeyRepository.findByTeamId(teamId))
+                        .map(this::toApiKeyResponse)
+                        .collectList());
     }
 
     @DeleteMapping("/{id}")
     public Mono<Void> removeApiKey(@PathVariable String id, ServerWebExchange exchange) {
         return apiKeyRepository.findById(id)
-            .switchIfEmpty(Mono.error(new IllegalArgumentException("API key not found")))
-            .flatMap(apiKey -> 
-                userContextService.getCurrentUsername(exchange)
-                    .flatMap(userService::findByUsername)
-                    .flatMap(user ->
-                        teamService.hasRole(apiKey.getTeamId(), user.getId(), "ADMIN")
-                            .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
-                            .switchIfEmpty(Mono.error(new AccessDeniedException(
-                                "Admin access required for team " + apiKey.getTeamId())))
-                    )
-                    .then(apiKeyRepository.deleteById(id))
-            );
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("API key not found")))
+                .flatMap(apiKey -> userContextService.getCurrentUsername(exchange)
+                        .flatMap(userService::findByUsername)
+                        .flatMap(user -> teamService.hasRole(apiKey.getTeamId(), user.getId(), "ADMIN")
+                                .filter(hasRole -> hasRole || user.getRoles().contains("SUPER_ADMIN"))
+                                .switchIfEmpty(Mono.error(new AccessDeniedException(
+                                        "Admin access required for team " + apiKey.getTeamId()))))
+                        .then(apiKeyRepository.deleteById(id)));
     }
 
     private ApiKeyResponse toApiKeyResponse(ApiKey apiKey) {
         return ApiKeyResponse.builder()
-            .id(apiKey.getId())
-            .key(apiKey.getKey())
-            .name(apiKey.getName())
-            .teamId(apiKey.getTeamId())
-            .createdBy(apiKey.getCreatedBy())
-            .createdAt(apiKey.getCreatedAt())
-            .expiresAt(apiKey.getExpiresAt())
-            .enabled(apiKey.isEnabled())
-            .build();
+                .id(apiKey.getId())
+                .key(apiKey.getKey())
+                .name(apiKey.getName())
+                .teamId(apiKey.getTeamId())
+                .createdBy(apiKey.getCreatedBy())
+                .createdAt(apiKey.getCreatedAt())
+                .expiresAt(apiKey.getExpiresAt())
+                .enabled(apiKey.isEnabled())
+                .build();
     }
-} 
+}

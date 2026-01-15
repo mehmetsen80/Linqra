@@ -9,8 +9,12 @@ import reactor.core.publisher.Mono;
 @Repository
 public interface ApiKeyRepository extends ReactiveMongoRepository<ApiKey, String> {
     Mono<ApiKey> findByKey(String key);
-    Mono<ApiKey> findByTeamId(String teamId);
+
+    Flux<ApiKey> findByTeamId(String teamId);
+
     Mono<Boolean> existsByKey(String key);
+
     Flux<ApiKey> findByEnabledTrue();
+
     Flux<ApiKey> findByCreatedBy(String username);
-} 
+}

@@ -5,7 +5,7 @@
 
 .api-key-block:hover {
   background-color: #fff;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .api-key-block code {
@@ -21,5 +21,15 @@
 }
 
 .action-button:hover {
-  background-color: rgba(0,0,0,0.05);
-} 
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.api-key-label {
+  min-width: 120px;
+  text-align: right;
+  padding-right: 1.5rem !important;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}

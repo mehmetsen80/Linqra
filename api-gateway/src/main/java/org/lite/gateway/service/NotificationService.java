@@ -24,6 +24,9 @@ public class NotificationService {
     @Value("${notifications.email.enabled:false}")
     private boolean emailEnabled;
 
+    @Value("${notifications.email.from}")
+    private String fromEmail;
+
     @Value("${notifications.slack.enabled:false}")
     private boolean slackEnabled;
 
@@ -70,6 +73,9 @@ public class NotificationService {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
 
+            if (fromEmail != null && !fromEmail.isEmpty()) {
+                helper.setFrom(fromEmail);
+            }
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(message, isHtml);

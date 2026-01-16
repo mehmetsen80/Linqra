@@ -177,6 +177,7 @@ notifications:
     port: ${vault.smtp.port}
     username: ${vault.smtp.username}
     password: ${vault.smtp.password}
+    from: noreply@linqra.com
     to: msen@dipme.app
     enabled: ${vault.smtp.enabled}
   slack:

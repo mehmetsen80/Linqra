@@ -208,14 +208,14 @@ This SLA may be updated by Dipme with 30 days notice. Material changes that nega
 ## 11. Contact Information
 
 **Technical Support:**
-- Email: msen@dipme.app
+- Email: msen@linqra.com
 
 **Security Incidents:**
-- Email: msen@dipme.app
+- Email: msen@linqra.com
 - Response: 24/7 monitoring
 
 **Billing:**
-- Email: msen@dipme.app
+- Email: msen@linqra.com
 
 ---
 

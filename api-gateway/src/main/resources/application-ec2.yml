@@ -178,7 +178,7 @@ notifications:
     username: ${vault.smtp.username}
     password: ${vault.smtp.password}
     from: noreply@linqra.com
-    to: msen@dipme.app
+    to: msen@linqra.com
     enabled: ${vault.smtp.enabled}
   slack:
     webhook-url: ${vault.slack.webhook.url}

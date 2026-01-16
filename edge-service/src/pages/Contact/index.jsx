@@ -33,7 +33,7 @@ const Contact = () => {
                 <div className="contact-container">
                     <div className="contact-info-card">
                         <p className="contact-label">Please email us at:</p>
-                        <a href="mailto:msen@dipme.app" className="contact-email">msen@dipme.app</a>
+                        <a href="mailto:msen@linqra.com" className="contact-email">msen@linqra.com</a>
                     </div>
                 </div>
             </div>

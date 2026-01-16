@@ -31,7 +31,7 @@ function Login() {
 
     try {
       const { error } = await login(formData.email, formData.password);
-      
+
       if (error) {
         setError(error);
         return;
@@ -50,21 +50,21 @@ function Login() {
       </div>
       <Link to="/" className="home-link">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-            <polyline points="9,22 9,12 15,12 15,22"/>
+          <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9,22 9,12 15,12 15,22" />
         </svg>
         Home
-      </Link>      
+      </Link>
       <div className="auth-form-container">
         <div className="auth-card">
           <div className={loading ? 'opacity-50' : ''}>
             <div className="auth-header">
               <h2>Welcome Back</h2>
-                        <p className="text-muted lead "> — Agentic AI Orchestration Platform — </p>
-                        <p className="text-muted lead ">Design, deploy, and monitor enterprise-grade AI workflows with built-in observability and security.</p>
+              <p className="text-muted lead "> — Agentic AI Orchestration Platform — </p>
+              <p className="text-muted lead ">Design, deploy, and monitor enterprise-grade AI workflows with built-in observability and security.</p>
             </div>
-            
-            <Button 
+
+            <Button
               variant="secondary"
               fullWidth
               onClick={handleSSOLogin}
@@ -82,8 +82,8 @@ function Login() {
                 </>
               )}
             </Button>
-            
-            {/* <div className="separator my-3">
+
+            <div className="separator my-3">
               <span className="separator-text">OR</span>
             </div>
 
@@ -121,7 +121,7 @@ function Login() {
                 <Form.Label className="kc-label">Password</Form.Label>
               </div>
 
-              <Button 
+              <Button
                 type="submit"
                 variant="primary"
                 fullWidth
@@ -136,15 +136,14 @@ function Login() {
                   'Sign In'
                 )}
               </Button>
-            </Form> */}
+            </Form>
 
 
-            {/* TODO: Uncomment this when we decide for the registration */}
-            {/* <div className="mt-4 text-center">
+            <div className="mt-4 text-center">
               <p className="mb-0">
                 Don't have an account? <Link to="/register" className="primary-link">Register</Link>
               </p>
-            </div> */}
+            </div>
           </div>
         </div>
       </div>

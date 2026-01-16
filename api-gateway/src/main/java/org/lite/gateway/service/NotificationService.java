@@ -33,6 +33,34 @@ public class NotificationService {
     }
 
     public void sendEmailAlert(String subject, String message) {
+        sendEmail(emailTo, subject, message, true);
+    }
+
+    public Mono<Void> sendWelcomeEmail(String to, String username) {
+        if (!emailEnabled) {
+            return Mono.empty();
+        }
+        return Mono.fromRunnable(() -> {
+            String subject = "Welcome to Linqra!";
+            String message = String.format("""
+                    <html>
+                        <body>
+                            <h2>Welcome to Linqra!</h2>
+                            <p>Hello %s,</p>
+                            <p>Thank you for registering. We are excited to have you on board!</p>
+                            <br/>
+                            <p>Best regards,</p>
+                            <p>The Linqra Team</p>
+                        </body>
+                    </html>
+                    """, username);
+            sendEmail(to, subject, message, true);
+        })
+                .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                .then();
+    }
+
+    private void sendEmail(String to, String subject, String message, boolean isHtml) {
         if (!emailEnabled || mailSender == null) {
             log.debug("Email notifications are disabled");
             return;
@@ -42,14 +70,15 @@ public class NotificationService {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
 
-            helper.setTo(emailTo);
+            helper.setTo(to);
             helper.setSubject(subject);
-            helper.setText(message, true); // true enables HTML content
+            helper.setText(message, isHtml);
 
             mailSender.send(mimeMessage);
-            log.info("Email alert sent successfully: {}", subject);
+            log.info("Email sent successfully to: {}", to);
         } catch (Exception e) {
-            log.error("Failed to send email alert: {}", e.getMessage());
+            log.error("Failed to send email to {}: {}", to, e.getMessage());
+            throw new RuntimeException("Failed to send email", e);
         }
     }
 

@@ -1,0 +1,21 @@
+/* OllamaModal.css */
+.ollama-modal .modal-header {
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+.ollama-modal .modal-footer {
+    border-top: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+.ollama-icon {
+    color: #000000;
+    /* Ollama brand color (often black/white) */
+}
+
+/* Ensure code blocks for endpoint display allow wrapping or scrolling */
+.endpoint-code {
+    word-break: break-all;
+    white-space: pre-wrap;
+}

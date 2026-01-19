@@ -110,4 +110,16 @@ public interface LinqLlmModelService {
      * @return Mono of void indicating completion
      */
     Mono<Void> updatePriorities(String teamId, java.util.Map<String, Integer> priorityUpdates);
+
+    /**
+     * Derives the model category (e.g., "openai-chat", "ollama-chat") from the
+     * model name and optional provider.
+     *
+     * @param modelName The name of the model (e.g., "gpt-4", "llama3")
+     * @param provider  The optional provider name (e.g., "openai", "ollama")
+     * @param teamId    The team ID to determine configured providers
+     * @return Mono of the derived model category, or empty if it cannot be
+     *         determined
+     */
+    Mono<String> deriveModelCategory(String modelName, String provider, String teamId);
 }

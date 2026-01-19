@@ -18,7 +18,8 @@ import './styles.css';
 const PROVIDER_LABELS = {
   openai: 'OpenAI',
   gemini: 'Gemini',
-  cohere: 'Cohere'
+  cohere: 'Cohere',
+  ollama: 'Ollama'
 };
 
 const MILVUS_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -71,6 +72,7 @@ const Rag = () => {
     try {
       setLoadingEmbeddingOptions(true);
       const { data, error: fetchError } = await llmModelService.getEmbeddingModels(currentTeam.id);
+      console.log('Embedding models:', data);
       if (fetchError) throw new Error(fetchError);
       setEmbeddingOptions(transformEmbeddingOptions(data || []));
     } catch (err) {

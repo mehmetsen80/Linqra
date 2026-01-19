@@ -410,19 +410,15 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                     category, modelName, provider, teamId))
                             .switchIfEmpty(Mono.defer(() -> {
                                 // Fallback to derivation if not found
-                                String derivedCategory = deriveModelCategory(modelName, provider);
-                                if (derivedCategory != null && !derivedCategory.isEmpty()) {
-                                    log.warn(
-                                            "Could not find modelCategory in MongoDB. Derived '{}' as fallback for modelName '{}', provider '{}', teamId '{}'",
-                                            derivedCategory, modelName, provider, teamId);
-                                    return Mono.just(derivedCategory);
-                                } else {
-                                    return Mono.error(new IllegalArgumentException(
-                                            "AI Assistant default model must have a modelCategory configured. " +
-                                                    "Could not find modelCategory in MongoDB or derive it for modelName: "
-                                                    + modelName +
-                                                    ", provider: " + provider + ", teamId: " + teamId));
-                                }
+                                return linqLlmModelService.deriveModelCategory(modelName, provider, teamId)
+                                        .doOnNext(derivedCategory -> log.warn(
+                                                "Could not find modelCategory in MongoDB. Derived '{}' as fallback for modelName '{}', provider '{}', teamId '{}'",
+                                                derivedCategory, modelName, provider, teamId))
+                                        .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                                                "AI Assistant default model must have a modelCategory configured. " +
+                                                        "Could not find modelCategory in MongoDB or derive it for modelName: "
+                                                        + modelName +
+                                                        ", provider: " + provider + ", teamId: " + teamId)));
                             }));
                 } else {
                     // Fallback: find by modelName and teamId, take first result
@@ -435,19 +431,15 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                                     category, modelName, teamId))
                             .switchIfEmpty(Mono.defer(() -> {
                                 // Fallback to derivation if not found
-                                String derivedCategory = deriveModelCategory(modelName, provider);
-                                if (derivedCategory != null && !derivedCategory.isEmpty()) {
-                                    log.warn(
-                                            "Could not find modelCategory in MongoDB. Derived '{}' as fallback for modelName '{}', teamId '{}'",
-                                            derivedCategory, modelName, teamId);
-                                    return Mono.just(derivedCategory);
-                                } else {
-                                    return Mono.error(new IllegalArgumentException(
-                                            "AI Assistant default model must have a modelCategory configured. " +
-                                                    "Could not find modelCategory in MongoDB or derive it for modelName: "
-                                                    + modelName +
-                                                    ", teamId: " + teamId));
-                                }
+                                return linqLlmModelService.deriveModelCategory(modelName, provider, teamId)
+                                        .doOnNext(derivedCategory -> log.warn(
+                                                "Could not find modelCategory in MongoDB. Derived '{}' as fallback for modelName '{}', teamId '{}'",
+                                                derivedCategory, modelName, teamId))
+                                        .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                                                "AI Assistant default model must have a modelCategory configured. " +
+                                                        "Could not find modelCategory in MongoDB or derive it for modelName: "
+                                                        + modelName +
+                                                        ", teamId: " + teamId)));
                             }));
                 }
             }
@@ -1038,6 +1030,14 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                     // Wait for execution to complete and get the workflow result
                     return waitForExecutionCompletion(execution)
                             .flatMap(completedExecution -> {
+                                if (completedExecution
+                                        .getStatus() == ExecutionStatus.WAITING_FOR_APPROVAL) {
+                                    Map<String, Object> approvalResult = new HashMap<>();
+                                    approvalResult.put("status", "WAITING_FOR_APPROVAL");
+                                    approvalResult.put("executionId", completedExecution.getExecutionId());
+                                    approvalResult.put("agentId", completedExecution.getAgentId());
+                                    return Mono.just(approvalResult);
+                                }
                                 // Get workflow result from LinqWorkflowExecution
                                 if (completedExecution.getWorkflowExecutionId() != null) {
                                     return workflowExecutionService
@@ -1191,7 +1191,8 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                 .flatMap(currentExecution -> {
                     ExecutionStatus status = currentExecution.getStatus();
                     if (status == ExecutionStatus.COMPLETED || status == ExecutionStatus.FAILED
-                            || status == ExecutionStatus.TIMEOUT || status == ExecutionStatus.CANCELLED) {
+                            || status == ExecutionStatus.TIMEOUT || status == ExecutionStatus.CANCELLED
+                            || status == ExecutionStatus.WAITING_FOR_APPROVAL) {
                         // Execution completed (successfully or with error)
                         log.info("Execution {} completed with status: {}", execution.getExecutionId(), status);
                         return Mono.just(currentExecution);
@@ -1359,6 +1360,30 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
                     hasTokenUsage = true;
                 }
             }
+        } else if ("ollama-chat".equals(modelCategory)
+                && (resultMap.containsKey("prompt_eval_count") || resultMap.containsKey("eval_count"))) {
+            // Ollama Native Format
+            long promptTokens = resultMap.containsKey("prompt_eval_count")
+                    ? ((Number) resultMap.get("prompt_eval_count")).longValue()
+                    : 0;
+            long completionTokens = resultMap.containsKey("eval_count")
+                    ? ((Number) resultMap.get("eval_count")).longValue()
+                    : 0;
+            long totalTokens = promptTokens + completionTokens;
+
+            String model = resultMap.containsKey("model")
+                    ? (String) resultMap.get("model")
+                    : modelName;
+
+            tokenUsage.setPromptTokens(promptTokens);
+            tokenUsage.setCompletionTokens(completionTokens);
+            tokenUsage.setTotalTokens(totalTokens);
+
+            // Calculate cost (should be 0.0 for local models in LlmCostService)
+            double cost = llmCostService.calculateCost(model, promptTokens, completionTokens);
+            tokenUsage.setCostUsd(cost);
+
+            hasTokenUsage = true;
         }
 
         return hasTokenUsage ? tokenUsage : null;
@@ -1835,54 +1860,5 @@ public class ChatExecutionServiceImpl implements ChatExecutionService {
         if (thread != null && thread.isAlive()) {
             thread.interrupt();
         }
-    }
-
-    /**
-     * Derive modelCategory from modelName and provider
-     * 
-     * @param modelName The model name (e.g., "gemini-2.0-flash", "gpt-4o")
-     * @param provider  The provider (e.g., "gemini", "openai")
-     * @return The derived modelCategory (e.g., "gemini-chat", "openai-chat") or
-     *         null if cannot be derived
-     */
-    private String deriveModelCategory(String modelName, String provider) {
-        if (modelName == null || modelName.isEmpty()) {
-            return null;
-        }
-
-        String lowerModelName = modelName.toLowerCase();
-        String lowerProvider = provider != null ? provider.toLowerCase() : "";
-
-        // Try to detect provider from modelName if provider is not provided
-        if (lowerProvider.isEmpty()) {
-            if (lowerModelName.startsWith("gemini") || lowerModelName.startsWith("embedding-001") ||
-                    lowerModelName.startsWith("text-embedding-004")) {
-                lowerProvider = "gemini";
-            } else if (lowerModelName.startsWith("gpt-") || lowerModelName.startsWith("text-embedding")) {
-                lowerProvider = "openai";
-            } else if (lowerModelName.startsWith("claude")) {
-                lowerProvider = "anthropic";
-            } else if (lowerModelName.startsWith("command") || lowerModelName.startsWith("embed")) {
-                lowerProvider = "cohere";
-            }
-        }
-
-        // Determine if it's an embedding model or chat model
-        boolean isEmbedding = lowerModelName.contains("embedding") ||
-                lowerModelName.contains("embed") ||
-                lowerModelName.startsWith("text-embedding");
-
-        // Build modelCategory based on provider and type
-        if ("gemini".equals(lowerProvider)) {
-            return isEmbedding ? "gemini-embed" : "gemini-chat";
-        } else if ("openai".equals(lowerProvider)) {
-            return isEmbedding ? "openai-embed" : "openai-chat";
-        } else if ("anthropic".equals(lowerProvider)) {
-            return "claude-chat"; // Anthropic models are typically chat models
-        } else if ("cohere".equals(lowerProvider)) {
-            return isEmbedding ? "cohere-embed" : "cohere-chat";
-        }
-
-        return null;
     }
 }

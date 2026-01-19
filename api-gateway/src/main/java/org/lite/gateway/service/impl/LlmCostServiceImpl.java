@@ -255,6 +255,11 @@ public class LlmCostServiceImpl implements LlmCostService {
             return "mistral";
         }
 
+        // Ollama models
+        if (lowerModel.startsWith("ollama")) {
+            return "ollama";
+        }
+
         return "unknown";
     }
 
@@ -387,11 +392,12 @@ public class LlmCostServiceImpl implements LlmCostService {
                     .getWorkflowMetadata()) {
                 String modelCategory = stepMetadata.getTarget();
 
-                // Only process LLM provider steps (OpenAI, Gemini, Cohere, Claude)
+                // Only process LLM provider steps (OpenAI, Gemini, Cohere, Claude, Ollama)
                 if (!modelCategory.equals("openai-chat") && !modelCategory.equals("gemini-chat")
                         && !modelCategory.equals("openai-embed")
                         && !modelCategory.equals("cohere-chat") && !modelCategory.equals("cohere-embed")
-                        && !modelCategory.equals("gemini-embed") && !modelCategory.equals("claude-chat")) {
+                        && !modelCategory.equals("gemini-embed") && !modelCategory.equals("claude-chat")
+                        && !modelCategory.equals("ollama-chat") && !modelCategory.equals("ollama-embed")) {
                     continue;
                 }
 
@@ -411,7 +417,11 @@ public class LlmCostServiceImpl implements LlmCostService {
                 // Use stored cost if available (from execution time), otherwise calculate with
                 // current pricing
                 double cost;
-                if (tokenUsage.getCostUsd() != null && tokenUsage.getCostUsd() > 0) {
+
+                // For local models (Ollama), cost is always 0
+                if (modelCategory.startsWith("ollama")) {
+                    cost = 0.0;
+                } else if (tokenUsage.getCostUsd() != null && tokenUsage.getCostUsd() > 0) {
                     cost = tokenUsage.getCostUsd();
                     log.debug("Using stored cost for {} ({}): ${}", model, rawModel, String.format("%.6f", cost));
                 } else {
@@ -483,11 +493,18 @@ public class LlmCostServiceImpl implements LlmCostService {
             }
 
             ConversationMessage.MessageMetadata.TokenUsage tokenUsage = message.getMetadata().getTokenUsage();
-            if (tokenUsage.getCostUsd() == null || tokenUsage.getCostUsd() == 0.0) {
-                continue; // Skip if no cost
+            String modelCategory = message.getMetadata().getModelCategory();
+
+            // Skip if no cost AND not a local model (Ollama/Meta/Mistral models have 0 cost
+            // but should
+            // be tracked)
+            boolean isLocal = modelCategory != null
+                    && (modelCategory.startsWith("ollama") || modelCategory.startsWith("local")
+                            || modelCategory.startsWith("meta") || modelCategory.startsWith("mistral"));
+            if (!isLocal && (tokenUsage.getCostUsd() == null || tokenUsage.getCostUsd() == 0.0)) {
+                continue;
             }
 
-            String modelCategory = message.getMetadata().getModelCategory();
             String rawModel = message.getMetadata().getModelName();
             if (rawModel == null || rawModel.isEmpty() || modelCategory == null || modelCategory.isEmpty()) {
                 continue;
@@ -498,7 +515,7 @@ public class LlmCostServiceImpl implements LlmCostService {
             long completionTokens = tokenUsage.getCompletionTokens() != null ? tokenUsage.getCompletionTokens() : 0;
             long tokens = tokenUsage.getTotalTokens() != null ? tokenUsage.getTotalTokens()
                     : (promptTokens + completionTokens);
-            double cost = tokenUsage.getCostUsd();
+            double cost = tokenUsage.getCostUsd() != null ? tokenUsage.getCostUsd() : 0.0;
 
             // Update totals
             totalRequests++;
@@ -748,7 +765,9 @@ public class LlmCostServiceImpl implements LlmCostService {
                         && !modelCategory.equals("openai-embed")
                         && !modelCategory.equals("cohere-chat") && !modelCategory.equals("claude-chat")
                         && !modelCategory.equals("cohere-embed")
-                        && !modelCategory.equals("gemini-embed")) {
+                        && !modelCategory.equals("gemini-embed")
+                        && !modelCategory.startsWith("meta") && !modelCategory.startsWith("mistral")
+                        && !modelCategory.startsWith("ollama")) {
                     continue;
                 }
 

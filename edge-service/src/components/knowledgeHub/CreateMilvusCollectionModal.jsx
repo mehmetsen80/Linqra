@@ -6,7 +6,8 @@ import { HiCollection, HiPlusCircle } from 'react-icons/hi';
 const PROVIDER_LABELS = {
   openai: 'OpenAI',
   gemini: 'Gemini',
-  cohere: 'Cohere'
+  cohere: 'Cohere',
+  ollama: 'Ollama'
 };
 
 const formatPriceLabel = (model) => {

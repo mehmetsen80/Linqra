@@ -2,6 +2,8 @@ package org.lite.gateway.scheduler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+
 import org.lite.gateway.service.AuditArchivalService;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -28,7 +30,7 @@ public class AuditArchivalScheduler {
      * "0 0 2 * * ?" = At 2:00 AM every day
      */
     @Scheduled(cron = "0 0 2 * * ?") // Daily at 2:00 AM
-    @net.javacrumbs.shedlock.spring.annotation.SchedulerLock(name = "auditArchival", lockAtLeastFor = "1m", lockAtMostFor = "1h")
+    @SchedulerLock(name = "auditArchival", lockAtLeastFor = "1m", lockAtMostFor = "1h")
     public void archiveOldAuditLogs() {
         log.info("🔄 Starting scheduled audit log archival (retention: {} days)", RETENTION_DAYS);
 

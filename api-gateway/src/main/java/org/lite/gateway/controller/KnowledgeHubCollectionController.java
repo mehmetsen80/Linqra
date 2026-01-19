@@ -255,7 +255,7 @@ public class KnowledgeHubCollectionController {
         public Mono<ResponseEntity<Map<String, Object>>> searchCollection(
                         @PathVariable String id,
                         @Valid @RequestBody KnowledgeCollectionSearchRequest request,
-                        org.springframework.web.server.ServerWebExchange exchange) {
+                        ServerWebExchange exchange) {
                 log.info("Performing semantic search for collection {}", id);
 
                 return Mono.zip(

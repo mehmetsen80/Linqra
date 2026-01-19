@@ -7,7 +7,8 @@ import Button from '../common/Button';
 const PROVIDER_LABELS = {
   openai: 'OpenAI',
   gemini: 'Gemini',
-  cohere: 'Cohere'
+  cohere: 'Cohere',
+  ollama: 'Ollama'
 };
 
 const getProviderKey = (modelCategory) => {

@@ -1,6 +1,6 @@
 import axiosInstance from './axiosInstance';
 
-const EMBEDDING_MODEL_CATEGORIES = ['openai-embed', 'gemini-embed', 'cohere-embed'];
+const EMBEDDING_MODEL_CATEGORIES = ['openai-embed', 'gemini-embed', 'cohere-embed', 'ollama-embed'];
 
 const llmModelService = {
   async getEmbeddingModels(teamId, categories = EMBEDDING_MODEL_CATEGORIES) {

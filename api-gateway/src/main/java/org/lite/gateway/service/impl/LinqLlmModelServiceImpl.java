@@ -14,7 +14,8 @@ import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.enums.AuditResultType;
-import org.springframework.http.HttpMethod;
+import org.springframework.data.redis.core.RedisTemplate;
+
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.util.StringUtils;
@@ -42,6 +43,9 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     private final WebClient.Builder webClientBuilder;
 
     @NonNull
+    private final RedisTemplate<String, String> redisTemplate;
+
+    @NonNull
     private final AuditLogHelper auditLogHelper;
 
     // Priority is now stored per-model in the database (LinqLlmModel.priority
@@ -64,6 +68,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     linqLlmModel.setContextWindowTokens(llmModel.getContextWindowTokens());
                     return linqLlmModel;
                 })
+                .doOnError(e -> log.warn("Error enriching model {}: {}", linqLlmModel.getModelName(), e.getMessage()))
+                .onErrorReturn(linqLlmModel)
                 .defaultIfEmpty(linqLlmModel);
     }
 
@@ -636,9 +642,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
 
         switch (modelCategory) {
             case "openai-chat":
-            case "mistral-chat":
                 payload.put("model",
-                        llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "default");
+                        llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "gpt-3.5-turbo");
                 payload.put("messages", request.getQuery().getPayload());
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     // Convert max.tokens to max_tokens for OpenAI API
@@ -648,6 +653,25 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         settings.put("max_tokens", value);
                     }
                     payload.putAll(settings);
+                }
+                break;
+            case "ollama-chat":
+                payload.put("model",
+                        llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "llama3");
+                payload.put("messages", request.getQuery().getPayload());
+                payload.put("stream", false);
+                if (llmConfig != null && llmConfig.getSettings() != null) {
+                    Map<String, Object> options = new HashMap<>();
+                    Map<String, Object> settings = new HashMap<>(llmConfig.getSettings());
+
+                    settings.forEach((k, v) -> {
+                        if (k.equals("max.tokens") || k.equals("max_tokens")) {
+                            options.put("num_predict", v);
+                        } else {
+                            options.put(k, v);
+                        }
+                    });
+                    payload.put("options", options);
                 }
                 break;
             case "huggingface-chat":
@@ -785,13 +809,49 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 log.info("Building Claude payload for model: {} with {} messages", claudeModel, claudeMessages.size());
                 break;
             case "openai-embed":
-                Object textParam = request.getQuery().getParams().getOrDefault("text", "");
-                String text = textParam != null ? textParam.toString() : "";
-                String model = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel()
+                Object textParamOpenAi = request.getQuery().getParams().getOrDefault("text", "");
+                String textOpenAi = textParamOpenAi != null ? textParamOpenAi.toString() : "";
+                String modelOpenAi = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel()
                         : "text-embedding-ada-002";
-                payload.put("input", text);
-                payload.put("model", model);
-                log.info("Building OpenAI embedding payload - text: {}, model: {}", text, model);
+                payload.put("input", textOpenAi);
+                payload.put("model", modelOpenAi);
+                log.info("Building OpenAI Embedding payload for {} - text: {}, model: {}", modelCategory, textOpenAi,
+                        modelOpenAi);
+                break;
+            case "ollama-embed":
+                Object textParamOllama = request.getQuery().getParams().getOrDefault("text", "");
+                String textOllama = textParamOllama != null ? textParamOllama.toString() : "";
+                String modelOllama = llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel()
+                        : "nomic-embed-text";
+                payload.put("prompt", textOllama);
+                payload.put("model", modelOllama);
+
+                Map<String, Object> embedOptions = new HashMap<>();
+                if (llmConfig != null && llmConfig.getSettings() != null) {
+                    embedOptions.putAll(llmConfig.getSettings());
+                }
+
+                // Set default context window if not explicitly provided
+                if (!embedOptions.containsKey("num_ctx")) {
+                    if (modelOllama.contains("nomic")) {
+                        embedOptions.put("num_ctx", 8192);
+                    } else if (modelOllama.contains("mxbai")) {
+                        embedOptions.put("num_ctx", 512);
+                    } else if (modelOllama.contains("snowflake")) {
+                        embedOptions.put("num_ctx", 512);
+                    }
+                }
+
+                if (!embedOptions.isEmpty()) {
+                    payload.put("options", embedOptions);
+                }
+
+                log.info("Building Ollama Embedding payload for {} - text length: {}, model: {}, options: {}",
+                        modelCategory,
+                        textOllama.length(), modelOllama, embedOptions);
+                if (log.isDebugEnabled()) {
+                    log.debug("Full Ollama payload: {}", payload);
+                }
                 break;
             case "gemini-embed":
                 Object geminiTextParam = request.getQuery().getParams().getOrDefault("text", "");
@@ -962,6 +1022,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 }
 
                 return requestSpec
+
                         .exchangeToMono(response -> {
                             if (response.statusCode().is2xxSuccessful()) {
                                 return response.bodyToMono(Object.class);
@@ -1000,8 +1061,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                                         });
                             }
                         })
-                        .timeout(Duration.ofSeconds(90)) // Per-request timeout to fail fast on hanging connections
-                        .retryWhen(reactor.util.retry.Retry.backoff(3, Duration.ofSeconds(5))
+                        .timeout(Duration.ofMinutes(10)) // Increased timeout for Ollama
+                        .retryWhen(reactor.util.retry.Retry.backoff(3, java.time.Duration.ofSeconds(5))
                                 .filter(throwable -> {
                                     // Retry on HTTP 429 (Rate Limit), HTTP 5xx (Server Error), or Timeout
                                     String msg = throwable.getMessage();
@@ -1013,7 +1074,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                                         "⚠️ Retrying LLM service call {} due to error: {} (Attempt {}/3)",
                                         url, retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1))
                                 .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
-                        .timeout(Duration.ofMinutes(5)) // Global timeout (including retries) increased to 5 minutes
+                        .timeout(java.time.Duration.ofMinutes(10)) // Global timeout (including retries) increased to 10
+                                                                   // minutes
                         .doOnNext(response -> log.info("✅ Received response from LLM service: {}", url))
                         .doOnError(error -> log.error("❌ Error calling LLM service {}: {}", url, error.getMessage(),
                                 error));
@@ -1050,5 +1112,40 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 .doOnSuccess(v -> log.info("✅ Successfully updated priorities for team: {}", teamId))
                 .doOnError(
                         error -> log.error("❌ Error updating priorities for team {}: {}", teamId, error.getMessage()));
+    }
+
+    @Override
+    public Mono<String> deriveModelCategory(String modelName, String provider, String teamId) {
+        if (modelName == null || modelName.isEmpty()) {
+            return Mono.empty();
+        }
+
+        String lowerModelName = modelName.toLowerCase();
+        String lowerProvider = provider != null ? provider.toLowerCase() : "";
+        String cacheKey = String.format("model_category:%s:%s:%s", teamId, lowerModelName, lowerProvider);
+
+        // 1. Check Redis Cache
+        return Mono.fromCallable(() -> redisTemplate.opsForValue().get(cacheKey))
+                .filter(Objects::nonNull)
+                .switchIfEmpty(Mono.defer(() -> {
+                    // 2. Check Database Logic
+                    Mono<String> dbLookup;
+                    if (!lowerProvider.isEmpty()) {
+                        dbLookup = linqLlmModelRepository
+                                .findByModelNameAndProviderAndTeamId(modelName, lowerProvider, teamId)
+                                .map(LinqLlmModel::getModelCategory);
+                    } else {
+                        dbLookup = linqLlmModelRepository.findByModelNameAndTeamId(modelName, teamId)
+                                .next()
+                                .map(LinqLlmModel::getModelCategory);
+                    }
+
+                    return dbLookup;
+                }))
+                .doOnNext(category -> {
+                    if (category != null) {
+                        redisTemplate.opsForValue().set(cacheKey, category, Duration.ofMinutes(60));
+                    }
+                });
     }
 }

@@ -51,7 +51,7 @@ import io.milvus.param.collection.GetCollectionStatisticsParam;
 import io.milvus.grpc.GetCollectionStatisticsResponse;
 import io.milvus.param.dml.DeleteParam;
 import io.milvus.grpc.MutationResult;
-import io.milvus.response.MutationResultWrapper;
+
 import io.milvus.param.dml.QueryParam;
 import io.milvus.grpc.QueryResults;
 import io.milvus.response.QueryResultsWrapper;
@@ -123,6 +123,12 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     private static final int SEARCH_PARAM_EF = 64;
     private static final int SHARDS_NUM = 2;
 
+    // Regex patterns for keyword extraction
+    private static final Pattern QUOTED_TEXT_PATTERN = Pattern.compile("\"([^\"]+)\"");
+    private static final Pattern CAPITALIZED_PHRASE_PATTERN = Pattern
+            .compile("\\b[A-Z][a-zA-Z0-9]*(?:\\s+(?:[A-Z][a-zA-Z0-9]*|[0-9]+))+\\b");
+    private static final Pattern ALPHANUMERIC_ID_PATTERN = Pattern.compile("\\b[A-Za-z]+-\\d+\\b");
+
     private static final Map<String, DataType> DATA_TYPE_MAP = Map.ofEntries(
             Map.entry("BOOL", DataType.Bool),
             Map.entry("INT8", DataType.Int8),
@@ -179,17 +185,26 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         try {
             R<Boolean> hasCollection = milvusClient.hasCollection(HasCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-
                     .build());
 
-            if (hasCollection.getData()) {
+            if (hasCollection.getStatus() != 0) {
+                throw new IllegalStateException(
+                        "Failed to check if collection exists: " + hasCollection.getMessage());
+            }
+
+            if (Boolean.TRUE.equals(hasCollection.getData())) {
                 log.info("Collection {} already exists, skipping creation but ensuring it is loaded", collectionName);
 
                 // Ensure it is loaded (critical for pre-existing/script-created collections)
-                milvusClient.loadCollection(LoadCollectionParam.newBuilder()
+                R<?> loadResponse = milvusClient.loadCollection(LoadCollectionParam.newBuilder()
                         .withCollectionName(collectionName)
-
                         .build());
+
+                if (loadResponse.getStatus() != 0) {
+                    log.warn("Failed to load existing collection {}: {}", collectionName, loadResponse.getMessage());
+                    // Not throwing generic exception here as we might want to return success for
+                    // existing collection
+                }
 
                 // Log skipped creation attempt
                 long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
@@ -230,7 +245,11 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             .withFieldTypes(fields)
                             .build());
 
-            milvusClient.createCollection(builder.build());
+            R<?> createResponse = milvusClient.createCollection(builder.build());
+            if (createResponse.getStatus() != 0) {
+                throw new IllegalStateException(
+                        "Failed to create collection " + collectionName + ": " + createResponse.getMessage());
+            }
             log.info("Created Milvus collection: {}", collectionName);
 
             // Create index on embedding field
@@ -250,14 +269,21 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                             "{\"M\":" + INDEX_PARAM_M + ",\"efConstruction\":" + INDEX_PARAM_EF_CONSTRUCTION + "}")
                     .build();
 
-            milvusClient.createIndex(indexParam);
+            R<?> indexResponse = milvusClient.createIndex(indexParam);
+            if (indexResponse.getStatus() != 0) {
+                throw new IllegalStateException(
+                        "Failed to create index for " + collectionName + ": " + indexResponse.getMessage());
+            }
             log.info("Created index on field: {}", embeddingField);
 
             // Load collection
-            milvusClient.loadCollection(LoadCollectionParam.newBuilder()
+            R<?> loadResponse = milvusClient.loadCollection(LoadCollectionParam.newBuilder()
                     .withCollectionName(collectionName)
-
                     .build());
+            if (loadResponse.getStatus() != 0) {
+                throw new IllegalStateException(
+                        "Failed to load collection " + collectionName + ": " + loadResponse.getMessage());
+            }
             log.info("Loaded Milvus collection: {}", collectionName);
 
             // Set teamId as a collection property
@@ -278,6 +304,15 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                     .withCollectionName(collectionName);
             collectionProperties.forEach(alterBuilder::withProperty);
             milvusClient.alterCollection(alterBuilder.build());
+            // alterCollection might not return R<RpcStatus> in older versions, checking
+            // signature?
+            // Usually returns R<RpcStatus> or void. Previously it was void in my view?
+            // Wait, Milvus client methods usually return R.
+            // Let's assume it returns R and check status.
+            R<?> alterResponse = milvusClient.alterCollection(alterBuilder.build());
+            if (alterResponse.getStatus() != 0) {
+                log.warn("Failed to set properties for collection {}: {}", collectionName, alterResponse.getMessage());
+            }
             log.info("Set collection properties {} for {}", collectionProperties, collectionName);
 
             // Log successful collection creation
@@ -691,8 +726,15 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             R<DescribeCollectionResponse> describeResponse = milvusClient.describeCollection(
                     DescribeCollectionParam.newBuilder()
                             .withCollectionName(collectionName)
-
                             .build());
+
+            if (describeResponse.getStatus() != 0) {
+                throw new IllegalStateException(
+                        "Failed to describe collection " + collectionName + ": " + describeResponse.getMessage());
+            }
+            if (describeResponse.getData() == null || describeResponse.getData().getSchema() == null) {
+                throw new IllegalStateException("Describe collection returned no schema for " + collectionName);
+            }
 
             List<InsertParam.Field> fields = new ArrayList<>();
 
@@ -792,8 +834,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                         .then(Mono.error(new IllegalStateException(
                                 "Milvus insert failed with status: " + insertResponse.getStatus())));
             }
-            MutationResultWrapper insertResultWrapper = new MutationResultWrapper(insertResponse.getData());
-            long insertCount = insertResultWrapper.getInsertCount();
+            long insertCount = insertResponse.getData().getInsertCnt();
             log.info("Stored record in collection {} (inserted {} vectors)", collectionName, insertCount);
 
             // Log successful storage
@@ -948,6 +989,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId) {
         log.debug("Generating embedding for text length: {} using model: {}/{}", text.length(), modelCategory,
                 modelName);
@@ -1030,6 +1072,15 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     "No embedding values received from Cohere embedding service");
                         }
                         return firstEmbedding.stream()
+                                .map(value -> ((Number) value).floatValue())
+                                .collect(Collectors.toList());
+                    } else if ("ollama-embed".equals(modelCategory)) {
+                        // Ollama embedding response format: {embedding: [...]}
+                        List<Object> rawEmbedding = (List<Object>) result.get("embedding");
+                        if (rawEmbedding == null) {
+                            throw new IllegalStateException("No embedding data received from Ollama embedding service");
+                        }
+                        return rawEmbedding.stream()
                                 .map(value -> ((Number) value).floatValue())
                                 .collect(Collectors.toList());
                     }
@@ -2805,8 +2856,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 return Mono.error(new RuntimeException("Failed to delete embeddings from Milvus: " + message));
             }
 
-            MutationResultWrapper wrapper = new MutationResultWrapper(response.getData());
-            long deletedCount = wrapper.getDeleteCount();
+            long deletedCount = response.getData().getDeleteCnt();
             log.info("Deleted {} embeddings for document {} in collection {}", deletedCount, documentId,
                     collectionName);
             return Mono.just(deletedCount);
@@ -2993,7 +3043,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         Set<String> keywords = new HashSet<>();
 
         // 1. Extract Quoted Text
-        java.util.regex.Matcher quotedMatcher = java.util.regex.Pattern.compile("\"([^\"]+)\"").matcher(query);
+        java.util.regex.Matcher quotedMatcher = QUOTED_TEXT_PATTERN.matcher(query);
         while (quotedMatcher.find()) {
             keywords.add(quotedMatcher.group(1));
         }
@@ -3002,8 +3052,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         // common stop words if needed, but keeping simple for now)
         // Improved Regex: Allows subsequent words to be numbers (e.g. "Part 7")
         // Pattern: \b[A-Z][a-zA-Z0-9]*(?:\s+([A-Z][a-zA-Z0-9]*|[0-9]+))+\b
-        java.util.regex.Matcher capitalizedMatcher = java.util.regex.Pattern
-                .compile("\\b[A-Z][a-zA-Z0-9]*(?:\\s+(?:[A-Z][a-zA-Z0-9]*|[0-9]+))+\\b").matcher(query);
+        java.util.regex.Matcher capitalizedMatcher = CAPITALIZED_PHRASE_PATTERN.matcher(query);
         while (capitalizedMatcher.find()) {
             String phrase = capitalizedMatcher.group();
             // Filter out single short words (like "The", "A") unless they are part of a
@@ -3015,7 +3064,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         // 3. Extract Alphanumeric Identifiers (e.g. I-485, N-400) - specifically
         // looking for letter-number patterns
         // \b[A-Za-z]+-\d+\b
-        java.util.regex.Matcher idMatcher = java.util.regex.Pattern.compile("\\b[A-Za-z]+-\\d+\\b").matcher(query);
+        java.util.regex.Matcher idMatcher = ALPHANUMERIC_ID_PATTERN.matcher(query);
         while (idMatcher.find()) {
             keywords.add(idMatcher.group());
         }

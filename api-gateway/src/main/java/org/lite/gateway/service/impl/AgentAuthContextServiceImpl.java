@@ -74,7 +74,7 @@ public class AgentAuthContextServiceImpl implements AgentAuthContextService {
 
                     if (isApiKeyAuth) {
                         String teamId = auth.getPrincipal().toString();
-                        log.debug("API Key auth detected for team: {}", teamId);
+                        log.info("API Key auth detected for team: {}", teamId);
 
                         return agentTaskService.getTaskById(taskId)
                                 .flatMap(task -> {

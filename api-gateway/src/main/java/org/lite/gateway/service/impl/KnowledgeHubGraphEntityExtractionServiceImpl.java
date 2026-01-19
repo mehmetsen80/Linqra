@@ -56,7 +56,7 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
     // Chat model categories for entity extraction
     // Ordered by cost priority: cheapest first (Gemini, Cohere) to most expensive
     private static final List<String> CHAT_MODEL_CATEGORIES = List.of(
-            "gemini-chat", "cohere-chat", "openai-chat", "claude-chat", "mistral-chat");
+            "gemini-chat", "cohere-chat", "ollama-chat", "openai-chat", "claude-chat");
     // Batches should be limited by token count, not just chunk count
     private static final int MAX_BATCH_TOKENS_ESTIMATE = 80000; // Safe limit (well below 200k context)
     private static final int MAX_CHUNKS_PER_BATCH = 5; // Secondary limit
@@ -1067,6 +1067,21 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                     hasTokenUsage = true;
                 }
             }
+        } else if ("ollama-chat".equals(modelCategory) &&
+                (resultMap.containsKey("prompt_eval_count") || resultMap.containsKey("eval_count"))) {
+            // Ollama native format
+            promptTokens = resultMap.containsKey("prompt_eval_count")
+                    ? ((Number) resultMap.get("prompt_eval_count")).longValue()
+                    : 0;
+            completionTokens = resultMap.containsKey("eval_count")
+                    ? ((Number) resultMap.get("eval_count")).longValue()
+                    : 0;
+            totalTokens = promptTokens + completionTokens;
+
+            model = resultMap.containsKey("model")
+                    ? (String) resultMap.get("model")
+                    : modelName;
+            hasTokenUsage = true;
         }
 
         if (hasTokenUsage) {

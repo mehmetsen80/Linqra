@@ -17,6 +17,7 @@ import org.lite.gateway.service.Neo4jGraphService;
 import org.lite.gateway.service.S3Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
@@ -166,7 +167,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
                 });
     }
 
-    @org.springframework.beans.factory.annotation.Value("${app.redis.listener.enabled:true}")
+    @Value("${app.redis.listener.enabled:true}")
     private boolean redisEnabled;
 
     @Scheduled(fixedDelay = 5000) // Poll every 5 seconds

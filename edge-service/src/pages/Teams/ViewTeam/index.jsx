@@ -28,7 +28,8 @@ import {
   HiArrowUp,
   HiArrowDown,
   HiSave,
-  HiRefresh
+  HiRefresh,
+  HiServer
 } from 'react-icons/hi';
 import { SiOpenai, SiGoogle, SiAnthropic } from 'react-icons/si';
 import { FaCloud } from 'react-icons/fa';
@@ -46,6 +47,7 @@ import OpenAIModal from '../../../components/teams/OpenAIModal';
 import GeminiModal from '../../../components/teams/GeminiModal';
 import CohereModal from '../../../components/teams/CohereModal';
 import ClaudeModal from '../../../components/teams/ClaudeModal';
+import OllamaModal from '../../../components/teams/OllamaModal';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import Footer from '../../../components/common/Footer';
 import './styles.css';
@@ -82,6 +84,7 @@ function ViewTeam() {
   const [showGeminiModal, setShowGeminiModal] = useState(false);
   const [showCohereModal, setShowCohereModal] = useState(false);
   const [showClaudeModal, setShowClaudeModal] = useState(false);
+  const [showOllamaModal, setShowOllamaModal] = useState(false);
   const [confirmModal, setConfirmModal] = useState({
     show: false,
     title: '',
@@ -983,6 +986,14 @@ function ViewTeam() {
                   >
                     <SiAnthropic className="me-1" size={16} /> Claude
                   </BootstrapButton>
+                  <BootstrapButton
+                    size="sm"
+                    variant="outline-info"
+                    onClick={() => setShowOllamaModal(true)}
+                    disabled={team.status === 'INACTIVE' || operationLoading}
+                  >
+                    <HiServer className="me-1" size={16} /> Ollama
+                  </BootstrapButton>
                   {needsPriorityReorder && (
                     <BootstrapButton
                       size="sm"
@@ -1316,6 +1327,15 @@ function ViewTeam() {
         <ClaudeModal
           show={true}
           onHide={() => setShowClaudeModal(false)}
+          team={team}
+          onTeamUpdate={fetchLlmModels}
+        />
+      )}
+
+      {showOllamaModal && (
+        <OllamaModal
+          show={true}
+          onHide={() => setShowOllamaModal(false)}
           team={team}
           onTeamUpdate={fetchLlmModels}
         />

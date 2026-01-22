@@ -1,4 +1,4 @@
-![Build Status](https://github.com/mehmetsen80/Linqra/actions/workflows/ci.yml/badge.svg) ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Version](https://img.shields.io/badge/version-0.7-brightgreen)
+![Build Status](https://github.com/mehmetsen80/Linqra/actions/workflows/ci.yml/badge.svg) ![Java 21](https://img.shields.io/badge/Java-21-blue) ![Version](https://img.shields.io/badge/version-0.8-brightgreen)
 
 # What is Linqra?
 

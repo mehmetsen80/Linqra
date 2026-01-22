@@ -123,6 +123,9 @@ public class SecurityConfig implements BeanFactoryAware {
             "/api/internal/**" // Secured by X-Change-Log-Token
     );
 
+    private static final Pattern SCOPE_KEY_PATTERN = Pattern.compile("^/([\\w-]+)/");
+    private static final Pattern ROUTE_PATTERN = Pattern.compile("/r/([^/]+)/");
+
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -314,8 +317,7 @@ public class SecurityConfig implements BeanFactoryAware {
 
     private String getScopeKey(String path) {
         // Updated regex to capture prefixes that may include hyphens
-        Pattern pattern = Pattern.compile("^/([\\w-]+)/");
-        Matcher matcher = pattern.matcher(path);
+        Matcher matcher = SCOPE_KEY_PATTERN.matcher(path);
 
         if (matcher.find()) {
             String prefix = matcher.group(0);
@@ -462,6 +464,7 @@ public class SecurityConfig implements BeanFactoryAware {
                     // Ensure roles are a list and check for the specific role
                     if (rolesRealm instanceof List) {
                         // check realm role if authorized
+                        @SuppressWarnings("unchecked")
                         boolean isAuthorizedRealm = ((List<String>) rolesRealm).contains("gateway_admin_realm");
                         if (isAuthorizedRealm) {
                             // get the resource access map
@@ -472,8 +475,10 @@ public class SecurityConfig implements BeanFactoryAware {
                                 var clientAccess = resourceAccess.get(clientId);
                                 if (clientAccess instanceof Map<?, ?>) {
                                     // get the client roles
+                                    @SuppressWarnings("unchecked")
                                     var clientRoles = ((Map<String, Object>) clientAccess).get("roles");
                                     if (clientRoles instanceof List) {
+                                        @SuppressWarnings("unchecked")
                                         boolean isAuthorizedClient = ((List<String>) clientRoles)
                                                 .contains("gateway_admin");
                                         log.info("Access granted: Authorized via gateway_admin role for path: {}",
@@ -493,8 +498,7 @@ public class SecurityConfig implements BeanFactoryAware {
     }
 
     private Mono<Boolean> checkRoutePermission(String path, ServerWebExchange exchange) {
-        Pattern routePattern = Pattern.compile("/r/([^/]+)/");
-        Matcher routeMatcher = routePattern.matcher(path);
+        Matcher routeMatcher = ROUTE_PATTERN.matcher(path);
 
         if (!routeMatcher.find()) {
             log.warn("No route identifier found in path: {}", path);

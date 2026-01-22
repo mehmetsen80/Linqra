@@ -505,8 +505,10 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 if (stepMetadata.getTarget().equals("openai-chat") || stepMetadata.getTarget().equals("gemini-chat")
                         || stepMetadata.getTarget().equals("cohere-chat")
                         || stepMetadata.getTarget().equals("claude-chat")
+                        || stepMetadata.getTarget().equals("ollama-chat")
                         || stepMetadata.getTarget().equals("openai-embed")
                         || stepMetadata.getTarget().equals("gemini-embed")
+                        || stepMetadata.getTarget().equals("ollama-embed")
                         || stepMetadata.getTarget().equals("cohere-embed")) {
                     if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
                         workflowResult.getSteps().stream()
@@ -689,6 +691,39 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                     completionTokens);
                                             tokenUsage.setCostUsd(cost);
                                             log.debug("Calculated cost for {} ({}p/{}c tokens): ${}",
+                                                    model, promptTokens, completionTokens, String.format("%.6f", cost));
+                                            hasTokenUsage = true;
+                                        } else if ((stepMetadata.getTarget().equals("ollama-chat")
+                                                || stepMetadata.getTarget().equals("ollama-embed"))
+                                                && (resultMap.containsKey("prompt_eval_count")
+                                                        || resultMap.containsKey("eval_count"))) {
+                                            // Ollama Native Format
+                                            long promptTokens = resultMap.containsKey("prompt_eval_count")
+                                                    ? ((Number) resultMap.get("prompt_eval_count")).longValue()
+                                                    : 0;
+                                            long completionTokens = resultMap.containsKey("eval_count")
+                                                    ? ((Number) resultMap.get("eval_count")).longValue()
+                                                    : 0;
+                                            long totalTokens = promptTokens + completionTokens;
+
+                                            tokenUsage.setPromptTokens(promptTokens);
+                                            tokenUsage.setCompletionTokens(completionTokens);
+                                            tokenUsage.setTotalTokens(totalTokens);
+
+                                            // Fallback specific for Ollama
+                                            String model = resultMap.containsKey("model")
+                                                    ? (String) resultMap.get("model")
+                                                    : stepMetadata.getModel();
+                                            if (model == null)
+                                                model = "llama3"; // Defensive default
+
+                                            stepMetadata.setModel(model);
+
+                                            // Calculate cost (should be 0.0 for local models in LlmCostService)
+                                            double cost = llmCostService.calculateCost(model, promptTokens,
+                                                    completionTokens);
+                                            tokenUsage.setCostUsd(cost);
+                                            log.debug("Calculated cost for local model {} ({}p/{}c tokens): ${}",
                                                     model, promptTokens, completionTokens, String.format("%.6f", cost));
                                             hasTokenUsage = true;
                                         }

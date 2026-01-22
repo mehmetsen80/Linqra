@@ -39,7 +39,10 @@ public class WebClientConfig {
                                                         new Jackson2JsonDecoder(mapper, MediaType.APPLICATION_JSON));
                                         clientCodecConfigurer.defaultCodecs().jackson2JsonEncoder(
                                                         new Jackson2JsonEncoder(mapper, MediaType.APPLICATION_JSON));
-                                        clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024); // Further reduced for EC2
+                                        clientCodecConfigurer.defaultCodecs().maxInMemorySize(4 * 1024 * 1024); // Further
+                                                                                                                // reduced
+                                                                                                                // for
+                                                                                                                // EC2
                                 })
                                 .build();
 

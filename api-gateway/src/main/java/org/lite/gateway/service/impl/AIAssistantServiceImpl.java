@@ -4,8 +4,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.AIAssistant;
 import org.lite.gateway.repository.AIAssistantRepository;
+import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.service.AIAssistantService;
+import org.lite.gateway.service.LinqLlmModelService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -21,7 +23,8 @@ public class AIAssistantServiceImpl implements AIAssistantService {
 
     private final AIAssistantRepository aiAssistantRepository;
     private final LinqLlmModelRepository linqLlmModelRepository;
-    private final org.lite.gateway.repository.AgentTaskRepository agentTaskRepository;
+    private final LinqLlmModelService linqLlmModelService;
+    private final AgentTaskRepository agentTaskRepository;
 
     @Override
     public Mono<AIAssistant> createAssistant(AIAssistant assistant, String teamId, String createdBy) {
@@ -112,25 +115,25 @@ public class AIAssistantServiceImpl implements AIAssistantService {
                                         return continueWithUpdates(existingAssistant, assistantUpdates, updatedBy);
                                     })
                                     .switchIfEmpty(Mono.defer(() -> {
-                                        // Fallback to derivation if not found in MongoDB
-                                        String derivedCategory = deriveModelCategory(modelName, provider);
-                                        if (derivedCategory != null) {
-                                            modelConfig.setModelCategory(derivedCategory);
-                                            log.warn(
-                                                    "Could not find modelCategory in MongoDB for modelName '{}', provider '{}', teamId '{}'. "
-                                                            +
-                                                            "Derived modelCategory '{}' as fallback.",
-                                                    modelName, provider, teamId, derivedCategory);
-                                        } else {
-                                            log.error(
-                                                    "Could not find or derive modelCategory for modelName '{}', provider '{}', teamId '{}'. "
-                                                            +
-                                                            "ModelCategory must be set explicitly or model must exist in linq_llm_models collection.",
-                                                    modelName, provider, teamId);
-                                        }
-                                        existingAssistant.setDefaultModel(modelConfig);
-                                        // Continue with rest of updates
-                                        return continueWithUpdates(existingAssistant, assistantUpdates, updatedBy);
+                                        // Fallback to derivation of modelCategory
+                                        return linqLlmModelService.deriveModelCategory(modelName, provider, teamId)
+                                                .map(derivedCategory -> {
+                                                    modelConfig.setModelCategory(derivedCategory);
+                                                    log.warn(
+                                                            "Derived modelCategory '{}' as fallback for modelName '{}', provider '{}', teamId '{}'",
+                                                            derivedCategory, modelName, provider, teamId);
+                                                    return derivedCategory;
+                                                })
+                                                .switchIfEmpty(Mono.fromRunnable(() -> {
+                                                    log.error(
+                                                            "Could not derive modelCategory for model '{}' provider '{}' team '{}'. Saving without category.",
+                                                            modelName, provider, teamId);
+                                                }).then(Mono.empty())) // continued flow below
+                                                .then(Mono.defer(() -> {
+                                                    existingAssistant.setDefaultModel(modelConfig);
+                                                    return continueWithUpdates(existingAssistant, assistantUpdates,
+                                                            updatedBy);
+                                                }));
                                     }));
                         } else {
                             existingAssistant.setDefaultModel(modelConfig);
@@ -443,54 +446,5 @@ public class AIAssistantServiceImpl implements AIAssistantService {
                     assistant.setSelectedTasks(tasks);
                     return assistant;
                 });
-    }
-
-    /**
-     * Derive modelCategory from modelName and provider
-     * 
-     * @param modelName The model name (e.g., "gemini-2.0-flash", "gpt-4o")
-     * @param provider  The provider (e.g., "gemini", "openai")
-     * @return The derived modelCategory (e.g., "gemini-chat", "openai-chat") or
-     *         null if cannot be derived
-     */
-    private String deriveModelCategory(String modelName, String provider) {
-        if (modelName == null || modelName.isEmpty()) {
-            return null;
-        }
-
-        String lowerModelName = modelName.toLowerCase();
-        String lowerProvider = provider != null ? provider.toLowerCase() : "";
-
-        // Try to detect provider from modelName if provider is not provided
-        if (lowerProvider.isEmpty()) {
-            if (lowerModelName.startsWith("gemini") || lowerModelName.startsWith("embedding-001") ||
-                    lowerModelName.startsWith("text-embedding-004")) {
-                lowerProvider = "gemini";
-            } else if (lowerModelName.startsWith("gpt-") || lowerModelName.startsWith("text-embedding")) {
-                lowerProvider = "openai";
-            } else if (lowerModelName.startsWith("claude")) {
-                lowerProvider = "anthropic";
-            } else if (lowerModelName.startsWith("command") || lowerModelName.startsWith("embed")) {
-                lowerProvider = "cohere";
-            }
-        }
-
-        // Determine if it's an embedding model or chat model
-        boolean isEmbedding = lowerModelName.contains("embedding") ||
-                lowerModelName.contains("embed") ||
-                lowerModelName.startsWith("text-embedding");
-
-        // Build modelCategory based on provider and type
-        if ("gemini".equals(lowerProvider)) {
-            return isEmbedding ? "gemini-embed" : "gemini-chat";
-        } else if ("openai".equals(lowerProvider)) {
-            return isEmbedding ? "openai-embed" : "openai-chat";
-        } else if ("anthropic".equals(lowerProvider)) {
-            return "claude-chat"; // Anthropic models are typically chat models
-        } else if ("cohere".equals(lowerProvider)) {
-            return isEmbedding ? "cohere-embed" : "cohere-chat";
-        }
-
-        return null;
     }
 }

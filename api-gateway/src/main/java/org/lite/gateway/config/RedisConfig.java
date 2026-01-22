@@ -1,6 +1,10 @@
 package org.lite.gateway.config;
 
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.core.LockProvider;
+import net.javacrumbs.shedlock.provider.redis.spring.RedisLockProvider;
+import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
+
 import org.lite.gateway.listener.CustomMessageListener;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,7 +20,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 @Configuration
 @Slf4j
-@net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock(defaultLockAtMostFor = "10m")
+@EnableSchedulerLock(defaultLockAtMostFor = "10m")
 public class RedisConfig {
 
     @Value("${spring.data.redis.host}")
@@ -72,7 +76,7 @@ public class RedisConfig {
     }
 
     @Bean
-    public net.javacrumbs.shedlock.core.LockProvider lockProvider(RedisConnectionFactory connectionFactory) {
-        return new net.javacrumbs.shedlock.provider.redis.spring.RedisLockProvider(connectionFactory);
+    public LockProvider lockProvider(RedisConnectionFactory connectionFactory) {
+        return new RedisLockProvider(connectionFactory);
     }
 }

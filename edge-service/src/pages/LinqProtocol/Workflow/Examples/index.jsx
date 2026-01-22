@@ -7,23 +7,23 @@ const WorkflowExamples = () => {
     return (
         <div className="workflow-examples">
             <h2>Workflow Examples</h2>
-            
+
             <div className="workflow-section">
                 <h3>Historical Saying Generator</h3>
                 <p>This example demonstrates how to create a workflow that generates inspirational sayings from historical figures using different AI models.</p>
-                
+
                 <div className="example-tabs">
                     <div className="tab">
                         <h4>OpenAI Version</h4>
-                        <div style={{ 
-                            overflowX: 'auto', 
+                        <div style={{
+                            overflowX: 'auto',
                             maxWidth: '100%',
                             backgroundColor: '#000000',
                             borderRadius: '6px',
                             margin: '0.5rem 0 0 0'
                         }}>
-                            <SyntaxHighlighter 
-                                language="json" 
+                            <SyntaxHighlighter
+                                language="json"
                                 style={vscDarkPlus}
                                 showLineNumbers={true}
                                 wrapLines={true}
@@ -87,18 +87,18 @@ const WorkflowExamples = () => {
                             </SyntaxHighlighter>
                         </div>
                     </div>
-                    
+
                     <div className="tab">
                         <h4>Gemini Version</h4>
-                        <div style={{ 
-                            overflowX: 'auto', 
+                        <div style={{
+                            overflowX: 'auto',
                             maxWidth: '100%',
                             backgroundColor: '#000000',
                             borderRadius: '6px',
                             margin: '0.5rem 0 0 0'
                         }}>
-                            <SyntaxHighlighter 
-                                language="json" 
+                            <SyntaxHighlighter
+                                language="json"
                                 style={vscDarkPlus}
                                 showLineNumbers={true}
                                 wrapLines={true}
@@ -160,16 +160,16 @@ const WorkflowExamples = () => {
             <div className="workflow-section">
                 <h3>Image Analysis Pipeline</h3>
                 <p>This example shows how to create a workflow that analyzes images using multiple AI models in sequence.</p>
-                
-                <div style={{ 
-                    overflowX: 'auto', 
+
+                <div style={{
+                    overflowX: 'auto',
                     maxWidth: '100%',
                     backgroundColor: '#000000',
                     borderRadius: '6px',
                     margin: '0.5rem 0 0 0'
                 }}>
-                    <SyntaxHighlighter 
-                        language="json" 
+                    <SyntaxHighlighter
+                        language="json"
                         style={vscDarkPlus}
                         showLineNumbers={true}
                         wrapLines={true}
@@ -224,16 +224,16 @@ const WorkflowExamples = () => {
             <div className="workflow-section">
                 <h3>Multi-Model Text Analysis</h3>
                 <p>This example demonstrates how to use different AI models for various aspects of text analysis.</p>
-                
-                <div style={{ 
-                    overflowX: 'auto', 
+
+                <div style={{
+                    overflowX: 'auto',
                     maxWidth: '100%',
                     backgroundColor: '#000000',
                     borderRadius: '6px',
                     margin: '0.5rem 0 0 0'
                 }}>
-                    <SyntaxHighlighter 
-                        language="json" 
+                    <SyntaxHighlighter
+                        language="json"
                         style={vscDarkPlus}
                         showLineNumbers={true}
                         wrapLines={true}

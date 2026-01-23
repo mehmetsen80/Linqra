@@ -991,8 +991,73 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
     @Override
     @SuppressWarnings("unchecked")
     public Mono<List<Float>> getEmbedding(String text, String modelCategory, String modelName, String teamId) {
-        log.debug("Generating embedding for text length: {} using model: {}/{}", text.length(), modelCategory,
-                modelName);
+        // First fetch the model to get its configured context window
+        return linqLlmModelService.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId)
+                .doOnNext(m -> log.debug("Found LLM model config: {} with contextWindowTokens: {}",
+                        m.getModelName(), m.getContextWindowTokens()))
+                .switchIfEmpty(Mono.error(new IllegalArgumentException("Embedding modelCategory " + modelCategory
+                        + " with model name " + modelName + " not found for team: " + teamId)))
+                .flatMap(llmModel -> {
+                    // Use model's configured context window, or default to 2048
+                    Integer contextWindowTokens = llmModel.getContextWindowTokens();
+                    int initialMaxTokens = (contextWindowTokens != null && contextWindowTokens > 0)
+                            ? contextWindowTokens
+                            : 2048;
+
+                    return generateSafeEmbedding(text, llmModel, initialMaxTokens);
+                })
+                .doOnError(e -> {
+                    log.error("Embedding generation failed: {}", e.getMessage());
+                });
+    }
+
+    /**
+     * Recursively generates embeddings with fallback logic for context length
+     * errors.
+     */
+    private Mono<List<Float>> generateSafeEmbedding(String text, org.lite.gateway.entity.LinqLlmModel llmModel,
+            int maxTokens) {
+        int maxChars = maxTokens * 3; // Conservative 3 chars/token
+
+        // Split text into windows based on current maxTokens
+        List<String> windows = splitTextIntoWindows(text, maxChars, maxChars / 2);
+
+        if (windows.size() > 1) {
+            log.debug("Splitting text of length {} into {} windows (maxTokens: {})", text.length(), windows.size(),
+                    maxTokens);
+        }
+
+        return Flux.fromIterable(windows)
+                .concatMap(window -> generateSingleEmbedding(window, llmModel.getModelCategory(),
+                        llmModel.getModelName(), llmModel)
+                        .onErrorResume(e -> {
+                            // Check if error is due to context length and if we can reduce the window size
+                            boolean isContextError = e.getMessage() != null &&
+                                    (e.getMessage().contains("context length")
+                                            || e.getMessage().contains("Internal Server Error"));
+
+                            if (isContextError && maxTokens > 512) {
+                                log.warn(
+                                        "Context length error for model {} with limit {}. Retrying window ({}) with safe limit 512.",
+                                        llmModel.getModelName(), maxTokens, window.length());
+                                // Recursive fallback: process this specific window with safe 512 limit
+                                return generateSafeEmbedding(window, llmModel, 512);
+                            }
+                            return Mono.error(e);
+                        }))
+                .collectList()
+                .map(this::averageEmbeddings);
+    }
+
+    /**
+     * Generate a single embedding for the given text using the specified model.
+     */
+    @SuppressWarnings("unchecked")
+    private Mono<List<Float>> generateSingleEmbedding(String text, String modelCategory, String modelName,
+            org.lite.gateway.entity.LinqLlmModel llmModel) {
+        log.debug("Generating embedding for text length: {} using model: {}/{}",
+                text.length(), modelCategory, modelName);
+
         LinqRequest request = new LinqRequest();
         LinqRequest.Link link = new LinqRequest.Link();
         link.setTarget(modelCategory);
@@ -1008,84 +1073,108 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
         query.setLlmConfig(llmConfig);
         request.setQuery(query);
 
-        return linqLlmModelService.findByModelCategoryAndModelNameAndTeamId(modelCategory, modelName, teamId)
-                .doOnNext(m -> System.out.println(">>> FOUND LLM MODEL CONFIG: " + m.getModelName() + " <<<"))
-                .switchIfEmpty(Mono.error(new IllegalArgumentException("Embedding modelCategory " + modelCategory
-                        + " with model name " + modelName + " not found for team: " + teamId)))
-                .flatMap(llmModel -> {
-                    System.out.println(">>> EXECUTING LLM REQUEST <<<");
-                    return linqLlmModelService.executeLlmRequest(request, llmModel);
-                })
-                .doOnError(e -> {
-                    System.out.println(">>> ERROR IN getEmbedding: " + e.getMessage() + " <<<");
-                    e.printStackTrace();
-                    log.error("Embedding generation failed: {}", e.getMessage());
-                })
+        return linqLlmModelService.executeLlmRequest(request, llmModel)
                 .map(response -> {
                     Map<String, Object> result = (Map<String, Object>) response.getResult();
                     if (result == null) {
                         throw new IllegalStateException("Received null result from embedding service");
                     }
-
                     if (result.containsKey("error")) {
                         throw new IllegalStateException("Embedding service error: " + result.get("error"));
                     }
-
-                    if ("openai-embed".equals(modelCategory)) {
-                        List<Map<String, Object>> data = (List<Map<String, Object>>) result.get("data");
-                        if (data == null || data.isEmpty()) {
-                            throw new IllegalStateException("No data received from OpenAI embedding service");
-                        }
-                        List<Object> rawEmbedding = (List<Object>) data.getFirst().get("embedding");
-                        log.debug("Successfully parsed OpenAI embedding (dim: {})", rawEmbedding.size());
-                        return rawEmbedding.stream()
-                                .map(value -> ((Number) value).floatValue())
-                                .collect(Collectors.toList());
-                    } else if ("huggingface-embed".equals(modelCategory)) {
-                        List<Object> rawEmbedding = (List<Object>) result.get("embedding");
-                        return rawEmbedding.stream()
-                                .map(value -> ((Number) value).floatValue())
-                                .collect(Collectors.toList());
-                    } else if ("gemini-embed".equals(modelCategory)) {
-                        // Gemini embedding response format: {embedding: {values: [...]}}
-                        Map<String, Object> embedding = (Map<String, Object>) result.get("embedding");
-                        if (embedding == null) {
-                            throw new IllegalStateException("No embedding data received from Gemini embedding service");
-                        }
-                        List<Object> values = (List<Object>) embedding.get("values");
-                        if (values == null || values.isEmpty()) {
-                            throw new IllegalStateException(
-                                    "No embedding values received from Gemini embedding service");
-                        }
-                        return values.stream()
-                                .map(value -> ((Number) value).floatValue())
-                                .collect(Collectors.toList());
-                    } else if ("cohere-embed".equals(modelCategory)) {
-                        // Cohere embedding response format: {embeddings: [[...]]}
-                        List<List<Object>> embeddings = (List<List<Object>>) result.get("embeddings");
-                        if (embeddings == null || embeddings.isEmpty()) {
-                            throw new IllegalStateException("No embeddings received from Cohere embedding service");
-                        }
-                        List<Object> firstEmbedding = embeddings.getFirst();
-                        if (firstEmbedding == null || firstEmbedding.isEmpty()) {
-                            throw new IllegalStateException(
-                                    "No embedding values received from Cohere embedding service");
-                        }
-                        return firstEmbedding.stream()
-                                .map(value -> ((Number) value).floatValue())
-                                .collect(Collectors.toList());
-                    } else if ("ollama-embed".equals(modelCategory)) {
-                        // Ollama embedding response format: {embedding: [...]}
-                        List<Object> rawEmbedding = (List<Object>) result.get("embedding");
-                        if (rawEmbedding == null) {
-                            throw new IllegalStateException("No embedding data received from Ollama embedding service");
-                        }
-                        return rawEmbedding.stream()
-                                .map(value -> ((Number) value).floatValue())
-                                .collect(Collectors.toList());
-                    }
-                    throw new IllegalArgumentException("Unsupported embedding modelCategory: " + modelCategory);
+                    return parseEmbeddingResponse(result, modelCategory);
                 });
+    }
+
+    /**
+     * Parse embedding response based on model category.
+     */
+    @SuppressWarnings("unchecked")
+    private List<Float> parseEmbeddingResponse(Map<String, Object> result, String modelCategory) {
+        if ("openai-embed".equals(modelCategory)) {
+            List<Map<String, Object>> data = (List<Map<String, Object>>) result.get("data");
+            if (data == null || data.isEmpty()) {
+                throw new IllegalStateException("No data received from OpenAI embedding service");
+            }
+            List<Object> rawEmbedding = (List<Object>) data.getFirst().get("embedding");
+            return rawEmbedding.stream().map(v -> ((Number) v).floatValue()).collect(Collectors.toList());
+        } else if ("huggingface-embed".equals(modelCategory)) {
+            List<Object> rawEmbedding = (List<Object>) result.get("embeddings");
+            if (rawEmbedding == null) {
+                rawEmbedding = (List<Object>) result.get("embedding");
+            }
+            if (rawEmbedding == null) {
+                throw new IllegalStateException("No embedding data received from HuggingFace embedding service");
+            }
+            return rawEmbedding.stream().map(v -> ((Number) v).floatValue()).collect(Collectors.toList());
+        } else if ("gemini-embed".equals(modelCategory)) {
+            Map<String, Object> embedding = (Map<String, Object>) result.get("embedding");
+            if (embedding == null) {
+                throw new IllegalStateException("No embedding received from Gemini embedding service");
+            }
+            List<Object> values = (List<Object>) embedding.get("values");
+            if (values == null || values.isEmpty()) {
+                throw new IllegalStateException("No embedding values received from Gemini embedding service");
+            }
+            return values.stream().map(v -> ((Number) v).floatValue()).collect(Collectors.toList());
+        } else if ("cohere-embed".equals(modelCategory)) {
+            List<List<Object>> embeddings = (List<List<Object>>) result.get("embeddings");
+            if (embeddings == null || embeddings.isEmpty()) {
+                throw new IllegalStateException("No embeddings received from Cohere embedding service");
+            }
+            List<Object> firstEmbedding = embeddings.getFirst();
+            return firstEmbedding.stream().map(v -> ((Number) v).floatValue()).collect(Collectors.toList());
+        } else if ("ollama-embed".equals(modelCategory)) {
+            List<Object> rawEmbedding = (List<Object>) result.get("embedding");
+            if (rawEmbedding == null) {
+                throw new IllegalStateException("No embedding data received from Ollama embedding service");
+            }
+            return rawEmbedding.stream().map(v -> ((Number) v).floatValue()).collect(Collectors.toList());
+        }
+        throw new IllegalArgumentException("Unsupported embedding modelCategory: " + modelCategory);
+    }
+
+    /**
+     * Split text into overlapping windows.
+     */
+    private List<String> splitTextIntoWindows(String text, int windowSize, int stride) {
+        List<String> windows = new ArrayList<>();
+        int start = 0;
+        while (start < text.length()) {
+            int end = Math.min(start + windowSize, text.length());
+            windows.add(text.substring(start, end));
+            start += stride;
+            // Avoid creating a tiny final window
+            if (start < text.length() && text.length() - start < stride / 2) {
+                windows.add(text.substring(start));
+                break;
+            }
+        }
+        return windows;
+    }
+
+    /**
+     * Average multiple embedding vectors into a single vector.
+     */
+    private List<Float> averageEmbeddings(List<List<Float>> embeddings) {
+        if (embeddings == null || embeddings.isEmpty()) {
+            throw new IllegalStateException("No embeddings to average");
+        }
+        if (embeddings.size() == 1) {
+            return embeddings.getFirst();
+        }
+
+        int dimension = embeddings.getFirst().size();
+        List<Float> averaged = new ArrayList<>(dimension);
+
+        for (int i = 0; i < dimension; i++) {
+            float sum = 0;
+            for (List<Float> embedding : embeddings) {
+                sum += embedding.get(i);
+            }
+            averaged.add(sum / embeddings.size());
+        }
+        return averaged;
     }
 
     @Override

@@ -7,15 +7,21 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
 @Configuration
-@ConfigurationProperties(prefix = "linqra.knowledgehub.s3")
+@ConfigurationProperties(prefix = "linqra.storage")
 @Data
-public class KnowledgeHubS3Properties {
+public class StorageProperties {
+
+    private String type = "s3"; // s3 or minio
+    private String endpoint; // Used for MinIO
+    private String accessKey;
+    private String secretKey;
 
     private String bucketName = "linqra-knowledge-hub";
     private String backupBucketName = "backup-linqra-knowledge-hub";
     private String auditBucketName = "linqra-audit";
     private String auditBackupBucketName = "backup-linqra-audit";
     private String backupBucketRegion = "us-east-1";
+
     private String rawPrefix = "raw";
     private String processedPrefix = "processed";
     private Duration presignedUrlExpiration = Duration.ofMinutes(15);
@@ -24,12 +30,6 @@ public class KnowledgeHubS3Properties {
     /**
      * Build S3 key pattern:
      * {prefix}/{teamId}/{collectionId}/{documentId}_{fileName}
-     * 
-     * @param teamId       Team ID
-     * @param collectionId Collection ID (e.g., knowledge base name)
-     * @param documentId   Unique document ID
-     * @param fileName     Original file name
-     * @return S3 key
      */
     public String buildRawKey(String teamId, String collectionId,
             String documentId, String fileName) {
@@ -37,14 +37,16 @@ public class KnowledgeHubS3Properties {
                 rawPrefix, teamId, collectionId, documentId, fileName);
     }
 
+    private Redis redis = new Redis();
+
+    @Data
+    public static class Redis {
+        private String documentProcessingChannel = "document-processing-queue";
+    }
+
     /**
      * Build processed S3 key pattern:
      * {prefix}/{teamId}/{collectionId}/{documentId}.json
-     * 
-     * @param teamId       Team ID
-     * @param collectionId Collection ID
-     * @param documentId   Document ID
-     * @return S3 key for processed data
      */
     public String buildProcessedKey(String teamId, String collectionId,
             String documentId) {

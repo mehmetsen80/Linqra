@@ -2,19 +2,28 @@ package service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
+import org.lite.gateway.repository.GraphExtractionJobRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentServiceImpl;
-import org.lite.gateway.service.impl.S3ServiceImpl;
+import org.lite.gateway.service.impl.ObjectStorageServiceImpl;
+import org.lite.gateway.util.AuditLogHelper;
 import org.lite.gateway.service.LinqMilvusStoreService;
+import org.lite.gateway.service.LinqraVaultService;
+import org.lite.gateway.service.Neo4jGraphService;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import io.milvus.client.MilvusServiceClient;
+import org.neo4j.driver.Driver;
+
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
@@ -22,6 +31,7 @@ import org.springframework.test.context.ActiveProfiles;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
+import org.lite.gateway.enums.DocumentStatus;
 import org.lite.gateway.enums.AuditResultType;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
@@ -58,6 +68,20 @@ class DocumentServiceImplIntegrationTest {
     @Autowired
     private KnowledgeHubDocumentRepository documentRepository;
 
+    @MockitoBean
+    private ChunkEncryptionService chunkEncryptionServiceMock; // Mocks the bean in context to prevent startup failure
+
+    @MockitoBean
+    private MilvusServiceClient milvusServiceClient; // Mocks Milvus client to prevent connection
+                                                     // failure during test
+
+    @MockitoBean
+    private Driver neo4jDriver; // Mocks Neo4j driver to prevent connection failure during test
+
+    @MockitoBean
+    private LinqraVaultService linqraVaultService; // Mocks Vault service to bypass file
+                                                   // requirement
+
     @Autowired
     private TeamRepository teamRepository;
 
@@ -73,34 +97,35 @@ class DocumentServiceImplIntegrationTest {
     @Autowired
     private KnowledgeHubCollectionRepository collectionRepository;
 
-    @Autowired
+    @MockitoBean
     private LinqMilvusStoreService milvusStoreService;
 
     @Autowired(required = false)
-    private org.lite.gateway.service.Neo4jGraphService neo4jGraphService;
+    private Neo4jGraphService neo4jGraphService;
 
     @Autowired(required = false)
-    private org.lite.gateway.repository.GraphExtractionJobRepository graphExtractionJobRepository;
+    private GraphExtractionJobRepository graphExtractionJobRepository;
 
     @Autowired(required = false)
-    private org.lite.gateway.util.AuditLogHelper auditLogHelper;
+    private AuditLogHelper auditLogHelper;
 
     private KnowledgeHubDocumentServiceImpl documentService;
-    private S3ServiceImpl s3Service;
-    private KnowledgeHubS3Properties s3Properties;
+    private ObjectStorageServiceImpl objectStorageService;
+    private StorageProperties storageProperties;
 
     @BeforeEach
     void setUp() {
-        // Setup S3Properties
-        this.s3Properties = new KnowledgeHubS3Properties();
-        this.s3Properties.setBucketName(BUCKET_NAME);
-        this.s3Properties.setRawPrefix("raw");
-        this.s3Properties.setProcessedPrefix("processed");
-        this.s3Properties.setPresignedUrlExpiration(Duration.ofMinutes(15));
-        this.s3Properties.setMaxFileSize(52428800L);
+        // Setup StorageProperties
+        this.storageProperties = new StorageProperties();
+        this.storageProperties.setBucketName(BUCKET_NAME);
+        this.storageProperties.setRawPrefix("raw");
+        this.storageProperties.setProcessedPrefix("processed");
+        this.storageProperties.setPresignedUrlExpiration(Duration.ofMinutes(15));
+        this.storageProperties.setMaxFileSize(52428800L);
+        this.storageProperties.setType("s3");
 
-        // Setup real S3 service
-        setupRealS3Service();
+        // Setup real ObjectStorage service
+        setupRealObjectStorageService();
 
         // Create no-op encryption service for tests
         ChunkEncryptionService chunkEncryptionService = createNoOpEncryptionService();
@@ -116,8 +141,8 @@ class DocumentServiceImplIntegrationTest {
                 documentRepository,
                 teamRepository,
                 eventPublisher,
-                s3Service,
-                s3Properties,
+                objectStorageService,
+                storageProperties,
                 chunkEncryptionService,
                 chunkRepository,
                 metadataRepository,
@@ -126,6 +151,10 @@ class DocumentServiceImplIntegrationTest {
                 neo4jGraphService,
                 graphExtractionJobRepository,
                 mockAuditLogHelper);
+
+        // Mock Milvus Store Service methods
+        when(milvusStoreService.deleteDocumentEmbeddings(any(), any(), any()))
+                .thenReturn(Mono.just(0L));
     }
 
     private ChunkEncryptionService createNoOpEncryptionService() {
@@ -247,7 +276,7 @@ class DocumentServiceImplIntegrationTest {
                     assertEquals(100L, document.getFileSize());
                     assertEquals("text/plain", document.getContentType());
                     assertNotNull(document.getS3Key());
-                    assertEquals("PENDING_UPLOAD", document.getStatus());
+                    assertEquals(DocumentStatus.PENDING_UPLOAD, document.getStatus());
                     assertEquals(TEST_TEAM_ID, document.getTeamId());
                     assertEquals(400, document.getChunkSize());
                     assertEquals(50, document.getOverlapTokens());
@@ -307,13 +336,13 @@ class DocumentServiceImplIntegrationTest {
         var dataBuffer = new DefaultDataBufferFactory().wrap(testData);
         Flux<org.springframework.core.io.buffer.DataBuffer> content = Flux.just(dataBuffer);
 
-        StepVerifier.create(s3Service.uploadFile(s3Key, content, "text/plain", fileSize))
+        StepVerifier.create(objectStorageService.uploadFile(s3Key, content, "text/plain", fileSize))
                 .verifyComplete();
 
         System.out.println("✅ File uploaded to S3!");
 
-        // Step 3: Verify file exists in S3
-        StepVerifier.create(s3Service.fileExists(s3Key))
+        // Step 3: Verify file exists in Object Storage
+        StepVerifier.create(objectStorageService.fileExists(s3Key))
                 .expectNext(true)
                 .verifyComplete();
 
@@ -324,7 +353,7 @@ class DocumentServiceImplIntegrationTest {
 
         StepVerifier.create(documentService.completeUpload(documentId, s3Key))
                 .expectNextMatches(document -> {
-                    assertEquals("UPLOADED", document.getStatus());
+                    assertEquals(DocumentStatus.UPLOADED, document.getStatus());
                     assertNotNull(document.getUploadedAt());
                     System.out.println("✅ Upload completed at: " + document.getUploadedAt());
                     return true;
@@ -336,7 +365,7 @@ class DocumentServiceImplIntegrationTest {
 
         // Cleanup: Delete file from S3
         System.out.println("🧹 Cleaning up S3 file...");
-        s3Service.deleteFile(s3Key).block();
+        objectStorageService.deleteFile(s3Key).block();
 
         System.out.println("🎉 Full integration test passed!");
     }
@@ -420,12 +449,12 @@ class DocumentServiceImplIntegrationTest {
 
         System.out.println("📝 Created document with documentId: " + documentId);
 
-        // When - Update status to READY
-        StepVerifier.create(documentService.updateStatus(documentId, "READY", null))
+        // When - Update status to AI_READY
+        StepVerifier.create(documentService.updateStatus(documentId, DocumentStatus.AI_READY.name(), null))
                 .expectNextMatches(document -> {
-                    assertEquals("READY", document.getStatus());
+                    assertEquals(DocumentStatus.AI_READY, document.getStatus());
                     assertNotNull(document.getProcessedAt());
-                    System.out.println("✅ Status updated to READY at: " + document.getProcessedAt());
+                    System.out.println("✅ Status updated to AI_READY at: " + document.getProcessedAt());
                     return true;
                 })
                 .verifyComplete();
@@ -433,7 +462,7 @@ class DocumentServiceImplIntegrationTest {
         // When - Update status to FAILED with error message
         StepVerifier.create(documentService.updateStatus(documentId, "FAILED", "Test error message"))
                 .expectNextMatches(document -> {
-                    assertEquals("FAILED", document.getStatus());
+                    assertEquals(DocumentStatus.FAILED, document.getStatus());
                     assertEquals("Test error message", document.getErrorMessage());
                     System.out.println("✅ Status updated to FAILED with message: " + document.getErrorMessage());
                     return true;
@@ -441,7 +470,7 @@ class DocumentServiceImplIntegrationTest {
                 .verifyComplete();
     }
 
-    private void setupRealS3Service() {
+    private void setupRealObjectStorageService() {
         // Create real AWS credentials
         var credentials = AwsBasicCredentials.create(AWS_ACCESS_KEY, AWS_SECRET_KEY);
         var credentialsProvider = StaticCredentialsProvider.create(credentials);
@@ -457,7 +486,7 @@ class DocumentServiceImplIntegrationTest {
                 .credentialsProvider(credentialsProvider)
                 .build();
 
-        // Create real S3Service
-        s3Service = new S3ServiceImpl(s3AsyncClient, s3Presigner, s3Properties);
+        // Create real ObjectStorageService
+        objectStorageService = new ObjectStorageServiceImpl(s3AsyncClient, s3Presigner, storageProperties);
     }
 }

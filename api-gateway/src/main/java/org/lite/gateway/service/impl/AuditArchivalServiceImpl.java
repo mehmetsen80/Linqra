@@ -1,14 +1,14 @@
-package org.lite.gateway.service.impl;
+package org.lite.gateway.service.impl; // Refactored for ObjectStorage
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.entity.AuditLog;
 import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.repository.AuditLogRepository;
 import org.lite.gateway.service.AuditArchivalService;
-import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.ObjectStorageService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -41,10 +41,10 @@ public class AuditArchivalServiceImpl implements AuditArchivalService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy/MM/dd");
 
     private final AuditLogRepository auditLogRepository;
-    private final S3Service s3Service;
+    private final ObjectStorageService objectStorageService;
     private final ObjectMapper objectMapper;
     private final ChunkEncryptionService chunkEncryptionService;
-    private final KnowledgeHubS3Properties s3Properties;
+    private final StorageProperties storageProperties;
 
     @Override
     public Mono<Void> archiveOldLogs(int retentionDays) {
@@ -136,8 +136,8 @@ public class AuditArchivalServiceImpl implements AuditArchivalService {
                         return chunkEncryptionService.encryptFile(compressedBytes, teamId, keyVersion)
                                 .flatMap(encryptedBytes -> {
                                     // Upload to S3 Dedicated Audit Bucket
-                                    String auditBucket = s3Properties.getAuditBucketName();
-                                    return s3Service
+                                    String auditBucket = storageProperties.getAuditBucketName();
+                                    return objectStorageService
                                             .uploadFileBytes(auditBucket, s3Key, encryptedBytes, "application/gzip",
                                                     keyVersion)
                                             .then(Mono.defer(() -> {
@@ -204,12 +204,12 @@ public class AuditArchivalServiceImpl implements AuditArchivalService {
 
         // Query each prefix and combine results
         return Flux.fromIterable(prefixes)
-                .flatMap(prefix -> s3Service.listFiles(prefix)
-                        .flatMapMany(s3Objects -> {
-                            log.debug("Found {} files under prefix {}", s3Objects.size(), prefix);
-                            return Flux.fromIterable(s3Objects)
-                                    .filter(obj -> obj.key().endsWith(".json.gz"))
-                                    .flatMap(obj -> downloadAndParseArchive(obj.key(), teamId));
+                .flatMap(prefix -> objectStorageService.listFiles(prefix)
+                        .flatMapMany(storageObjects -> {
+                            log.debug("Found {} files under prefix {}", storageObjects.size(), prefix);
+                            return Flux.fromIterable(storageObjects)
+                                    .filter(obj -> obj.getKey().endsWith(".json.gz"))
+                                    .flatMap(obj -> downloadAndParseArchive(obj.getKey(), teamId));
                         })
                         .onErrorResume(e -> {
                             log.warn("Error querying prefix {}: {}", prefix, e.getMessage());
@@ -274,7 +274,7 @@ public class AuditArchivalServiceImpl implements AuditArchivalService {
     private Flux<AuditLog> downloadAndParseArchive(String s3Key, String teamId) {
         log.debug("Downloading and parsing archive: {}", s3Key);
 
-        return s3Service.downloadFileContent(s3Key)
+        return objectStorageService.downloadFileContent(s3Key)
                 .flatMapMany(fileBytes -> {
                     Mono<byte[]> decryptedBytesMono;
 

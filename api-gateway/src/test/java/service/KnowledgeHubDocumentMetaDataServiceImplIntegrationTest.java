@@ -1,28 +1,28 @@
 package service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.enums.DocumentStatus;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentMetaDataServiceImpl;
-import org.lite.gateway.service.impl.KnowledgeHubDocumentServiceImpl;
+
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.ChunkEncryptionService;
-import org.lite.gateway.service.impl.S3ServiceImpl;
+import org.lite.gateway.service.impl.ObjectStorageServiceImpl;
+import org.lite.gateway.util.AuditLogHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.lang.NonNull;
-import org.springframework.messaging.Message;
+
 import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.support.AbstractMessageChannel;
 import org.springframework.test.context.ActiveProfiles;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import org.lite.gateway.enums.AuditResultType;
+
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.async.AsyncRequestBody;
@@ -35,12 +35,19 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.lite.gateway.service.LinqraVaultService;
+import io.milvus.client.MilvusServiceClient;
+import org.neo4j.driver.Driver;
+import org.lite.gateway.service.LinqMilvusStoreService;
 
 /**
  * Integration tests for KnowledgeHubDocumentMetaDataService using real MongoDB
@@ -64,12 +71,12 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
     private static final String AWS_ACCESS_KEY = "YOUR_AWS_ACCESS_KEY";
     private static final String AWS_SECRET_KEY = "YOUR_AWS_SECRET_KEY";
     private static final String AWS_REGION = "us-west-2";
-    private static final String BUCKET_NAME = "linqra-knowledge-hub-dev"; // Use dev bucket for testing
+    private static final String BUCKET_NAME = "linqra-knowledge-hub-test"; // Use dev bucket for testing
     private static final String TEST_TEAM_ID = "67d0aeb17172416c411d419e";
     private static final String TEST_COLLECTION_ID = "test-collection-metadata";
 
     // Replace with an actual documentId that has processed JSON in S3
-    private static final String EXISTING_DOCUMENT_ID = "YOUR_EXISTING_DOCUMENT_ID_HERE";
+    private static final String EXISTING_DOCUMENT_ID = "9d7b8f74-889e-4e05-ae35-5c2389e39e88";
 
     @Autowired
     private KnowledgeHubDocumentRepository documentRepository;
@@ -77,13 +84,33 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
     @Autowired
     private KnowledgeHubDocumentMetaDataRepository metadataRepository;
 
-    @Autowired(required = false)
-    private org.lite.gateway.util.AuditLogHelper auditLogHelper;
+    @MockitoBean
+    private AuditLogHelper auditLogHelper;
 
-    private KnowledgeHubDocumentServiceImpl documentService;
+    @MockitoBean
+    private ChunkEncryptionService chunkEncryptionService;
+
+    @MockitoBean
+    private LinqraVaultService linqraVaultService;
+
+    @MockitoBean
+    private MilvusServiceClient milvusServiceClient;
+
+    @MockitoBean
+    private Driver neo4jDriver;
+
+    @MockitoBean
+    private LinqMilvusStoreService linqMilvusStoreService;
+
+    @MockitoBean(name = "executionMessageChannel")
+    private MessageChannel executionMessageChannel;
+
+    @MockitoBean
+    private KnowledgeHubDocumentEmbeddingService embeddingService;
+
     private KnowledgeHubDocumentMetaDataServiceImpl metadataService;
-    private S3ServiceImpl s3Service;
-    private KnowledgeHubS3Properties s3Properties;
+    private ObjectStorageServiceImpl objectStorageService;
+    private StorageProperties storageProperties;
     private ObjectMapper objectMapper;
     private S3AsyncClient s3Client;
     private S3Presigner s3Presigner;
@@ -96,135 +123,52 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
             return;
         }
 
-        // Setup S3Properties
-        this.s3Properties = new KnowledgeHubS3Properties();
-        this.s3Properties.setBucketName(BUCKET_NAME);
-        this.s3Properties.setRawPrefix("raw");
-        this.s3Properties.setProcessedPrefix("processed");
-        this.s3Properties.setPresignedUrlExpiration(Duration.ofMinutes(15));
-        this.s3Properties.setMaxFileSize(52428800L);
+        // Setup StorageProperties
+        this.storageProperties = new StorageProperties();
+        this.storageProperties.setBucketName(BUCKET_NAME);
+        this.storageProperties.setRawPrefix("raw");
+        this.storageProperties.setProcessedPrefix("processed");
+        this.storageProperties.setPresignedUrlExpiration(Duration.ofMinutes(15));
+        this.storageProperties.setMaxFileSize(52428800L);
+        this.storageProperties.setType("s3");
 
-        // Setup real S3 service
-        setupRealS3Service();
+        // Setup real ObjectStorage service
+        setupRealObjectStorageService();
 
         // Setup ObjectMapper
         this.objectMapper = new ObjectMapper();
 
-        // Create a no-op MessageChannel for testing (WebSocket publishing not needed in
-        // integration tests)
-        MessageChannel mockExecutionMessageChannel = new AbstractMessageChannel() {
-            @Override
-            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
-                // No-op: just return true to simulate successful message sending
-                return true;
-            }
-        };
+        // Configure mocks
+        when(chunkEncryptionService.encryptChunkText(anyString(), anyString()))
+                .thenAnswer(i -> Mono.just(i.getArgument(0)));
+        when(chunkEncryptionService.encryptChunkText(anyString(), anyString(), anyString()))
+                .thenAnswer(i -> Mono.just(i.getArgument(0)));
+        when(chunkEncryptionService.decryptChunkText(anyString(), anyString(), anyString()))
+                .thenAnswer(i -> Mono.just(i.getArgument(0)));
+        when(chunkEncryptionService.getCurrentKeyVersion(anyString())).thenReturn(Mono.just("v1"));
+
+        when(auditLogHelper.logDetailedEvent(
+                any(), any(), any(), anyString(), anyString(), anyMap(), anyString(), anyString(), any()))
+                .thenReturn(Mono.empty());
+        when(auditLogHelper.logDetailedEvent(
+                any(), any(), any(), anyString(), anyString(), anyMap(), anyString(), anyString()))
+                .thenReturn(Mono.empty());
+
+        when(embeddingService.embedDocument(anyString(), anyString())).thenReturn(Mono.empty());
 
         // Create KnowledgeHubDocumentMetaDataServiceImpl
-        KnowledgeHubDocumentEmbeddingService noopEmbeddingService = (docId, teamId) -> Mono.empty();
-
-        // Create no-op ChunkEncryptionService for testing
-        ChunkEncryptionService noopEncryptionService = new ChunkEncryptionService() {
-            private final java.util.concurrent.atomic.AtomicInteger versionCounter = new java.util.concurrent.atomic.AtomicInteger(
-                    1);
-
-            @Override
-            public Mono<String> encryptChunkText(String plaintext, String teamId) {
-                return Mono.just(plaintext); // Return as-is for testing
-            }
-
-            @Override
-            public Mono<String> encryptChunkText(String plaintext, String teamId, String keyVersion) {
-                return Mono.just(plaintext); // Return as-is for testing
-            }
-
-            @Override
-            public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion) {
-                return Mono.just(encryptedText); // Return as-is for testing
-            }
-
-            public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion,
-                    boolean logAudit) {
-                return Mono.just("decrypted");
-            }
-
-            @Override
-            public Mono<String> getCurrentKeyVersion(String teamId) {
-                return Mono.just("v1"); // Return default version for testing
-            }
-
-            @Override
-            public Mono<byte[]> encryptFile(byte[] fileBytes, String teamId) {
-                return Mono.just(fileBytes); // Return as-is for testing
-            }
-
-            @Override
-            public Mono<byte[]> encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
-                return Mono.just(fileBytes); // Return as-is for testing
-            }
-
-            @Override
-            public Mono<byte[]> decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
-                return Mono.just(encryptedBytes); // Return as-is for testing
-            }
-
-            @Override
-            public Mono<String> rotateKey(String teamId) {
-                return Mono.just("v" + versionCounter.incrementAndGet());
-            }
-        };
-
-        // Create a no-op AuditLogHelper for testing (audit logging not needed in
-        // integration tests)
-        org.lite.gateway.util.AuditLogHelper mockAuditLogHelper = auditLogHelper != null
-                ? auditLogHelper
-                : createNoOpAuditLogHelper();
-
         this.metadataService = new KnowledgeHubDocumentMetaDataServiceImpl(
                 metadataRepository,
                 documentRepository,
-                s3Service,
+                objectStorageService,
                 objectMapper,
-                mockExecutionMessageChannel,
-                noopEmbeddingService,
-                noopEncryptionService,
-                mockAuditLogHelper);
+                executionMessageChannel,
+                embeddingService,
+                chunkEncryptionService,
+                auditLogHelper);
     }
 
-    /**
-     * Create a no-op AuditLogHelper for testing that returns empty Mono for all
-     * audit logging operations.
-     * This allows tests to run without requiring audit service setup.
-     */
-    private org.lite.gateway.util.AuditLogHelper createNoOpAuditLogHelper() {
-        org.lite.gateway.util.AuditLogHelper mockHelper = mock(org.lite.gateway.util.AuditLogHelper.class);
-
-        // Mock all logDetailedEvent methods to return empty Mono
-        when(mockHelper.logDetailedEvent(
-                any(org.lite.gateway.enums.AuditEventType.class),
-                any(org.lite.gateway.enums.AuditActionType.class),
-                any(org.lite.gateway.enums.AuditResourceType.class),
-                anyString(),
-                anyString(),
-                any(Map.class),
-                anyString(),
-                anyString(),
-                any(AuditResultType.class))).thenReturn(reactor.core.publisher.Mono.empty());
-
-        when(mockHelper.logDetailedEvent(
-                any(org.lite.gateway.enums.AuditEventType.class),
-                any(org.lite.gateway.enums.AuditActionType.class),
-                any(org.lite.gateway.enums.AuditResourceType.class),
-                anyString(),
-                anyString(),
-                any(Map.class),
-                anyString(),
-                anyString())).thenReturn(reactor.core.publisher.Mono.empty());
-
-        return mockHelper;
-    }
-
-    private void setupRealS3Service() {
+    private void setupRealObjectStorageService() {
         AwsBasicCredentials awsCredentials = AwsBasicCredentials.create(AWS_ACCESS_KEY, AWS_SECRET_KEY);
         StaticCredentialsProvider credentialsProvider = StaticCredentialsProvider.create(awsCredentials);
 
@@ -238,7 +182,7 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
                 .credentialsProvider(credentialsProvider)
                 .build();
 
-        this.s3Service = new S3ServiceImpl(s3Client, s3Presigner, s3Properties);
+        this.objectStorageService = new ObjectStorageServiceImpl(s3Client, s3Presigner, storageProperties);
     }
 
     /**
@@ -310,7 +254,7 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
 
         // Step 1: Create a test document in MongoDB
         String testDocumentId = UUID.randomUUID().toString();
-        String processedS3Key = s3Properties.buildProcessedKey(TEST_TEAM_ID, TEST_COLLECTION_ID, testDocumentId);
+        String processedS3Key = storageProperties.buildProcessedKey(TEST_TEAM_ID, TEST_COLLECTION_ID, testDocumentId);
 
         // Create processed JSON content
         Map<String, Object> processedJson = createTestProcessedJson(testDocumentId);
@@ -434,9 +378,11 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
     void testGetMetadataExtract_NotFound() {
         String nonExistentDocumentId = UUID.randomUUID().toString();
 
+        // When document doesn't exist, the service first validates document existence
+        // and throws "Document not found" before checking metadata
         StepVerifier.create(metadataService.getMetadataExtract(nonExistentDocumentId, TEST_TEAM_ID))
                 .expectErrorMatches(error -> error instanceof RuntimeException &&
-                        error.getMessage().contains("Metadata extract not found"))
+                        error.getMessage().contains("Document not found"))
                 .verify();
     }
 
@@ -495,7 +441,7 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
         }
 
         String testDocumentId = UUID.randomUUID().toString();
-        String processedS3Key = s3Properties.buildProcessedKey(TEST_TEAM_ID, TEST_COLLECTION_ID, testDocumentId);
+        String processedS3Key = storageProperties.buildProcessedKey(TEST_TEAM_ID, TEST_COLLECTION_ID, testDocumentId);
 
         try {
             // Create test document and metadata (similar to
@@ -531,22 +477,24 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
 
             // Verify metadata exists
             StepVerifier.create(metadataService.getMetadataExtract(testDocumentId, TEST_TEAM_ID))
-                    .assertNext(metadata -> assertNotNull(metadata))
+                    .assertNext(Assertions::assertNotNull)
                     .verifyComplete();
 
             // Delete metadata
             StepVerifier.create(metadataService.deleteMetadataExtract(testDocumentId))
                     .verifyComplete();
 
-            // Verify metadata is deleted
-            StepVerifier.create(metadataService.getMetadataExtract(testDocumentId, TEST_TEAM_ID))
-                    .expectErrorMatches(error -> error instanceof RuntimeException &&
-                            error.getMessage().contains("Metadata extract not found"))
-                    .verify();
+            // Verify metadata is deleted by checking the repository directly
+            // (getMetadataExtract auto-extracts if metadata is missing, so we check
+            // repository)
+            StepVerifier.create(metadataRepository.findByDocumentIdAndTeamId(testDocumentId, TEST_TEAM_ID))
+                    .expectNextCount(0)
+                    .verifyComplete();
 
             System.out.println("✅ Delete metadata test successful!");
 
             // Cleanup
+            assert savedDocument != null;
             documentRepository.deleteById(savedDocument.getId()).block();
             s3Client.deleteObject(b -> b.bucket(BUCKET_NAME).key(processedS3Key).build()).join();
 
@@ -562,7 +510,14 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
      */
     private Map<String, Object> createTestProcessedJson(String documentId) {
         Map<String, Object> processedJson = new HashMap<>();
-        processedJson.put("documentId", documentId);
+
+        // ProcessingMetadata
+        Map<String, Object> processingMetadata = new HashMap<>();
+        processingMetadata.put("documentId", documentId);
+        processingMetadata.put("processedAt", LocalDateTime.now().toString());
+        processingMetadata.put("processingVersion", "1.0");
+        processingMetadata.put("status", "SUCCESS");
+        processedJson.put("processingMetadata", processingMetadata);
 
         // Statistics
         Map<String, Object> statistics = new HashMap<>();
@@ -570,22 +525,35 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
         statistics.put("wordCount", 5000);
         statistics.put("characterCount", 25000);
         statistics.put("language", "en");
+        statistics.put("totalChunks", 5);
+        statistics.put("totalTokens", 2000);
         processedJson.put("statistics", statistics);
 
-        // Metadata
-        Map<String, Object> metadata = new HashMap<>();
-        metadata.put("title", "Test Document Title");
-        metadata.put("author", "Test Author");
-        metadata.put("subject", "Test Subject");
-        metadata.put("keywords", "test, integration, metadata");
-        metadata.put("creator", "Test Creator");
-        metadata.put("producer", "Test Producer");
-        processedJson.put("metadata", metadata);
+        // ExtractedMetadata (not "metadata")
+        Map<String, Object> extractedMetadata = new HashMap<>();
+        extractedMetadata.put("title", "Test Document Title");
+        extractedMetadata.put("author", "Test Author");
+        extractedMetadata.put("subject", "Test Subject");
+        extractedMetadata.put("keywords", "test, integration, metadata");
+        extractedMetadata.put("creator", "Test Creator");
+        extractedMetadata.put("producer", "Test Producer");
+        extractedMetadata.put("pageCount", 10);
+        extractedMetadata.put("language", "en");
+        processedJson.put("extractedMetadata", extractedMetadata);
 
-        // Custom metadata
-        Map<String, Object> customMetadata = new HashMap<>();
-        customMetadata.put("customField1", "customValue1");
-        processedJson.put("customMetadata", customMetadata);
+        // ChunkingStrategy
+        Map<String, Object> chunkingStrategy = new HashMap<>();
+        chunkingStrategy.put("method", "sentence");
+        chunkingStrategy.put("maxTokens", 400);
+        chunkingStrategy.put("overlapTokens", 50);
+        processedJson.put("chunkingStrategy", chunkingStrategy);
+
+        // QualityChecks
+        Map<String, Object> qualityChecks = new HashMap<>();
+        qualityChecks.put("allChunksValid", true);
+        qualityChecks.put("warnings", List.of());
+        qualityChecks.put("errors", List.of());
+        processedJson.put("qualityChecks", qualityChecks);
 
         return processedJson;
     }

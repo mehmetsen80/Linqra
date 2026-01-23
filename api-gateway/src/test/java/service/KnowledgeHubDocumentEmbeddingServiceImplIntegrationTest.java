@@ -1,10 +1,10 @@
-package service;
+package service; // Refactored for ObjectStorage
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.lite.gateway.ApiGatewayApplication;
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +14,15 @@ import reactor.test.StepVerifier;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.lite.gateway.service.LinqraVaultService;
+import org.lite.gateway.service.ChunkEncryptionService;
+import org.lite.gateway.util.AuditLogHelper;
+import org.neo4j.driver.Driver;
+import reactor.core.publisher.Mono;
 
 /**
  * Integration test that exercises the full document → Milvus embedding flow
@@ -37,7 +46,7 @@ class KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest {
      * Replace the placeholders with real values before running.
      */
     private static final String TEAM_ID = "67d0aeb17172416c411d419e";
-    private static final String DOCUMENT_ID = "d287c97e-eb9e-4c7e-bc05-59e7e9b7b169";
+    private static final String DOCUMENT_ID = "d275933c-7a11-46d5-a2f8-d240d72f5b4d";
     private static final String MILVUS_COLLECTION_NAME = "uscis_marriage_based_files_openai_text_embedding_3_small_1536";
     private static final String S3_BUCKET_NAME = "linqra-knowledge-hub-dev";
 
@@ -48,7 +57,19 @@ class KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest {
     private LinqMilvusStoreService milvusStoreService;
 
     @Autowired
-    private KnowledgeHubS3Properties s3Properties;
+    private StorageProperties storageProperties;
+
+    @MockitoBean
+    private LinqraVaultService linqraVaultService;
+
+    @MockitoBean
+    private ChunkEncryptionService chunkEncryptionService;
+
+    @MockitoBean
+    private AuditLogHelper auditLogHelper;
+
+    @MockitoBean
+    private Driver neo4jDriver;
 
     private boolean shouldRun;
 
@@ -64,8 +85,29 @@ class KnowledgeHubDocumentEmbeddingServiceImplIntegrationTest {
             return;
         }
 
+        // Configure mocks
+        when(chunkEncryptionService.encryptChunkText(anyString(), anyString()))
+                .thenAnswer(i -> Mono.just(i.getArgument(0)));
+        when(chunkEncryptionService.decryptChunkText(anyString(), anyString(), anyString()))
+                .thenAnswer(i -> Mono.just(i.getArgument(0)));
+        when(chunkEncryptionService.getCurrentKeyVersion(anyString())).thenReturn(Mono.just("v1"));
+
+        // Configure AuditLogHelper to return empty Mono for all method signatures
+        lenient().when(auditLogHelper.logDetailedEvent(
+                any(), any(), any(), anyString(), anyString(), anyMap(), anyString(), anyString(), any()))
+                .thenReturn(Mono.empty());
+        lenient().when(auditLogHelper.logDetailedEvent(
+                any(), any(), any(), anyString(), anyString(), anyMap(), anyString(), anyString()))
+                .thenReturn(Mono.empty());
+        lenient().when(auditLogHelper.logDetailedEvent(
+                any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Mono.empty());
+        lenient().when(auditLogHelper.logDetailedEvent(
+                any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(Mono.empty());
+
         log.info("🔧 Configuring S3 bucket for integration test: {}", S3_BUCKET_NAME);
-        s3Properties.setBucketName(S3_BUCKET_NAME);
+        storageProperties.setBucketName(S3_BUCKET_NAME);
     }
 
     @Test

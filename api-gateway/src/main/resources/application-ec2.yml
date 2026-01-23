@@ -223,14 +223,18 @@ vault:
     key: ${VAULT_MASTER_KEY}
 
 linqra:
-  knowledgehub:
-    s3:
-      bucket-name: ${vault.aws.s3.bucket.name}
-      backup-bucket-name: ${vault.aws.s3.backup.bucket.name}
-      backup-bucket-region: ${vault.aws.s3.backup.bucket.region}
-      raw-prefix: raw
-      processed-prefix: processed
-      presigned-url-expiration: PT15M  # 15 minutes
-      max-file-size: 52428800  # 50MB in bytes
+  storage:
+    type: ${vault.storage.type:s3}
+    endpoint: ${vault.storage.endpoint:}
+    access-key: ${vault.minio.access.key:}
+    secret-key: ${vault.minio.secret.key:}
+    
+    bucket-name: ${vault.aws.s3.bucket.name}
+    backup-bucket-name: ${vault.aws.s3.backup.bucket.name}
+    backup-bucket-region: ${vault.aws.s3.backup.bucket.region}
+    raw-prefix: raw
+    processed-prefix: processed
+    presigned-url-expiration: PT15M
+    max-file-size: 52428800
     redis:
       document-processing-channel: document-processing-queue

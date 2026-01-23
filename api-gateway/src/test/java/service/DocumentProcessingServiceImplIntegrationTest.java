@@ -2,7 +2,7 @@ package service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.entity.KnowledgeHubChunk;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.enums.DocumentStatus;
@@ -12,19 +12,17 @@ import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.ChunkingService;
 import org.lite.gateway.service.TikaDocumentParser;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentProcessingServiceImpl;
-import org.lite.gateway.service.impl.S3ServiceImpl;
+import org.lite.gateway.service.impl.ObjectStorageServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
-import org.springframework.lang.NonNull;
-import org.springframework.messaging.Message;
+
 import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.support.AbstractMessageChannel;
 import org.springframework.test.context.ActiveProfiles;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import org.lite.gateway.enums.AuditResultType;
+
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
@@ -35,11 +33,16 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.lite.gateway.service.LinqraVaultService;
+import io.milvus.client.MilvusServiceClient;
+import org.neo4j.driver.Driver;
+import org.lite.gateway.service.LinqMilvusStoreService;
 
 /**
  * Integration tests for KnowledgeHubDocumentProcessingService using real
@@ -74,15 +77,30 @@ class DocumentProcessingServiceImplIntegrationTest {
     @Autowired
     private KnowledgeHubChunkRepository chunkRepository;
 
-    @Autowired(required = false)
+    @MockitoBean
     private ChunkEncryptionService chunkEncryptionService;
 
-    @Autowired(required = false)
+    @MockitoBean
     private org.lite.gateway.util.AuditLogHelper auditLogHelper;
 
+    @MockitoBean
+    private LinqraVaultService linqraVaultService;
+
+    @MockitoBean
+    private MilvusServiceClient milvusServiceClient;
+
+    @MockitoBean
+    private Driver neo4jDriver;
+
+    @MockitoBean
+    private LinqMilvusStoreService linqMilvusStoreService;
+
+    @MockitoBean(name = "executionMessageChannel")
+    private MessageChannel executionMessageChannel;
+
     private KnowledgeHubDocumentProcessingServiceImpl documentProcessingService;
-    private S3ServiceImpl s3Service;
-    private KnowledgeHubS3Properties s3Properties;
+    private ObjectStorageServiceImpl objectStorageService;
+    private StorageProperties storageProperties;
 
     @BeforeEach
     void setUp() {
@@ -92,30 +110,37 @@ class DocumentProcessingServiceImplIntegrationTest {
             return;
         }
 
-        // Setup KnowledgeHubS3Properties
-        this.s3Properties = new KnowledgeHubS3Properties();
-        this.s3Properties.setBucketName(BUCKET_NAME);
-        this.s3Properties.setRawPrefix("raw");
-        this.s3Properties.setProcessedPrefix("processed");
-        this.s3Properties.setPresignedUrlExpiration(Duration.ofMinutes(15));
-        this.s3Properties.setMaxFileSize(52428800L);
+        // Setup StorageProperties
+        this.storageProperties = new StorageProperties();
+        this.storageProperties.setBucketName(BUCKET_NAME);
+        this.storageProperties.setRawPrefix("raw");
+        this.storageProperties.setProcessedPrefix("processed");
+        this.storageProperties.setPresignedUrlExpiration(Duration.ofMinutes(15));
+        this.storageProperties.setMaxFileSize(52428800L);
+        this.storageProperties.setType("s3");
 
-        // Setup real S3 service
-        setupRealS3Service();
+        // Setup real ObjectStorage service
+        setupRealObjectStorageService();
 
         // Setup Tika and Chunking services
         TikaDocumentParser tikaDocumentParser = new TikaDocumentParser();
         ChunkingService chunkingService = new ChunkingService();
 
-        // Create a no-op MessageChannel for testing (WebSocket publishing not needed in
-        // integration tests)
-        MessageChannel mockExecutionMessageChannel = new AbstractMessageChannel() {
-            @Override
-            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
-                // No-op: just return true to simulate successful message sending
-                return true;
-            }
-        };
+        // Configure mocks
+        when(chunkEncryptionService.encryptChunkText(anyString(), anyString()))
+                .thenAnswer(i -> Mono.just(i.getArgument(0)));
+        when(chunkEncryptionService.encryptChunkText(anyString(), anyString(), anyString()))
+                .thenAnswer(i -> Mono.just(i.getArgument(0)));
+        when(chunkEncryptionService.decryptChunkText(anyString(), anyString(), anyString()))
+                .thenAnswer(i -> Mono.just(i.getArgument(0)));
+        when(chunkEncryptionService.getCurrentKeyVersion(anyString())).thenReturn(Mono.just("v1"));
+
+        when(auditLogHelper.logDetailedEvent(
+                any(), any(), any(), anyString(), anyString(), anyMap(), anyString(), anyString(), any()))
+                .thenReturn(Mono.empty());
+        when(auditLogHelper.logDetailedEvent(
+                any(), any(), any(), anyString(), anyString(), anyMap(), anyString(), anyString()))
+                .thenReturn(Mono.empty());
 
         // Create a no-op ApplicationEventPublisher for testing (events not needed in
         // integration tests)
@@ -124,131 +149,18 @@ class DocumentProcessingServiceImplIntegrationTest {
             // log.debug("Event published: {}", event.getClass().getSimpleName());
         };
 
-        // Create a no-op ChunkEncryptionService for testing if not autowired
-        // This passes through text without encryption for integration tests
-        ChunkEncryptionService encryptionService = chunkEncryptionService != null
-                ? chunkEncryptionService
-                : createNoOpEncryptionService();
-
-        // Create a no-op AuditLogHelper for testing (audit logging not needed in
-        // integration tests)
-        org.lite.gateway.util.AuditLogHelper mockAuditLogHelper = auditLogHelper != null
-                ? auditLogHelper
-                : createNoOpAuditLogHelper();
-
         // Create KnowledgeHubDocumentProcessingServiceImpl
         this.documentProcessingService = new KnowledgeHubDocumentProcessingServiceImpl(
                 documentRepository,
                 chunkRepository,
-                s3Service,
+                objectStorageService,
                 tikaDocumentParser,
                 chunkingService,
-                s3Properties,
+                storageProperties,
                 mockEventPublisher,
-                encryptionService,
-                mockAuditLogHelper,
-                mockExecutionMessageChannel);
-    }
-
-    /**
-     * Create a no-op ChunkEncryptionService for testing that passes through text
-     * without encryption.
-     * This allows tests to run without requiring vault setup.
-     */
-    private ChunkEncryptionService createNoOpEncryptionService() {
-        return new ChunkEncryptionService() {
-            private final java.util.concurrent.atomic.AtomicInteger versionCounter = new java.util.concurrent.atomic.AtomicInteger(
-                    1);
-
-            @Override
-            public Mono<String> encryptChunkText(String plaintext, String teamId) {
-                return Mono.just(plaintext); // No encryption for tests
-            }
-
-            @Override
-            public Mono<String> encryptChunkText(String plaintext, String teamId, String keyVersion) {
-                return Mono.just(plaintext); // No encryption for tests
-            }
-
-            @Override
-            public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion) {
-                return Mono.just(encryptedText); // No decryption for tests (assumes already plaintext)
-            }
-
-            public Mono<String> decryptChunkText(String encryptedText, String teamId, String keyVersion,
-                    boolean logAudit) {
-                return Mono.just("decrypted");
-            }
-
-            @Override
-            public Mono<String> getCurrentKeyVersion(String teamId) {
-                return Mono.just("v" + versionCounter.get()); // Use current version from counter
-            }
-
-            @Override
-            public Mono<byte[]> encryptFile(byte[] fileBytes, String teamId) {
-                return Mono.just(fileBytes); // No encryption for tests
-            }
-
-            @Override
-            public Mono<byte[]> encryptFile(byte[] fileBytes, String teamId, String keyVersion) {
-                return Mono.just(fileBytes); // No encryption for tests
-            }
-
-            @Override
-            public Mono<byte[]> decryptFile(byte[] encryptedBytes, String teamId, String keyVersion) {
-                return Mono.just(encryptedBytes); // No decryption for tests (assumes already plaintext)
-            }
-
-            @Override
-            public Mono<String> rotateKey(String teamId) {
-                return Mono.just("v" + versionCounter.incrementAndGet());
-            }
-        };
-    }
-
-    /**
-     * Create a no-op AuditLogHelper for testing that returns empty Mono for all
-     * audit logging operations.
-     * This allows tests to run without requiring audit service setup.
-     */
-    private org.lite.gateway.util.AuditLogHelper createNoOpAuditLogHelper() {
-        org.lite.gateway.util.AuditLogHelper mockHelper = mock(org.lite.gateway.util.AuditLogHelper.class);
-
-        // Mock all logDetailedEvent methods to return empty Mono
-        when(mockHelper.logDetailedEvent(
-                any(org.lite.gateway.enums.AuditEventType.class),
-                any(org.lite.gateway.enums.AuditActionType.class),
-                any(org.lite.gateway.enums.AuditResourceType.class),
-                anyString(),
-                anyString(),
-                any(Map.class),
-                anyString(),
-                anyString(),
-                any(AuditResultType.class))).thenReturn(reactor.core.publisher.Mono.empty());
-
-        when(mockHelper.logDetailedEvent(
-                any(org.lite.gateway.enums.AuditEventType.class),
-                any(org.lite.gateway.enums.AuditActionType.class),
-                any(org.lite.gateway.enums.AuditResourceType.class),
-                anyString(),
-                anyString(),
-                any(Map.class),
-                anyString(),
-                anyString())).thenReturn(reactor.core.publisher.Mono.empty());
-
-        // Also mock the overloaded method without result parameter
-        when(mockHelper.logDetailedEvent(
-                any(org.lite.gateway.enums.AuditEventType.class),
-                any(org.lite.gateway.enums.AuditActionType.class),
-                any(org.lite.gateway.enums.AuditResourceType.class),
-                anyString(),
-                anyString(),
-                any(Map.class),
-                anyString(),
-                anyString())).thenReturn(reactor.core.publisher.Mono.empty());
-
-        return mockHelper;
+                chunkEncryptionService,
+                auditLogHelper,
+                executionMessageChannel);
     }
 
     @Test
@@ -302,13 +214,13 @@ class DocumentProcessingServiceImplIntegrationTest {
         var dataBuffer = new DefaultDataBufferFactory().wrap(testData);
         Flux<org.springframework.core.io.buffer.DataBuffer> content = Flux.just(dataBuffer);
 
-        StepVerifier.create(s3Service.uploadFile(s3Key, content, "text/plain", testData.length))
+        StepVerifier.create(objectStorageService.uploadFile(s3Key, content, "text/plain", testData.length))
                 .verifyComplete();
 
         System.out.println("✅ File uploaded to S3: " + s3Key);
 
         // Verify file exists before processing
-        StepVerifier.create(s3Service.fileExists(s3Key))
+        StepVerifier.create(objectStorageService.fileExists(s3Key))
                 .expectNext(true)
                 .verifyComplete();
 
@@ -379,13 +291,13 @@ class DocumentProcessingServiceImplIntegrationTest {
         // Verify processed JSON exists in S3
         System.out.println("🔍 Step 6: Verifying processed JSON in S3...");
         String processedS3Key = afterProcessing.getProcessedS3Key();
-        StepVerifier.create(s3Service.fileExists(processedS3Key))
+        StepVerifier.create(objectStorageService.fileExists(processedS3Key))
                 .expectNext(true)
                 .verifyComplete();
         System.out.println("✅ Processed JSON exists in S3: " + processedS3Key);
 
         // Download and verify processed JSON structure
-        byte[] processedJsonBytes = s3Service.downloadFileContent(processedS3Key).block();
+        byte[] processedJsonBytes = objectStorageService.downloadFileContent(processedS3Key).block();
         assertNotNull(processedJsonBytes);
         assertTrue(processedJsonBytes.length > 0);
         String processedJson = new String(processedJsonBytes, StandardCharsets.UTF_8);
@@ -420,29 +332,20 @@ class DocumentProcessingServiceImplIntegrationTest {
 
         // Use dev bucket for existing USCIS document
         String devBucketName = "linqra-knowledge-hub-dev";
-        KnowledgeHubS3Properties devS3Properties = new KnowledgeHubS3Properties();
-        devS3Properties.setBucketName(devBucketName);
-        devS3Properties.setRawPrefix("raw");
-        devS3Properties.setProcessedPrefix("processed");
-        devS3Properties.setPresignedUrlExpiration(Duration.ofMinutes(15));
-        devS3Properties.setMaxFileSize(52428800L);
+        StorageProperties devStorageProperties = new StorageProperties();
+        devStorageProperties.setBucketName(devBucketName);
+        devStorageProperties.setRawPrefix("raw");
+        devStorageProperties.setProcessedPrefix("processed");
+        devStorageProperties.setPresignedUrlExpiration(Duration.ofMinutes(15));
+        devStorageProperties.setMaxFileSize(52428800L);
+        devStorageProperties.setType("s3");
 
-        // Setup S3 service with dev bucket
-        S3ServiceImpl devS3Service = setupS3ServiceForBucket(devS3Properties);
+        // Setup ObjectStorage service with dev bucket
+        ObjectStorageServiceImpl devObjectStorageService = setupObjectStorageServiceForBucket(devStorageProperties);
 
         // Setup processing service with dev bucket
         TikaDocumentParser tikaDocumentParser = new TikaDocumentParser();
         ChunkingService chunkingService = new ChunkingService();
-
-        // Create a no-op MessageChannel for testing (WebSocket publishing not needed in
-        // integration tests)
-        MessageChannel mockExecutionMessageChannel = new AbstractMessageChannel() {
-            @Override
-            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
-                // No-op: just return true to simulate successful message sending
-                return true;
-            }
-        };
 
         // Create a no-op ApplicationEventPublisher for testing (events not needed in
         // integration tests)
@@ -451,28 +354,17 @@ class DocumentProcessingServiceImplIntegrationTest {
             // log.debug("Event published: {}", event.getClass().getSimpleName());
         };
 
-        // Use the same encryption service (no-op if not autowired)
-        ChunkEncryptionService encryptionService = chunkEncryptionService != null
-                ? chunkEncryptionService
-                : createNoOpEncryptionService();
-
-        // Create a no-op AuditLogHelper for testing (audit logging not needed in
-        // integration tests)
-        org.lite.gateway.util.AuditLogHelper mockAuditLogHelper = auditLogHelper != null
-                ? auditLogHelper
-                : createNoOpAuditLogHelper();
-
         KnowledgeHubDocumentProcessingServiceImpl devDocumentProcessingService = new KnowledgeHubDocumentProcessingServiceImpl(
                 documentRepository,
                 chunkRepository,
-                devS3Service,
+                devObjectStorageService,
                 tikaDocumentParser,
                 chunkingService,
-                devS3Properties,
+                devStorageProperties,
                 mockEventPublisher,
-                encryptionService,
-                mockAuditLogHelper,
-                mockExecutionMessageChannel);
+                chunkEncryptionService,
+                auditLogHelper,
+                executionMessageChannel);
 
         System.out.println("📦 Using S3 bucket: " + devBucketName);
 
@@ -510,7 +402,7 @@ class DocumentProcessingServiceImplIntegrationTest {
 
         // Step 2: Verify file exists in S3
         System.out.println("🔍 Step 2: Verifying file exists in S3...");
-        Boolean fileExists = devS3Service.fileExists(s3Key).block();
+        Boolean fileExists = devObjectStorageService.fileExists(s3Key).block();
 
         if (!Boolean.TRUE.equals(fileExists)) {
             System.out.println("❌ File does not exist in S3: " + s3Key);
@@ -609,13 +501,13 @@ class DocumentProcessingServiceImplIntegrationTest {
         // Step 8: Verify processed JSON exists in S3
         System.out.println("🔍 Step 8: Verifying processed JSON in S3...");
         String processedS3Key = afterProcessing.getProcessedS3Key();
-        StepVerifier.create(devS3Service.fileExists(processedS3Key))
+        StepVerifier.create(devObjectStorageService.fileExists(processedS3Key))
                 .expectNext(true)
                 .verifyComplete();
         System.out.println("✅ Processed JSON exists in S3: " + processedS3Key);
 
         // Download and verify processed JSON structure
-        byte[] processedJsonBytes = devS3Service.downloadFileContent(processedS3Key).block();
+        byte[] processedJsonBytes = devObjectStorageService.downloadFileContent(processedS3Key).block();
         assertNotNull(processedJsonBytes);
         assertTrue(processedJsonBytes.length > 0);
         String processedJson = new String(processedJsonBytes, StandardCharsets.UTF_8);
@@ -636,7 +528,7 @@ class DocumentProcessingServiceImplIntegrationTest {
 
         // Cleanup (if configured)
         System.out.println("\n🧹 Cleaning up test data...");
-        cleanupTestDataWithBucket(documentId, s3Key, processedS3Key, devS3Service, devBucketName);
+        cleanupTestDataWithBucket(documentId, s3Key, processedS3Key, devObjectStorageService, devBucketName);
 
         System.out.println("🎉 Existing USCIS document processing test passed!");
     }
@@ -683,7 +575,7 @@ class DocumentProcessingServiceImplIntegrationTest {
         documentRepository.save(document).block();
 
         var dataBuffer = new DefaultDataBufferFactory().wrap(testData);
-        s3Service.uploadFile(s3Key, Flux.just(dataBuffer), "text/plain", testData.length).block();
+        objectStorageService.uploadFile(s3Key, Flux.just(dataBuffer), "text/plain", testData.length).block();
 
         // When - Process the document
         System.out.println("⚙️  Processing document with token chunking...");
@@ -835,15 +727,16 @@ class DocumentProcessingServiceImplIntegrationTest {
 
         // Use dev bucket
         String devBucketName = "linqra-knowledge-hub-dev";
-        KnowledgeHubS3Properties devS3Properties = new KnowledgeHubS3Properties();
-        devS3Properties.setBucketName(devBucketName);
-        devS3Properties.setRawPrefix("raw");
-        devS3Properties.setProcessedPrefix("processed");
-        devS3Properties.setPresignedUrlExpiration(Duration.ofMinutes(15));
-        devS3Properties.setMaxFileSize(52428800L);
+        StorageProperties devStorageProperties = new StorageProperties();
+        devStorageProperties.setBucketName(devBucketName);
+        devStorageProperties.setRawPrefix("raw");
+        devStorageProperties.setProcessedPrefix("processed");
+        devStorageProperties.setPresignedUrlExpiration(Duration.ofMinutes(15));
+        devStorageProperties.setMaxFileSize(52428800L);
+        devStorageProperties.setType("s3");
 
-        // Setup S3 service with dev bucket
-        S3ServiceImpl devS3Service = setupS3ServiceForBucket(devS3Properties);
+        // Setup ObjectStorage service with dev bucket
+        ObjectStorageServiceImpl devObjectStorageService = setupObjectStorageServiceForBucket(devStorageProperties);
 
         System.out.println("📦 Using S3 bucket: " + devBucketName);
         System.out.println("📋 Testing download from S3 for document: " + documentId);
@@ -871,7 +764,7 @@ class DocumentProcessingServiceImplIntegrationTest {
             System.out.println("\n🔍 Step 2: Testing processed JSON download...");
             System.out.println("   - Processed S3 Key: " + processedS3Key);
 
-            Boolean fileExists = devS3Service.fileExists(processedS3Key).block();
+            Boolean fileExists = devObjectStorageService.fileExists(processedS3Key).block();
 
             if (!Boolean.TRUE.equals(fileExists)) {
                 System.out.println("❌ Processed JSON file does not exist in S3: " + processedS3Key);
@@ -880,7 +773,7 @@ class DocumentProcessingServiceImplIntegrationTest {
 
                 // Try to download
                 try {
-                    byte[] processedJsonBytes = devS3Service.downloadFileContent(processedS3Key).block();
+                    byte[] processedJsonBytes = devObjectStorageService.downloadFileContent(processedS3Key).block();
 
                     if (processedJsonBytes == null || processedJsonBytes.length == 0) {
                         System.out.println("❌ Downloaded processed JSON is empty");
@@ -927,7 +820,7 @@ class DocumentProcessingServiceImplIntegrationTest {
         System.out.println("   - Raw S3 Key: " + rawS3Key);
 
         // Check if raw file exists
-        Boolean rawFileExists = devS3Service.fileExists(rawS3Key).block();
+        Boolean rawFileExists = devObjectStorageService.fileExists(rawS3Key).block();
 
         if (!Boolean.TRUE.equals(rawFileExists)) {
             System.out.println("❌ Raw file does not exist in S3: " + rawS3Key);
@@ -941,7 +834,7 @@ class DocumentProcessingServiceImplIntegrationTest {
         System.out.println("⬇️  Downloading raw file from S3...");
 
         try {
-            byte[] rawFileBytes = devS3Service.downloadFileContent(rawS3Key).block();
+            byte[] rawFileBytes = devObjectStorageService.downloadFileContent(rawS3Key).block();
 
             if (rawFileBytes == null || rawFileBytes.length == 0) {
                 System.out.println("❌ Downloaded raw file is empty");
@@ -998,11 +891,11 @@ class DocumentProcessingServiceImplIntegrationTest {
     }
 
     private void cleanupTestData(String documentId, String rawS3Key, String processedS3Key) {
-        cleanupTestDataWithBucket(documentId, rawS3Key, processedS3Key, s3Service, BUCKET_NAME);
+        cleanupTestDataWithBucket(documentId, rawS3Key, processedS3Key, objectStorageService, BUCKET_NAME);
     }
 
     private void cleanupTestDataWithBucket(String documentId, String rawS3Key, String processedS3Key,
-            S3ServiceImpl s3ServiceToUse, String bucketName) {
+            ObjectStorageServiceImpl objectStorageServiceToUse, String bucketName) {
         if (!CLEANUP_AFTER_TEST) {
             // Keep files for inspection
             System.out.println("📋 Files kept for inspection (CLEANUP_AFTER_TEST = false):");
@@ -1030,13 +923,13 @@ class DocumentProcessingServiceImplIntegrationTest {
 
             // Delete raw file from S3
             if (rawS3Key != null) {
-                s3ServiceToUse.deleteFile(rawS3Key).block();
+                objectStorageServiceToUse.deleteFile(rawS3Key).block();
                 System.out.println("   - Deleted raw file from S3");
             }
 
             // Delete processed JSON from S3
             if (processedS3Key != null) {
-                s3ServiceToUse.deleteFile(processedS3Key).block();
+                objectStorageServiceToUse.deleteFile(processedS3Key).block();
                 System.out.println("   - Deleted processed JSON from S3");
             }
         } catch (Exception e) {
@@ -1044,11 +937,11 @@ class DocumentProcessingServiceImplIntegrationTest {
         }
     }
 
-    private void setupRealS3Service() {
-        s3Service = setupS3ServiceForBucket(s3Properties);
+    private void setupRealObjectStorageService() {
+        objectStorageService = setupObjectStorageServiceForBucket(storageProperties);
     }
 
-    private S3ServiceImpl setupS3ServiceForBucket(KnowledgeHubS3Properties properties) {
+    private ObjectStorageServiceImpl setupObjectStorageServiceForBucket(StorageProperties properties) {
         // Create real AWS credentials
         var credentials = AwsBasicCredentials.create(AWS_ACCESS_KEY, AWS_SECRET_KEY);
         var credentialsProvider = StaticCredentialsProvider.create(credentials);
@@ -1064,7 +957,7 @@ class DocumentProcessingServiceImplIntegrationTest {
                 .credentialsProvider(credentialsProvider)
                 .build();
 
-        // Create and return S3Service
-        return new S3ServiceImpl(s3AsyncClient, s3Presigner, properties);
+        // Create and return ObjectStorageService
+        return new ObjectStorageServiceImpl(s3AsyncClient, s3Presigner, properties);
     }
 }

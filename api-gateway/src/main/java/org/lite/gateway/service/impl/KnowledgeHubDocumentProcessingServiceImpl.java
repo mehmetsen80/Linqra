@@ -2,7 +2,7 @@ package org.lite.gateway.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.dto.ProcessedDocumentDto;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.event.KnowledgeHubDocumentMetaDataEvent;
@@ -17,8 +17,6 @@ import org.lite.gateway.service.*;
 import org.lite.gateway.util.AuditLogHelper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
@@ -56,10 +54,10 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
 
     private final KnowledgeHubDocumentRepository documentRepository;
     private final KnowledgeHubChunkRepository chunkRepository;
-    private final S3Service s3Service;
+    private final ObjectStorageService objectStorageService;
     private final TikaDocumentParser tikaDocumentParser;
     private final ChunkingService chunkingService;
-    private final KnowledgeHubS3Properties s3Properties;
+    private final StorageProperties storageProperties;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ApplicationEventPublisher eventPublisher;
     private final ChunkEncryptionService chunkEncryptionService;
@@ -71,20 +69,20 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
     public KnowledgeHubDocumentProcessingServiceImpl(
             KnowledgeHubDocumentRepository documentRepository,
             KnowledgeHubChunkRepository chunkRepository,
-            S3Service s3Service,
+            ObjectStorageService objectStorageService,
             TikaDocumentParser tikaDocumentParser,
             ChunkingService chunkingService,
-            KnowledgeHubS3Properties s3Properties,
+            StorageProperties storageProperties,
             ApplicationEventPublisher eventPublisher,
             ChunkEncryptionService chunkEncryptionService,
             AuditLogHelper auditLogHelper,
             @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel) {
         this.documentRepository = documentRepository;
         this.chunkRepository = chunkRepository;
-        this.s3Service = s3Service;
+        this.objectStorageService = objectStorageService;
         this.tikaDocumentParser = tikaDocumentParser;
         this.chunkingService = chunkingService;
-        this.s3Properties = s3Properties;
+        this.storageProperties = storageProperties;
         this.eventPublisher = eventPublisher;
         this.chunkEncryptionService = chunkEncryptionService;
         this.auditLogHelper = auditLogHelper;
@@ -232,7 +230,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
 
                     // Step 1: Download file from S3
                     // Step 1: Download file from S3
-                    return s3Service.downloadFileContent(document.getS3Key())
+                    return objectStorageService.downloadFileContent(document.getS3Key())
                             .doOnSuccess(
                                     bytes -> log.info("Downloaded {} bytes for document: {}", bytes.length, documentId))
                             .flatMap(bytes -> {
@@ -1052,15 +1050,16 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             byte[] jsonBytes = jsonContent.getBytes();
 
             // Build S3 key for processed document
-            String s3Key = s3Properties.buildProcessedKey(
+            String s3Key = storageProperties.buildProcessedKey(
                     document.getTeamId(),
                     document.getCollectionId(),
                     document.getDocumentId());
 
-            DataBufferFactory factory = org.springframework.core.io.buffer.DefaultDataBufferFactory.sharedInstance;
-            Flux<DataBuffer> flux = Flux.just(factory.wrap(jsonBytes));
-
-            return s3Service.uploadFile(s3Key, flux, "application/json", jsonBytes.length)
+            return objectStorageService.uploadFileBytes(
+                    s3Key,
+                    jsonBytes,
+                    "application/json",
+                    document.getEncryptionKeyVersion())
                     .thenReturn(s3Key);
 
         } catch (Exception e) {

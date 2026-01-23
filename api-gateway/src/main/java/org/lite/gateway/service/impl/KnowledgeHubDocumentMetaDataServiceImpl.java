@@ -16,7 +16,7 @@ import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
-import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.ObjectStorageService;
 import org.lite.gateway.util.AuditLogHelper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DuplicateKeyException;
@@ -44,7 +44,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
 
     private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
     private final KnowledgeHubDocumentRepository documentRepository;
-    private final S3Service s3Service;
+    private final ObjectStorageService objectStorageService;
     private final ObjectMapper objectMapper;
     private final MessageChannel executionMessageChannel;
     private final KnowledgeHubDocumentEmbeddingService embeddingService;
@@ -54,7 +54,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
     public KnowledgeHubDocumentMetaDataServiceImpl(
             KnowledgeHubDocumentMetaDataRepository metadataRepository,
             KnowledgeHubDocumentRepository documentRepository,
-            S3Service s3Service,
+            ObjectStorageService objectStorageService,
             ObjectMapper objectMapper,
             @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel,
             KnowledgeHubDocumentEmbeddingService embeddingService,
@@ -62,7 +62,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
             AuditLogHelper auditLogHelper) {
         this.metadataRepository = metadataRepository;
         this.documentRepository = documentRepository;
-        this.s3Service = s3Service;
+        this.objectStorageService = objectStorageService;
         this.objectMapper = objectMapper;
         this.executionMessageChannel = executionMessageChannel;
         this.embeddingService = embeddingService;
@@ -270,7 +270,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
         String collectionId = document.getCollectionId();
 
         return metadataRepository.deleteByDocumentIdAndTeamIdAndCollectionId(documentId, teamId, collectionId)
-                .then(s3Service.downloadFileContent(document.getProcessedS3Key()))
+                .then(objectStorageService.downloadFileContent(document.getProcessedS3Key()))
                 .flatMap(jsonBytes -> {
                     try {
                         // Parse as ProcessedDocumentDto to decrypt sensitive fields
@@ -333,7 +333,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
 
     private Mono<KnowledgeHubDocumentMetaData> updateMetadataFromProcessedJson(
             KnowledgeHubDocumentMetaData existing, KnowledgeHubDocument document) {
-        return s3Service.downloadFileContent(document.getProcessedS3Key())
+        return objectStorageService.downloadFileContent(document.getProcessedS3Key())
                 .flatMap(jsonBytes -> {
                     try {
                         // Parse as ProcessedDocumentDto to decrypt sensitive fields

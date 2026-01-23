@@ -1,0 +1,101 @@
+name: Deploy MinIO to Polaris
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-minio:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create secrets.json from GitHub secret
+        env:
+          SECRETS_JSON: ${{ secrets.SECRETS_JSON }}
+        run: |
+          mkdir -p secrets
+          if [ -z "$SECRETS_JSON" ]; then
+            echo "ERROR: SECRETS_JSON GitHub secret is not set"
+            exit 1
+          fi
+          echo "$SECRETS_JSON" > secrets/secrets.json
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Generate vault.encrypted
+        env:
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
+        run: |
+          if [ -z "$VAULT_MASTER_KEY" ]; then
+            echo "❌ ERROR: VAULT_MASTER_KEY secret is not set"
+            exit 1
+          fi
+          
+          # Run bootstrap script to create vault
+          export VAULT_ENVIRONMENT=ec2
+          chmod +x scripts/bootstrap-vault.sh
+          bash scripts/bootstrap-vault.sh secrets/secrets.json ec2
+          
+          if [ ! -f secrets/vault.encrypted ]; then
+            echo "ERROR: vault.encrypted was not created"
+            exit 1
+          fi
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
+
+      - name: Deploy to Polaris EC2
+        env:
+          EC2_HOST: ${{ secrets.HOST_DNS_POLARIS }}
+          EC2_USERNAME: ${{ secrets.USERNAME_PROD }}
+          TARGET_DIR: ${{ secrets.TARGET_DIR_PROD }}
+          VAULT_MASTER_KEY: ${{ secrets.VAULT_MASTER_KEY }}
+        run: |
+          # Disable strict host key checking
+          mkdir -p ~/.ssh
+          echo "StrictHostKeyChecking no" >> ~/.ssh/config
+          
+          echo "🚀 Starting Deployment of MinIO to $EC2_HOST..."
+
+          # 1. Create directory structure (Host & App)
+          ssh $EC2_USERNAME@$EC2_HOST "sudo mkdir -p $TARGET_DIR/.kube/minio && sudo mkdir -p $TARGET_DIR/vault-reader && sudo mkdir -p $TARGET_DIR/secrets && sudo mkdir -p /opt/minio/data && sudo chown -R $EC2_USERNAME:$EC2_USERNAME $TARGET_DIR && sudo chown -R 1000:1000 /opt/minio/data"
+          
+          # 2. Transfer Build Context
+          # We need: pom.xml, vault-reader/, scripts/ (for vault-entrypoint), .kube/minio/ (Dockerfile)
+          rsync -avz --exclude 'target/' pom.xml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/
+          rsync -avz --exclude 'target/' vault-reader/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/vault-reader/
+          rsync -avz scripts/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/scripts/
+          rsync -avz .kube/minio/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/minio/
+          
+          # 3. Transfer Config & Secrets
+          scp docker-compose-polaris-minio.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose-polaris-minio.yml
+          scp secrets/vault.encrypted $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/secrets/
+          
+          # 4. Deploy
+          ssh $EC2_USERNAME@$EC2_HOST "
+            cd $TARGET_DIR
+            
+            # Setup Permissions
+            sudo chown -R $EC2_USERNAME $TARGET_DIR
+            sudo chmod +x scripts/*.sh
+
+            # Set Secrets Permissions
+            sudo chmod 644 secrets/vault.encrypted
+
+            # Export Master Key
+            export VAULT_MASTER_KEY=$VAULT_MASTER_KEY
+            export VAULT_ENVIRONMENT=ec2
+            
+            # Deploy (Build & Up)
+            echo "🚀 Building and Deploying MinIO..."
+            sudo -E docker compose -f docker-compose-polaris-minio.yml down || true
+            sudo -E docker compose -f docker-compose-polaris-minio.yml up -d --build
+          "
+          echo "✅ Deployment Complete!"

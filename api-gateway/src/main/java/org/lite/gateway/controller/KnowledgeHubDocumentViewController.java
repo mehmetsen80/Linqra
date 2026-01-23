@@ -11,7 +11,7 @@ import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
-import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.ObjectStorageService;
 import org.lite.gateway.service.TeamContextService;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
@@ -33,7 +33,7 @@ import java.util.Map;
 public class KnowledgeHubDocumentViewController {
 
         private final KnowledgeHubDocumentService documentService;
-        private final S3Service s3Service;
+        private final ObjectStorageService objectStorageService;
         private final TeamContextService teamContextService;
         private final ObjectMapper objectMapper;
         private final ChunkEncryptionService chunkEncryptionService;
@@ -72,7 +72,8 @@ public class KnowledgeHubDocumentViewController {
                                 .flatMap(teamId -> documentService.getDocumentById(documentId, teamId)
                                                 .flatMap(document -> {
                                                         // Download encrypted file from S3
-                                                        return s3Service.downloadFileContent(document.getS3Key())
+                                                        return objectStorageService
+                                                                        .downloadFileContent(document.getS3Key())
                                                                         .flatMap(encryptedBytes -> {
                                                                                 Mono<byte[]> fileBytesMono;
                                                                                 if (Boolean.TRUE
@@ -153,7 +154,7 @@ public class KnowledgeHubDocumentViewController {
                                                 .switchIfEmpty(
                                                                 Mono.error(new RuntimeException(
                                                                                 "Processed JSON not available for this document")))
-                                                .flatMap(document -> s3Service
+                                                .flatMap(document -> objectStorageService
                                                                 .generatePresignedDownloadUrl(
                                                                                 document.getProcessedS3Key())
                                                                 .map(url -> {
@@ -196,7 +197,7 @@ public class KnowledgeHubDocumentViewController {
                                                 .switchIfEmpty(
                                                                 Mono.error(new RuntimeException(
                                                                                 "Processed JSON not available for this document")))
-                                                .flatMap(document -> s3Service
+                                                .flatMap(document -> objectStorageService
                                                                 .downloadFileContent(document.getProcessedS3Key())
                                                                 .flatMap(bytes -> {
                                                                         try {

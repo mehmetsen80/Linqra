@@ -83,6 +83,14 @@ spring:
         uri: https://${vault.eureka.gateway.url}:8761
         predicates:
         - Path=/eureka/**
+        
+      - id: minio-proxy
+        uri: http://localhost:9000
+        predicates:
+          - Path=/${vault.aws.s3.bucket.name}/**, /${vault.aws.s3.backup.bucket.name}/**, /${vault.aws.s3.audit.bucket.name}/**, /${vault.aws.s3.audit.backup.bucket.name}/**
+        filters:
+          - RemoveRequestHeader=Authorization
+          - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
 
 #        ## Inventory Service (Just to Test) (This is being loaded dynamically from mongodb)
 #      - id: inventory-service
@@ -229,14 +237,19 @@ vault:
     key: ${VAULT_MASTER_KEY}
 
 linqra:
-  knowledgehub:
-    s3:
-      bucket-name: ${vault.aws.s3.bucket.name}
-      backup-bucket-name: ${vault.aws.s3.backup.bucket.name}
-      backup-bucket-region: ${vault.aws.s3.backup.bucket.region}
-      raw-prefix: raw
-      processed-prefix: processed
-      presigned-url-expiration: PT15M  # 15 minutes
-      max-file-size: 52428800  # 50MB in bytes
+  storage:
+    type: ${vault.storage.type:s3}
+    endpoint: ${vault.storage.endpoint:}
+    # Use MinIO keys if type is minio and keys are provided
+    access-key: ${vault.minio.access.key:}
+    secret-key: ${vault.minio.secret.key:}
+    
+    bucket-name: ${vault.aws.s3.bucket.name}
+    backup-bucket-name: ${vault.aws.s3.backup.bucket.name}
+    backup-bucket-region: ${vault.aws.s3.backup.bucket.region}
+    raw-prefix: raw
+    processed-prefix: processed
+    presigned-url-expiration: PT15M
+    max-file-size: 52428800
     redis:
       document-processing-channel: document-processing-queue

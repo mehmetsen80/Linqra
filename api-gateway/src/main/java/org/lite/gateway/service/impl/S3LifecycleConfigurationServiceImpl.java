@@ -1,8 +1,8 @@
-package org.lite.gateway.service.impl;
+package org.lite.gateway.service.impl; // Refactored for ObjectStorage
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
@@ -18,14 +18,15 @@ import java.util.List;
 public class S3LifecycleConfigurationServiceImpl {
 
         private final S3AsyncClient s3AsyncClient;
-        private final KnowledgeHubS3Properties s3Properties;
+        private final StorageProperties storageProperties;
 
         /**
          * Initialize S3 Lifecycle Rules on startup
          */
         @EventListener(ApplicationReadyEvent.class)
         public void initializeLifecycleRules() {
-                log.info("Initializing S3 Lifecycle Rules for bucket: {}", s3Properties.getBucketName());
+                log.info("Initializing Object Storage Lifecycle Rules for bucket: {}",
+                                storageProperties.getBucketName());
 
                 try {
                         // Define rules
@@ -74,7 +75,7 @@ public class S3LifecycleConfigurationServiceImpl {
 
                         PutBucketLifecycleConfigurationRequest request = PutBucketLifecycleConfigurationRequest
                                         .builder()
-                                        .bucket(s3Properties.getBucketName())
+                                        .bucket(storageProperties.getBucketName())
                                         .lifecycleConfiguration(lifecycleConfig)
                                         .build();
 
@@ -82,15 +83,15 @@ public class S3LifecycleConfigurationServiceImpl {
                         s3AsyncClient.putBucketLifecycleConfiguration(request)
                                         .whenComplete((response, error) -> {
                                                 if (error != null) {
-                                                        log.error("Failed to set S3 Lifecycle Rules: {}",
+                                                        log.error("Failed to set Lifecycle Rules: {}",
                                                                         error.getMessage());
                                                 } else {
-                                                        log.info("Successfully configured S3 Lifecycle Rules (Audits: 7 years, Exports: 7 days)");
+                                                        log.info("Successfully configured Lifecycle Rules (Audits: 7 years, Exports: 7 days)");
                                                 }
                                         });
 
                 } catch (Exception e) {
-                        log.error("Error configuring S3 lifecycle: {}", e.getMessage(), e);
+                        log.error("Error configuring storage lifecycle: {}", e.getMessage(), e);
                 }
         }
 }

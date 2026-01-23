@@ -448,15 +448,19 @@ function ViewTeam() {
     const modelIndex = sortedLlmModels.findIndex(m => m.id === modelId);
     if (modelIndex <= 0) return; // Already at top
 
-    const updatedModels = [...llmModels];
-    const currentModel = updatedModels.find(m => m.id === modelId);
-    const prevModel = sortedLlmModels[modelIndex - 1];
-    const prevModelInList = updatedModels.find(m => m.id === prevModel.id);
+    // Create a working copy of the sorted list
+    const newSortedList = [...sortedLlmModels];
 
-    // Swap priorities
-    const tempPriority = currentModel.priority;
-    currentModel.priority = prevModelInList.priority;
-    prevModelInList.priority = tempPriority;
+    // Swap element with the one above it
+    const temp = newSortedList[modelIndex];
+    newSortedList[modelIndex] = newSortedList[modelIndex - 1];
+    newSortedList[modelIndex - 1] = temp;
+
+    // Reassign priorities sequentially to ensure consistency (1, 2, 3...)
+    const updatedModels = newSortedList.map((model, index) => ({
+      ...model,
+      priority: index + 1
+    }));
 
     setLlmModels(updatedModels);
     setPriorityChanged(true);
@@ -467,15 +471,19 @@ function ViewTeam() {
     const modelIndex = sortedLlmModels.findIndex(m => m.id === modelId);
     if (modelIndex >= sortedLlmModels.length - 1) return; // Already at bottom
 
-    const updatedModels = [...llmModels];
-    const currentModel = updatedModels.find(m => m.id === modelId);
-    const nextModel = sortedLlmModels[modelIndex + 1];
-    const nextModelInList = updatedModels.find(m => m.id === nextModel.id);
+    // Create a working copy of the sorted list
+    const newSortedList = [...sortedLlmModels];
 
-    // Swap priorities
-    const tempPriority = currentModel.priority;
-    currentModel.priority = nextModelInList.priority;
-    nextModelInList.priority = tempPriority;
+    // Swap element with the one below it
+    const temp = newSortedList[modelIndex];
+    newSortedList[modelIndex] = newSortedList[modelIndex + 1];
+    newSortedList[modelIndex + 1] = temp;
+
+    // Reassign priorities sequentially to ensure consistency (1, 2, 3...)
+    const updatedModels = newSortedList.map((model, index) => ({
+      ...model,
+      priority: index + 1
+    }));
 
     setLlmModels(updatedModels);
     setPriorityChanged(true);
@@ -1028,7 +1036,7 @@ function ViewTeam() {
                           <tr key={model.id}>
                             <td>
                               <Badge bg="dark" className="px-2">
-                                #{model.priority ?? '-'}
+                                #{index + 1}
                               </Badge>
                             </td>
                             <td>

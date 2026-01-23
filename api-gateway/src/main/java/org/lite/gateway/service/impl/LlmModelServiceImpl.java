@@ -338,28 +338,28 @@ public class LlmModelServiceImpl implements LlmModelService {
 
                 // Local Models (Ollama)
                 // These models are hosted locally via Ollama and have $0.00 cost
-                models.add(createModel("llama3", "Meta Llama 3 (Local)", "meta", "ollama-chat",
+                models.add(createModel("llama3", "Meta Llama 3", "ollama", "ollama-chat",
                                 0.0, 0.0, true, "Meta Llama 3 running locally via Ollama",
                                 "http://localhost:11434/api/chat", null, 8_192, now));
-                models.add(createModel("mistral", "Mistral (Local)", "mistral", "ollama-chat",
+                models.add(createModel("mistral", "Mistral", "ollama", "ollama-chat",
                                 0.0, 0.0, true, "Mistral running locally via Ollama",
                                 "http://localhost:11434/api/chat", null, 8_192, now));
-                models.add(createModel("llama3.2", "Meta Llama 3.2 (Local)", "meta", "ollama-chat",
+                models.add(createModel("llama3.2", "Meta Llama 3.2 (Local)", "ollama", "ollama-chat",
                                 0.0, 0.0, true, "Meta Llama 3.2: Optimized for edge and vision",
                                 "http://localhost:11434/api/chat", null, 128_000, now));
-                models.add(createModel("gemma2", "Google Gemma 2 (Local)", "google", "ollama-chat",
+                models.add(createModel("gemma2", "Google Gemma 2 (Local)", "ollama", "ollama-chat",
                                 0.0, 0.0, true, "Google Gemma 2: High performance open model",
                                 "http://localhost:11434/api/chat", null, 8_192, now));
-                models.add(createModel("qwen2.5", "Qwen 2.5 (Local)", "qwen", "ollama-chat",
+                models.add(createModel("qwen2.5", "Qwen 2.5 (Local)", "ollama", "ollama-chat",
                                 0.0, 0.0, true, "Qwen 2.5: Strong reasoning and coding",
                                 "http://localhost:11434/api/chat", null, 32_768, now));
-                models.add(createModel("phi3.5", "Microsoft Phi 3.5 (Local)", "microsoft", "ollama-chat",
+                models.add(createModel("phi3.5", "Microsoft Phi 3.5 (Local)", "ollama", "ollama-chat",
                                 0.0, 0.0, true, "Phi 3.5: Powerful small language model",
                                 "http://localhost:11434/api/chat", null, 128_000, now));
-                models.add(createModel("deepseek-r1", "DeepSeek R1 (Local)", "deepseek", "ollama-chat",
+                models.add(createModel("deepseek-r1", "DeepSeek R1 (Local)", "ollama", "ollama-chat",
                                 0.0, 0.0, true, "DeepSeek R1: Advanced reasoning capabilities",
                                 "http://localhost:11434/api/chat", null, 128_000, now));
-                models.add(createModel("mistral-nemo", "Mistral Nemo (Local)", "mistral", "ollama-chat",
+                models.add(createModel("mistral-nemo", "Mistral Nemo (Local)", "ollama", "ollama-chat",
                                 0.0, 0.0, true, "Mistral Nemo: 12B model by Mistral & NVIDIA",
                                 "http://localhost:11434/api/chat", null, 128_000, now));
                 models.add(createModel("nomic-embed-text", "Ollama Nomic Embed Text", "ollama", "ollama-embed",

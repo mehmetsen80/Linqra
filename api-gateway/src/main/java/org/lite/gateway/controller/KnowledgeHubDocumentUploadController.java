@@ -1,11 +1,11 @@
-package org.lite.gateway.controller;
+package org.lite.gateway.controller; // Refactored for ObjectStorage
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.annotation.AuditLog;
 
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.dto.*;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.enums.AuditActionType;
@@ -13,7 +13,7 @@ import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
-import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.ObjectStorageService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.TeamService;
 import org.lite.gateway.service.UserContextService;
@@ -36,8 +36,8 @@ import java.util.List;
 @Slf4j
 public class KnowledgeHubDocumentUploadController {
 
-        private final S3Service s3Service;
-        private final KnowledgeHubS3Properties s3Properties;
+        private final ObjectStorageService objectStorageService;
+        private final StorageProperties storageProperties;
         private final KnowledgeHubDocumentService documentService;
         private final TeamContextService teamContextService;
         private final KnowledgeHubDocumentRepository documentRepository;
@@ -56,10 +56,10 @@ public class KnowledgeHubDocumentUploadController {
                 log.info("Initiating upload for file: {}", request.getFileName());
 
                 // Validate file size
-                if (request.getFileSize() > s3Properties.getMaxFileSize()) {
+                if (request.getFileSize() > storageProperties.getMaxFileSize()) {
                         return Mono.just(ResponseEntity.badRequest()
                                         .body(UploadResponse.error("File size exceeds maximum allowed: "
-                                                        + s3Properties.getMaxFileSize())));
+                                                        + storageProperties.getMaxFileSize())));
                 }
 
                 // Use service to initiate upload (generates presigned URL and creates document)
@@ -103,7 +103,7 @@ public class KnowledgeHubDocumentUploadController {
                                 .mapToLong(UploadInitiateRequest::getFileSize)
                                 .sum();
 
-                if (totalSize > s3Properties.getMaxFileSize() * request.getFiles().size()) {
+                if (totalSize > storageProperties.getMaxFileSize() * request.getFiles().size()) {
                         return Mono.just(ResponseEntity.badRequest()
                                         .body(BulkUploadResponse.error("Total file size exceeds maximum allowed")));
                 }
@@ -114,7 +114,7 @@ public class KnowledgeHubDocumentUploadController {
 
                                         for (UploadInitiateRequest fileRequest : request.getFiles()) {
                                                 // Validate individual file size
-                                                if (fileRequest.getFileSize() > s3Properties.getMaxFileSize()) {
+                                                if (fileRequest.getFileSize() > storageProperties.getMaxFileSize()) {
                                                         uploadResponses.add(Mono.just(UploadResponse.builder()
                                                                         .error("File size exceeds maximum: "
                                                                                         + fileRequest.getFileName())
@@ -286,7 +286,7 @@ public class KnowledgeHubDocumentUploadController {
 
                 return teamContextService.getTeamFromContext(exchange)
                                 .flatMap(teamId -> documentService.getDocumentById(documentId, teamId)
-                                                .flatMap(document -> s3Service
+                                                .flatMap(document -> objectStorageService
                                                                 .generatePresignedDownloadUrl(document.getS3Key())
                                                                 .map(url -> {
                                                                         java.util.Map<String, String> response = java.util.Map

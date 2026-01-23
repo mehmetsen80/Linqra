@@ -67,7 +67,7 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 cleanProperties.put("encryptionKeyVersion", encryptionKeyVersion);
 
                 StringBuilder cypher = new StringBuilder();
-                cypher.append("MERGE (e:").append(entityType).append(" {id: $entityId, teamId: $teamId}) ");
+                cypher.append("MERGE (e:`").append(entityType).append("` {id: $entityId, teamId: $teamId}) ");
                 // ON CREATE and ON MATCH must come immediately after MERGE
                 cypher.append("ON CREATE SET e.createdAt = timestamp() ");
                 cypher.append("ON MATCH SET e.updatedAt = timestamp() ");
@@ -126,8 +126,8 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 Map<String, Object> sanitizedProps = properties != null ? sanitizeProperties(properties) : Map.of();
 
                 StringBuilder cypher = new StringBuilder();
-                cypher.append("MATCH (from:").append(fromEntityType).append(" {id: $fromId, teamId: $teamId}) ");
-                cypher.append("MATCH (to:").append(toEntityType).append(" {id: $toId, teamId: $teamId}) ");
+                cypher.append("MATCH (from:`").append(fromEntityType).append("` {id: $fromId, teamId: $teamId}) ");
+                cypher.append("MATCH (to:`").append(toEntityType).append("` {id: $toId, teamId: $teamId}) ");
                 cypher.append("MERGE (from)-[r:").append(relationshipType).append("]->(to) ");
 
                 // ON CREATE and ON MATCH must come immediately after MERGE
@@ -174,7 +174,7 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 cleanFilters.remove("teamId");
 
                 StringBuilder cypher = new StringBuilder();
-                cypher.append("MATCH (e:").append(entityType).append(") ");
+                cypher.append("MATCH (e:`").append(entityType).append("`) ");
                 cypher.append("WHERE e.teamId = $teamId "); // Always enforce teamId filtering
 
                 if (!cleanFilters.isEmpty()) {
@@ -229,7 +229,7 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 // For direct relationships (maxDepth=1), use a simpler query
                 if (maxDepth <= 1) {
                     StringBuilder cypher = new StringBuilder();
-                    cypher.append("MATCH (start:").append(entityType).append(" {id: $entityId, teamId: $teamId})-[r");
+                    cypher.append("MATCH (start:`").append(entityType).append("` {id: $entityId, teamId: $teamId})-[r");
 
                     if (relationshipType != null && !relationshipType.isEmpty()) {
                         cypher.append(":").append(relationshipType);
@@ -267,8 +267,8 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                     // For multi-hop paths (maxDepth > 1), use path traversal
                     params.put("maxDepth", maxDepth);
                     StringBuilder cypher = new StringBuilder();
-                    cypher.append("MATCH path = (start:").append(entityType)
-                            .append(" {id: $entityId, teamId: $teamId})");
+                    cypher.append("MATCH path = (start:`").append(entityType)
+                            .append("` {id: $entityId, teamId: $teamId})");
 
                     if (relationshipType != null && !relationshipType.isEmpty()) {
                         cypher.append("-[r:").append(relationshipType).append("*1..").append(maxDepth).append("]-");
@@ -346,7 +346,7 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 params.put("entityId", entityId);
                 params.put("teamId", teamId);
 
-                String cypher = "MATCH (e:" + entityType + " {id: $entityId, teamId: $teamId}) " +
+                String cypher = "MATCH (e:`" + entityType + "` {id: $entityId, teamId: $teamId}) " +
                         "DETACH DELETE e " +
                         "RETURN count(e) as deleted";
 
@@ -372,7 +372,7 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 params.put("teamId", teamId);
 
                 // Use DETACH DELETE to remove entities and all their relationships
-                String cypher = "MATCH (e:" + entityType + " {teamId: $teamId}) " +
+                String cypher = "MATCH (e:`" + entityType + "` {teamId: $teamId}) " +
                         "DETACH DELETE e " +
                         "RETURN count(e) as deleted";
 

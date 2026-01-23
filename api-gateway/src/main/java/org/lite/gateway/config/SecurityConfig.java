@@ -120,8 +120,11 @@ public class SecurityConfig implements BeanFactoryAware {
             "/r/komunas-app/whatsapp/webhook",
             "/widget/**", // Public AI Assistant widget scripts (public API key based)
             "/api/auth/**", // Public Auth Endpoints (SSO Callback, Login, Register)
-            "/api/internal/**" // Secured by X-Change-Log-Token
-    );
+            "/api/internal/**", // Secured by X-Change-Log-Token
+            "/linqra-knowledge-hub-dev/**", // MinIO Proxy (Secured by S3 Signature)
+            "/backup-linqra-knowledge-hub-dev/**",
+            "/linqra-audit-dev/**",
+            "/backup-linqra-audit-dev/**");
 
     private static final Pattern SCOPE_KEY_PATTERN = Pattern.compile("^/([\\w-]+)/");
     private static final Pattern ROUTE_PATTERN = Pattern.compile("/r/([^/]+)/");
@@ -163,6 +166,7 @@ public class SecurityConfig implements BeanFactoryAware {
                 .addFilterBefore(apiKeyAuthenticationFilter,
                         SecurityWebFiltersOrder.AUTHENTICATION)
                 .authorizeExchange(exchange -> exchange
+                        .pathMatchers(org.springframework.http.HttpMethod.OPTIONS).permitAll()
                         .anyExchange()
                         .access(this::dynamicPathAuthorization));
         return serverHttpSecurity.build();

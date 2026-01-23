@@ -11,69 +11,49 @@ services:
       dockerfile: .kube/minio/Dockerfile.polaris
     container_name: minio-service
     restart: always
-    # Command is handled by CMD in Dockerfile, but we can override or be explicit if needed.
-    # The Dockerfile CMD is: ["server", "/data", "--console-address", ":9001"]
-    # The vault-entrypoint.sh will execute this command after loading secrets.
-
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
-      # Vault Configuration
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
       VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
-
-      # Secrets to inject from Vault
-      # We ask vault-reader to inject these specific variables from the vault file
-      # In secrets-ec2.json they are 'minio.access.key' and 'minio.secret.key'.
-      # BUT vault-reader exports exact keys from the JSON.
-      # Wait, vault-reader usually exports Flattened keys or As-Is?
-      # Let's check secrets-ec2.json: "minio.access.key": "..."
-      # If vault-reader exports as MINIO_ACCESS_KEY (uppercase, underscore), that's auto-conversion?
-      # OR does it export 'minio.access.key'? Shell vars can't have dots.
-      # The standard Java vault-reader typically normalizes keys to UPPERCASE_UNDERSCORE.
-      # So "minio.access.key" -> "MINIO_ACCESS_KEY".
-
-      # We need MINIO_ROOT_USER and MINIO_ROOT_PASSWORD for MinIO.
-      # We can't map names in VAULT_REQUIRED_VARS.
-
-      # However, we can use the injected variables in the environment section if they were available at compose time, 
-      # BUT they are injected INSIDE the container effectively (exported in entrypoint).
-      # So we can't do: MINIO_ROOT_USER: ${MINIO_ACCESS_KEY} here because compose doesn't see them.
-
-      # MINIO supports custom credential env vars using `MINIO_ACCESS_KEY_FILE` etc? No.
-      # But we can rename them in the entrypoint?
-      # `vault-entrypoint.sh` just exports them.
-
-      # TRICK: We can instruct `vault-entrypoint.sh` (or a specific wrapper) to map them.
-      # OR improved plan: Update `secrets-ec2.json` to use standard MinIO env var names directly?
-      # "minio.access.key" is existing.
-      # Changing keys in secrets.json might break Dev environment if not synchronized.
-      # secrets-dev.json uses "minio.access.key".
-
-      # Let's check `vault-entrypoint.sh` capabilities. 
-      # It reads secrets and exports them.
-      # If secrets has `minio.access.key`, the vault-reader (Java) likely converts to `MINIO_ACCESS_KEY`.
-
-      # So inside the container we will have `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` env vars.
-      # MinIO expects `MINIO_ROOT_USER` and `MINIO_ROOT_PASSWORD`.
-
-      # We can set `MINIO_ROOT_USER` to `${MINIO_ACCESS_KEY}` in the Dockerfile? 
-      # No, ENV expansion happens at build time or runtime from provided ENV. 
-      # Shell expansion in CMD/ENTRYPOINT works.
-
-      # MinIO allows `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` as aliases for ROOT_USER/PASSWORD for backward compatibility!
-      # Confirmed: MinIO supports legacy `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`.
-      # So if `vault-reader` produces `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY`, MinIO will pick them up automatically.
-
-      # Great! We just need to ensure we request them.
       VAULT_REQUIRED_VARS: MINIO_ACCESS_KEY,MINIO_SECRET_KEY
-
-      # Redirect Console requests to the public URL
       MINIO_BROWSER_REDIRECT_URL: "https://polaris.linqra.com/minio/"
     volumes:
-      # Host Path (EC2 /opt/minio/data) -> Container Path (/data)
       - /opt/minio/data:/data
+      - ./secrets:/app/secrets:ro
+    networks:
+      - linqra-network
+
+  createbuckets:
+    build:
+      context: .
+      dockerfile: .kube/minio/Dockerfile.polaris
+    container_name: minio-createbuckets
+    depends_on:
+      - minio
+    environment:
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
+      VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-ec2}
+      VAULT_REQUIRED_VARS: MINIO_ACCESS_KEY,MINIO_SECRET_KEY
+    # We override entrypoint to use our shell command, mostly to bypass the default server startup
+    # But we MUST use /app/vault-entrypoint.sh to inject secrets first!
+    # vault-entrypoint.sh executes the passed arguments.
+    entrypoint:
+      - /app/vault-entrypoint.sh
+      - /bin/sh
+      - -c
+    command: >
+      " echo 'Waiting for MinIO to be ready...'; # Simple wait loop sleep 10;
+
+      echo 'Configuring MinIO Client...'; # Use injected env vars MINIO_ACCESS_KEY / MINIO_SECRET_KEY mc config host add myminio http://minio-service:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
+
+      echo 'Creating Bucket linqra-knowledge-hub...'; mc mb --ignore-existing myminio/linqra-knowledge-hub;
+
+      echo 'Setting Public Download Policy...'; mc anonymous set download myminio/linqra-knowledge-hub;
+
+      echo 'Bucket created successfully!'; "
+    volumes:
       - ./secrets:/app/secrets:ro
     networks:
       - linqra-network

@@ -203,6 +203,10 @@ jobs:
         IMAGE_TAG: ${{ github.sha }}
       run: |
         kubectl apply -f .kube/eks/namespace.yml
+        
+        # Deploy MinIO service mapping (to EC2)
+        kubectl apply -f .kube/eks/minio-service.yml
+        
         kubectl apply -f .kube/eks/backend.yml
         kubectl apply -f .kube/eks/frontend.yml
         kubectl apply -f .kube/eks/ingress.yml

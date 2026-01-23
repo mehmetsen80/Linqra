@@ -32,4 +32,4 @@ jobs:
           
           # 3. Deploy
           ssh $USERNAME@$HOST "cd $TARGET_DIR && \
-            docker compose -f docker-compose-polaris-caddy.yml up -d --build"
+            docker compose -f docker-compose-polaris-caddy.yml up -d --force-recreate"

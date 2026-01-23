@@ -13,6 +13,7 @@ public class StorageProperties {
 
     private String type = "s3"; // s3 or minio
     private String endpoint; // Used for MinIO
+    private String publicEndpoint; // Public URL for client-side access (e.g. gateway)
     private String accessKey;
     private String secretKey;
 

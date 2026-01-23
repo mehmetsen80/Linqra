@@ -61,12 +61,16 @@ public class ObjectStorageServiceImpl implements ObjectStorageService {
                 PresignedPutObjectRequest presignedRequest = s3Presigner.presignPutObject(presignRequest);
                 log.info("Full Presigned URL: {}", presignedRequest.url().toString());
 
-                // Replace internal endpoint (e.g. localhost:9000) with public gateway endpoint
-                // (localhost:7777)
-                // This ensures the Host header matches what MinIO expects (localhost:9000) via
-                // the gateway's proxying
+                // Replace internal endpoint with public endpoint if configured
+                // This ensures the frontend gets a URL it can access (e.g. through the gateway)
+                // while the signature remains valid for the internal endpoint.
                 String internalUrl = presignedRequest.url().toString();
-                String publicUrl = internalUrl.replace("http://localhost:9000", "https://localhost:7777");
+                String publicUrl = internalUrl;
+
+                if (storageProperties.getEndpoint() != null && storageProperties.getPublicEndpoint() != null) {
+                    publicUrl = internalUrl.replace(storageProperties.getEndpoint(),
+                            storageProperties.getPublicEndpoint());
+                }
 
                 log.info("Internal Presigned URL: {}", internalUrl);
                 log.info("Public Presigned URL: {}", publicUrl);

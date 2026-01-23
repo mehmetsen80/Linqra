@@ -938,8 +938,21 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
     }
 
     private String cleanJsonText(String text) {
-        // Clean up the response - remove markdown code blocks if present
+        if (text == null) {
+            return "";
+        }
         text = text.trim();
+
+        // Try to find JSON array structure
+        int firstBracket = text.indexOf('[');
+        int lastBracket = text.lastIndexOf(']');
+
+        if (firstBracket >= 0 && lastBracket >= 0 && lastBracket > firstBracket) {
+            return text.substring(firstBracket, lastBracket + 1);
+        }
+
+        // Fallback: cleanup markdown code blocks if the substring approach failed (e.g.
+        // valid array not found)
         if (text.startsWith("```json")) {
             text = text.substring(7);
         } else if (text.startsWith("```")) {
@@ -948,7 +961,14 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
         if (text.endsWith("```")) {
             text = text.substring(0, text.length() - 3);
         }
-        return text.trim();
+
+        text = text.trim();
+        // Strict fallback: if it doesn't look like a JSON array, return empty to
+        // prevent parsing error
+        if (!text.startsWith("[")) {
+            return "[]";
+        }
+        return text;
     }
 
     private String generateEntityId(String entityType, Map<String, Object> entity) {
@@ -1107,190 +1127,63 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
         log.debug("Generated entity extraction prompt (length: {}). Preview: {}", prompt.length(),
                 prompt.substring(0, Math.min(prompt.length(), 200)));
 
-        // Find cheapest available model first
-        return linqLlmModelService
-                .findCheapestAvailableModel(CHAT_MODEL_CATEGORIES, teamId, ESTIMATED_PROMPT_TOKENS,
-                        ESTIMATED_COMPLETION_TOKENS)
-                .flatMap(cheapestModel -> {
-                    // Start with cheapest model, but fallback to others if it fails
-                    return tryExtractionWithModelsStartingWith(text, prompt, documentId, teamId, cheapestModel);
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    // Fallback to original logic if no cheapest model found
-                    log.warn("Could not find cheapest model, falling back to original model selection logic");
-                    return tryExtractionWithModels(text, prompt, documentId, teamId, CHAT_MODEL_CATEGORIES, 0);
-                }));
-    }
-
-    /**
-     * Try extraction starting with a specific model, falling back to others on
-     * error
-     */
-    private Mono<EntityExtractionResult> tryExtractionWithModelsStartingWith(
-            String text, String prompt, String documentId, String teamId,
-            org.lite.gateway.entity.LinqLlmModel preferredModel) {
-
-        // Find the index of the preferred model's category
-        final int preferredIndex = CHAT_MODEL_CATEGORIES.indexOf(preferredModel.getModelCategory());
-        final int startIndex = preferredIndex == -1 ? 0 : preferredIndex + 1; // Start after preferred model
-
-        // Try the preferred model first
-        return executeEntityExtractionWithModel(text, prompt, preferredModel, documentId, teamId)
-                .onErrorResume(error -> {
-                    log.warn("Preferred model {} failed with error: {}. Trying other available models...",
-                            preferredModel.getModelName(), error.getMessage());
-                    // Try other models in order (starting after the preferred model's category)
-                    return tryExtractionWithModels(text, prompt, documentId, teamId, CHAT_MODEL_CATEGORIES, startIndex);
+        // Get all available models for the team, sort by priority, and try them in
+        // order
+        return linqLlmModelRepository.findByTeamId(teamId)
+                .filter(model -> CHAT_MODEL_CATEGORIES.contains(model.getModelCategory()))
+                .sort(Comparator.comparingInt(m -> m.getPriority() != null ? m.getPriority() : 999))
+                .collectList()
+                .flatMap(models -> {
+                    if (models.isEmpty()) {
+                        return Mono.error(new RuntimeException("No chat models configured for team " + teamId));
+                    }
+                    log.info("Found {} available chat models for team {}. Trying in priority order.", models.size(),
+                            teamId);
+                    return tryExtractionWithLlmModels(text, prompt, documentId, teamId, models, 0);
                 });
     }
 
     /**
-     * Try extraction with models, falling back to next model on any error
+     * Try extraction with a specific list of models, falling back to next model on
+     * error
      */
-    private Mono<EntityExtractionResult> tryExtractionWithModels(
+    private Mono<EntityExtractionResult> tryExtractionWithLlmModels(
             String text, String prompt, String documentId, String teamId,
-            List<String> categories, int startIndex) {
+            List<org.lite.gateway.entity.LinqLlmModel> models, int startIndex) {
 
-        if (startIndex >= categories.size()) {
+        if (startIndex >= models.size()) {
             return Mono.error(new RuntimeException(
                     "All available chat models failed. Please check your model configurations or try again later."));
         }
 
-        String category = categories.get(startIndex);
-        log.debug("Trying entity extraction with model category: {}", category);
+        org.lite.gateway.entity.LinqLlmModel currentModel = models.get(startIndex);
+        log.debug("Trying entity extraction with model: {} (Priority: {})",
+                currentModel.getModelName(), currentModel.getPriority());
 
-        return linqLlmModelRepository.findByModelCategoryAndTeamId(category, teamId)
-                .next()
-                .flatMap(llmModel -> {
-                    log.info("Using model {}:{} for entity extraction", llmModel.getModelCategory(),
-                            llmModel.getModelName());
-                    return executeEntityExtractionWithModel(text, prompt, llmModel, documentId, teamId);
-                })
+        return executeEntityExtractionWithModel(text, prompt, currentModel, documentId, teamId)
                 .onErrorResume(error -> {
-                    // Try next model on ANY error - this provides resilience against:
-                    // - Rate limit errors (429, TOO_MANY_REQUESTS, tokens per min)
-                    // - Network/API failures (temporary issues)
-                    // - Model-specific errors (API down, invalid response)
-                    // - Any other transient failures
-                    // Robust rate limit detection: check exception type and message format
+                    // Try next model on ANY error
                     boolean isRateLimit = false;
-
-                    // Check 1: WebClientResponseException with status 429
                     if (error instanceof org.springframework.web.reactive.function.client.WebClientResponseException webClientEx) {
                         if (webClientEx.getStatusCode() != null && webClientEx.getStatusCode().value() == 429) {
                             isRateLimit = true;
                         }
+                    } else if (error.getMessage() != null &&
+                            (error.getMessage().contains("Too Many Requests") ||
+                                    error.getMessage().contains("allocations") ||
+                                    error.getMessage().contains("quota") ||
+                                    error.getMessage().contains("rate limit"))) {
+                        isRateLimit = true;
                     }
 
-                    // Check 2: Parse error message for HTTP status code format (fallback)
-                    // Error messages from LinqLlmModelServiceImpl follow format: "HTTP
-                    // {statusCode}: {errorMessage}"
-                    // But errors from other sources may have different formats
-                    if (!isRateLimit) {
-                        String errorMsg = error.getMessage();
-                        if (errorMsg != null) {
-                            // Check if message contains "HTTP 429" anywhere (not just at start)
-                            if (errorMsg.contains("HTTP 429") || errorMsg.contains("HTTP 429:")) {
-                                isRateLimit = true;
-                            } else {
-                                // Try to parse status code from "HTTP {statusCode}: ..." format if present
-                                try {
-                                    int httpIndex = errorMsg.indexOf("HTTP ");
-                                    if (httpIndex >= 0) {
-                                        String afterHttp = errorMsg.substring(httpIndex + 5).trim();
-                                        int colonIndex = afterHttp.indexOf(':');
-                                        if (colonIndex > 0) {
-                                            int statusCode = Integer
-                                                    .parseInt(afterHttp.substring(0, colonIndex).trim());
-                                            if (statusCode == 429) {
-                                                isRateLimit = true;
-                                            }
-                                        }
-                                    }
-                                } catch (Exception e) {
-                                    // If parsing fails, not a rate limit error - continue normally
-                                }
-                            }
-                        }
-                    }
+                    long delay = isRateLimit ? 2000 : 0; // 2s delay for rate limits
 
-                    // Parse retry-after time from error message if available (e.g., "Please retry
-                    // in 46.912382516s")
-                    Duration delay = Duration.ofSeconds(3); // Default delay for non-rate-limit errors
-                    // Check if this is an HTTP 400 error due to invalid max_tokens configuration
-                    String errorMsg = error.getMessage();
-                    if (errorMsg != null && errorMsg.contains("HTTP 400")) {
-                        // Check if it's a max_tokens error
-                        if (errorMsg.contains("too many tokens") ||
-                                errorMsg.contains("max tokens must be less than") ||
-                                errorMsg.contains("maximum output length")) {
-                            log.warn(
-                                    "⚠️ Invalid max_tokens configuration for model {} (HTTP 400). Error: {}. Skipping this model and trying next...",
-                                    category, errorMsg);
-                        }
-                    }
+                    log.warn("Model {} failed (RateLimit: {}): {}. Falling back to next priority model...",
+                            currentModel.getModelName(), isRateLimit, error.getMessage());
 
-                    if (isRateLimit) {
-                        if (errorMsg == null) {
-                            errorMsg = error.getMessage();
-                        }
-                        if (errorMsg != null) {
-                            // Try to extract retry time from message like "Please retry in 46.912382516s"
-                            try {
-                                int retryIndex = errorMsg.indexOf("Please retry in");
-                                if (retryIndex >= 0) {
-                                    String afterRetry = errorMsg.substring(retryIndex + "Please retry in".length())
-                                            .trim();
-                                    // Find the number and 's' (seconds)
-                                    StringBuilder secondsStr = new StringBuilder();
-                                    for (int i = 0; i < afterRetry.length(); i++) {
-                                        char c = afterRetry.charAt(i);
-                                        if (Character.isDigit(c) || c == '.') {
-                                            secondsStr.append(c);
-                                        } else if (c == 's' || c == 'S') {
-                                            break;
-                                        } else if (secondsStr.length() > 0) {
-                                            break; // End of number
-                                        }
-                                    }
-                                    if (secondsStr.length() > 0) {
-                                        double seconds = Double.parseDouble(secondsStr.toString());
-                                        // Add 1 second buffer and round up to nearest second
-                                        long delaySeconds = Math.max(5, (long) Math.ceil(seconds + 1));
-                                        delay = Duration.ofSeconds(delaySeconds);
-                                        log.warn(
-                                                "⚠️ Rate limit detected for model {} (HTTP 429). Parsed retry-after: {}s. Waiting {} seconds before trying next model...",
-                                                category, seconds, delaySeconds);
-                                    }
-                                }
-                            } catch (Exception e) {
-                                log.debug("Could not parse retry-after time from error message: {}", errorMsg);
-                            }
-                        }
-
-                        if (delay.getSeconds() == 3) {
-                            // Fallback if parsing failed - use default 5 seconds
-                            delay = Duration.ofSeconds(5);
-                            log.warn(
-                                    "⚠️ Rate limit detected for model {} (HTTP 429). Waiting 5 seconds before trying next model...",
-                                    category);
-                        }
-                    } else {
-                        log.warn(
-                                "Model {} failed with error: {}. Waiting 3 seconds before trying next available model...",
-                                category, error.getMessage());
-                    }
-
-                    // Try next model in the list after delay
-                    return Mono.delay(delay)
-                            .then(tryExtractionWithModels(text, prompt, documentId, teamId, categories,
-                                    startIndex + 1));
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    // No model found for this category, try next
-                    log.debug("No model found for category {}. Trying next...", category);
-                    return tryExtractionWithModels(text, prompt, documentId, teamId, categories, startIndex + 1);
-                }));
+                    return Mono.delay(Duration.ofMillis(delay))
+                            .then(tryExtractionWithLlmModels(text, prompt, documentId, teamId, models, startIndex + 1));
+                });
     }
 
     /**
@@ -1315,7 +1208,7 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
         Map<String, Object> systemMessage = new HashMap<>();
         systemMessage.put("role", "system");
         systemMessage.put("content",
-                "You are an expert entity extraction assistant. Extract entities from the provided text and return a JSON array of entities. Each entity should have: type (e.g., Form, Person, Organization, Date, Location), id (unique identifier), name (display name), and any other relevant properties. Return ONLY valid JSON, no explanations.");
+                "You are an expert entity extraction assistant. Extract entities from the provided text and return a JSON array of entities. Each entity should have: type (e.g., Form, Person, Organization, Date, Location), id (unique identifier), name (display name), and any other relevant properties. Return ONLY valid JSON, no explanations. Example: [{\"type\": \"Person\", \"id\": \"p1\", \"name\": \"John Doe\"}]");
         messages.add(systemMessage);
 
         Map<String, Object> userMessage = new HashMap<>();
@@ -1337,6 +1230,12 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
             maxTokensForModel = Math.min(MAX_TOKENS, 4096); // Cohere max output limit
         }
         settings.put("max_tokens", maxTokensForModel);
+
+        // Enable JSON mode for Ollama to force valid JSON output
+        if ("ollama-chat".equals(llmModel.getModelCategory())) {
+            settings.put("format", "json");
+        }
+
         llmConfig.setSettings(settings);
         query.setLlmConfig(llmConfig);
 
@@ -1364,8 +1263,10 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
 
                         // Extract text from response (OpenAI format: result -> choices[0] -> message ->
                         // content)
-                        String jsonText = extractTextFromResponse(response, llmModel.getModelCategory());
-                        log.debug("LLM response text: {}", jsonText);
+                        String rawText = extractTextFromResponse(response, llmModel.getModelCategory());
+                        // Clean up the text (remove markdown, extract JSON array)
+                        String jsonText = cleanJsonText(rawText);
+                        log.debug("LLM response text (cleaned): {}", jsonText);
 
                         // Parse JSON array of entities
                         List<Map<String, Object>> entities = objectMapper.readValue(

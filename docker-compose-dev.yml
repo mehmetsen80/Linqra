@@ -220,6 +220,7 @@ services:
       VAULT_MASTER_KEY: ${VAULT_MASTER_KEY}
       VAULT_ENVIRONMENT: ${VAULT_ENVIRONMENT:-dev}
       VAULT_REQUIRED_VARS: MINIO_ACCESS_KEY,MINIO_SECRET_KEY
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     volumes:
       - ./.kube/minio/data:/data
       - ./secrets:/app/secrets:ro
@@ -229,6 +230,9 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+    ports:
+      - "9000:9000"
+      - "9001:9001"
     networks:
       - linqra-network
 

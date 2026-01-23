@@ -20,7 +20,7 @@ import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.GraphExtractionJobService;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.LinqMilvusStoreService;
-import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.ObjectStorageService;
 import org.lite.gateway.util.AuditLogHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -67,7 +67,7 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
 
     private final KnowledgeHubDocumentRepository documentRepository;
     private final KnowledgeHubCollectionRepository collectionRepository;
-    private final S3Service s3Service;
+    private final ObjectStorageService objectStorageService;
     private final LinqMilvusStoreService milvusStoreService;
     private final ObjectMapper objectMapper;
     private final RedisTemplate<String, String> redisTemplate;
@@ -400,7 +400,7 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     }
 
     private Mono<ProcessedDocumentDto> fetchProcessedDocument(KnowledgeHubDocument document) {
-        return s3Service.downloadFileContent(document.getProcessedS3Key())
+        return objectStorageService.downloadFileContent(document.getProcessedS3Key())
                 .flatMap(bytes -> {
                     try {
                         ProcessedDocumentDto processedDoc = objectMapper
@@ -1200,9 +1200,10 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
                                         return chunk;
                                     })
                                     .onErrorResume(e -> {
-                                        log.warn(
-                                                "Failed to decrypt chunk text for team {} with key version {}: {}. Keeping encrypted value.",
-                                                teamId, finalKeyVersion, e.getMessage());
+                                        log.error(
+                                                "Failed to decrypt chunk {} for team {} with key version {}: {}. " +
+                                                        "This may cause embedding failures if text remains encrypted.",
+                                                chunk.getChunkId(), teamId, finalKeyVersion, e.getMessage());
                                         return Mono.empty();
                                     });
                         }

@@ -46,7 +46,9 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         String path = exchange.getRequest().getPath().value();
 
         // Skip API key for all non-linq, non-route, and non-agent-tasks paths
-        if (!path.startsWith("/linq") && !path.startsWith("/api/agent-tasks/")
+        // Also skip for MinIO bucket paths (knowledge-hub, audit)
+        if ((!path.startsWith("/linq") || path.contains("knowledge-hub") || path.contains("audit"))
+                && !path.startsWith("/api/agent-tasks/")
                 && (path.contains("/whatsapp/webhook") || !path.startsWith("/r/"))) {
             return chain.filter(exchange);
         }

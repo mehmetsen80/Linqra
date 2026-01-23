@@ -1,4 +1,4 @@
-package org.lite.gateway.service.impl;
+package org.lite.gateway.service.impl; // Refactored for ObjectStorage
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +14,7 @@ import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.CollectionExportService;
 import org.lite.gateway.service.Neo4jGraphService;
-import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.ObjectStorageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,7 +48,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
     private final CollectionExportJobRepository jobRepository;
     private final KnowledgeHubCollectionRepository collectionRepository;
     private final KnowledgeHubDocumentRepository documentRepository;
-    private final S3Service s3Service;
+    private final ObjectStorageService objectStorageService;
     private final ChunkEncryptionService chunkEncryptionService;
     private final Neo4jGraphService neo4jGraphService;
     private final ReactiveRedisTemplate<String, String> asyncStepQueueRedisTemplate;
@@ -321,7 +321,8 @@ public class CollectionExportServiceImpl implements CollectionExportService {
                                             return uploadExportZip(s3Key, zipBytes, teamId)
                                                     .flatMap(s3KeyUploaded -> {
                                                         // Generate presigned URL
-                                                        return s3Service.generatePresignedDownloadUrl(s3KeyUploaded)
+                                                        return objectStorageService
+                                                                .generatePresignedDownloadUrl(s3KeyUploaded)
                                                                 .map(downloadUrl -> {
                                                                     LocalDateTime expiresAt = LocalDateTime.now()
                                                                             .plusHours(EXPORT_EXPIRY_HOURS);
@@ -464,7 +465,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
     }
 
     private Mono<byte[]> downloadAndDecryptFile(KnowledgeHubDocument document, String teamId) {
-        return s3Service.downloadFileContent(document.getS3Key())
+        return objectStorageService.downloadFileContent(document.getS3Key())
                 .flatMap(encryptedBytes -> {
                     // Decrypt if file is encrypted
                     if (document.getEncrypted() != null && document.getEncrypted()
@@ -489,7 +490,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
     }
 
     private Mono<byte[]> downloadAndDecryptProcessedJson(KnowledgeHubDocument document, String teamId) {
-        return s3Service.downloadFileContent(document.getProcessedS3Key())
+        return objectStorageService.downloadFileContent(document.getProcessedS3Key())
                 .flatMap(bytes -> {
                     try {
                         ProcessedDocumentDto processedDoc = objectMapper.readValue(
@@ -751,7 +752,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
     }
 
     private Mono<String> uploadExportZip(String s3Key, byte[] zipBytes, String teamId) {
-        return s3Service.uploadFileBytes(s3Key, zipBytes, "application/zip", null)
+        return objectStorageService.uploadFileBytes(s3Key, zipBytes, "application/zip", null)
                 .thenReturn(s3Key)
                 .doOnSuccess(key -> log.info("Uploaded export ZIP to S3: {} ({} bytes)", key, zipBytes.length));
     }

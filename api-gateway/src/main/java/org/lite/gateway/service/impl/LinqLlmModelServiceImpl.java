@@ -667,6 +667,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     settings.forEach((k, v) -> {
                         if (k.equals("max.tokens") || k.equals("max_tokens")) {
                             options.put("num_predict", v);
+                        } else if (k.equals("format")) {
+                            payload.put("format", v);
                         } else {
                             options.put(k, v);
                         }

@@ -1,10 +1,12 @@
-package org.lite.gateway.scheduler;
+package org.lite.gateway.scheduler; // Refactored for ObjectStorage
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
+import java.util.List;
+import java.util.ArrayList;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -28,7 +30,7 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class AuditBackupScheduler {
 
-    private final KnowledgeHubS3Properties s3Properties;
+    private final StorageProperties storageProperties;
 
     /**
      * Sync source bucket audit logs to backup bucket (Additive Only).
@@ -39,7 +41,7 @@ public class AuditBackupScheduler {
     @SchedulerLock(name = "auditBackup", lockAtLeastFor = "1m", lockAtMostFor = "1h")
     public void syncAuditBucket() {
         log.info("🔄 Starting Daily Audit Log Integrity Sync from {} to {}",
-                s3Properties.getAuditBucketName(), s3Properties.getAuditBackupBucketName());
+                storageProperties.getAuditBucketName(), storageProperties.getAuditBackupBucketName());
 
         performAuditSync()
                 .thenAccept(result -> log.info("✅ Daily Audit Log Integrity Sync completed: {}", result))
@@ -51,19 +53,26 @@ public class AuditBackupScheduler {
 
     private CompletableFuture<String> performAuditSync() {
         return CompletableFuture.supplyAsync(() -> {
-            String sourcePath = "s3://" + s3Properties.getAuditBucketName() + "/audit-logs";
-            String backupPath = "s3://" + s3Properties.getAuditBackupBucketName() + "/audit-logs";
-            String backupRegion = s3Properties.getBackupBucketRegion();
+            String sourcePath = "s3://" + storageProperties.getAuditBucketName() + "/audit-logs";
+            String backupPath = "s3://" + storageProperties.getAuditBackupBucketName() + "/audit-logs";
+            String backupRegion = storageProperties.getBackupBucketRegion();
 
-            // Compliance: No --delete flag
-            String[] command = {
-                    "aws", "s3", "sync",
-                    sourcePath,
-                    backupPath,
-                    "--region", backupRegion
-            };
+            List<String> commandList = new ArrayList<>();
+            commandList.add("aws");
+            commandList.add("s3");
+            commandList.add("sync");
+            commandList.add(sourcePath);
+            commandList.add(backupPath);
+            commandList.add("--region");
+            commandList.add(backupRegion);
 
-            return executeCommand(command);
+            // Add endpoint override if needed (for MinIO)
+            if (storageProperties.getEndpoint() != null && !storageProperties.getEndpoint().isEmpty()) {
+                commandList.add("--endpoint-url");
+                commandList.add(storageProperties.getEndpoint());
+            }
+
+            return executeCommand(commandList.toArray(new String[0]));
         });
     }
 
@@ -120,19 +129,27 @@ public class AuditBackupScheduler {
      */
     public CompletableFuture<String> dryRun() {
         return CompletableFuture.supplyAsync(() -> {
-            String sourcePath = "s3://" + s3Properties.getAuditBucketName() + "/audit-logs";
-            String backupPath = "s3://" + s3Properties.getAuditBackupBucketName() + "/audit-logs";
-            String backupRegion = s3Properties.getBackupBucketRegion();
+            String sourcePath = "s3://" + storageProperties.getAuditBucketName() + "/audit-logs";
+            String backupPath = "s3://" + storageProperties.getAuditBackupBucketName() + "/audit-logs";
+            String backupRegion = storageProperties.getBackupBucketRegion();
 
-            String[] command = {
-                    "aws", "s3", "sync",
-                    sourcePath,
-                    backupPath,
-                    "--dryrun",
-                    "--region", backupRegion
-            };
+            List<String> commandList = new ArrayList<>();
+            commandList.add("aws");
+            commandList.add("s3");
+            commandList.add("sync");
+            commandList.add(sourcePath);
+            commandList.add(backupPath);
+            commandList.add("--dryrun");
+            commandList.add("--region");
+            commandList.add(backupRegion);
 
-            return executeCommand(command);
+            // Add endpoint override if needed (for MinIO)
+            if (storageProperties.getEndpoint() != null && !storageProperties.getEndpoint().isEmpty()) {
+                commandList.add("--endpoint-url");
+                commandList.add(storageProperties.getEndpoint());
+            }
+
+            return executeCommand(commandList.toArray(new String[0]));
         });
     }
 }

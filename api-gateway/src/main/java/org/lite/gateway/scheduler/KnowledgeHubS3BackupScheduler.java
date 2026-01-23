@@ -4,12 +4,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -24,10 +26,10 @@ import java.util.concurrent.CompletableFuture;
 @Slf4j
 public class KnowledgeHubS3BackupScheduler {
 
-    private final KnowledgeHubS3Properties s3Properties;
+    private final StorageProperties storageProperties;
 
     /**
-     * Sync general Knowledge Hub bucket to backup (Standard Sync).
+     * Sync general Knowledge Hub bucket backup (Standard Sync).
      * Maintains an exact mirror of the knowledge base (documents).
      * Runs Monthly at 4:00 AM on the 1st.
      */
@@ -35,7 +37,7 @@ public class KnowledgeHubS3BackupScheduler {
     @SchedulerLock(name = "knowledgeHubBackup", lockAtLeastFor = "5m", lockAtMostFor = "4h")
     public void syncKnowledgeHubBucket() {
         log.info("🔄 Starting Monthly Knowledge Hub Backup Sync from {} to {}",
-                s3Properties.getBucketName(), s3Properties.getBackupBucketName());
+                storageProperties.getBucketName(), storageProperties.getBackupBucketName());
 
         performGeneralSync()
                 .thenAccept(result -> log.info("✅ Monthly Knowledge Hub Backup Sync completed: {}", result))
@@ -47,20 +49,26 @@ public class KnowledgeHubS3BackupScheduler {
 
     private CompletableFuture<String> performGeneralSync() {
         return CompletableFuture.supplyAsync(() -> {
-            String sourceBucket = "s3://" + s3Properties.getBucketName();
-            String backupBucket = "s3://" + s3Properties.getBackupBucketName();
-            String backupRegion = s3Properties.getBackupBucketRegion();
+            String sourceBucket = "s3://" + storageProperties.getBucketName();
+            String backupBucket = "s3://" + storageProperties.getBackupBucketName();
+            String backupRegion = storageProperties.getBackupBucketRegion();
 
-            // Standard Backup: Use --delete to mirror exactly
-            String[] command = {
-                    "aws", "s3", "sync",
-                    sourceBucket,
-                    backupBucket,
-                    "--delete",
-                    "--region", backupRegion
-            };
+            List<String> commandList = new ArrayList<>();
+            commandList.add("aws");
+            commandList.add("s3");
+            commandList.add("sync");
+            commandList.add(sourceBucket);
+            commandList.add(backupBucket);
+            commandList.add("--delete");
+            commandList.add("--region");
+            commandList.add(backupRegion);
 
-            return executeCommand(command);
+            if (storageProperties.getEndpoint() != null && !storageProperties.getEndpoint().isEmpty()) {
+                commandList.add("--endpoint-url");
+                commandList.add(storageProperties.getEndpoint());
+            }
+
+            return executeCommand(commandList.toArray(new String[0]));
         });
     }
 
@@ -119,20 +127,27 @@ public class KnowledgeHubS3BackupScheduler {
      */
     public CompletableFuture<String> dryRun() {
         return CompletableFuture.supplyAsync(() -> {
-            String sourceBucket = "s3://" + s3Properties.getBucketName();
-            String backupBucket = "s3://" + s3Properties.getBackupBucketName();
-            String backupRegion = s3Properties.getBackupBucketRegion();
+            String sourceBucket = "s3://" + storageProperties.getBucketName();
+            String backupBucket = "s3://" + storageProperties.getBackupBucketName();
+            String backupRegion = storageProperties.getBackupBucketRegion();
 
-            String[] command = {
-                    "aws", "s3", "sync",
-                    sourceBucket,
-                    backupBucket,
-                    "--delete",
-                    "--dryrun",
-                    "--region", backupRegion
-            };
+            List<String> commandList = new ArrayList<>();
+            commandList.add("aws");
+            commandList.add("s3");
+            commandList.add("sync");
+            commandList.add(sourceBucket);
+            commandList.add(backupBucket);
+            commandList.add("--delete");
+            commandList.add("--dryrun");
+            commandList.add("--region");
+            commandList.add(backupRegion);
 
-            return executeCommand(command);
+            if (storageProperties.getEndpoint() != null && !storageProperties.getEndpoint().isEmpty()) {
+                commandList.add("--endpoint-url");
+                commandList.add(storageProperties.getEndpoint());
+            }
+
+            return executeCommand(commandList.toArray(new String[0]));
         });
     }
 }

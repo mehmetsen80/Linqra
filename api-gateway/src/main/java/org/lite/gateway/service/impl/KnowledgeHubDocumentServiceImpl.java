@@ -2,7 +2,7 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.lite.gateway.config.KnowledgeHubS3Properties;
+import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.event.KnowledgeHubDocumentProcessingEvent;
@@ -14,7 +14,7 @@ import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
-import org.lite.gateway.service.S3Service;
+import org.lite.gateway.service.ObjectStorageService;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.util.AuditLogHelper;
@@ -39,8 +39,8 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         private final KnowledgeHubDocumentRepository documentRepository;
         private final TeamRepository teamRepository;
         private final ApplicationEventPublisher eventPublisher;
-        private final S3Service s3Service;
-        private final KnowledgeHubS3Properties s3Properties;
+        private final ObjectStorageService objectStorageService;
+        private final StorageProperties storageProperties;
         private final ChunkEncryptionService chunkEncryptionService;
         private final KnowledgeHubChunkRepository chunkRepository;
         private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
@@ -63,14 +63,15 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                         String documentId = UUID.randomUUID().toString();
 
                                         // Build S3 key
-                                        String s3Key = s3Properties.buildRawKey(
+                                        String s3Key = storageProperties.buildRawKey(
                                                         teamId,
                                                         request.getCollectionId(),
                                                         documentId,
                                                         request.getFileName());
 
                                         // Generate presigned URL
-                                        return s3Service.generatePresignedUploadUrl(s3Key, request.getContentType())
+                                        return objectStorageService
+                                                        .generatePresignedUploadUrl(s3Key, request.getContentType())
                                                         .flatMap(presignedUrl -> {
                                                                 // Create document record
                                                                 return createDocument(request, s3Key, documentId,
@@ -183,7 +184,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                         // File is not encrypted yet - encrypt it
                                         log.info("Encrypting file for document: {}", documentId);
 
-                                        return s3Service.downloadFileContent(s3Key)
+                                        return objectStorageService.downloadFileContent(s3Key)
                                                         .flatMap(plainBytes -> {
                                                                 // Encrypt file bytes
                                                                 return chunkEncryptionService
@@ -206,19 +207,20 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                                                         // encrypted
                                                                                                         // file (replace
                                                                                                         // original)
-                                                                                                        return s3Service.uploadFileBytes(
-                                                                                                                        s3Key,
-                                                                                                                        encryptedBytes,
-                                                                                                                        document.getContentType(),
-                                                                                                                        encryptionKeyVersion // Pass
-                                                                                                                                             // encryption
-                                                                                                                                             // key
-                                                                                                                                             // version
-                                                                                                                                             // to
-                                                                                                                                             // store
-                                                                                                                                             // in
-                                                                                                                                             // S3
-                                                                                                                                             // metadata
+                                                                                                        return objectStorageService
+                                                                                                                        .uploadFileBytes(
+                                                                                                                                        s3Key,
+                                                                                                                                        encryptedBytes,
+                                                                                                                                        document.getContentType(),
+                                                                                                                                        encryptionKeyVersion // Pass
+                                                                                                                                                             // encryption
+                                                                                                                                                             // key
+                                                                                                                                                             // version
+                                                                                                                                                             // to
+                                                                                                                                                             // store
+                                                                                                                                                             // in
+                                                                                                                                                             // S3
+                                                                                                                                                             // metadata
                                                                                                         )
                                                                                                                         .then(Mono.fromCallable(
                                                                                                                                         () -> {
@@ -421,7 +423,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                 .documentId(doc.getDocumentId())
                                 .teamId(doc.getTeamId())
                                 .collectionId(doc.getCollectionId())
-                                .s3Bucket(s3Properties.getBucketName())
+                                .s3Bucket(storageProperties.getBucketName())
                                 .s3Key(doc.getS3Key())
                                 .fileName(doc.getFileName())
                                 .fileSize(doc.getFileSize())
@@ -538,7 +540,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                         if (document.getS3Key() != null && !document.getS3Key().isEmpty()) {
                                                 log.info("Attempting to delete raw S3 file for document: {} - S3 key: {}",
                                                                 documentId, document.getS3Key());
-                                                deleteRawFile = s3Service.deleteFile(document.getS3Key())
+                                                deleteRawFile = objectStorageService.deleteFile(document.getS3Key())
                                                                 .doOnSuccess(v -> log.info(
                                                                                 "✅ Successfully deleted raw S3 file for document: {} - {}",
                                                                                 documentId, document.getS3Key()))
@@ -567,7 +569,8 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                         && !document.getProcessedS3Key().isEmpty()) {
                                                 log.info("Attempting to delete processed S3 file for document: {} - S3 key: {}",
                                                                 documentId, document.getProcessedS3Key());
-                                                deleteProcessedFile = s3Service.deleteFile(document.getProcessedS3Key())
+                                                deleteProcessedFile = objectStorageService
+                                                                .deleteFile(document.getProcessedS3Key())
                                                                 .doOnSuccess(
                                                                                 v -> log.info("✅ Successfully deleted processed S3 file for document: {} - {}",
                                                                                                 documentId,
@@ -869,7 +872,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
 
                 Mono<Void> deleteProcessedFile = Mono.empty();
                 if (StringUtils.hasText(document.getProcessedS3Key())) {
-                        deleteProcessedFile = s3Service.deleteFile(document.getProcessedS3Key())
+                        deleteProcessedFile = objectStorageService.deleteFile(document.getProcessedS3Key())
                                         .doOnSuccess(v -> log.info("Deleted processed S3 file {} for document {}",
                                                         document.getProcessedS3Key(), document.getDocumentId()))
                                         .doOnError(error -> log.warn(

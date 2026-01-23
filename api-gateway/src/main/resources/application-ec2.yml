@@ -226,6 +226,7 @@ linqra:
   storage:
     type: ${vault.storage.type:s3}
     endpoint: ${vault.storage.endpoint:}
+    public-endpoint: ${vault.storage.public.endpoint:}
     access-key: ${vault.minio.access.key:}
     secret-key: ${vault.minio.secret.key:}
     

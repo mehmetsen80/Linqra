@@ -22,8 +22,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Standalone CLI utility to read vault secrets and output as environment variables
- * Usage: java -jar vault-reader.jar --file /path/to/vault.encrypted --master-key <base64-key> --environment dev --format env
+ * Standalone CLI utility to read vault secrets and output as environment
+ * variables
+ * Usage: java -jar vault-reader.jar --file /path/to/vault.encrypted
+ * --master-key <base64-key> --environment dev --format env
  */
 public class VaultReaderCli {
 
@@ -207,6 +209,9 @@ public class VaultReaderCli {
         keyMapping.put("postgres.password", "POSTGRES_PASSWORD");
         keyMapping.put("keycloak.admin", "KEYCLOAK_ADMIN");
         keyMapping.put("keycloak.admin.password", "KEYCLOAK_ADMIN_PASSWORD");
+        keyMapping.put("storage.type", "STORAGE_TYPE");
+        keyMapping.put("storage.endpoint", "STORAGE_ENDPOINT");
+        keyMapping.put("storage.public.endpoint", "STORAGE_PUBLIC_ENDPOINT");
         keyMapping.put("aws.access.key.id", "AWS_ACCESS_KEY_ID");
         keyMapping.put("aws.secret.access.key", "AWS_SECRET_ACCESS_KEY");
         return keyMapping;

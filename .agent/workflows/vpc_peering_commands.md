@@ -87,24 +87,52 @@ aws ec2 authorize-security-group-ingress \
   --region us-west-2
 ```
 
-## 5. MinIO Configuration (EKS to EC2)
 
-**EC2 Instance Private IP:** `172.31.4.38` (Polaris)
+## 6. System Verification Commands
 
-### Update GitHub Secret for Deployment
-Update `SECRETS_JSON` GitHub secret to use EC2 private IP instead of Docker service name:
+Use these commands to verify the state of the VPC peering infrastructure.
 
-```json
-{
-  "storage.endpoint": "http://172.31.4.38:9000",
-  "storage.public.endpoint": "https://polaris.linqra.com"
-}
+### Verify Peering Connection
+Check if the peering connection is active.
+```bash
+aws ec2 describe-vpc-peering-connections \
+  --vpc-peering-connection-ids pcx-00b9b68fa4783983b \
+  --region us-west-2
 ```
 
-### Deployment
-- **EKS**: Trigger `ci.yml` workflow - automatically regenerates vault and deploys
-- **EC2**: Trigger `deploy-polaris-minio.yml` - deploys MinIO service
+### Verify Route Tables (EKS Side)
+Check if route tables have the route to `172.31.0.0/16`.
+```bash
+aws ec2 describe-route-tables \
+  --filters "Name=vpc-id,Values=vpc-0070d7bb409137a42" \
+  --query 'RouteTables[*].{ID:RouteTableId, Routes:Routes[?DestinationCidrBlock==`172.31.0.0/16`]}' \
+  --region us-west-2
+```
 
-> **Note**: VPC peering allows EKS pods to reach EC2 services via private IP. 
-> The S3 client uses the private endpoint for operations, while presigned URLs use the public endpoint.
+### Verify Security Group Rules
+Check if `sg-306de854` allows traffic on port 9000.
+```bash
+aws ec2 describe-security-groups \
+  --group-ids sg-306de854 \
+  --query 'SecurityGroups[*].IpPermissions[?ToPort==`9000`]' \
+  --region us-west-2
+```
+
+### Verify EC2 Instance IP
+Confirm the private IP of the Polaris instance.
+```bash
+aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=polaris-ec2" \
+  --query 'Reservations[*].Instances[*].PrivateIpAddress' \
+  --region us-west-2
+```
+
+## 7. MinIO Configuration (Hybrid Connectivity)
+
+- **Internal Access (EKS -> EC2)**: `http://minio-service:9000`
+  - Uses Kubernetes Service + Endpoints mapping to `172.31.4.38`
+  - Traffic flows over VPC peering
+- **Public Access (Uploads)**: `https://polaris.linqra.com`
+  - Proxied via Caddy on EC2
+
 

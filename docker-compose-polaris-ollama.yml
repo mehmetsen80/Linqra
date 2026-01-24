@@ -1,0 +1,15 @@
+services:
+  ollama-service:
+    image: ollama/ollama:latest
+    container_name: ollama-service
+    ports:
+      - "11434:11434"
+    volumes:
+      - /opt/ollama/models:/root/.ollama
+    networks:
+      - linqra-network
+    restart: always
+
+networks:
+  linqra-network:
+    external: true

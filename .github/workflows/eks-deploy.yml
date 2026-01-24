@@ -207,6 +207,9 @@ jobs:
         # Deploy MinIO service mapping (to EC2)
         kubectl apply -f .kube/eks/minio-service.yml
         
+        # Deploy Ollama service mapping (to EC2)
+        kubectl apply -f .kube/eks/ollama-service.yml
+        
         kubectl apply -f .kube/eks/backend.yml
         kubectl apply -f .kube/eks/frontend.yml
         kubectl apply -f .kube/eks/ingress.yml

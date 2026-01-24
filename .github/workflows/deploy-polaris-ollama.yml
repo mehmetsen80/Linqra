@@ -1,0 +1,44 @@
+name: Deploy Ollama to Polaris
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-ollama:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY_PROD }}
+
+      - name: Deploy to Polaris EC2
+        env:
+          EC2_HOST: ${{ secrets.HOST_DNS_POLARIS }}
+          EC2_USERNAME: ${{ secrets.USERNAME_PROD }}
+          TARGET_DIR: ${{ secrets.TARGET_DIR_PROD }}
+        run: |
+          # Disable strict host key checking
+          mkdir -p ~/.ssh
+          echo "StrictHostKeyChecking no" >> ~/.ssh/config
+          
+          echo "🚀 Starting Deployment of Ollama to $EC2_HOST..."
+
+          # 1. Create directory structure
+          # Create models directory (root required for /opt)
+          ssh $EC2_USERNAME@$EC2_HOST "sudo mkdir -p /opt/ollama/models && sudo chown -R 1000:1000 /opt/ollama/models && mkdir -p $TARGET_DIR"
+
+          # 2. Transfer Config
+          scp docker-compose-polaris-ollama.yml $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/docker-compose-polaris-ollama.yml
+          
+          # 3. Deploy
+          ssh $EC2_USERNAME@$EC2_HOST "
+            cd $TARGET_DIR
+            
+            echo "🐳 Deploying Ollama..."
+            sudo docker compose -f docker-compose-polaris-ollama.yml up -d --remove-orphans
+          "
+          echo "✅ Deployment Complete!"

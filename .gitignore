@@ -53,13 +53,11 @@ build/
 /.kube/neo4j/data/**
 /.kube/neo4j/logs/**
 
-### Vault Files (Never commit encrypted secrets!)
-/secrets/*.encrypted
+### Vault Files (Only commit dev encrypted secrets!)
+/secrets/secrets*
 /secrets/*.backup
 /secrets/*.tmp
 /secrets/.gitkeep
-/secrets/secrets-dev.json
-/secrets/secrets-ec2.json
 
 ### Environment Files (Never commit secrets!)
 .env

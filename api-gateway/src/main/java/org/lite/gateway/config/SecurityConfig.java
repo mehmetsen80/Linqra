@@ -516,17 +516,30 @@ public class SecurityConfig implements BeanFactoryAware {
         String routeIdentifier = routeMatcher.group(1);
         // log.info("Route identifier found: {}", routeIdentifier);
 
-        // Prioritize the Authentication Principal (e.g. API Key team) over header
+        // Prioritize the API Key Attribute or Authentication Principal over header
         // lookup
         return authenticationMono
                 .flatMap(auth -> {
+                    // Check if we stashed the teamId in attributes (happens when Bearer token
+                    // overwrites context)
+                    String apiKeyTeamId = exchange.getAttribute("API_KEY_TEAM_ID");
+                    if (apiKeyTeamId != null) {
+                        return Mono.just(apiKeyTeamId);
+                    }
+
                     if (auth.getPrincipal() instanceof String teamId) {
                         return Mono.just(teamId);
                     }
                     return getTeamContextService().getTeamFromContext(exchange);
                 })
-                .switchIfEmpty(getTeamContextService().getTeamFromContext(exchange)) // Fallback if no auth (shouldn't
-                                                                                     // happen here but safe)
+                .switchIfEmpty(Mono.defer(() -> {
+                    // Check attribute even if authenticationMono is empty/default
+                    String apiKeyTeamId = exchange.getAttribute("API_KEY_TEAM_ID");
+                    if (apiKeyTeamId != null) {
+                        return Mono.just(apiKeyTeamId);
+                    }
+                    return getTeamContextService().getTeamFromContext(exchange);
+                }))
                 .doOnNext(teamId -> log.info("Checking team {} permission for route: {}", teamId, routeIdentifier))
                 .flatMap(teamId -> {
                     String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);
@@ -589,6 +602,7 @@ public class SecurityConfig implements BeanFactoryAware {
         List<String> allowedHeadersList = new ArrayList<>(List.of(allowedHeaders.split(",")));
         allowedHeadersList.add("X-API-Key");
         allowedHeadersList.add("X-API-Key-Name");
+        allowedHeadersList.add("X-Team-ID");
         configuration.setAllowedHeaders(allowedHeadersList);
 
         configuration.setAllowCredentials(true);

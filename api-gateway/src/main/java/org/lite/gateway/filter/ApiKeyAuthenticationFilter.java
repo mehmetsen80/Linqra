@@ -131,8 +131,13 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
                             new ApiKeyPair(apiKey, apiKeyName),
                             List.of(new SimpleGrantedAuthority("ROLE_API_ACCESS"))));
                 })
-                .flatMap(authentication -> chain.filter(exchange)
-                        .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication)))
+                .flatMap(authentication -> {
+                    // Stash the Team ID in attributes in case SecurityContext is overwritten by
+                    // OAuth2 filter later
+                    exchange.getAttributes().put("API_KEY_TEAM_ID", authentication.getPrincipal());
+                    return chain.filter(exchange)
+                            .contextWrite(ReactiveSecurityContextHolder.withAuthentication(authentication));
+                })
                 .switchIfEmpty(Mono.error(new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED, "Invalid API key")))
                 .onErrorResume(ResponseStatusException.class, e -> {

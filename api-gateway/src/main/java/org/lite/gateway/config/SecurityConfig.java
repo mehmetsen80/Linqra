@@ -373,7 +373,7 @@ public class SecurityConfig implements BeanFactoryAware {
             // For /r/ paths, check route permissions first
             if (path.startsWith("/r/") && !path.contains("/whatsapp/webhook")) {
                 // log.info("Checking route permissions for path: {}", path);
-                return checkRoutePermission(path, authorizationContext.getExchange())
+                return checkRoutePermission(authenticationMono, path, authorizationContext.getExchange())
                         .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path, hasPermission))
                         .flatMap(hasPermission -> {
                             if (!hasPermission) {
@@ -467,6 +467,9 @@ public class SecurityConfig implements BeanFactoryAware {
 
                     // Ensure roles are a list and check for the specific role
                     if (rolesRealm instanceof List) {
+                        // Log user roles for debugging
+                        log.info("User Realm Roles: {}", rolesRealm);
+
                         // check realm role if authorized
                         @SuppressWarnings("unchecked")
                         boolean isAuthorizedRealm = ((List<String>) rolesRealm).contains("gateway_admin_realm");
@@ -501,7 +504,8 @@ public class SecurityConfig implements BeanFactoryAware {
                 .defaultIfEmpty(new AuthorizationDecision(false));
     }
 
-    private Mono<Boolean> checkRoutePermission(String path, ServerWebExchange exchange) {
+    private Mono<Boolean> checkRoutePermission(Mono<Authentication> authenticationMono, String path,
+            ServerWebExchange exchange) {
         Matcher routeMatcher = ROUTE_PATTERN.matcher(path);
 
         if (!routeMatcher.find()) {
@@ -512,7 +516,17 @@ public class SecurityConfig implements BeanFactoryAware {
         String routeIdentifier = routeMatcher.group(1);
         // log.info("Route identifier found: {}", routeIdentifier);
 
-        return getTeamContextService().getTeamFromContext(exchange)
+        // Prioritize the Authentication Principal (e.g. API Key team) over header
+        // lookup
+        return authenticationMono
+                .flatMap(auth -> {
+                    if (auth.getPrincipal() instanceof String teamId) {
+                        return Mono.just(teamId);
+                    }
+                    return getTeamContextService().getTeamFromContext(exchange);
+                })
+                .switchIfEmpty(getTeamContextService().getTeamFromContext(exchange)) // Fallback if no auth (shouldn't
+                                                                                     // happen here but safe)
                 .doOnNext(teamId -> log.info("Checking team {} permission for route: {}", teamId, routeIdentifier))
                 .flatMap(teamId -> {
                     String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);

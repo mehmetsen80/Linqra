@@ -51,6 +51,12 @@ axiosInstance.interceptors.request.use(
         } else {
           // Token is still valid
           config.headers.Authorization = `Bearer ${authData.token}`;
+
+          // Inject Active Team ID context if available
+          const currentTeamId = localStorage.getItem('currentTeamId');
+          if (currentTeamId) {
+            config.headers['X-Team-ID'] = currentTeamId;
+          }
         }
       } catch (error) {
         // Invalid token

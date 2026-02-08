@@ -1,6 +1,7 @@
 package org.lite.gateway.controller;
 
-import org.springframework.beans.factory.annotation.Value;
+import lombok.RequiredArgsConstructor;
+import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -8,15 +9,18 @@ import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api/environment")
+@RequiredArgsConstructor
 public class EnvironmentController {
 
-    @Value("${spring.profiles.active:dev}")
-    private String activeProfile;
+    private final Environment environment;
 
     @GetMapping("/profile")
     public Mono<EnvironmentInfo> getEnvironmentInfo() {
-        return Mono.just(new EnvironmentInfo(activeProfile));
+        String[] activeProfiles = environment.getActiveProfiles();
+        String profile = activeProfiles.length > 0 ? String.join(",", activeProfiles) : "default";
+        return Mono.just(new EnvironmentInfo(profile));
     }
 
-    public record EnvironmentInfo(String profile) {}
+    public record EnvironmentInfo(String profile) {
+    }
 }

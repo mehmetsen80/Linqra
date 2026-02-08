@@ -225,6 +225,7 @@ public class SecurityConfig implements BeanFactoryAware {
                     .build();
 
             return authorizedClientManager.authorize(authorizeRequest)
+                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
                     .doOnError(error -> log.error("Error authorizing client: {}", error.getMessage()))
                     .flatMap(authorizedClient -> {
                         if (authorizedClient != null && authorizedClient.getAccessToken() != null) {

@@ -21,7 +21,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.domain.Sort;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -51,7 +51,7 @@ public class LlmCostServiceImpl implements LlmCostService {
     private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
     private final LlmPricingSnapshotRepository pricingSnapshotRepository;
     private final LlmModelRepository llmModelRepository;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final CacheService cacheService;
     private final ObjectMapper objectMapper;
 
     /**
@@ -88,7 +88,7 @@ public class LlmCostServiceImpl implements LlmCostService {
 
                         // Also store in Redis (backup - for distributed scenarios)
                         String cacheJson = objectMapper.writeValueAsString(cacheMap);
-                        redisTemplate.opsForValue().set(REDIS_PRICING_CACHE_KEY, cacheJson, CACHE_EXPIRATION);
+                        cacheService.set(REDIS_PRICING_CACHE_KEY, cacheJson, CACHE_EXPIRATION).block();
                         log.info("✅ Loaded {} models into Redis pricing cache", models.size());
                     } catch (Exception e) {
                         log.error("❌ Failed to cache models: {}", e.getMessage(), e);
@@ -132,7 +132,7 @@ public class LlmCostServiceImpl implements LlmCostService {
 
                         // Also update Redis cache
                         String cacheJson = objectMapper.writeValueAsString(cacheMap);
-                        redisTemplate.opsForValue().set(REDIS_PRICING_CACHE_KEY, cacheJson, CACHE_EXPIRATION);
+                        cacheService.set(REDIS_PRICING_CACHE_KEY, cacheJson, CACHE_EXPIRATION).block();
                         log.info("✅ Refreshed {} models into Redis pricing cache", models.size());
                     } catch (Exception e) {
                         log.error("❌ Failed to refresh pricing cache: {}", e.getMessage(), e);
@@ -325,7 +325,7 @@ public class LlmCostServiceImpl implements LlmCostService {
 
         // In-memory cache empty - try Redis as backup
         try {
-            String cacheJson = redisTemplate.opsForValue().get(REDIS_PRICING_CACHE_KEY);
+            String cacheJson = cacheService.get(REDIS_PRICING_CACHE_KEY).block();
 
             if (cacheJson != null && !cacheJson.isEmpty()) {
                 // Parse Redis cache and also populate in-memory cache

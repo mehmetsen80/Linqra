@@ -5,6 +5,7 @@ import com.mongodb.reactivestreams.client.MongoClients;
 
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,7 +22,6 @@ import org.springframework.data.mongodb.repository.config.EnableReactiveMongoRep
 import org.springframework.lang.NonNull;
 import org.springframework.transaction.ReactiveTransactionManager;
 import org.springframework.transaction.reactive.TransactionalOperator;
-
 
 @Configuration
 @EnableReactiveMongoRepositories(basePackages = "org.lite.gateway.repository")
@@ -40,10 +40,56 @@ public class MongoReactiveConfig extends AbstractReactiveMongoConfiguration {
         return databaseName;
     }
 
+    @Autowired
+    private org.springframework.core.env.Environment env;
+
     @Override
     @Bean
     public @NonNull MongoClient reactiveMongoClient() {
+        if (env.matchesProfiles("remote-dev")) {
+            return createRemoteDevMongoClient();
+        }
         return MongoClients.create(mongoUri);
+    }
+
+    private MongoClient createRemoteDevMongoClient() {
+        log.warn("⚠️ REMOTE-DEV PROFILE ACTIVE: Bypassing MongoDB SSL Certificate Validation");
+        try {
+            // Create a trust manager that does not validate certificate chains
+            final javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[] {
+                    new javax.net.ssl.X509TrustManager() {
+                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                            return null;
+                        }
+
+                        public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                        }
+
+                        public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                        }
+                    }
+            };
+
+            // Install the all-trusting trust manager
+            final javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("SSL");
+            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+
+            com.mongodb.ConnectionString connectionString = new com.mongodb.ConnectionString(mongoUri);
+
+            com.mongodb.MongoClientSettings settings = com.mongodb.MongoClientSettings.builder()
+                    .applyConnectionString(connectionString)
+                    .applyToSslSettings(builder -> {
+                        builder.enabled(true);
+                        builder.invalidHostNameAllowed(true);
+                        builder.context(sslContext);
+                    })
+                    .build();
+
+            return MongoClients.create(settings);
+        } catch (Exception e) {
+            log.error("Failed to configure SSL bypass for remote-dev", e);
+            throw new RuntimeException("Could not configure MongoDB SSL bypass", e);
+        }
     }
 
     @Bean
@@ -55,16 +101,18 @@ public class MongoReactiveConfig extends AbstractReactiveMongoConfiguration {
         return template;
     }
 
-    //Very important, do not remove this, otherwise the HealthCheckConfig "save" throws error although it really saves
+    // Very important, do not remove this, otherwise the HealthCheckConfig "save"
+    // throws error although it really saves
     @Bean
     @Override
     public @NonNull MappingMongoConverter mappingMongoConverter(
             @NonNull ReactiveMongoDatabaseFactory databaseFactory,
             @NonNull MongoCustomConversions customConversions,
             @NonNull MongoMappingContext mappingContext) {
-            
-        MappingMongoConverter converter = super.mappingMongoConverter(databaseFactory, customConversions, mappingContext);
-        converter.setMapKeyDotReplacement("_");  // Replace dots with underscores in map keys
+
+        MappingMongoConverter converter = super.mappingMongoConverter(databaseFactory, customConversions,
+                mappingContext);
+        converter.setMapKeyDotReplacement("_"); // Replace dots with underscores in map keys
         return converter;
     }
 

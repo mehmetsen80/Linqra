@@ -94,7 +94,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 log.error("❌ Failed to list collections: {}", response.getMessage());
             } else {
                 List<String> names = response.getData().getCollectionNamesList();
-                log.info("✅ Found {} collections: {}", names.size(), names);
+                log.debug("✅ Found {} collections: {}", names.size(), names);
 
                 // Detailed check for a few
                 for (String name : names) {
@@ -103,7 +103,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                                     .withCollectionName(name)
                                     .build());
                     if (desc.getStatus() == 0) {
-                        log.info("   - {} (ID: {}, Loaded: {})", name, desc.getData().getCollectionID(),
+                        log.debug("   - {} (ID: {}, Loaded: {})", name, desc.getData().getCollectionID(),
                                 desc.getData());
                     } else {
                         log.warn("   - {} (Describe Failed: {})", name, desc.getMessage());
@@ -274,7 +274,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 throw new IllegalStateException(
                         "Failed to create index for " + collectionName + ": " + indexResponse.getMessage());
             }
-            log.info("Created index on field: {}", embeddingField);
+            log.debug("Created index on field: {}", embeddingField);
 
             // Load collection
             R<?> loadResponse = milvusClient.loadCollection(LoadCollectionParam.newBuilder()
@@ -284,7 +284,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
                 throw new IllegalStateException(
                         "Failed to load collection " + collectionName + ": " + loadResponse.getMessage());
             }
-            log.info("Loaded Milvus collection: {}", collectionName);
+            log.debug("Loaded Milvus collection: {}", collectionName);
 
             // Set teamId as a collection property
             Map<String, String> collectionProperties = new HashMap<>();
@@ -313,7 +313,7 @@ public class LinqMilvusStoreServiceImpl implements LinqMilvusStoreService {
             if (alterResponse.getStatus() != 0) {
                 log.warn("Failed to set properties for collection {}: {}", collectionName, alterResponse.getMessage());
             }
-            log.info("Set collection properties {} for {}", collectionProperties, collectionName);
+            log.debug("Set collection properties {} for {}", collectionProperties, collectionName);
 
             // Log successful collection creation
             long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();

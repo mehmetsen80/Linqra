@@ -12,7 +12,7 @@ import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.ApiKeyContextService;
 import org.lite.gateway.service.ApiKeyService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -30,7 +30,7 @@ public class LinqMicroServiceImpl implements LinqMicroService {
     private final WebClient.Builder webClientBuilder;
 
     @NonNull
-    private final RedisTemplate<String, String> redisTemplate;
+    private final CacheService cacheService;
 
     @NonNull
     private final ObjectMapper objectMapper;
@@ -61,60 +61,63 @@ public class LinqMicroServiceImpl implements LinqMicroService {
             getFetchRequest.getLink().setAction("fetch");
             getFetchRequest.setQuery(request.getQuery());
             String cacheKey = generateCacheKey(getFetchRequest);
-            redisTemplate.delete(cacheKey);
+            cacheService.delete(cacheKey).subscribe();
             return executeLinqRequest(request);
         }
 
         // Check if this is a fetch action
         if ("fetch".equalsIgnoreCase(action)) {
             // First check if this is part of a workflow step
-            if (request.getQuery() != null && request.getQuery().getWorkflow() != null && !request.getQuery().getWorkflow().isEmpty()) {
+            if (request.getQuery() != null && request.getQuery().getWorkflow() != null
+                    && !request.getQuery().getWorkflow().isEmpty()) {
                 // Find the current step
                 LinqRequest.Query.WorkflowStep currentStep = request.getQuery().getWorkflow().stream()
-                    .filter(step -> step.getTarget().equals(request.getLink().getTarget()) &&
-                                  step.getAction().equals(request.getLink().getAction()))
-                    .findFirst()
-                    .orElse(null);
+                        .filter(step -> step.getTarget().equals(request.getLink().getTarget()) &&
+                                step.getAction().equals(request.getLink().getAction()))
+                        .findFirst()
+                        .orElse(null);
 
                 // Check if caching is enabled for this step
-                if (currentStep != null && 
-                    currentStep.getCacheConfig() != null && 
-                    currentStep.getCacheConfig().isEnabled()) {
-                    
+                if (currentStep != null &&
+                        currentStep.getCacheConfig() != null &&
+                        currentStep.getCacheConfig().isEnabled()) {
+
                     // Use custom cache key if provided, otherwise generate one
-                    String cacheKey = currentStep.getCacheConfig().getKey() != null ? 
-                        currentStep.getCacheConfig().getKey() : 
-                        generateCacheKey(request);
-                    
+                    String cacheKey = currentStep.getCacheConfig().getKey() != null
+                            ? currentStep.getCacheConfig().getKey()
+                            : generateCacheKey(request);
+
                     log.info("Checking cache for workflow step with key: {}", cacheKey);
-                    
-                    return Mono.fromCallable(() -> redisTemplate.opsForValue().get(cacheKey))
-                        .filter(Objects::nonNull)
-                        .map(value -> {
-                            try {
-                                log.info("Cache hit for workflow step with key: {}", cacheKey);
-                                LinqResponse response = objectMapper.readValue(value, LinqResponse.class);
-                                response.getMetadata().setCacheHit(true);
-                                return response;
-                            } catch (Exception e) {
-                                log.error("Failed to deserialize cached LinqResponse", e);
-                                throw new RuntimeException("Failed to deserialize cached LinqResponse", e);
-                            }
-                        })
-                        .switchIfEmpty(
-                            executeLinqRequest(request)
-                                .doOnNext(response -> {
-                                    try {
-                                        log.info("Cache miss for workflow step with key: {}, storing in cache", cacheKey);
-                                        String jsonResponse = objectMapper.writeValueAsString(response);
-                                        Duration ttl = currentStep.getCacheConfig().getTtlAsDuration();
-                                        redisTemplate.opsForValue().set(cacheKey, jsonResponse, ttl);
-                                    } catch (Exception e) {
-                                        log.error("Failed to serialize LinqResponse for cache", e);
-                                        throw new RuntimeException("Failed to serialize LinqResponse for cache", e);
-                                    }
-                                })
-                        );
+
+                    return cacheService.get(cacheKey)
+                            .map(value -> {
+                                try {
+                                    log.info("Cache hit for workflow step with key: {}", cacheKey);
+                                    LinqResponse response = objectMapper.readValue(value, LinqResponse.class);
+                                    response.getMetadata().setCacheHit(true);
+                                    return response;
+                                } catch (Exception e) {
+                                    log.error("Failed to deserialize cached LinqResponse", e);
+                                    throw new RuntimeException("Failed to deserialize cached LinqResponse", e);
+                                }
+                            })
+                            .switchIfEmpty(
+                                    executeLinqRequest(request)
+                                            .doOnNext(response -> {
+                                                try {
+                                                    log.info(
+                                                            "Cache miss for workflow step with key: {}, storing in cache",
+                                                            cacheKey);
+                                                    String jsonResponse = objectMapper.writeValueAsString(response);
+                                                    Duration ttl = currentStep.getCacheConfig().getTtlAsDuration();
+                                                    cacheService.set(cacheKey, jsonResponse, ttl)
+                                                            .subscribe();
+                                                } catch (Exception e) {
+                                                    log.error("Failed to serialize LinqResponse for cache", e);
+                                                    throw new RuntimeException(
+                                                            "Failed to serialize LinqResponse for cache", e);
+                                                }
+                                            }));
                 }
             }
 
@@ -187,21 +190,21 @@ public class LinqMicroServiceImpl implements LinqMicroService {
             path = path.substring(1);
         }
 
-        // Special handling for api-gateway target - call API directly without /r/ prefix
+        // Special handling for api-gateway target - call API directly without /r/
+        // prefix
         String url;
         if ("api-gateway".equals(target)) {
             url = baseUrl + "/" + path;
         } else {
             url = baseUrl + "/r/" + target + "/" + path;
         }
-        
+
         log.info("Linq url: {}", url);
 
         // Add remaining params as query parameters
-        Map<String, String> queryParams = params != null ?
-                params.entrySet().stream()
-                        .filter(e -> !intent.contains("{" + e.getKey() + "}") && e.getValue() != null)
-                        .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toString()))
+        Map<String, String> queryParams = params != null ? params.entrySet().stream()
+                .filter(e -> !intent.contains("{" + e.getKey() + "}") && e.getValue() != null)
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toString()))
                 : Map.of();
 
         if (!queryParams.isEmpty()) {
@@ -266,7 +269,7 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                     requestSpec = requestSpec
                             .header("x-api-key", apiKeyValue)
                             .header("x-api-key-name", apiKeyName);
-                    
+
                     // Add executedBy header if present (for user context in workflow steps)
                     if (request.getExecutedBy() != null) {
                         requestSpec = requestSpec.header("X-Executed-By", request.getExecutedBy());
@@ -278,10 +281,8 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                                 if (response.statusCode().is2xxSuccessful()) {
                                     return response.bodyToMono(Object.class)
                                             .switchIfEmpty(Mono.just(Map.of(
-                                                    "message", method.equals("DELETE") ?
-                                                            "Resource successfully deleted" :
-                                                            "Success but no content"
-                                            )));
+                                                    "message", method.equals("DELETE") ? "Resource successfully deleted"
+                                                            : "Success but no content")));
                                 } else {
                                     return response.bodyToMono(String.class)
                                             .flatMap(error -> Mono.error(new RuntimeException(

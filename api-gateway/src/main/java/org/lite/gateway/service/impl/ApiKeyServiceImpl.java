@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.ApiKey;
 import org.lite.gateway.repository.ApiKeyRepository;
 import org.lite.gateway.service.ApiKeyService;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,7 +22,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ApiKeyServiceImpl implements ApiKeyService {
     private final ApiKeyRepository apiKeyRepository;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final CacheService cacheService;
     private final ObjectMapper objectMapper;
     private static final String API_KEY_CACHE_PREFIX = "api_key:";
     private static final Duration CACHE_DURATION = Duration.ofMinutes(5);
@@ -63,45 +63,44 @@ public class ApiKeyServiceImpl implements ApiKeyService {
     @Override
     public Mono<ApiKey> validateApiKey(String apiKey) {
         String cacheKey = API_KEY_CACHE_PREFIX + apiKey;
-        String cachedValue = redisTemplate.opsForValue().get(cacheKey);
 
-        if (cachedValue != null) {
-            try {
-                ApiKey cached = objectMapper.readValue(cachedValue, ApiKey.class);
-                if (cached.isEnabled() && (cached.getExpiresAt() == null ||
-                        cached.getExpiresAt().isAfter(Instant.now()))) {
-                    return Mono.just(cached);
-                }
-                // If key is expired or disabled, remove from cache
-                redisTemplate.delete(cacheKey);
-            } catch (Exception e) {
-                log.error("Error deserializing cached API key", e);
-            }
-        }
-
-        return apiKeyRepository.findByKey(apiKey)
-                .flatMap(key -> {
-                    if (!key.isEnabled()) {
-                        log.warn("API key is disabled: {}", apiKey);
-                        return Mono.error(new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED, "API key is disabled"));
-                    }
-                    if (key.getExpiresAt() != null && key.getExpiresAt().isBefore(Instant.now())) {
-                        String errorMessage = String.format("API key expired at %s", key.getExpiresAt());
-                        log.warn("{}: {}", errorMessage, apiKey);
-                        return Mono.error(new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED, errorMessage));
-                    }
-                    return Mono.just(key);
-                })
-                .doOnNext(validKey -> {
+        return cacheService.get(cacheKey)
+                .flatMap(cachedValue -> {
                     try {
-                        String value = objectMapper.writeValueAsString(validKey);
-                        redisTemplate.opsForValue().set(cacheKey, value, CACHE_DURATION);
+                        ApiKey cached = objectMapper.readValue(cachedValue, ApiKey.class);
+                        if (isValid(cached)) {
+                            return Mono.just(cached);
+                        }
+                        cacheService.delete(cacheKey).subscribe();
                     } catch (Exception e) {
-                        log.error("Error caching API key", e);
+                        log.error("Error deserializing API key", e);
                     }
-                });
+                    return Mono.empty();
+                })
+                .switchIfEmpty(apiKeyRepository.findByKey(apiKey)
+                        .flatMap(key -> {
+                            if (!key.isEnabled()) {
+                                return Mono.error(
+                                        new ResponseStatusException(HttpStatus.UNAUTHORIZED, "API key is disabled"));
+                            }
+                            if (key.getExpiresAt() != null && key.getExpiresAt().isBefore(Instant.now())) {
+                                return Mono
+                                        .error(new ResponseStatusException(HttpStatus.UNAUTHORIZED, "API key expired"));
+                            }
+                            return Mono.just(key);
+                        })
+                        .doOnNext(validKey -> {
+                            try {
+                                String value = objectMapper.writeValueAsString(validKey);
+                                cacheService.set(cacheKey, value, CACHE_DURATION).subscribe();
+                            } catch (Exception e) {
+                                log.error("Error Caching API Key", e);
+                            }
+                        }));
+    }
+
+    private boolean isValid(ApiKey key) {
+        return key.isEnabled() && (key.getExpiresAt() == null || key.getExpiresAt().isAfter(Instant.now()));
     }
 
     @Override
@@ -109,15 +108,13 @@ public class ApiKeyServiceImpl implements ApiKeyService {
         return apiKeyRepository.findById(id)
                 .flatMap(apiKey -> {
                     apiKey.setEnabled(false);
-                    invalidateKeyCache(apiKey.getKey());
-                    return apiKeyRepository.save(apiKey);
-                })
-                .then();
+                    return apiKeyRepository.save(apiKey)
+                            .then(cacheService.delete(API_KEY_CACHE_PREFIX + apiKey.getKey()).then());
+                });
     }
 
-    // Method to invalidate cache when key is revoked/deleted
     public void invalidateKeyCache(String apiKey) {
-        redisTemplate.delete(API_KEY_CACHE_PREFIX + apiKey);
+        cacheService.delete(API_KEY_CACHE_PREFIX + apiKey).subscribe();
     }
 
     @Override

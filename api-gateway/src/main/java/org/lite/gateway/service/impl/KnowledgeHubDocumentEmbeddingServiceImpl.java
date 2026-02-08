@@ -24,7 +24,7 @@ import org.lite.gateway.service.ObjectStorageService;
 import org.lite.gateway.util.AuditLogHelper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
@@ -70,7 +70,7 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
     private final ObjectStorageService objectStorageService;
     private final LinqMilvusStoreService milvusStoreService;
     private final ObjectMapper objectMapper;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final CacheService cacheService;
     private final LlmModelRepository llmModelRepository;
     private final ChunkEncryptionService chunkEncryptionService;
     private final AuditLogHelper auditLogHelper;
@@ -1046,9 +1046,9 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
             String modelCategory,
             String modelName,
             String teamId) {
-        return Mono.fromCallable(() -> Optional.ofNullable(redisTemplate.opsForValue().get(cacheKey)))
+        return cacheService.get(cacheKey)
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(optionalCached -> optionalCached.map(cached -> {
+                .flatMap(cached -> {
                     try {
                         List<Double> cachedValues = objectMapper.readValue(cached,
                                 objectMapper.getTypeFactory().constructCollectionType(List.class, Double.class));
@@ -1062,13 +1062,13 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
                     }
                     return Mono.<List<Float>>empty();
                 })
-                        .orElseGet(() -> Mono.empty()))
                 .switchIfEmpty(milvusStoreService.getEmbedding(text, modelCategory, modelName, teamId)
                         .flatMap(embedding -> Mono.fromRunnable(() -> {
                             try {
                                 List<Double> toCache = embedding.stream().map(Float::doubleValue).toList();
-                                redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(toCache),
-                                        EMBEDDING_CACHE_TTL);
+                                cacheService.set(cacheKey, objectMapper.writeValueAsString(toCache),
+                                        EMBEDDING_CACHE_TTL)
+                                        .subscribe();
                             } catch (Exception e) {
                                 log.warn("Failed to cache embedding for key {}: {}", cacheKey, e.getMessage());
                             }

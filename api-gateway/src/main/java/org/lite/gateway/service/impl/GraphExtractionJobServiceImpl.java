@@ -14,7 +14,7 @@ import org.lite.gateway.service.KnowledgeHubGraphRelationshipExtractionService;
 import org.lite.gateway.service.Neo4jGraphService;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -38,7 +38,7 @@ public class GraphExtractionJobServiceImpl implements GraphExtractionJobService 
     private final GraphExtractionJobRepository jobRepository;
     private final KnowledgeHubGraphEntityExtractionService entityExtractionService;
     private final KnowledgeHubGraphRelationshipExtractionService relationshipExtractionService;
-    private final ReactiveRedisTemplate<String, String> asyncStepQueueRedisTemplate;
+    private final CacheService cacheService;
     private final ObjectMapper objectMapper;
     private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
     private final Neo4jGraphService graphService;
@@ -163,8 +163,7 @@ public class GraphExtractionJobServiceImpl implements GraphExtractionJobService 
                     try {
                         String taskJson = objectMapper.writeValueAsString(task);
                         // Add to Redis queue
-                        return asyncStepQueueRedisTemplate.opsForList()
-                                .rightPush(QUEUE_KEY, taskJson)
+                        return cacheService.rightPush(QUEUE_KEY, taskJson)
                                 .doOnSuccess(count -> log.info("Queued graph extraction job {} (queue size: {})", jobId,
                                         count))
                                 .thenReturn(savedJob);
@@ -339,7 +338,7 @@ public class GraphExtractionJobServiceImpl implements GraphExtractionJobService 
             return;
         }
 
-        asyncStepQueueRedisTemplate.opsForList().leftPop(QUEUE_KEY)
+        cacheService.leftPop(QUEUE_KEY)
                 .doOnSubscribe(s -> log.debug("Checking graph extraction queue..."))
                 .doOnNext(message -> log.info("Found graph extraction job in queue: {}", message))
                 .flatMap(message -> {

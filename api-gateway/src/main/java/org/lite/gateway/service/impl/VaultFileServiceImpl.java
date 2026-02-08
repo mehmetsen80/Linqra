@@ -20,7 +20,8 @@ import java.time.LocalDateTime;
  * Service for reading encrypted vault file from disk (read-only)
  * Handles file locking and caching
  * 
- * Note: api-gateway only reads from vault. Writing is done via vault-reader CLI.
+ * Note: api-gateway only reads from vault. Writing is done via vault-reader
+ * CLI.
  */
 @Service
 @Slf4j
@@ -106,7 +107,7 @@ public class VaultFileServiceImpl implements VaultFileService {
             ObjectMapper mapper = new ObjectMapper();
             mapper.registerModule(new JavaTimeModule());
             mapper.configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
-            
+
             VaultFile vault = mapper.readValue(json, VaultFile.class);
             
             // Cache
@@ -228,6 +229,8 @@ public class VaultFileServiceImpl implements VaultFileService {
             return "ec2"; // Use "ec2" directly instead of mapping to "prod"
         } else if (activeProfile.contains("staging")) {
             return "staging";
+        } else if (activeProfile.contains("remote-dev")) {
+            return "remote-dev";
         } else {
             return "dev";
         }

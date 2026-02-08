@@ -6,6 +6,7 @@ import org.lite.gateway.config.StorageProperties;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
+import org.lite.gateway.repository.KnowledgeHubDocumentVersionRepository;
 import org.lite.gateway.repository.GraphExtractionJobRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
@@ -94,6 +95,9 @@ class DocumentServiceImplIntegrationTest {
     @Autowired
     private KnowledgeHubDocumentMetaDataRepository metadataRepository;
 
+    @MockitoBean
+    private KnowledgeHubDocumentVersionRepository versionRepository;
+
     @Autowired
     private KnowledgeHubCollectionRepository collectionRepository;
 
@@ -146,6 +150,7 @@ class DocumentServiceImplIntegrationTest {
                 chunkEncryptionService,
                 chunkRepository,
                 metadataRepository,
+                versionRepository,
                 collectionRepository,
                 milvusStoreService,
                 neo4jGraphService,

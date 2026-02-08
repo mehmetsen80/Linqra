@@ -11,7 +11,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
@@ -30,9 +32,9 @@ public class RedisConfig {
     private int redisPort;
 
     @Bean
-    public org.springframework.data.redis.core.ReactiveStringRedisTemplate reactiveStringRedisTemplate(
+    public ReactiveStringRedisTemplate reactiveStringRedisTemplate(
             @Qualifier("redisConnectionFactory") RedisConnectionFactory connectionFactory) {
-        return new org.springframework.data.redis.core.ReactiveStringRedisTemplate(
+        return new ReactiveStringRedisTemplate(
                 (org.springframework.data.redis.connection.ReactiveRedisConnectionFactory) connectionFactory);
     }
 
@@ -44,6 +46,7 @@ public class RedisConfig {
 
     // Redis message listener container to handle Pub/Sub
     @Bean
+    @Profile("!remote-dev")
     @ConditionalOnProperty(name = "app.redis.listener.enabled", havingValue = "true", matchIfMissing = true)
     public RedisMessageListenerContainer redisMessageListenerContainer(
             RedisConnectionFactory redisConnectionFactory,
@@ -75,8 +78,19 @@ public class RedisConfig {
         return template;
     }
 
+    // Redis-based lock provider for production profiles
     @Bean
+    @Profile("!remote-dev")
     public LockProvider lockProvider(RedisConnectionFactory connectionFactory) {
+        log.info("Initializing RedisLockProvider for distributed locking");
         return new RedisLockProvider(connectionFactory);
+    }
+
+    // Simple in-memory lock provider for remote-dev profile
+    @Bean
+    @Profile("remote-dev")
+    public LockProvider simpleLockProvider() {
+        log.info("Initializing SimpleLockProvider for remote-dev profile (in-memory locking)");
+        return new net.javacrumbs.shedlock.provider.inmemory.InMemoryLockProvider();
     }
 }

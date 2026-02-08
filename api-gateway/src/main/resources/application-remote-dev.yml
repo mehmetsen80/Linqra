@@ -1,0 +1,178 @@
+spring:
+  application:
+    name: api-gateway
+  main:
+    allow-bean-definition-overriding: true
+    allow-circular-references: true
+    web-application-type: reactive
+  session:
+    store-type: none
+  security:
+    oauth2:
+      client:
+        registration:
+          linqra-gateway-client:
+            client-id: linqra-gateway-client
+            client-secret: ${vault.keycloak.client.secret}
+            authorization-grant-type: authorization_code
+            scope: gateway.read
+            redirect-uri: ${vault.oauth2.redirect.uri} # http://localhost:7777/login/oauth2/code/keycloak
+            provider: keycloak
+        provider:
+          keycloak:
+            # Remote Keycloak Configuration
+            token-uri: https://${vault.keycloak.gateway.url}/realms/Linqra/protocol/openid-connect/token
+            authorization-uri: https://${vault.keycloak.gateway.url}/realms/Linqra/protocol/openid-connect/auth
+            jwk-set-uri: https://${vault.keycloak.gateway.url}/realms/Linqra/protocol/openid-connect/certs
+            issuer-uri: https://${vault.keycloak.gateway.url}/realms/Linqra
+      resourceserver:
+        opaquetoken:
+          introspection-uri: https://${vault.keycloak.gateway.url}/realms/Linqra/protocol/openid-connect/token/introspect
+          client-id: linqra-gateway-client
+          client-secret: ${vault.keycloak.client.secret}
+        jwt:
+          issuer-uri: https://${vault.keycloak.gateway.url}/realms/Linqra
+          jwk-set-uri: https://${vault.keycloak.gateway.url}/realms/Linqra/protocol/openid-connect/certs
+          validation:
+            allowed-issuers:
+              - https://${vault.keycloak.gateway.url}/realms/Linqra
+
+  data:
+    redis:
+      host: ${vault.redis.host} # localhost (local container)
+      port: ${vault.redis.port}
+      database: 0
+      timeout: 500
+      connect-timeout: 500
+    mongodb:
+      uri: ${vault.mongodb.uri} # SaaS Access
+      database: Linqra
+      auto-index-creation: true
+
+  cloud:
+    gateway:
+      httpserver:
+        wiretap: true
+      httpclient:
+        wiretap: true
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      default-filters:
+        - SetRequestHeader=X-Forwarded-Proto, https
+        - SetRequestHeader=X-Forwarded-Port, 443
+        - TokenRelay
+
+      routes:
+      # Remote Discovery Server Routes
+      - id: discovery-server
+        uri: https://${vault.eureka.gateway.url}
+        predicates:
+        - Path=/eureka/web
+        filters:
+          - SetPath=/
+        
+      - id: discovery-server-static
+        uri: https://${vault.eureka.gateway.url}
+        predicates:
+        - Path=/eureka/**
+        
+      - id: minio-proxy
+        uri: ${vault.storage.endpoint} # https://polaris.linqra.com
+        predicates:
+          - Path=/${vault.aws.s3.bucket.name}/**, /${vault.aws.s3.backup.bucket.name}/**, /${vault.aws.s3.audit.bucket.name}/**, /${vault.aws.s3.audit.backup.bucket.name}/**
+        filters:
+          - RemoveRequestHeader=Authorization
+          - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,loggers,threaddump, metrics
+
+eureka:
+  client:
+    service-url:
+      defaultZone: https://${vault.eureka.username}:${vault.eureka.password}@${vault.eureka.gateway.url}/eureka/eureka/
+    enabled: true
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    hostname: localhost
+    instance-id: ${spring.application.name}:${random.value}
+    non-secure-port-enabled: true
+    secure-port-enabled: false
+    # secure-port: ${server.port} # 7777 (SSL)
+
+server:
+  port: 7777
+  http2:
+    enabled: true
+  ssl:
+    # SSL Enabled for remote-dev to allow https localhost access
+    enabled: true
+    key-store: ${vault.gateway.key.store}
+    key-store-password: ${vault.gateway.keystore.password}
+    key-alias: ${vault.gateway.alias.name}
+    key-store-type: PKCS12
+    trust-store: ${vault.gateway.trust.store}
+    trust-store-password: ${vault.gateway.truststore.password}
+    trust-store-type: JKS
+    client-auth: none
+
+logging:
+  level:
+    root: INFO
+    org.springframework.cloud.gateway: INFO  # Reduced from TRACE
+    org.springframework.http.server.reactive: INFO  # Reduced from TRACE
+    org.springframework.web.reactive: INFO  # Reduced from TRACE
+    reactor.netty: WARN
+    reactor.netty.transport: WARN
+    org.springframework.security: INFO  # Reduced from DEBUG
+    org.springframework.security.oauth2.client: INFO  # Reduced from DEBUG
+    org.lite.gateway: INFO  # Your application logs
+    javax.net.ssl: OFF
+
+cors:
+  allowed-origins: http://localhost:3000,https://localhost:3000
+  allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD
+  allowed-headers: Origin,Content-Type,Accept,Authorization,X-Requested-With,X-User-Token,X-Team-ID,X-API-Key
+  max-age: 3600
+
+jwt:
+  secret: ${vault.jwt.secret}
+  expiration: 86400000
+
+milvus:
+  host: ${vault.milvus.host}
+  port: ${vault.milvus.port}
+  uri: ${vault.milvus.uri}
+  token: ${vault.milvus.token}
+
+neo4j:
+  uri: ${vault.neo4j.uri}
+  username: ${vault.neo4j.username}
+  password: ${vault.neo4j.password}
+
+linqra:
+  storage:
+    type: ${vault.storage.type}
+    endpoint: ${vault.storage.endpoint}
+    public-endpoint: ${vault.storage.public.endpoint}
+    access-key: ${vault.minio.access.key}
+    secret-key: ${vault.minio.secret.key}
+    bucket-name: ${vault.aws.s3.bucket.name}
+
+notifications:
+  email:
+    host: ${vault.smtp.host}
+    port: ${vault.smtp.port}
+    username: ${vault.smtp.username}
+    password: ${vault.smtp.password}
+    enabled: ${vault.smtp.enabled}
+
+health:
+  check:
+    service-pattern: ".*-dev"

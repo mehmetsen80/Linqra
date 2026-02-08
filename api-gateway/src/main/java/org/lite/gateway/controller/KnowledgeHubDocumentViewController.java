@@ -59,6 +59,26 @@ public class KnowledgeHubDocumentViewController {
         }
 
         /**
+         * Get full document text (reconstructed from chunks)
+         */
+        @GetMapping("/view/{documentId}/text")
+        @AuditLog(eventType = AuditEventType.DOCUMENT_ACCESSED, action = AuditActionType.READ, resourceType = AuditResourceType.DOCUMENT, resourceIdParam = "documentId", documentIdParam = "documentId", reason = "Document text viewed")
+        public Mono<ResponseEntity<Map<String, String>>> getDocumentText(
+                        @PathVariable String documentId,
+                        ServerWebExchange exchange) {
+                log.info("Getting document text: {}", documentId);
+
+                return teamContextService.getTeamFromContext(exchange)
+                                .flatMap(teamId -> documentService.getDocumentText(documentId, teamId)
+                                                .map(text -> ResponseEntity.ok(Map.of("text", text))))
+                                .onErrorResume(error -> {
+                                        log.error("Error getting document text: {}", documentId, error);
+                                        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                                        .build());
+                                });
+        }
+
+        /**
          * Download document file (decrypted if encrypted)
          * Streams the decrypted file directly to the client
          */

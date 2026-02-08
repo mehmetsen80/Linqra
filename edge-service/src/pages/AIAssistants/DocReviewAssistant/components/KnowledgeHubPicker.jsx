@@ -45,7 +45,7 @@ const KnowledgeHubPicker = ({ show, onHide, onSelect }) => {
     );
 
     return (
-        <Modal show={show} onHide={onHide} size="lg" centered>
+        <Modal show={show} onHide={onHide} size="lg" centered style={{ zIndex: 10000 }}>
             <Modal.Header closeButton>
                 <Modal.Title className="d-flex align-items-center">
                     <HiDatabase className="me-2 text-primary" />
@@ -77,32 +77,38 @@ const KnowledgeHubPicker = ({ show, onHide, onSelect }) => {
                             </div>
                         ) : (
                             <ListGroup>
-                                {filteredDocuments.map(doc => (
-                                    <ListGroup.Item
-                                        key={doc.id}
-                                        action
-                                        active={selectedDoc?.id === doc.id}
-                                        onClick={() => setSelectedDoc(doc)}
-                                        className="d-flex justify-content-between align-items-center"
-                                    >
-                                        <div className="d-flex align-items-center">
-                                            <HiDocumentText className="me-3" size={20} />
-                                            <div>
-                                                <div className="fw-bold">{doc.fileName}</div>
-                                                <small className="text-muted">
-                                                    {(doc.fileSize / 1024).toFixed(1)} KB • {new Date(doc.createdAt).toLocaleDateString()}
-                                                </small>
+                                {filteredDocuments.map(doc => {
+                                    const isReady = doc.status === 'AI_READY';
+                                    return (
+                                        <ListGroup.Item
+                                            key={doc.id}
+                                            action={isReady}
+                                            active={selectedDoc?.id === doc.id}
+                                            onClick={() => isReady && setSelectedDoc(doc)}
+                                            className="d-flex justify-content-between align-items-center"
+                                            style={!isReady ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                                        >
+                                            <div className="d-flex align-items-center">
+                                                <HiDocumentText className="me-3" size={20} />
+                                                <div>
+                                                    <div className={`fw-bold ${!isReady ? 'text-muted' : ''}`}>{doc.fileName}</div>
+                                                    <small className="text-muted">
+                                                        {(doc.fileSize / 1024).toFixed(1)} KB • {new Date(doc.createdAt).toLocaleDateString()}
+                                                    </small>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div>
-                                            {doc.status === 'PROCESSED' ? (
-                                                <Badge bg="success">Ready</Badge>
-                                            ) : (
-                                                <Badge bg="secondary">{doc.status}</Badge>
-                                            )}
-                                        </div>
-                                    </ListGroup.Item>
-                                ))}
+                                            <div>
+                                                {doc.status === 'AI_READY' ? (
+                                                    <Badge bg="success">AI Ready</Badge>
+                                                ) : doc.status === 'PROCESSED' ? (
+                                                    <Badge bg="warning" text="dark">Processing</Badge>
+                                                ) : (
+                                                    <Badge bg="secondary">{doc.status}</Badge>
+                                                )}
+                                            </div>
+                                        </ListGroup.Item>
+                                    );
+                                })}
                             </ListGroup>
                         )}
                     </div>

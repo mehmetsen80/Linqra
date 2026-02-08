@@ -274,7 +274,10 @@ public class VaultFileServiceImpl implements VaultFileService {
             return "ec2"; // Use "ec2" directly instead of mapping to "prod"
         } else if (activeProfile.contains("staging")) {
             return "staging";
-        } else {
+        } else if (activeProfile.contains("remote-dev")) {
+            return "remote-dev";
+        }
+        else {
             return "dev";
         }
     }

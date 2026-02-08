@@ -2,6 +2,7 @@ package org.lite.gateway.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
@@ -19,42 +20,43 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 @EnableScheduling
 @Slf4j
 public class AsyncQueueConfig {
-    
-    @Bean
-    @Qualifier("asyncStepStatusRedisTemplate")
-    public ReactiveRedisTemplate<String, LinqResponse.QueuedWorkflowStep> asyncStepStatusRedisTemplate(
-            @Qualifier("redisConnectionFactory") ReactiveRedisConnectionFactory connectionFactory) {
-        log.info("Initializing asyncStepStatusRedisTemplate");
-        
-        // Configure ObjectMapper with Java Time API support
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        
-        // Create serializer with ObjectMapper in constructor
-        Jackson2JsonRedisSerializer<LinqResponse.QueuedWorkflowStep> serializer = 
-            new Jackson2JsonRedisSerializer<>(mapper, LinqResponse.QueuedWorkflowStep.class);
-        
-        RedisSerializationContext.RedisSerializationContextBuilder<String, LinqResponse.QueuedWorkflowStep> builder =
-            RedisSerializationContext.newSerializationContext(new StringRedisSerializer());
-        
-        RedisSerializationContext<String, LinqResponse.QueuedWorkflowStep> context = 
-            builder.value(serializer).build();
-        
-        return new ReactiveRedisTemplate<>(connectionFactory, context);
-    }
 
-    @Bean
-    @Qualifier("asyncStepQueueRedisTemplate")
-    public ReactiveRedisTemplate<String, String> asyncStepQueueRedisTemplate(
-            @Qualifier("redisConnectionFactory") ReactiveRedisConnectionFactory connectionFactory) {
-        log.info("Initializing asyncStepQueueRedisTemplate");
-        RedisSerializationContext.RedisSerializationContextBuilder<String, String> builder =
-            RedisSerializationContext.newSerializationContext(new StringRedisSerializer());
-        
-        RedisSerializationContext<String, String> context = 
-            builder.value(new StringRedisSerializer()).build();
-        
-        return new ReactiveRedisTemplate<>(connectionFactory, context);
-    }
-} 
+        @Bean
+        @Profile("!remote-dev")
+        @Qualifier("asyncStepStatusRedisTemplate")
+        public ReactiveRedisTemplate<String, LinqResponse.QueuedWorkflowStep> asyncStepStatusRedisTemplate(
+                        @Qualifier("redisConnectionFactory") ReactiveRedisConnectionFactory connectionFactory) {
+                log.info("Initializing asyncStepStatusRedisTemplate");
+
+                // Configure ObjectMapper with Java Time API support
+                ObjectMapper mapper = new ObjectMapper();
+                mapper.registerModule(new JavaTimeModule());
+                mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+
+                // Create serializer with ObjectMapper in constructor
+                Jackson2JsonRedisSerializer<LinqResponse.QueuedWorkflowStep> serializer = new Jackson2JsonRedisSerializer<>(
+                                mapper, LinqResponse.QueuedWorkflowStep.class);
+
+                RedisSerializationContext.RedisSerializationContextBuilder<String, LinqResponse.QueuedWorkflowStep> builder = RedisSerializationContext
+                                .newSerializationContext(new StringRedisSerializer());
+
+                RedisSerializationContext<String, LinqResponse.QueuedWorkflowStep> context = builder.value(serializer)
+                                .build();
+
+                return new ReactiveRedisTemplate<>(connectionFactory, context);
+        }
+
+        @Bean
+        @Profile("!remote-dev")
+        @Qualifier("asyncStepQueueRedisTemplate")
+        public ReactiveRedisTemplate<String, String> asyncStepQueueRedisTemplate(
+                        @Qualifier("redisConnectionFactory") ReactiveRedisConnectionFactory connectionFactory) {
+                log.info("Initializing asyncStepQueueRedisTemplate");
+                RedisSerializationContext.RedisSerializationContextBuilder<String, String> builder = RedisSerializationContext
+                                .newSerializationContext(new StringRedisSerializer());
+
+                RedisSerializationContext<String, String> context = builder.value(new StringRedisSerializer()).build();
+
+                return new ReactiveRedisTemplate<>(connectionFactory, context);
+        }
+}

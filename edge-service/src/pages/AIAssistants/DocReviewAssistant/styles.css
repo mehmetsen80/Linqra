@@ -1,0 +1,169 @@
+/* Doc Review Assistant Styles */
+
+.doc-viewer-editor .ProseMirror {
+    min-height: 400px;
+    outline: none;
+    font-size: 0.95rem;
+    line-height: 1.7;
+}
+
+.doc-viewer-editor .ProseMirror:focus {
+    outline: none;
+}
+
+.doc-viewer-editor .ProseMirror p {
+    margin-bottom: 0.75rem;
+}
+
+.doc-viewer-editor .ProseMirror h1,
+.doc-viewer-editor .ProseMirror h2,
+.doc-viewer-editor .ProseMirror h3 {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.doc-viewer-editor .ProseMirror mark {
+    background-color: #fef08a;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.125rem;
+}
+
+.doc-viewer-editor .ProseMirror code {
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.875em;
+}
+
+.doc-viewer-editor .ProseMirror blockquote {
+    border-left: 3px solid #d1d5db;
+    padding-left: 1rem;
+    margin-left: 0;
+    color: #6b7280;
+    font-style: italic;
+}
+
+.doc-viewer-editor .ProseMirror ul,
+.doc-viewer-editor .ProseMirror ol {
+    padding-left: 1.5rem;
+}
+
+/* Editor Toolbar Buttons */
+.doc-viewer-editor .btn {
+    padding: 0.25rem 0.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Review Suggestions Panel */
+.review-suggestions-panel {
+    background: #f8f9fa;
+    border-left: 1px solid #dee2e6;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.review-points-list {
+    max-height: calc(100vh - 200px);
+    overflow-y: auto;
+}
+
+.review-point-card {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    transition: box-shadow 0.2s ease;
+}
+
+.review-point-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* PDF Viewer */
+.react-pdf__Document {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.react-pdf__Page {
+    max-width: 100%;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1rem;
+}
+
+.react-pdf__Page canvas {
+    max-width: 100%;
+    height: auto !important;
+}
+
+/* Highlighted text in document */
+.doc-highlight-warning {
+    background-color: #fff3cd;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+.doc-highlight-danger {
+    background-color: #f8d7da;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+.doc-highlight-success {
+    background-color: #d1e7dd;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+/* Modal z-index override to appear above fullscreen container */
+.modal {
+    z-index: 10001 !important;
+}
+
+.modal-backdrop {
+    z-index: 10000 !important;
+}
+
+/* Document Viewer Tabs */
+.doc-viewer-tabs {
+    margin-bottom: 1rem;
+}
+
+.doc-viewer-tabs .nav-tabs {
+    border-bottom: 2px solid var(--primary-color, #0d6efd) !important;
+    gap: 0.25rem;
+}
+
+.doc-viewer-tabs .nav-tabs .nav-link {
+    color: #000 !important;
+    background-color: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    border-bottom: none !important;
+    border-radius: 0.5rem 0.5rem 0 0;
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    opacity: 0.7;
+    /* Make inactive slightly faded but visible */
+}
+
+.doc-viewer-tabs .nav-tabs .nav-link:hover {
+    color: var(--primary-color, #0d6efd) !important;
+    background-color: #e9ecef !important;
+    opacity: 1;
+}
+
+.doc-viewer-tabs .nav-tabs .nav-link.active {
+    color: #fff !important;
+    background-color: var(--primary-color, #0d6efd) !important;
+    border-color: var(--primary-color, #0d6efd) !important;
+    border-bottom-color: var(--primary-color, #0d6efd) !important;
+    margin-bottom: -2px;
+    opacity: 1;
+}
+
+.doc-viewer-tabs .nav-tabs .nav-link svg {
+    vertical-align: text-bottom;
+}

@@ -168,7 +168,10 @@ public class EarlyVaultService implements LinqraVaultService {
             return "ec2";
         } else if (activeProfile.contains("staging")) {
             return "staging";
-        } else {
+        } else if (activeProfile.contains("remote-dev")) {
+            return "remote-dev";
+        }
+        else {
             return "dev";
         }
     }

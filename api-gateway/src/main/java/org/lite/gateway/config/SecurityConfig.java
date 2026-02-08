@@ -373,63 +373,68 @@ public class SecurityConfig implements BeanFactoryAware {
         // if (path.startsWith(prefix)) {
         // scopeKey = prefix + "**";
         // }
-        String scope = dynamicRouteService.getClientScope(getScopeKey(path));// i.e. inventory-service/** ->
-                                                                             // inventory-service.read
+        return dynamicRouteService.getClientScope(getScopeKey(path))
+                .defaultIfEmpty("")
+                .flatMap(scope -> {
+                    // 2nd step - check the realm access role
+                    // if whitelist passes, check for roles in the JWT token for secured paths
+                    if (isWhitelisted) {
+                        // REMOTE-DEV BYPASS: Allow open access to whitelisted routes in remote-dev
+                        // profile
+                        boolean isRemoteDev = java.util.Arrays.asList(environment.getActiveProfiles())
+                                .contains("remote-dev");
+                        if (isRemoteDev) {
+                            log.warn("REMOTE-DEV MODE: Bypassing security checks for path: {}", path);
+                            return Mono.just(new AuthorizationDecision(true));
+                        }
 
-        // 2nd step - check the realm access role
-        // if whitelist passes, check for roles in the JWT token for secured paths
-        if (isWhitelisted) {
-            // REMOTE-DEV BYPASS: Allow open access to whitelisted routes in remote-dev
-            // profile
-            boolean isRemoteDev = java.util.Arrays.asList(environment.getActiveProfiles()).contains("remote-dev");
-            if (isRemoteDev) {
-                log.warn("REMOTE-DEV MODE: Bypassing security checks for path: {}", path);
-                return Mono.just(new AuthorizationDecision(true));
-            }
+                        // For /r/ paths, check route permissions first
+                        if (path.startsWith("/r/") && !path.contains("/whatsapp/webhook")) {
+                            // log.info("Checking route permissions for path: {}", path);
+                            return checkRoutePermission(authenticationMono, path, authorizationContext.getExchange())
+                                    .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path,
+                                            hasPermission))
+                                    .flatMap(hasPermission -> {
+                                        if (!hasPermission) {
+                                            log.warn(
+                                                    "Route permission denied for: {}. Team does not have USE permission for this route.",
+                                                    path);
+                                            return Mono.just(new AuthorizationDecision(false));
+                                        }
+                                        // Check if identified by API Key filter
+                                        return authenticationMono.flatMap(auth -> {
+                                            boolean isApiKeyAuth = auth.getAuthorities().stream()
+                                                    .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
 
-            // For /r/ paths, check route permissions first
-            if (path.startsWith("/r/") && !path.contains("/whatsapp/webhook")) {
-                // log.info("Checking route permissions for path: {}", path);
-                return checkRoutePermission(authenticationMono, path, authorizationContext.getExchange())
-                        .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path, hasPermission))
-                        .flatMap(hasPermission -> {
-                            if (!hasPermission) {
-                                log.warn(
-                                        "Route permission denied for: {}. Team does not have USE permission for this route.",
-                                        path);
-                                return Mono.just(new AuthorizationDecision(false));
+                                            if (isApiKeyAuth) {
+                                                return Mono.just(new AuthorizationDecision(true));
+                                            }
+                                            return continueWithJwtChecks(Mono.just(auth), path, scope);
+                                        });
+                                    })
+                                    .onErrorResume(error -> {
+                                        log.error("Error checking route permissions for {}: {}", path,
+                                                error.getMessage(), error);
+                                        return Mono.just(new AuthorizationDecision(false));
+                                    })
+                                    .defaultIfEmpty(new AuthorizationDecision(false));
+                        }
+
+                        // For non-route paths, continue with normal JWT checks
+                        return authenticationMono.flatMap(auth -> {
+                            boolean isApiKeyAuth = auth.getAuthorities().stream()
+                                    .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
+
+                            if (isApiKeyAuth) {
+                                return Mono.just(new AuthorizationDecision(true));
                             }
-                            // Check if identified by API Key filter
-                            return authenticationMono.flatMap(auth -> {
-                                boolean isApiKeyAuth = auth.getAuthorities().stream()
-                                        .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
+                            return continueWithJwtChecks(Mono.just(auth), path, scope);
+                        });
+                    }
 
-                                if (isApiKeyAuth) {
-                                    return Mono.just(new AuthorizationDecision(true));
-                                }
-                                return continueWithJwtChecks(Mono.just(auth), path, scope);
-                            });
-                        })
-                        .onErrorResume(error -> {
-                            log.error("Error checking route permissions for {}: {}", path, error.getMessage(), error);
-                            return Mono.just(new AuthorizationDecision(false));
-                        })
-                        .defaultIfEmpty(new AuthorizationDecision(false));
-            }
+                    return Mono.just(new AuthorizationDecision(false));
+                });
 
-            // For non-route paths, continue with normal JWT checks
-            return authenticationMono.flatMap(auth -> {
-                boolean isApiKeyAuth = auth.getAuthorities().stream()
-                        .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
-
-                if (isApiKeyAuth) {
-                    return Mono.just(new AuthorizationDecision(true));
-                }
-                return continueWithJwtChecks(Mono.just(auth), path, scope);
-            });
-        }
-
-        return Mono.just(new AuthorizationDecision(false));
     }
 
     private Mono<AuthorizationDecision> continueWithJwtChecks(Mono<Authentication> authenticationMono, String path,

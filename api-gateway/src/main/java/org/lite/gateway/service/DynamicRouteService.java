@@ -73,12 +73,8 @@ public class DynamicRouteService {
         }
     }
 
-    public String getClientScope(String path) {
-        // Use block() since this might be called synchronously?
-        // Or return caching service value.
-        // Original code: return redisTemplate.opsForValue().get(path);
-        // This is blocking.
-        return cacheService.get(path).block();
+    public reactor.core.publisher.Mono<String> getClientScope(String path) {
+        return cacheService.get(path);
     }
 
     // Add a path to the whitelist

@@ -9,6 +9,8 @@ import org.lite.gateway.event.KnowledgeHubDocumentProcessingEvent;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
+import org.lite.gateway.repository.KnowledgeHubDocumentVersionRepository;
+import org.lite.gateway.entity.KnowledgeHubDocumentVersion;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditEventType;
@@ -44,6 +46,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         private final ChunkEncryptionService chunkEncryptionService;
         private final KnowledgeHubChunkRepository chunkRepository;
         private final KnowledgeHubDocumentMetaDataRepository metadataRepository;
+        private final KnowledgeHubDocumentVersionRepository versionRepository;
         private final KnowledgeHubCollectionRepository collectionRepository;
         private final LinqMilvusStoreService milvusStoreService;
         private final org.lite.gateway.service.Neo4jGraphService neo4jGraphService;
@@ -743,9 +746,21 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                         })
                                                         .then();
 
+                                        // Delete all version records for this document
+                                        // Delete all version records for this document
+                                        Mono<Void> deleteVersions = versionRepository.deleteAllByDocumentId(documentId)
+                                                        .doOnSuccess(v -> log.info(
+                                                                        "Deleted version history for document: {}",
+                                                                        documentId))
+                                                        .doOnError(error -> log.warn(
+                                                                        "Error deleting versions for document {}: {}",
+                                                                        documentId, error.getMessage()))
+                                                        .onErrorResume(error -> Mono.empty());
+
                                         // Execute all deletions in parallel, then delete the document record
                                         return Mono
-                                                        .when(deleteChunks, deleteMetadata, deleteRawFile,
+                                                        .when(deleteChunks, deleteMetadata, deleteVersions,
+                                                                        deleteRawFile,
                                                                         deleteProcessedFile,
                                                                         deleteMilvusEmbeddings,
                                                                         deleteGraphExtractionJobs,
@@ -774,6 +789,196 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                         .flatMap(this::removeMetadataData)
                                                         .flatMap(this::removeProcessedData)
                                                         .then();
+                                });
+        }
+
+        @Override
+        public Mono<String> getDocumentText(String documentId, String teamId) {
+                return getDocumentById(documentId, teamId)
+                                .flatMap(document -> {
+                                        // Check encryption status from the document record
+                                        boolean isEncrypted = Boolean.TRUE.equals(document.getEncrypted());
+                                        String keyVersion = document.getEncryptionKeyVersion();
+
+                                        return chunkRepository.findByDocumentId(documentId)
+                                                        .collectSortedList((c1, c2) -> Integer.compare(
+                                                                        c1.getChunkIndex(), c2.getChunkIndex()))
+                                                        .flatMap(chunks -> {
+                                                                if (chunks.isEmpty()) {
+                                                                        return Mono.just("");
+                                                                }
+
+                                                                // Process chunks
+                                                                return reactor.core.publisher.Flux.fromIterable(chunks)
+                                                                                .concatMap(chunk -> {
+                                                                                        String text = chunk.getText();
+                                                                                        if (!StringUtils.hasText(
+                                                                                                        text)) {
+                                                                                                return Mono.empty();
+                                                                                        }
+
+                                                                                        Mono<String> decryptedTextMono;
+                                                                                        if (isEncrypted && keyVersion != null) {
+                                                                                                decryptedTextMono = chunkEncryptionService
+                                                                                                                .decryptChunkText(
+                                                                                                                                text,
+                                                                                                                                teamId,
+                                                                                                                                keyVersion)
+                                                                                                                .onErrorResume(e -> {
+                                                                                                                        log.warn("Failed to decrypt chunk {} for document {}: {}",
+                                                                                                                                        chunk.getChunkIndex(),
+                                                                                                                                        documentId,
+                                                                                                                                        e.getMessage());
+                                                                                                                        return Mono.just(
+                                                                                                                                        "[Decryption Failed]");
+                                                                                                                });
+                                                                                        } else {
+                                                                                                decryptedTextMono = Mono
+                                                                                                                .just(text);
+                                                                                        }
+
+                                                                                        return decryptedTextMono.map(
+                                                                                                        decrypted -> {
+                                                                                                                // Return
+                                                                                                                // object
+                                                                                                                // holding
+                                                                                                                // text
+                                                                                                                // and
+                                                                                                                // page
+                                                                                                                // info
+                                                                                                                int page = (chunk
+                                                                                                                                .getPageNumbers() != null
+                                                                                                                                && !chunk.getPageNumbers()
+                                                                                                                                                .isEmpty())
+                                                                                                                                                                ? chunk.getPageNumbers()
+                                                                                                                                                                                .get(0)
+                                                                                                                                                                : -1;
+                                                                                                                return new ChunkTextWithPage(
+                                                                                                                                decrypted,
+                                                                                                                                page);
+                                                                                                        });
+                                                                                })
+                                                                                .collectList()
+                                                                                .map(chunkTexts -> {
+                                                                                        StringBuilder fullText = new StringBuilder();
+                                                                                        int currentPage = -1;
+
+                                                                                        for (ChunkTextWithPage cp : chunkTexts) {
+                                                                                                if (cp.page != -1
+                                                                                                                && cp.page != currentPage) {
+                                                                                                        if (fullText.length() > 0)
+                                                                                                                fullText.append("\n\n");
+                                                                                                        fullText.append("--- Page ")
+                                                                                                                        .append(cp.page)
+                                                                                                                        .append(" ---\n\n");
+                                                                                                        currentPage = cp.page;
+                                                                                                } else if (fullText
+                                                                                                                .length() > 0) {
+                                                                                                        fullText.append("\n\n");
+                                                                                                }
+                                                                                                fullText.append(cp.text);
+                                                                                        }
+                                                                                        return fullText.toString();
+                                                                                });
+                                                        });
+                                });
+        }
+
+        // Helper record for text reconstruction
+        private record ChunkTextWithPage(String text, int page) {
+        }
+
+        @Override
+        public Mono<Void> updateDocumentContent(String documentId, byte[] content) {
+                return documentRepository.findByDocumentId(documentId)
+                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)))
+                                .flatMap(document -> {
+                                        // 1. Create a version record for the CURRENT state (before update)
+                                        KnowledgeHubDocumentVersion version = KnowledgeHubDocumentVersion.builder()
+                                                        .documentId(document.getDocumentId())
+                                                        .teamId(document.getTeamId())
+                                                        .versionNumber(document.getCurrentVersion())
+                                                        .s3Key(document.getS3Key())
+                                                        .fileSize(document.getFileSize())
+                                                        .encrypted(Boolean.TRUE.equals(document.getEncrypted()))
+                                                        .encryptionKeyVersion(document.getEncryptionKeyVersion())
+                                                        .createdAt(document.getProcessedAt() != null
+                                                                        ? document.getProcessedAt()
+                                                                        : LocalDateTime.now()) // Use last
+                                                                                               // processed/modified
+                                                                                               // time
+                                                        .summary("Previous version prior to edit")
+                                                        .build();
+
+                                        return versionRepository.save(version)
+                                                        .flatMap(savedVersion -> {
+                                                                // 2. Prepare NEW state
+                                                                int newVersionNumber = document.getCurrentVersion() + 1;
+
+                                                                // Generate new S3 key for the new version to avoid
+                                                                // overwriting the old one
+                                                                // Format: teamId/collectionId/docId/v{version}/fileName
+                                                                String newS3Key = String.format("%s/%s/%s/v%d/%s",
+                                                                                document.getTeamId(),
+                                                                                document.getCollectionId(),
+                                                                                documentId,
+                                                                                newVersionNumber,
+                                                                                document.getFileName());
+
+                                                                boolean isEncrypted = Boolean.TRUE
+                                                                                .equals(document.getEncrypted());
+                                                                String keyVersion = document.getEncryptionKeyVersion();
+
+                                                                Mono<byte[]> contentToUploadMono;
+                                                                if (isEncrypted && StringUtils.hasText(keyVersion)) {
+                                                                        contentToUploadMono = chunkEncryptionService
+                                                                                        .encryptFile(content,
+                                                                                                        document.getTeamId(),
+                                                                                                        keyVersion);
+                                                                } else {
+                                                                        contentToUploadMono = Mono.just(content);
+                                                                }
+
+                                                                return contentToUploadMono
+                                                                                .flatMap(finalContent -> objectStorageService
+                                                                                                .uploadFileBytes(
+                                                                                                                newS3Key,
+                                                                                                                finalContent,
+                                                                                                                document.getContentType(),
+                                                                                                                keyVersion)
+                                                                                                .then(Mono.defer(() -> {
+                                                                                                        // 3. Update
+                                                                                                        // main document
+                                                                                                        // record
+                                                                                                        document.setS3Key(
+                                                                                                                        newS3Key);
+                                                                                                        document.setCurrentVersion(
+                                                                                                                        newVersionNumber);
+                                                                                                        document.setFileSize(
+                                                                                                                        (long) finalContent.length);
+                                                                                                        document.setProcessedAt(
+                                                                                                                        LocalDateTime.now());
+
+                                                                                                        return documentRepository
+                                                                                                                        .save(document)
+                                                                                                                        .then();
+                                                                                                })));
+                                                        });
+                                });
+        }
+
+        @Override
+        public Mono<Map<String, String>> generateDownloadUrl(String documentId) {
+                return documentRepository.findByDocumentId(documentId)
+                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)))
+                                .flatMap(document -> {
+                                        return objectStorageService
+                                                        .generatePresignedDownloadUrl(document.getS3Key())
+                                                        .map(url -> {
+                                                                Map<String, String> result = new HashMap<>();
+                                                                result.put("downloadUrl", url);
+                                                                return result;
+                                                        });
                                 });
         }
 
@@ -896,5 +1101,108 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                         "Updated document {} after processed data deletion",
                                                                         saved.getDocumentId()));
                                 }));
+        }
+
+        @Override
+        public reactor.core.publisher.Flux<KnowledgeHubDocumentVersion> getDocumentVersions(String documentId,
+                        String teamId) {
+                return documentRepository.findByDocumentId(documentId)
+                                .filter(doc -> doc.getTeamId().equals(teamId))
+                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found or access denied")))
+                                .flatMapMany(doc -> versionRepository
+                                                .findAllByDocumentIdOrderByVersionNumberDesc(documentId));
+        }
+
+        @Override
+        public Mono<KnowledgeHubDocument> restoreVersion(String documentId, Integer versionNumber, String teamId) {
+                return documentRepository.findByDocumentId(documentId)
+                                .filter(doc -> doc.getTeamId().equals(teamId))
+                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found or access denied")))
+                                .flatMap(currentDoc -> {
+                                        return versionRepository
+                                                        .findByDocumentIdAndVersionNumber(documentId, versionNumber)
+                                                        .switchIfEmpty(Mono.error(new RuntimeException(
+                                                                        "Version " + versionNumber + " not found")))
+                                                        .flatMap(targetVersion -> {
+                                                                // 1. Archive CURRENT state as a new historical version
+                                                                KnowledgeHubDocumentVersion currentAsHistory = KnowledgeHubDocumentVersion
+                                                                                .builder()
+                                                                                .documentId(currentDoc.getDocumentId())
+                                                                                .teamId(currentDoc.getTeamId())
+                                                                                .versionNumber(currentDoc
+                                                                                                .getCurrentVersion())
+                                                                                .s3Key(currentDoc.getS3Key())
+                                                                                .fileSize(currentDoc.getFileSize())
+                                                                                .encrypted(Boolean.TRUE.equals(
+                                                                                                currentDoc.getEncrypted()))
+                                                                                .encryptionKeyVersion(currentDoc
+                                                                                                .getEncryptionKeyVersion())
+                                                                                .createdAt(currentDoc
+                                                                                                .getProcessedAt() != null
+                                                                                                                ? currentDoc.getProcessedAt()
+                                                                                                                : LocalDateTime.now())
+                                                                                .summary("Pre-restore archived version")
+                                                                                .build();
+
+                                                                return versionRepository.save(currentAsHistory)
+                                                                                .flatMap(saved -> {
+                                                                                        // 2. Update Main Document to
+                                                                                        // point to Target Version's
+                                                                                        // content
+                                                                                        // Note: We use the S3 Key from
+                                                                                        // the target version.
+                                                                                        // We DO NOT duplicate the file
+                                                                                        // in S3, we just point to it.
+                                                                                        // But we DO increment the
+                                                                                        // version number to represent
+                                                                                        // "Restored State".
+                                                                                        int newVersionNum = currentDoc
+                                                                                                        .getCurrentVersion()
+                                                                                                        + 1;
+
+                                                                                        currentDoc.setCurrentVersion(
+                                                                                                        newVersionNum);
+                                                                                        currentDoc.setS3Key(
+                                                                                                        targetVersion.getS3Key());
+                                                                                        currentDoc.setFileSize(
+                                                                                                        targetVersion.getFileSize());
+                                                                                        currentDoc.setEncrypted(
+                                                                                                        targetVersion.getEncrypted());
+                                                                                        currentDoc.setEncryptionKeyVersion(
+                                                                                                        targetVersion.getEncryptionKeyVersion());
+                                                                                        currentDoc.setProcessedAt(
+                                                                                                        LocalDateTime.now());
+
+                                                                                        // Reset processing status as we
+                                                                                        // might need to
+                                                                                        // re-process/re-index
+                                                                                        // Actually, if we restore, the
+                                                                                        // embeddings for THAT version
+                                                                                        // might be gone if we deleted
+                                                                                        // them?
+                                                                                        // Or maybe we treat "Restore"
+                                                                                        // as a new "Upload" event
+                                                                                        // effectively?
+                                                                                        // Let's set it to UPLOADED so
+                                                                                        // it triggers re-processing
+                                                                                        // (embedding generation) for
+                                                                                        // the restored content.
+                                                                                        currentDoc.setStatus(
+                                                                                                        DocumentStatus.UPLOADED);
+
+                                                                                        return documentRepository.save(
+                                                                                                        currentDoc)
+                                                                                                        .doOnSuccess(doc -> {
+                                                                                                                log.info("Restored document {} to version {} (new version {})",
+                                                                                                                                documentId,
+                                                                                                                                versionNumber,
+                                                                                                                                newVersionNum);
+                                                                                                                publishProcessingEvent(
+                                                                                                                                doc,
+                                                                                                                                documentId);
+                                                                                                        });
+                                                                                });
+                                                        });
+                                });
         }
 }

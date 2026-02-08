@@ -11,7 +11,7 @@ import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
 import org.springframework.stereotype.Service;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.lite.gateway.service.CacheService;
 import reactor.core.publisher.Mono;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -35,8 +35,7 @@ import java.util.stream.Collectors;
 public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     private static final String QUEUE_KEY = "async:step:queue";
 
-    private final ReactiveRedisTemplate<String, String> asyncStepQueueRedisTemplate;
-    private final ReactiveRedisTemplate<String, QueuedWorkflowStep> asyncStepStatusRedisTemplate;
+    private final CacheService cacheService;
     private final ObjectMapper objectMapper;
     private final LinqLlmModelRepository linqLlmModelRepository;
     private final LinqLlmModelService linqLlmModelService;
@@ -73,16 +72,15 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
                     step.getIntent(),
                     teamId);
 
-            // First store the status
-            return asyncStepStatusRedisTemplate.opsForValue()
-                    .set(redisKey, stepExecution, Duration.ofHours(24))
+            // First store the status (serialize to JSON)
+            String stepJson = objectMapper.writeValueAsString(stepExecution);
+            return cacheService.set(redisKey, stepJson, Duration.ofHours(24))
                     .doOnSuccess(v -> log.info("Queued async step for workflow {} step {} with execution ID {}",
                             workflowId, stepNumber, executionId))
                     .doOnError(e -> log.error("Failed to queue async step for workflow {} step {}: {}",
                             workflowId, stepNumber, e.getMessage(), e))
                     // Then add the task to the queue
-                    .then(asyncStepQueueRedisTemplate.opsForList()
-                            .rightPush(QUEUE_KEY, objectMapper.writeValueAsString(task))
+                    .then(cacheService.rightPush(QUEUE_KEY, objectMapper.writeValueAsString(task))
                             .doOnSuccess(
                                     v -> log.info("Added task to queue for workflow {} step {} with execution ID {}",
                                             workflowId, stepNumber, executionId))
@@ -99,7 +97,7 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     public Mono<QueuedWorkflowStep> getAsyncStepStatus(String workflowId, int stepNumber) {
         // Get all keys matching the pattern workflowId:stepNumber:*
         String pattern = String.format("%s:%d:*", workflowId, stepNumber);
-        return asyncStepStatusRedisTemplate.keys(pattern)
+        return cacheService.keys(pattern)
                 .collectList()
                 .flatMap(keys -> {
                     if (keys.isEmpty()) {
@@ -107,7 +105,14 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
                     }
                     // Get the most recent execution (last key in the list)
                     String latestKey = keys.get(keys.size() - 1);
-                    return asyncStepStatusRedisTemplate.opsForValue().get(latestKey);
+                    return cacheService.get(latestKey)
+                            .map(json -> {
+                                try {
+                                    return objectMapper.readValue(json, QueuedWorkflowStep.class);
+                                } catch (Exception e) {
+                                    throw new RuntimeException("Failed to deserialize QueuedWorkflowStep", e);
+                                }
+                            });
                 });
     }
 
@@ -115,7 +120,7 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     public Mono<Void> cancelAsyncStep(String workflowId, int stepNumber) {
         // Get all keys matching the pattern workflowId:stepNumber:*
         String pattern = String.format("%s:%d:*", workflowId, stepNumber);
-        return asyncStepStatusRedisTemplate.keys(pattern)
+        return cacheService.keys(pattern)
                 .collectList()
                 .flatMap(keys -> {
                     if (keys.isEmpty()) {
@@ -124,13 +129,18 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
                     }
                     // Get the most recent execution (last key in the list)
                     String latestKey = keys.get(keys.size() - 1);
-                    return asyncStepStatusRedisTemplate.opsForValue().get(latestKey)
-                            .flatMap(stepExecution -> {
-                                stepExecution.setStatus("cancelled");
-                                stepExecution.setCancelledAt(LocalDateTime.now());
-                                return asyncStepStatusRedisTemplate.opsForValue()
-                                        .set(latestKey, stepExecution, Duration.ofHours(24))
-                                        .then();
+                    return cacheService.get(latestKey)
+                            .flatMap(json -> {
+                                try {
+                                    QueuedWorkflowStep stepExecution = objectMapper.readValue(json,
+                                            QueuedWorkflowStep.class);
+                                    stepExecution.setStatus("cancelled");
+                                    stepExecution.setCancelledAt(LocalDateTime.now());
+                                    String updatedJson = objectMapper.writeValueAsString(stepExecution);
+                                    return cacheService.set(latestKey, updatedJson, Duration.ofHours(24));
+                                } catch (Exception e) {
+                                    return Mono.error(new RuntimeException("Failed to update step status", e));
+                                }
                             });
                 });
     }
@@ -138,13 +148,22 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     @Override
     public Mono<Map<String, QueuedWorkflowStep>> getAllAsyncSteps(String workflowId) {
         String pattern = String.format("%s:*", workflowId);
-        return asyncStepStatusRedisTemplate.keys(pattern)
+        return cacheService.keys(pattern)
                 .collectList()
                 .flatMap(keys -> {
                     if (keys.isEmpty()) {
                         return Mono.empty();
                     }
-                    return asyncStepStatusRedisTemplate.opsForValue().multiGet(keys)
+                    return reactor.core.publisher.Flux.fromIterable(keys)
+                            .flatMap(key -> cacheService.get(key)
+                                    .map(json -> {
+                                        try {
+                                            return objectMapper.readValue(json, QueuedWorkflowStep.class);
+                                        } catch (Exception e) {
+                                            throw new RuntimeException("Failed to deserialize QueuedWorkflowStep", e);
+                                        }
+                                    }))
+                            .collectList()
                             .map(steps -> steps.stream()
                                     .collect(Collectors.toMap(
                                             QueuedWorkflowStep::getStepId,
@@ -169,7 +188,14 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
                 task.getWorkflowId(), task.getStepId(), task.getTeamId(), executionId);
 
         // First check if the step is already being processed or completed
-        return asyncStepStatusRedisTemplate.opsForValue().get(statusKey)
+        return cacheService.get(statusKey)
+                .map(json -> {
+                    try {
+                        return objectMapper.readValue(json, QueuedWorkflowStep.class);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Failed to deserialize QueuedWorkflowStep", e);
+                    }
+                })
                 .doOnNext(status -> log.info("Current status for workflow {} step {}: {}",
                         task.getWorkflowId(), task.getStepId(), status.getStatus()))
                 .filter(status -> !status.getStatus().equals("processing") && !status.getStatus().equals("completed"))
@@ -206,9 +232,13 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
 
     private Mono<QueuedWorkflowStep> updateStatusToProcessing(String statusKey, QueuedWorkflowStep status) {
         status.setStatus("processing");
-        return asyncStepStatusRedisTemplate.opsForValue()
-                .set(statusKey, status, Duration.ofHours(24))
-                .thenReturn(status);
+        try {
+            String json = objectMapper.writeValueAsString(status);
+            return cacheService.set(statusKey, json, Duration.ofHours(24))
+                    .thenReturn(status);
+        } catch (Exception e) {
+            return Mono.error(new RuntimeException("Failed to serialize QueuedWorkflowStep", e));
+        }
     }
 
     private Mono<LinqResponse> executeStepWithTeam(LinqResponse.WorkflowStep step, Map<String, Object> params,
@@ -278,27 +308,35 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
     }
 
     private Mono<Void> updateStatusToCompleted(String statusKey, Object result, String workflowId, String stepId) {
-        return asyncStepStatusRedisTemplate.opsForValue().get(statusKey)
-                .flatMap(status -> {
-                    status.setStatus("completed");
-                    status.setCompletedAt(LocalDateTime.now());
-                    status.setResult(result);
-                    return asyncStepStatusRedisTemplate.opsForValue()
-                            .set(statusKey, status, Duration.ofHours(24))
-                            .then();
+        return cacheService.get(statusKey)
+                .flatMap(json -> {
+                    try {
+                        QueuedWorkflowStep status = objectMapper.readValue(json, QueuedWorkflowStep.class);
+                        status.setStatus("completed");
+                        status.setCompletedAt(LocalDateTime.now());
+                        status.setResult(result);
+                        String updatedJson = objectMapper.writeValueAsString(status);
+                        return cacheService.set(statusKey, updatedJson, Duration.ofHours(24));
+                    } catch (Exception e) {
+                        return Mono.error(new RuntimeException("Failed to update status", e));
+                    }
                 })
                 .then(updateWorkflowExecution(workflowId, stepId, "completed", result));
     }
 
     private Mono<Void> updateStatusToFailed(String statusKey, String errorMessage, String workflowId, String stepId) {
-        return asyncStepStatusRedisTemplate.opsForValue().get(statusKey)
-                .flatMap(status -> {
-                    status.setStatus("failed");
-                    status.setError(errorMessage);
-                    status.setCompletedAt(LocalDateTime.now());
-                    return asyncStepStatusRedisTemplate.opsForValue()
-                            .set(statusKey, status, Duration.ofHours(24))
-                            .then();
+        return cacheService.get(statusKey)
+                .flatMap(json -> {
+                    try {
+                        QueuedWorkflowStep status = objectMapper.readValue(json, QueuedWorkflowStep.class);
+                        status.setStatus("failed");
+                        status.setError(errorMessage);
+                        status.setCompletedAt(LocalDateTime.now());
+                        String updatedJson = objectMapper.writeValueAsString(status);
+                        return cacheService.set(statusKey, updatedJson, Duration.ofHours(24));
+                    } catch (Exception e) {
+                        return Mono.error(new RuntimeException("Failed to update status", e));
+                    }
                 })
                 .then(updateWorkflowExecution(workflowId, stepId, "failed", null));
     }
@@ -360,7 +398,7 @@ public class QueuedWorkflowServiceImpl implements QueuedWorkflowService {
         }
 
         log.info("Checking async step queue...");
-        asyncStepQueueRedisTemplate.opsForList().leftPop(QUEUE_KEY)
+        cacheService.leftPop(QUEUE_KEY)
                 .doOnSubscribe(s -> log.info("Subscribing to queue processing..."))
                 .doOnNext(message -> log.info("Found message in queue: {}", message))
                 .flatMap(message -> {

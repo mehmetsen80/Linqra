@@ -89,4 +89,8 @@ public class KnowledgeHubDocument {
 
     // Deletion
     private LocalDateTime deletedAt;
+
+    // Versioning
+    @Builder.Default
+    private Integer currentVersion = 1;
 }

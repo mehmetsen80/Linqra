@@ -18,7 +18,7 @@ import org.lite.gateway.service.ObjectStorageService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.ReactiveRedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -51,7 +51,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
     private final ObjectStorageService objectStorageService;
     private final ChunkEncryptionService chunkEncryptionService;
     private final Neo4jGraphService neo4jGraphService;
-    private final ReactiveRedisTemplate<String, String> asyncStepQueueRedisTemplate;
+    private final CacheService cacheService;
     private final ObjectMapper objectMapper;
 
     @Autowired(required = false)
@@ -113,8 +113,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
                                 try {
                                     String taskJson = objectMapper.writeValueAsString(task);
                                     // Add to Redis queue
-                                    return asyncStepQueueRedisTemplate.opsForList()
-                                            .rightPush(QUEUE_KEY, taskJson)
+                                    return cacheService.rightPush(QUEUE_KEY, taskJson)
                                             .doOnSuccess(count -> log.info(
                                                     "Queued collection export job {} (queue size: {})", jobId, count))
                                             .thenReturn(savedJob);
@@ -177,7 +176,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
             return;
         }
 
-        asyncStepQueueRedisTemplate.opsForList().leftPop(QUEUE_KEY)
+        cacheService.leftPop(QUEUE_KEY)
                 .doOnSubscribe(s -> log.debug("Checking collection export queue..."))
                 .doOnNext(message -> log.info("Found collection export job in queue: {}", message))
                 .flatMap(message -> {

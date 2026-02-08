@@ -29,10 +29,12 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 3000,
+      host: '0.0.0.0', // Bind to all interfaces so Docker containers can reach it
       strictPort: true,
       cors: true,
       open: true,
-      https: httpsConfig
+      https: httpsConfig,
+      proxy: {}
     },
     build: {
       outDir: 'dist',

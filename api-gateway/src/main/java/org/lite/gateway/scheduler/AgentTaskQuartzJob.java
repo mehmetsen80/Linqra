@@ -8,7 +8,7 @@ import org.lite.gateway.service.CronCalculationService;
 import org.quartz.DisallowConcurrentExecution;
 import org.quartz.JobExecutionContext;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.scheduling.quartz.QuartzJobBean;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -34,7 +34,7 @@ public class AgentTaskQuartzJob extends QuartzJobBean {
     private CronCalculationService cronCalculationService;
 
     @Autowired
-    private RedisTemplate<String, String> redisTemplate;
+    private CacheService cacheService;
 
     @Override
     protected void executeInternal(JobExecutionContext context) {
@@ -52,7 +52,7 @@ public class AgentTaskQuartzJob extends QuartzJobBean {
 
         // Try to acquire lock with 10 minute TTL (sufficient for most tasks,
         // auto-expires)
-        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(lockKey, "LOCKED", Duration.ofMinutes(10));
+        Boolean acquired = cacheService.setIfAbsent(lockKey, "LOCKED", Duration.ofMinutes(10)).block();
 
         if (!Boolean.TRUE.equals(acquired)) {
             log.info("[Quartz] Skipping task {} execution - already running on another node or completed (lock: {})",

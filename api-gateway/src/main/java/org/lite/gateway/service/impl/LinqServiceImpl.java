@@ -17,7 +17,7 @@ import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.LinqWorkflowService;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,204 +31,224 @@ import java.util.*;
 @RequiredArgsConstructor
 public class LinqServiceImpl implements LinqService {
 
-    @NonNull
-    private final RedisTemplate<String, String> redisTemplate;
+        @NonNull
+        private final CacheService cacheService;
 
-    @NonNull
-    private final ApiRouteRepository apiRouteRepository;
+        @NonNull
+        private final ApiRouteRepository apiRouteRepository;
 
-    @NonNull
-    private final TeamRouteRepository teamRouteRepository;
+        @NonNull
+        private final TeamRouteRepository teamRouteRepository;
 
-    @NonNull
-    private final LinqLlmModelRepository linqLlmModelRepository;
+        @NonNull
+        private final LinqLlmModelRepository linqLlmModelRepository;
 
-    @NonNull
-    private final LinqLlmModelService linqLlmModelService;
+        @NonNull
+        private final LinqLlmModelService linqLlmModelService;
 
-    @NonNull
-    private final LinqMicroService linqMicroService;
+        @NonNull
+        private final LinqMicroService linqMicroService;
 
-    @NonNull
-    private final LinqWorkflowService linqWorkflowService;
+        @NonNull
+        private final LinqWorkflowService linqWorkflowService;
 
-    @NonNull
-    private final LinqWorkflowExecutionService workflowExecutionService;
+        @NonNull
+        private final LinqWorkflowExecutionService workflowExecutionService;
 
-    @NonNull
-    private final ChatExecutionService chatExecutionService;
+        @NonNull
+        private final ChatExecutionService chatExecutionService;
 
-    @Value("${server.host:localhost}")
-    private String gatewayHost;
+        @Value("${server.host:localhost}")
+        private String gatewayHost;
 
-    @Value("${server.port:7777}")
-    private int gatewayPort;
+        @Value("${server.port:7777}")
+        private int gatewayPort;
 
-    @Value("${server.ssl.enabled:true}")
-    private boolean sslEnabled;
+        @Value("${server.ssl.enabled:true}")
+        private boolean sslEnabled;
 
-    @Override
-    public Mono<LinqResponse> processLinqRequest(LinqRequest request) {
-        log.info("Starting processLinqRequest for target: {}", request.getLink().getTarget());
-        return validateRoutePermission(request)
-                .then(Mono.<LinqResponse>defer(() -> {
-                    log.info("After validateRoutePermission");
-                    if (request.getQuery() == null || request.getQuery().getIntent().isEmpty()) {
-                        return Mono.error(new IllegalArgumentException("Invalid LINQ request"));
-                    }
+        @Override
+        public Mono<LinqResponse> processLinqRequest(LinqRequest request) {
+                log.info("Starting processLinqRequest for target: {}", request.getLink().getTarget());
+                return validateRoutePermission(request)
+                                .then(Mono.<LinqResponse>defer(() -> {
+                                        log.info("After validateRoutePermission");
+                                        if (request.getQuery() == null || request.getQuery().getIntent().isEmpty()) {
+                                                return Mono.error(new IllegalArgumentException("Invalid LINQ request"));
+                                        }
 
-                    // Handle chat requests (AI Assistant conversations)
-                    if ("assistant".equals(request.getLink().getTarget())
-                            && "chat".equals(request.getLink().getAction())) {
-                        log.info("Processing chat request for assistant");
-                        return chatExecutionService.executeChat(request);
-                    }
+                                        // Handle chat requests (AI Assistant conversations)
+                                        if ("assistant".equals(request.getLink().getTarget())
+                                                        && "chat".equals(request.getLink().getAction())) {
+                                                log.info("Processing chat request for assistant");
+                                                return chatExecutionService.executeChat(request);
+                                        }
 
-                    // Handle workflow requests
-                    if (request.getQuery().getWorkflow() != null && !request.getQuery().getWorkflow().isEmpty()) {
-                        log.info("Processing workflow request with {} steps", request.getQuery().getWorkflow().size());
-                        return workflowExecutionService.executeWorkflow(request)
-                                .flatMap(response ->
-                        // Track the execution
-                        workflowExecutionService.trackExecution(request, response)
-                                .thenReturn(response));
-                    }
+                                        // Handle workflow requests
+                                        if (request.getQuery().getWorkflow() != null
+                                                        && !request.getQuery().getWorkflow().isEmpty()) {
+                                                log.info("Processing workflow request with {} steps",
+                                                                request.getQuery().getWorkflow().size());
+                                                return workflowExecutionService.executeWorkflow(request)
+                                                                .flatMap(response ->
+                                                // Track the execution
+                                                workflowExecutionService.trackExecution(request, response)
+                                                                .thenReturn(response));
+                                        }
 
-                    // Existing logic for single requests
-                    // Extract teamId from params (must be present from controller)
-                    String teamId;
-                    if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                                        // Existing logic for single requests
+                                        // Extract teamId from params (must be present from controller)
+                                        String teamId;
+                                        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                                                Object teamObj = request.getQuery().getParams().get("teamId");
+                                                if (teamObj != null) {
+                                                        teamId = String.valueOf(teamObj);
+                                                } else {
+                                                        return Mono.error(new ResponseStatusException(
+                                                                        HttpStatus.UNAUTHORIZED,
+                                                                        "Team ID must be provided in params"));
+                                                }
+                                        } else {
+                                                return Mono.error(new ResponseStatusException(
+                                                                HttpStatus.UNAUTHORIZED,
+                                                                "Team ID must be provided in params"));
+                                        }
+
+                                        log.info("Got team from params: {}", teamId);
+
+                                        // Try to get modelName from llmConfig first, then fallback to target-only
+                                        // search
+                                        final String modelName = (request.getQuery() != null
+                                                        && request.getQuery().getLlmConfig() != null
+                                                        && request.getQuery().getLlmConfig().getModel() != null)
+                                                                        ? request.getQuery().getLlmConfig().getModel()
+                                                                        : null;
+
+                                        Mono<org.lite.gateway.entity.LinqLlmModel> llmModelMono;
+                                        if (modelName != null) {
+                                                log.info("🔍 Searching for LLM model configuration: modelCategory={}, modelName={}, teamId={}",
+                                                                request.getLink().getTarget(), modelName, teamId);
+                                                llmModelMono = linqLlmModelRepository
+                                                                .findByModelCategoryAndModelNameAndTeamId(
+                                                                                request.getLink().getTarget(),
+                                                                                modelName,
+                                                                                teamId)
+                                                                .doOnNext(llmModel -> log.info(
+                                                                                "✅ Found LLM model configuration: modelCategory={}, modelName={}",
+                                                                                llmModel.getModelCategory(),
+                                                                                llmModel.getModelName()))
+                                                                .doOnError(error -> log.error(
+                                                                                "❌ Error finding LLM model for modelCategory {} with modelName {}: {}",
+                                                                                request.getLink().getTarget(),
+                                                                                modelName, error.getMessage()))
+                                                                .switchIfEmpty(Mono.defer(() -> {
+                                                                        log.warn(
+                                                                                        "⚠️ No LLM model found with modelName {}, falling back to target-only search",
+                                                                                        modelName);
+                                                                        return linqLlmModelRepository
+                                                                                        .findByModelCategoryAndTeamId(
+                                                                                                        request.getLink()
+                                                                                                                        .getTarget(),
+                                                                                                        teamId)
+                                                                                        .next() // Take the first result
+                                                                                        .doOnNext(llmModel -> log.info(
+                                                                                                        "✅ Found LLM model configuration (fallback): modelCategory={}, modelName={}",
+                                                                                                        llmModel.getModelCategory(),
+                                                                                                        llmModel.getModelName()));
+                                                                }));
+                                        } else {
+                                                log.info("🔍 Searching for LLM model configuration: modelCategory={}, teamId={}",
+                                                                request.getLink().getTarget(), teamId);
+                                                llmModelMono = linqLlmModelRepository
+                                                                .findByModelCategoryAndTeamId(
+                                                                                request.getLink().getTarget(), teamId)
+                                                                .next() // Take the first result
+                                                                .doOnNext(llmModel -> log.info(
+                                                                                "✅ Found LLM model configuration: modelCategory={}, modelName={}",
+                                                                                llmModel.getModelCategory(),
+                                                                                llmModel.getModelName()))
+                                                                .doOnError(error -> log.error(
+                                                                                "❌ Error finding LLM model for modelCategory {}: {}",
+                                                                                request.getLink().getTarget(),
+                                                                                error.getMessage()));
+                                        }
+
+                                        return llmModelMono
+                                                        .doOnSuccess(llmModel -> {
+                                                                if (llmModel == null) {
+                                                                        log.warn(
+                                                                                        "⚠️ No LLM model configuration found for modelCategory: {}, will try microservice",
+                                                                                        request.getLink().getTarget());
+                                                                }
+                                                        })
+                                                        .doOnNext(llmModel -> log.info(
+                                                                        "🚀 About to execute LLM request for modelCategory: {}",
+                                                                        request.getLink().getTarget()))
+                                                        .flatMap(llmModel -> linqLlmModelService
+                                                                        .executeLlmRequest(request, llmModel))
+                                                        .doOnNext(response -> log
+                                                                        .info("✅ LLM request executed successfully"))
+                                                        .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
+                                                                log.info("📡 No LLM model found, executing microservice request for modelCategory: {}",
+                                                                                request.getLink().getTarget());
+                                                                return linqMicroService.execute(request);
+                                                        }));
+                                }));
+        }
+
+        private Mono<Void> validateRoutePermission(LinqRequest request) {
+                String routeIdentifier = request.getLink().getTarget();
+
+                // List of AI service targets that should bypass permission checks
+                Set<String> bypassTargets = Set.of("openai-chat", "ollama-chat", "huggingface-chat", "gemini-chat",
+                                "workflow",
+                                "openai-embed", "gemini-embed", "ollama-embed", "api-gateway", "assistant");
+
+                // If the target is in our bypass list, return immediately
+                if (bypassTargets.contains(routeIdentifier)) {
+                        return Mono.empty();
+                }
+
+                // Extract teamId from params (must be present from controller)
+                String teamId;
+                if (request.getQuery() != null && request.getQuery().getParams() != null) {
                         Object teamObj = request.getQuery().getParams().get("teamId");
                         if (teamObj != null) {
-                            teamId = String.valueOf(teamObj);
+                                teamId = String.valueOf(teamObj);
                         } else {
-                            return Mono.error(new ResponseStatusException(
-                                    HttpStatus.UNAUTHORIZED,
-                                    "Team ID must be provided in params"));
+                                return Mono.error(new ResponseStatusException(
+                                                HttpStatus.UNAUTHORIZED,
+                                                "Team ID must be provided in params"));
                         }
-                    } else {
+                } else {
                         return Mono.error(new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED,
-                                "Team ID must be provided in params"));
-                    }
+                                        HttpStatus.UNAUTHORIZED,
+                                        "Team ID must be provided in params"));
+                }
 
-                    log.info("Got team from params: {}", teamId);
-
-                    // Try to get modelName from llmConfig first, then fallback to target-only
-                    // search
-                    final String modelName = (request.getQuery() != null && request.getQuery().getLlmConfig() != null
-                            && request.getQuery().getLlmConfig().getModel() != null)
-                                    ? request.getQuery().getLlmConfig().getModel()
-                                    : null;
-
-                    Mono<org.lite.gateway.entity.LinqLlmModel> llmModelMono;
-                    if (modelName != null) {
-                        log.info("🔍 Searching for LLM model configuration: modelCategory={}, modelName={}, teamId={}",
-                                request.getLink().getTarget(), modelName, teamId);
-                        llmModelMono = linqLlmModelRepository
-                                .findByModelCategoryAndModelNameAndTeamId(request.getLink().getTarget(), modelName,
-                                        teamId)
-                                .doOnNext(llmModel -> log.info(
-                                        "✅ Found LLM model configuration: modelCategory={}, modelName={}",
-                                        llmModel.getModelCategory(), llmModel.getModelName()))
-                                .doOnError(error -> log.error(
-                                        "❌ Error finding LLM model for modelCategory {} with modelName {}: {}",
-                                        request.getLink().getTarget(), modelName, error.getMessage()))
-                                .switchIfEmpty(Mono.defer(() -> {
-                                    log.warn(
-                                            "⚠️ No LLM model found with modelName {}, falling back to target-only search",
-                                            modelName);
-                                    return linqLlmModelRepository
-                                            .findByModelCategoryAndTeamId(request.getLink().getTarget(), teamId)
-                                            .next() // Take the first result
-                                            .doOnNext(llmModel -> log.info(
-                                                    "✅ Found LLM model configuration (fallback): modelCategory={}, modelName={}",
-                                                    llmModel.getModelCategory(), llmModel.getModelName()));
-                                }));
-                    } else {
-                        log.info("🔍 Searching for LLM model configuration: modelCategory={}, teamId={}",
-                                request.getLink().getTarget(), teamId);
-                        llmModelMono = linqLlmModelRepository
-                                .findByModelCategoryAndTeamId(request.getLink().getTarget(), teamId)
-                                .next() // Take the first result
-                                .doOnNext(llmModel -> log.info(
-                                        "✅ Found LLM model configuration: modelCategory={}, modelName={}",
-                                        llmModel.getModelCategory(), llmModel.getModelName()))
-                                .doOnError(error -> log.error("❌ Error finding LLM model for modelCategory {}: {}",
-                                        request.getLink().getTarget(), error.getMessage()));
-                    }
-
-                    return llmModelMono
-                            .doOnSuccess(llmModel -> {
-                                if (llmModel == null) {
-                                    log.warn(
-                                            "⚠️ No LLM model configuration found for modelCategory: {}, will try microservice",
-                                            request.getLink().getTarget());
-                                }
-                            })
-                            .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for modelCategory: {}",
-                                    request.getLink().getTarget()))
-                            .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(request, llmModel))
-                            .doOnNext(response -> log.info("✅ LLM request executed successfully"))
-                            .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                                log.info("📡 No LLM model found, executing microservice request for modelCategory: {}",
-                                        request.getLink().getTarget());
-                                return linqMicroService.execute(request);
-                            }));
-                }));
-    }
-
-    private Mono<Void> validateRoutePermission(LinqRequest request) {
-        String routeIdentifier = request.getLink().getTarget();
-
-        // List of AI service targets that should bypass permission checks
-        Set<String> bypassTargets = Set.of("openai-chat", "ollama-chat", "huggingface-chat", "gemini-chat", "workflow",
-                "openai-embed", "gemini-embed", "ollama-embed", "api-gateway", "assistant");
-
-        // If the target is in our bypass list, return immediately
-        if (bypassTargets.contains(routeIdentifier)) {
-            return Mono.empty();
+                String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);
+                return cacheService.get(permissionCacheKey)
+                                .switchIfEmpty(checkAndCachePermission(routeIdentifier, permissionCacheKey, teamId))
+                                .filter(Boolean::parseBoolean)
+                                .switchIfEmpty(Mono.error(new ResponseStatusException(
+                                                HttpStatus.FORBIDDEN,
+                                                "Team does not have USE permission for " + routeIdentifier)))
+                                .then();
         }
 
-        // Extract teamId from params (must be present from controller)
-        String teamId;
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
-            Object teamObj = request.getQuery().getParams().get("teamId");
-            if (teamObj != null) {
-                teamId = String.valueOf(teamObj);
-            } else {
-                return Mono.error(new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "Team ID must be provided in params"));
-            }
-        } else {
-            return Mono.error(new ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED,
-                    "Team ID must be provided in params"));
+        private Mono<String> checkAndCachePermission(String routeIdentifier, String cacheKey, String teamId) {
+                return apiRouteRepository.findByRouteIdentifier(routeIdentifier)
+                                .flatMap(apiRoute -> teamRouteRepository
+                                                .findByTeamIdAndRouteId(teamId, apiRoute.getId())
+                                                .map(teamRoute -> {
+                                                        boolean hasUsePermission = teamRoute.getPermissions()
+                                                                        .contains(RoutePermission.USE);
+                                                        cacheService.set(cacheKey,
+                                                                        String.valueOf(hasUsePermission),
+                                                                        Duration.ofMinutes(5))
+                                                                        .subscribe();
+                                                        return String.valueOf(hasUsePermission);
+                                                }))
+                                .switchIfEmpty(Mono.just("false"));
         }
-
-        // Otherwise, proceed with normal permission check
-        String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);
-        return Mono.fromCallable(() -> redisTemplate.opsForValue().get(permissionCacheKey))
-                .filter(Objects::nonNull)
-                .switchIfEmpty(checkAndCachePermission(routeIdentifier, permissionCacheKey, teamId))
-                .filter(Boolean::parseBoolean)
-                .switchIfEmpty(Mono.error(new ResponseStatusException(
-                        HttpStatus.FORBIDDEN,
-                        "Team does not have USE permission for " + routeIdentifier)))
-                .then();
-    }
-
-    private Mono<String> checkAndCachePermission(String routeIdentifier, String cacheKey, String teamId) {
-        return apiRouteRepository.findByRouteIdentifier(routeIdentifier)
-                .flatMap(apiRoute -> teamRouteRepository.findByTeamIdAndRouteId(teamId, apiRoute.getId())
-                        .map(teamRoute -> {
-                            boolean hasUsePermission = teamRoute.getPermissions().contains(RoutePermission.USE);
-                            redisTemplate.opsForValue().set(cacheKey,
-                                    String.valueOf(hasUsePermission),
-                                    Duration.ofMinutes(5));
-                            return String.valueOf(hasUsePermission);
-                        }))
-                .switchIfEmpty(Mono.just("false"));
-    }
 }

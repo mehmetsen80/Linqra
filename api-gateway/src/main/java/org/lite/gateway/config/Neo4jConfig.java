@@ -25,6 +25,9 @@ public class Neo4jConfig {
 
     private Driver driverInstance;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.core.env.Environment env;
+
     @Bean
     public Driver neo4jDriver() {
         // Validate and normalize URI - Neo4j Java driver requires bolt:// or neo4j://
@@ -57,7 +60,23 @@ public class Neo4jConfig {
                 throw new RuntimeException("Neo4j authentication credentials are required");
             }
 
-            driverInstance = GraphDatabase.driver(neo4jUri, AuthTokens.basic(neo4jUsername, neo4jPassword));
+            org.neo4j.driver.Config config = org.neo4j.driver.Config.defaultConfig();
+            String effectiveUri = neo4jUri;
+
+            if (env.matchesProfiles("remote-dev")) {
+                log.warn("⚠️ REMOTE-DEV PROFILE ACTIVE: Bypassing Neo4j SSL Certificate Validation");
+                // Downgrade scheme to allow manual config (neo4j+s enforces settings that
+                // conflict with manual config)
+                if (effectiveUri.startsWith("neo4j+s://")) {
+                    effectiveUri = effectiveUri.replace("neo4j+s://", "neo4j://");
+                }
+                config = org.neo4j.driver.Config.builder()
+                        .withEncryption()
+                        .withTrustStrategy(org.neo4j.driver.Config.TrustStrategy.trustAllCertificates())
+                        .build();
+            }
+
+            driverInstance = GraphDatabase.driver(effectiveUri, AuthTokens.basic(neo4jUsername, neo4jPassword), config);
             log.info("Using Neo4j authentication with username: {}", neo4jUsername);
 
             // Verify connection

@@ -111,6 +111,29 @@ const docReviewService = {
                 error: error.response?.data?.message || 'Failed to fetch messages'
             };
         }
+    },
+
+    /**
+     * Trigger AI analysis of the document
+     * @param {string} reviewId - The review session ID
+     * @param {string} documentId - The document ID from Knowledge Hub
+     * @param {string} assistantId - The AI assistant ID
+     * @returns {Promise<{success: boolean, data: any, error: any}>}
+     */
+    analyzeDocument: async (reviewId, documentId, assistantId) => {
+        try {
+            const response = await axiosInstance.post(`/api/doc-reviews/${reviewId}/analyze`, {
+                documentId,
+                assistantId
+            });
+            return { success: true, data: response.data };
+        } catch (error) {
+            console.error('Error analyzing document:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to analyze document'
+            };
+        }
     }
 };
 

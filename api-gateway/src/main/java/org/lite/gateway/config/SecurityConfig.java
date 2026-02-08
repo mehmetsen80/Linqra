@@ -10,9 +10,11 @@ import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.core.env.Environment;
+import org.lite.gateway.service.CacheService;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.config.annotation.method.configuration.EnableReactiveMethodSecurity;
@@ -47,7 +49,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.util.AntPathMatcher;
 import java.time.Duration;
-import java.util.Objects;
+
 import org.lite.gateway.entity.RoutePermission;
 import org.lite.gateway.repository.ApiRouteRepository;
 import org.lite.gateway.repository.TeamRouteRepository;
@@ -84,9 +86,10 @@ public class SecurityConfig implements BeanFactoryAware {
     private final ReactiveClientRegistrationRepository customClientRegistrationRepository;
     private final ReactiveOAuth2AuthorizedClientService customAuthorizedClientService;
     private final ApiKeyAuthenticationFilter apiKeyAuthenticationFilter;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final CacheService cacheService;
     private final ApiRouteRepository apiRouteRepository;
     private final TeamRouteRepository teamRouteRepository;
+    private final Environment environment;
 
     private BeanFactory beanFactory;
 
@@ -94,16 +97,18 @@ public class SecurityConfig implements BeanFactoryAware {
             ReactiveClientRegistrationRepository customClientRegistrationRepository,
             ReactiveOAuth2AuthorizedClientService customAuthorizedClientService,
             ApiKeyAuthenticationFilter apiKeyAuthenticationFilter,
-            RedisTemplate<String, String> redisTemplate,
+            CacheService cacheService,
             ApiRouteRepository apiRouteRepository,
-            TeamRouteRepository teamRouteRepository) {
+            TeamRouteRepository teamRouteRepository,
+            Environment environment) {
         this.dynamicRouteService = dynamicRouteService;
         this.customClientRegistrationRepository = customClientRegistrationRepository;
         this.customAuthorizedClientService = customAuthorizedClientService;
         this.apiKeyAuthenticationFilter = apiKeyAuthenticationFilter;
-        this.redisTemplate = redisTemplate;
+        this.cacheService = cacheService;
         this.apiRouteRepository = apiRouteRepository;
         this.teamRouteRepository = teamRouteRepository;
+        this.environment = environment;
     }
 
     @Override
@@ -136,6 +141,7 @@ public class SecurityConfig implements BeanFactoryAware {
 
     // For Keycloak RS256 tokens
     @Bean
+    @Profile("!remote-dev")
     public ReactiveJwtDecoder keycloakJwtDecoder() {
         return NimbusReactiveJwtDecoder.withJwkSetUri(jwkSetUri).build();
     }
@@ -149,7 +155,8 @@ public class SecurityConfig implements BeanFactoryAware {
 
     @Bean
     public SecurityWebFilterChain jwtSecurityFilterChain(ServerHttpSecurity serverHttpSecurity,
-            AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager authorizedClientManager) {
+            AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager authorizedClientManager,
+            ReactiveJwtDecoder keycloakJwtDecoder) {
         serverHttpSecurity
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
@@ -162,7 +169,7 @@ public class SecurityConfig implements BeanFactoryAware {
                             return cn; // Return the Common Name (CN) as the principal
                         }))
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
-                        .jwtDecoder(keycloakJwtDecoder())))
+                        .jwtDecoder(keycloakJwtDecoder)))
                 .addFilterBefore(apiKeyAuthenticationFilter,
                         SecurityWebFiltersOrder.AUTHENTICATION)
                 .authorizeExchange(exchange -> exchange
@@ -271,6 +278,7 @@ public class SecurityConfig implements BeanFactoryAware {
     // Bean to handle OAuth2 client credentials
     // DO NOT DELETE THIS
     @Bean
+    @Profile("!remote-dev")
     public AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager authorizedClientManager() {
 
         ReactiveOAuth2AuthorizedClientProvider authorizedClientProvider = ReactiveOAuth2AuthorizedClientProviderBuilder
@@ -370,6 +378,14 @@ public class SecurityConfig implements BeanFactoryAware {
         // 2nd step - check the realm access role
         // if whitelist passes, check for roles in the JWT token for secured paths
         if (isWhitelisted) {
+            // REMOTE-DEV BYPASS: Allow open access to whitelisted routes in remote-dev
+            // profile
+            boolean isRemoteDev = java.util.Arrays.asList(environment.getActiveProfiles()).contains("remote-dev");
+            if (isRemoteDev) {
+                log.warn("REMOTE-DEV MODE: Bypassing security checks for path: {}", path);
+                return Mono.just(new AuthorizationDecision(true));
+            }
+
             // For /r/ paths, check route permissions first
             if (path.startsWith("/r/") && !path.contains("/whatsapp/webhook")) {
                 // log.info("Checking route permissions for path: {}", path);
@@ -545,8 +561,7 @@ public class SecurityConfig implements BeanFactoryAware {
                     String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);
                     // log.info("Checking Redis cache for key: {}", permissionCacheKey);
 
-                    return Mono.fromCallable(() -> redisTemplate.opsForValue().get(permissionCacheKey))
-                            .filter(Objects::nonNull)
+                    return cacheService.get(permissionCacheKey)
                             .map(cachedPermission -> {
                                 boolean hasPermission = Boolean.parseBoolean(cachedPermission);
                                 // log.info("Using cached permission for team {} route {}: {}", teamId,
@@ -569,9 +584,10 @@ public class SecurityConfig implements BeanFactoryAware {
                                                         // teamId, routeIdentifier, hasUsePermission);
 
                                                         // Cache the result
-                                                        redisTemplate.opsForValue().set(permissionCacheKey,
+                                                        cacheService.set(permissionCacheKey,
                                                                 String.valueOf(hasUsePermission),
-                                                                Duration.ofMinutes(5));
+                                                                Duration.ofMinutes(5))
+                                                                .subscribe();
                                                         // log.info("Cached permission result for team {} route {}: {}",
                                                         // teamId, routeIdentifier, hasUsePermission);
 

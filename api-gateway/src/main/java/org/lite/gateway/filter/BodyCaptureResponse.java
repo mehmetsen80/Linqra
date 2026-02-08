@@ -15,12 +15,12 @@ import reactor.core.publisher.Mono;
 import java.nio.charset.StandardCharsets;
 
 @Slf4j
-public class BodyCaptureResponse extends  ServerHttpResponseDecorator {
+public class BodyCaptureResponse extends ServerHttpResponseDecorator {
 
     private final StringBuilder fullBody = new StringBuilder();
-    private Mono<String> bodyCaptureMono;  // Cached Mono to capture the body later
+    private Mono<String> bodyCaptureMono; // Cached Mono to capture the body later
 
-    private final StringBuilder bodyBuffer = new StringBuilder();  // Buffer to store response body
+    private final StringBuilder bodyBuffer = new StringBuilder(); // Buffer to store response body
 
     public BodyCaptureResponse(ServerHttpResponse delegate) {
         super(delegate);
@@ -39,15 +39,14 @@ public class BodyCaptureResponse extends  ServerHttpResponseDecorator {
                 dataBuffer.read(content);
                 String bodyString = new String(content, StandardCharsets.UTF_8);
                 log.info("bodyString: {}", bodyString);
-                bodyBuffer.append(bodyString);  // Append to the StringBuilder
+                bodyBuffer.append(bodyString); // Append to the StringBuilder
             } else {
                 log.info("No readable data in dataBuffer");
             }
-            DataBufferUtils.release(dataBuffer);  // Release the buffer after reading
-            return bufferFactory().wrap(content);  // Return a wrapped buffer for further processing
+            DataBufferUtils.release(dataBuffer); // Release the buffer after reading
+            return bufferFactory().wrap(content); // Return a wrapped buffer for further processing
         }));
     }
-
 
     @Override
     public @NonNull HttpHeaders getHeaders() {
@@ -58,7 +57,7 @@ public class BodyCaptureResponse extends  ServerHttpResponseDecorator {
         if (!headers.containsKey(HttpHeaders.CONTENT_TYPE)) {
             headers.set(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
         }
-        
+
         // Copy Authorization header if it exists
         if (super.getHeaders().containsKey(HttpHeaders.AUTHORIZATION)) {
             headers.set(HttpHeaders.AUTHORIZATION, super.getHeaders().getFirst(HttpHeaders.AUTHORIZATION));

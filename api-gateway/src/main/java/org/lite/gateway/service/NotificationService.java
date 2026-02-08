@@ -15,16 +15,16 @@ public class NotificationService {
     private final JavaMailSender mailSender;
     private final WebClient.Builder webClientBuilder;
 
-    @Value("${notifications.email.to}")
+    @Value("${notifications.email.to:admin@localhost}")
     private String emailTo;
 
-    @Value("${notifications.slack.webhook-url}")
+    @Value("${notifications.slack.webhook-url:dummy}")
     private String slackWebhookUrl;
 
     @Value("${notifications.email.enabled:false}")
     private boolean emailEnabled;
 
-    @Value("${notifications.email.from}")
+    @Value("${notifications.email.from:system@linqra.com}")
     private String fromEmail;
 
     @Value("${notifications.slack.enabled:false}")

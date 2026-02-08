@@ -10,7 +10,7 @@ import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lite.gateway.service.CacheService;
 import org.springframework.http.codec.ServerCodecConfigurer;
 import org.springframework.lang.NonNull;
 import org.springframework.web.reactive.config.WebFluxConfigurer;
@@ -18,16 +18,18 @@ import org.springframework.web.reactive.config.WebFluxConfigurer;
 @Configuration
 @Slf4j
 public class GatewayConfig implements WebFluxConfigurer {
-    
+
     @Bean
     public RouteLocator routeLocator(RouteLocatorBuilder routeLocationBuilder,
-                                     ApiRouteService apiRouteService,
-                                     ReactiveResilience4JCircuitBreakerFactory reactiveResilience4JCircuitBreakerFactory,
-                                     RedisTemplate<String, String> redisTemplate,
-                                     MetricService metricService,
-                                     ObjectMapper objectMapper) {
+            ApiRouteService apiRouteService,
+            ReactiveResilience4JCircuitBreakerFactory reactiveResilience4JCircuitBreakerFactory,
+            CacheService cacheService,
+            MetricService metricService,
+            ObjectMapper objectMapper,
+            org.springframework.core.env.Environment environment) {
         return new ApiRouteLocatorImpl(routeLocationBuilder,
-                apiRouteService, reactiveResilience4JCircuitBreakerFactory, redisTemplate, metricService, objectMapper);
+                apiRouteService, reactiveResilience4JCircuitBreakerFactory, cacheService, metricService, objectMapper,
+                environment);
     }
 
     @Bean

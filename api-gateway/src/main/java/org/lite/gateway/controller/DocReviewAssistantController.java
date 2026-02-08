@@ -13,6 +13,8 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/doc-reviews")
 @RequiredArgsConstructor
@@ -56,5 +58,29 @@ public class DocReviewAssistantController {
     @GetMapping("/team/{teamId}")
     public Flux<DocReviewAssistant> getReviewsByTeam(@PathVariable String teamId) {
         return docReviewAssistantService.getReviewsByTeam(teamId);
+    }
+
+    @PostMapping("/{id}/analyze")
+    public Mono<ResponseEntity<DocReviewAssistant>> analyzeDocument(
+            @PathVariable String id,
+            @RequestBody Map<String, String> request,
+            ServerWebExchange exchange) {
+
+        String documentId = request.get("documentId");
+        String assistantId = request.get("assistantId");
+
+        log.info("Starting document analysis for review {} with document {} using assistant {}",
+                id, documentId, assistantId);
+
+        return userContextService.getCurrentUsername(exchange)
+                .flatMap(username -> teamContextService.getTeamFromContext(exchange)
+                        .flatMap(teamId -> docReviewAssistantService.analyzeDocument(
+                                id, documentId, assistantId, teamId, username)))
+                .map(ResponseEntity::ok)
+                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()))
+                .onErrorResume(error -> {
+                    log.error("Error analyzing document: {}", error.getMessage(), error);
+                    return Mono.just(ResponseEntity.badRequest().build());
+                });
     }
 }

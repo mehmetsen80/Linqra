@@ -10,7 +10,7 @@ import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter;
 import org.springframework.cloud.gateway.route.builder.GatewayFilterSpec;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.server.ServerWebExchange;
@@ -23,16 +23,21 @@ import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
-public class RedisRateLimiterFilterService implements FilterService{
+public class RedisRateLimiterFilterService implements FilterService {
 
     private final ApplicationContext applicationContext;
-    private final RedisTemplate<String, String> redisTemplate;
+    private final CacheService cacheService;
     private final ObjectMapper objectMapper;
+    private final boolean redisEnabled;
 
-    public RedisRateLimiterFilterService(ApplicationContext applicationContext, RedisTemplate<String, String> redisTemplate, ObjectMapper objectMapper){
+    public RedisRateLimiterFilterService(ApplicationContext applicationContext,
+            CacheService cacheService,
+            ObjectMapper objectMapper,
+            @Value("${app.redis.enabled:true}") boolean redisEnabled) {
         this.applicationContext = applicationContext;
-        this.redisTemplate = redisTemplate;
+        this.cacheService = cacheService;
         this.objectMapper = objectMapper;
+        this.redisEnabled = redisEnabled;
     }
 
     @Override
@@ -42,44 +47,48 @@ public class RedisRateLimiterFilterService implements FilterService{
             int burstCapacity = Integer.parseInt(Objects.requireNonNull(filter.getArgs().get("burstCapacity")));
             int requestedTokens = Integer.parseInt(Objects.requireNonNull(filter.getArgs().get("requestedTokens")));
 
-            RedisRateLimiterRecord redisRateLimiterRecord = new RedisRateLimiterRecord(apiRoute.getRouteIdentifier(), replenishRate, burstCapacity, requestedTokens);
-            RedisRateLimiter redisRateLimiter = new RedisRateLimiter(replenishRate, burstCapacity, requestedTokens);
-            redisRateLimiter.setApplicationContext(applicationContext);
-
             // Use the daily call limit if set
             Integer maxCallsPerDay = apiRoute.getMaxCallsPerDay();
 
-            gatewayFilterSpec.requestRateLimiter().configure(config -> {
-                config.setRouteId(apiRoute.getRouteIdentifier());
-                config.setRateLimiter(redisRateLimiter);
-                config.setKeyResolver(exchange -> Mono.just(apiRoute.getRouteIdentifier()));
-                config.setDenyEmptyKey(true);
-                config.setEmptyKeyStatus(HttpStatus.TOO_MANY_REQUESTS.name());
-            })
-                    .filter((exchange, chain) -> {
-                        if (maxCallsPerDay != null) {
-                            return handleDailyLimit(apiRoute, maxCallsPerDay, exchange)
-                                    .flatMap(allowed -> allowed ? chain.filter(exchange) : tooManyRequestsResponse(exchange));
-                        }
-                        return chain.filter(exchange);
-                    })
-                    .filter(new RedisRateLimiterFilter(redisRateLimiterRecord));
+            if (maxCallsPerDay != null) {
+                gatewayFilterSpec.filter((exchange, chain) -> handleDailyLimit(apiRoute, maxCallsPerDay, exchange)
+                        .flatMap(allowed -> allowed ? chain.filter(exchange) : tooManyRequestsResponse(exchange)));
+            }
+
+            if (redisEnabled) {
+                RedisRateLimiterRecord redisRateLimiterRecord = new RedisRateLimiterRecord(
+                        apiRoute.getRouteIdentifier(), replenishRate, burstCapacity, requestedTokens);
+                RedisRateLimiter redisRateLimiter = new RedisRateLimiter(replenishRate, burstCapacity, requestedTokens);
+                redisRateLimiter.setApplicationContext(applicationContext);
+
+                gatewayFilterSpec.requestRateLimiter().configure(config -> {
+                    config.setRouteId(apiRoute.getRouteIdentifier());
+                    config.setRateLimiter(redisRateLimiter);
+                    config.setKeyResolver(exchange -> Mono.just(apiRoute.getRouteIdentifier()));
+                    config.setDenyEmptyKey(true);
+                    config.setEmptyKeyStatus(HttpStatus.TOO_MANY_REQUESTS.name());
+                });
+                gatewayFilterSpec.filter(new RedisRateLimiterFilter(redisRateLimiterRecord));
+            }
         } catch (Exception e) {
-            log.error("Error applying RedisRateLimiter filter for route {}: {}", apiRoute.getRouteIdentifier(), e.getMessage());
+            log.error("Error applying RedisRateLimiter filter for route {}: {}", apiRoute.getRouteIdentifier(),
+                    e.getMessage());
         }
     }
 
     private Mono<Boolean> handleDailyLimit(ApiRoute apiRoute, int maxCallsPerDay, ServerWebExchange exchange) {
         String dailyCallsKey = "dailyCalls:" + apiRoute.getPath(); // Use path or other identifier
-        return Mono.fromCallable(() -> {
-            Long currentCount = redisTemplate.opsForValue().increment(dailyCallsKey);
-            if (currentCount == null || currentCount == 1) {
-                currentCount = 1L;
-                redisTemplate.expire(dailyCallsKey, Duration.ofDays(1)); // Expire after 24 hours
-            }
-            log.debug("API route {} has made {} calls today", apiRoute.getRouteIdentifier(), currentCount);
-            return currentCount <= maxCallsPerDay;
-        });
+        return cacheService.increment(dailyCallsKey)
+                .flatMap(currentCount -> {
+                    if (currentCount == 1) {
+                        return cacheService.expire(dailyCallsKey, Duration.ofDays(1)).thenReturn(currentCount);
+                    }
+                    return Mono.just(currentCount);
+                })
+                .map(currentCount -> {
+                    log.debug("API route {} has made {} calls today", apiRoute.getRouteIdentifier(), currentCount);
+                    return currentCount <= maxCallsPerDay;
+                });
     }
 
     private Mono<Void> tooManyRequestsResponse(ServerWebExchange exchange) {
@@ -89,7 +98,8 @@ public class RedisRateLimiterFilterService implements FilterService{
         // Custom message to return
         Map<String, String> responseBody = new HashMap<>();
         responseBody.put("error", "Too Many Requests");
-        responseBody.put("message", "You have exceeded the maximum number of allowed requests. Please try again later.");
+        responseBody.put("message",
+                "You have exceeded the maximum number of allowed requests. Please try again later.");
         responseBody.put("timestamp", String.valueOf(System.currentTimeMillis()));
 
         try {

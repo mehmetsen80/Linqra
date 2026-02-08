@@ -390,6 +390,64 @@ function Home() {
         </div>
       </div>
 
+      {/* API MANAGEMENT PLATFORM SECTION */}
+      <div className="api-platform-section">
+        <h2 className="home-section-title">The API Management Platform Built for AI</h2>
+        <p className="section-subtitle">One unified platform for API management, AI orchestration, and enterprise security.</p>
+
+        <div className="feature-bars">
+          <div className="feature-bar">
+            <div className="feature-bar-icon">
+              <i className="fas fa-plug"></i>
+            </div>
+            <div className="feature-bar-content">
+              <h3>Unified API Gateway</h3>
+              <p>Route traditional REST APIs and AI endpoints through a single, secure gateway with circuit breakers, rate limiting, and dynamic routing.</p>
+            </div>
+          </div>
+
+          <div className="feature-bar">
+            <div className="feature-bar-icon">
+              <i className="fas fa-vial"></i>
+            </div>
+            <div className="feature-bar-content">
+              <h3>API & AI Playground</h3>
+              <p>Test any endpoint in the browser—REST APIs and AI models side by side. Chat with AI models directly and debug requests in real-time.</p>
+            </div>
+          </div>
+
+          <div className="feature-bar">
+            <div className="feature-bar-icon">
+              <i className="fas fa-user-shield"></i>
+            </div>
+            <div className="feature-bar-content">
+              <h3>Enterprise SSO</h3>
+              <p>Keycloak-powered authentication with SAML, OIDC, LDAP integration. Role-based access control and multi-tenant isolation built-in.</p>
+            </div>
+          </div>
+
+          <div className="feature-bar">
+            <div className="feature-bar-icon">
+              <i className="fas fa-bug"></i>
+            </div>
+            <div className="feature-bar-content">
+              <h3>Troubleshooting Dashboard</h3>
+              <p>Debug API and AI issues with request/response tracing, error analysis, alerts, and comprehensive performance metrics.</p>
+            </div>
+          </div>
+
+          <div className="feature-bar">
+            <div className="feature-bar-icon">
+              <i className="fas fa-chart-bar"></i>
+            </div>
+            <div className="feature-bar-content">
+              <h3>Monitoring & Analytics</h3>
+              <p>Track token usage, model performance, API call volumes, and agent activity with detailed real-time dashboards and historical reports.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* HOW IT WORKS SECTION */}
       <div id="how-it-works" className="architecture-section">
         <h2>How It Works?</h2>

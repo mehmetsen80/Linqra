@@ -6,6 +6,14 @@ services:
       - "11434:11434"
     volumes:
       - /opt/ollama/models:/root/.ollama
+    # Unleash the GPU (Future Upgrade)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
     networks:
       - linqra-network
     restart: always

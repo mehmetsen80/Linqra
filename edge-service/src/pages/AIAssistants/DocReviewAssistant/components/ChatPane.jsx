@@ -1,18 +1,48 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Form, Spinner } from 'react-bootstrap';
+import { Card, Form, Spinner, ListGroup, Badge } from 'react-bootstrap';
 import Button from '../../../../components/common/Button';
-import { HiPaperAirplane, HiInformationCircle, HiClock, HiCode, HiDownload } from 'react-icons/hi';
+import { HiPaperAirplane, HiInformationCircle, HiClock, HiCode, HiDownload, HiDocumentText } from 'react-icons/hi';
 import docReviewService from '../../../../services/docReviewService';
 import { toast } from 'react-toastify';
 import DocReviewHistoryModal from './DocReviewHistoryModal';
+import { useTeam } from '../../../../contexts/TeamContext';
 
 const ChatPane = ({ assistant, reviewSession, onSessionUpdate, onLoadSession }) => {
+    const { currentTeam } = useTeam();
     const [messages, setMessages] = useState([]);
     const [inputText, setInputText] = useState('');
     const [sending, setSending] = useState(false);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
+    const [recentReviews, setRecentReviews] = useState([]);
+    const [loadingRecent, setLoadingRecent] = useState(false);
     const messagesEndRef = useRef(null);
+
+    // Fetch recent reviews on mount
+    useEffect(() => {
+        if (currentTeam && !reviewSession) {
+            fetchRecentReviews();
+        }
+    }, [currentTeam, reviewSession]);
+
+    const fetchRecentReviews = async () => {
+        if (!currentTeam?.id) return;
+        setLoadingRecent(true);
+        try {
+            const response = await docReviewService.getReviewsByTeam(currentTeam.id);
+            if (response.success) {
+                // Sort by createdAt desc, take top 5
+                const sorted = response.data
+                    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                    .slice(0, 5);
+                setRecentReviews(sorted);
+            }
+        } catch (error) {
+            console.error('Error fetching recent reviews:', error);
+        } finally {
+            setLoadingRecent(false);
+        }
+    };
 
     // Fetch history when conversationId is available
     useEffect(() => {
@@ -126,9 +156,46 @@ const ChatPane = ({ assistant, reviewSession, onSessionUpdate, onLoadSession }) 
 
             <div className="flex-grow-1 p-3 overflow-auto" style={{ minHeight: 0 }}>
                 {!reviewSession ? (
-                    <div className="text-center text-muted mt-5">
-                        <HiInformationCircle size={24} className="mb-2" />
-                        <p>Select a contract to start the review.</p>
+                    <div className="mt-3">
+                        <div className="text-center text-muted mb-4">
+                            <HiInformationCircle size={24} className="mb-2" />
+                            <p>Select a document to start a new review.</p>
+                        </div>
+
+                        {/* Recent Reviews Section */}
+                        {loadingRecent ? (
+                            <div className="text-center py-3">
+                                <Spinner size="sm" animation="border" variant="primary" />
+                            </div>
+                        ) : recentReviews.length > 0 && (
+                            <div className="mt-3">
+                                <h6 className="text-muted mb-3 d-flex align-items-center">
+                                    <HiClock className="me-2" />
+                                    Recent Reviews
+                                </h6>
+                                <ListGroup variant="flush">
+                                    {recentReviews.map(review => (
+                                        <ListGroup.Item
+                                            key={review.id}
+                                            action
+                                            onClick={() => onLoadSession(review)}
+                                            className="d-flex align-items-center justify-content-between py-2 px-2 small"
+                                        >
+                                            <div className="d-flex align-items-center text-truncate">
+                                                <HiDocumentText className="text-secondary me-2 flex-shrink-0" />
+                                                <span className="text-truncate">{review.documentName}</span>
+                                            </div>
+                                            <Badge
+                                                bg={review.status === 'COMPLETED' ? 'success' : 'primary'}
+                                                className="ms-2 flex-shrink-0"
+                                            >
+                                                {review.status}
+                                            </Badge>
+                                        </ListGroup.Item>
+                                    ))}
+                                </ListGroup>
+                            </div>
+                        )}
                     </div>
                 ) : messages.length === 0 && !loadingHistory ? (
                     <div className="text-muted text-center mt-5">

@@ -7,7 +7,7 @@ export const knowledgeHubDocumentService = {
       const queryParams = new URLSearchParams();
       if (params.collectionId) queryParams.append('collectionId', params.collectionId);
       if (params.status) queryParams.append('status', params.status);
-      
+
       const url = `/api/documents${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
       const response = await axiosInstance.get(url);
       return {
@@ -95,7 +95,7 @@ export const knowledgeHubDocumentService = {
   downloadDocument: async (documentId, fileName) => {
     try {
       console.log('Starting download for document:', documentId);
-      
+
       const response = await axiosInstance.get(`/api/documents/view/${documentId}/download`, {
         responseType: 'blob', // Important: download as binary blob
         timeout: 300000, // 5 minutes timeout for large files
@@ -103,7 +103,7 @@ export const knowledgeHubDocumentService = {
           'Accept': '*/*' // Override default Accept: application/json to allow blob responses
         }
       });
-      
+
       console.log('Download response received:', {
         status: response.status,
         statusText: response.statusText,
@@ -111,7 +111,7 @@ export const knowledgeHubDocumentService = {
         hasData: !!response.data,
         dataSize: response.data?.size || response.data?.length || 'unknown'
       });
-      
+
       // Check if response is actually an error (blob responses can contain error JSON)
       if (response.data instanceof Blob && response.data.type === 'application/json') {
         // Response might be an error JSON wrapped in a blob
@@ -125,33 +125,33 @@ export const knowledgeHubDocumentService = {
           // If not JSON, continue with download
         }
       }
-      
+
       // Check response status
       if (response.status < 200 || response.status >= 300) {
         throw new Error(`Download failed with status: ${response.status}`);
       }
-      
+
       // Create a blob URL and trigger download
-      const blob = response.data instanceof Blob 
-        ? response.data 
+      const blob = response.data instanceof Blob
+        ? response.data
         : new Blob([response.data], { type: response.headers['content-type'] || 'application/octet-stream' });
-      
+
       // Validate blob is not empty
       if (!blob || blob.size === 0) {
         throw new Error('Downloaded file is empty or invalid');
       }
-      
+
       console.log('Download successful:', {
         blobSize: blob.size,
         contentType: blob.type || response.headers['content-type'],
         contentDisposition: response.headers['content-disposition']
       });
-      
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.style.display = 'none';
-      
+
       // Get filename from Content-Disposition header or use provided/default name
       const contentDisposition = response.headers['content-disposition'];
       let downloadFileName = fileName || 'document';
@@ -162,7 +162,7 @@ export const knowledgeHubDocumentService = {
           /filename\*=UTF-8''([^;\n]+)/,
           /filename=([^;\n]+)/
         ];
-        
+
         for (const pattern of patterns) {
           const fileNameMatch = contentDisposition.match(pattern);
           if (fileNameMatch && fileNameMatch[1]) {
@@ -177,11 +177,11 @@ export const knowledgeHubDocumentService = {
           }
         }
       }
-      
+
       link.setAttribute('download', downloadFileName);
       document.body.appendChild(link);
       link.click();
-      
+
       // Clean up after a short delay
       setTimeout(() => {
         if (document.body.contains(link)) {
@@ -189,7 +189,7 @@ export const knowledgeHubDocumentService = {
         }
         window.URL.revokeObjectURL(url);
       }, 100);
-      
+
       return {
         success: true
       };
@@ -203,10 +203,10 @@ export const knowledgeHubDocumentService = {
         hasData: !!error.response?.data,
         dataType: error.response?.data ? typeof error.response.data : 'none'
       });
-      
+
       // Handle blob error responses
       let errorMessage = error.message || 'Failed to download document';
-      
+
       // Check if axios actually threw an error for non-2xx status
       if (error.response?.status) {
         if (error.response.status === 404) {
@@ -218,7 +218,7 @@ export const knowledgeHubDocumentService = {
         } else if (error.response.status >= 500) {
           errorMessage = 'Server error occurred while downloading';
         }
-        
+
         // Try to parse error message from blob response
         if (error.response?.data instanceof Blob) {
           try {
@@ -250,7 +250,7 @@ export const knowledgeHubDocumentService = {
           errorMessage = 'Network error - please check your connection';
         }
       }
-      
+
       return {
         success: false,
         error: errorMessage
@@ -265,7 +265,7 @@ export const knowledgeHubDocumentService = {
       const response = await axiosInstance.get(`/api/documents/view/${documentId}/download`, {
         responseType: 'blob'
       });
-      
+
       // Extract filename from headers
       const contentDisposition = response.headers['content-disposition'];
       let fileName = 'document';
@@ -280,11 +280,11 @@ export const knowledgeHubDocumentService = {
           }
         }
       }
-      
+
       // Create blob URL for download
       const blob = new Blob([response.data], { type: response.headers['content-type'] || 'application/octet-stream' });
       const downloadUrl = window.URL.createObjectURL(blob);
-      
+
       return {
         success: true,
         data: {
@@ -395,6 +395,57 @@ export const knowledgeHubDocumentService = {
       return {
         success: false,
         error: error.response?.data?.error || error.response?.data?.message || 'Failed to extract metadata'
+      };
+    }
+  },
+
+  // Get full document text
+  getDocumentText: async (documentId) => {
+    try {
+      const response = await axiosInstance.get(`/api/documents/view/${documentId}/text`);
+      return {
+        success: true,
+        data: response.data // Returns { text: "..." }
+      };
+    } catch (error) {
+      console.error('Error fetching document text:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch document text'
+      };
+    }
+  },
+
+  // Get document versions
+  getDocumentVersions: async (documentId) => {
+    try {
+      const response = await axiosInstance.get(`/api/documents/${documentId}/versions`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error fetching document versions:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch document versions'
+      };
+    }
+  },
+
+  // Restore document version
+  restoreVersion: async (documentId, versionNumber) => {
+    try {
+      const response = await axiosInstance.post(`/api/documents/${documentId}/versions/${versionNumber}/restore`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Error restoring document version:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to restore document version'
       };
     }
   }

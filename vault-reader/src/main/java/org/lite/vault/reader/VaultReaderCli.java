@@ -214,6 +214,7 @@ public class VaultReaderCli {
         keyMapping.put("storage.public.endpoint", "STORAGE_PUBLIC_ENDPOINT");
         keyMapping.put("aws.access.key.id", "AWS_ACCESS_KEY_ID");
         keyMapping.put("aws.secret.access.key", "AWS_SECRET_ACCESS_KEY");
+        // keyMapping.put("onlyoffice.jwt.secret", "ONLYOFFICE_JWT_SECRET");
         return keyMapping;
     }
 

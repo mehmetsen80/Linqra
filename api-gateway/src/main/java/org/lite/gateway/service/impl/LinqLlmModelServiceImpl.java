@@ -14,7 +14,7 @@ import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.enums.AuditResultType;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.lite.gateway.service.CacheService;
 
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -43,7 +43,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     private final WebClient.Builder webClientBuilder;
 
     @NonNull
-    private final RedisTemplate<String, String> redisTemplate;
+    private final CacheService cacheService;
 
     @NonNull
     private final AuditLogHelper auditLogHelper;
@@ -1127,8 +1127,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
         String cacheKey = String.format("model_category:%s:%s:%s", teamId, lowerModelName, lowerProvider);
 
         // 1. Check Redis Cache
-        return Mono.fromCallable(() -> redisTemplate.opsForValue().get(cacheKey))
-                .filter(Objects::nonNull)
+        return cacheService.get(cacheKey)
                 .switchIfEmpty(Mono.defer(() -> {
                     // 2. Check Database Logic
                     Mono<String> dbLookup;
@@ -1146,7 +1145,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 }))
                 .doOnNext(category -> {
                     if (category != null) {
-                        redisTemplate.opsForValue().set(cacheKey, category, Duration.ofMinutes(60));
+                        cacheService.set(cacheKey, category, Duration.ofMinutes(60))
+                                .subscribe();
                     }
                 });
     }

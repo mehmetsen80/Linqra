@@ -146,11 +146,23 @@
             <version>9.0.1.Final</version>
         </dependency>
 
-        <!-- WebSocket Support -->
+        <!-- WebSocket Support (Excluding Tomcat to prevent conflict with Netty/Gateway) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-websocket</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-tomcat</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-web</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
+
+
 
         <!-- Neo4j Java Driver -->
         <dependency>
@@ -260,6 +272,11 @@
         <dependency>
             <groupId>net.javacrumbs.shedlock</groupId>
             <artifactId>shedlock-provider-redis-spring</artifactId>
+            <version>6.2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-inmemory</artifactId>
             <version>6.2.0</version>
         </dependency>
 

@@ -12,4 +12,7 @@ public interface DocReviewAssistantService {
     Mono<DocReviewAssistant> updateReview(String id, DocReviewAssistant updates);
 
     Flux<DocReviewAssistant> getReviewsByTeam(String teamId);
+
+    Mono<DocReviewAssistant> analyzeDocument(String reviewId, String documentId, String assistantId,
+            String teamId, String username);
 }

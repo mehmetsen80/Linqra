@@ -87,7 +87,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vault-encrypted
-          path: secrets/vault.encrypted
+          path: secrets/vault-ec2.encrypted
           retention-days: 1
 
   # ----------------------------------------------------------------
@@ -199,7 +199,7 @@ jobs:
           --namespace linqra \
           --from-literal=master-key="$VAULT_MASTER_KEY" \
           --from-literal=change-log-token="${{ secrets.CHANGE_LOG_TOKEN }}" \
-          --from-file=vault-file=secrets/vault.encrypted
+          --from-file=vault-file=secrets/vault-ec2.encrypted
 
     - name: Deploy Manifests
       env:

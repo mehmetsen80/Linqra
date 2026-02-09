@@ -137,19 +137,14 @@ public class EarlyVaultService implements LinqraVaultService {
 
     private String resolveVaultPath(String path) {
         File configuredFile = new File(path);
-        String projectRoot = System.getProperty("user.dir");
-        File ideFallbackFile = new File(projectRoot, "secrets/vault.encrypted");
 
         if (configuredFile.exists()) {
             return configuredFile.getAbsolutePath();
         }
 
-        if (path.equals("/app/secrets/vault.encrypted") && ideFallbackFile.exists()) {
-            log.warn("Docker vault path not found, using IDE path: {}", ideFallbackFile.getAbsolutePath());
-            return ideFallbackFile.getAbsolutePath();
-        }
-
-        return path; // Return as-is, will fail later if not found
+        // Just return as-is. If it doesn't exist, it will throw an error in loadVault()
+        // which is what we want for strict environment enforcement.
+        return path;
     }
 
     private String getCurrentEnvironment() {

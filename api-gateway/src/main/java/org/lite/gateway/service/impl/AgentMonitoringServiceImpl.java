@@ -577,6 +577,187 @@ public class AgentMonitoringServiceImpl implements AgentMonitoringService {
         }
 
         /**
+         * Retrieves task-level statistics for a specific agent within a team.
+         * This includes total executions, successful/failed counts, success rate,
+         * average execution time, and last execution timestamp for each task.
+         *
+         * @param agentId The ID of the agent.
+         * @param teamId  The ID of the team the agent belongs to.
+         * @return A Mono emitting a Map containing agent and task statistics.
+         */
+        @Override
+        public Mono<Map<String, Object>> getTaskStatisticsByAgent(String agentId, String teamId) {
+                log.info("Getting task-level statistics for agent {} in team {}", agentId, teamId);
+
+                // First verify the agent exists and belongs to the team
+                return agentRepository.findById(agentId)
+                                .switchIfEmpty(Mono.error(new RuntimeException("Agent not found")))
+                                .flatMap(agent -> {
+                                        if (!teamId.equals(agent.getTeamId())) {
+                                                return Mono.error(new RuntimeException(
+                                                                "Agent does not belong to the specified team"));
+                                        }
+
+                                        // Get all tasks for this agent
+                                        return agentTaskRepository.findByAgentId(agentId)
+                                                        .collectList()
+                                                        .flatMap(tasks -> {
+                                                                if (tasks.isEmpty()) {
+                                                                        return Mono.just(Map.of(
+                                                                                        "agentId", agentId,
+                                                                                        "teamId", teamId,
+                                                                                        "taskStatistics", List.of()));
+                                                                }
+
+                                                                // Get all executions for this agent
+                                                                return agentExecutionRepository.findByAgentId(agentId)
+                                                                                .collectList()
+                                                                                .map(executions -> {
+                                                                                        // Group executions by taskId
+                                                                                        // and calculate stats
+                                                                                        Map<String, Map<String, Object>> taskStatsMap = new HashMap<>();
+
+                                                                                        // Initialize stats for all
+                                                                                        // tasks (even those with no
+                                                                                        // executions)
+                                                                                        for (AgentTask task : tasks) {
+                                                                                                Map<String, Object> stats = new HashMap<>();
+                                                                                                stats.put("taskId", task
+                                                                                                                .getId());
+                                                                                                stats.put("taskName",
+                                                                                                                task.getName());
+                                                                                                stats.put("taskType",
+                                                                                                                task.getTaskType());
+                                                                                                stats.put("enabled",
+                                                                                                                task.isEnabled());
+                                                                                                stats.put("totalExecutions",
+                                                                                                                0L);
+                                                                                                stats.put("successfulExecutions",
+                                                                                                                0L);
+                                                                                                stats.put("failedExecutions",
+                                                                                                                0L);
+                                                                                                stats.put("successRate",
+                                                                                                                0.0);
+                                                                                                stats.put("averageExecutionTimeMs",
+                                                                                                                0.0);
+                                                                                                stats.put("lastExecutedAt",
+                                                                                                                null);
+                                                                                                taskStatsMap.put(task
+                                                                                                                .getId(),
+                                                                                                                stats);
+                                                                                        }
+
+                                                                                        // Calculate stats from
+                                                                                        // executions
+                                                                                        for (AgentExecution execution : executions) {
+                                                                                                String taskId = execution
+                                                                                                                .getTaskId();
+                                                                                                if (taskId != null
+                                                                                                                && taskStatsMap.containsKey(
+                                                                                                                                taskId)) {
+                                                                                                        Map<String, Object> stats = taskStatsMap
+                                                                                                                        .get(taskId);
+
+                                                                                                        // Increment
+                                                                                                        // total
+                                                                                                        // executions
+                                                                                                        long total = (long) stats
+                                                                                                                        .get("totalExecutions");
+                                                                                                        stats.put("totalExecutions",
+                                                                                                                        total + 1);
+
+                                                                                                        // Count
+                                                                                                        // successful/failed
+                                                                                                        if (ExecutionResult.SUCCESS
+                                                                                                                        .equals(execution
+                                                                                                                                        .getResult())) {
+                                                                                                                long successful = (long) stats
+                                                                                                                                .get("successfulExecutions");
+                                                                                                                stats.put("successfulExecutions",
+                                                                                                                                successful + 1);
+                                                                                                        } else if (ExecutionResult.FAILURE
+                                                                                                                        .equals(execution
+                                                                                                                                        .getResult())) {
+                                                                                                                long failed = (long) stats
+                                                                                                                                .get("failedExecutions");
+                                                                                                                stats.put("failedExecutions",
+                                                                                                                                failed + 1);
+                                                                                                        }
+
+                                                                                                        // Track last
+                                                                                                        // execution
+                                                                                                        // time
+                                                                                                        if (execution.getCompletedAt() != null) {
+                                                                                                                LocalDateTime lastExec = (LocalDateTime) stats
+                                                                                                                                .get("lastExecutedAt");
+                                                                                                                if (lastExec == null
+                                                                                                                                || execution.getCompletedAt()
+                                                                                                                                                .isAfter(lastExec)) {
+                                                                                                                        stats.put("lastExecutedAt",
+                                                                                                                                        execution.getCompletedAt());
+                                                                                                                }
+                                                                                                        }
+                                                                                                }
+                                                                                        }
+
+                                                                                        // Calculate derived metrics
+                                                                                        // (success rate, avg execution
+                                                                                        // time)
+                                                                                        for (Map<String, Object> stats : taskStatsMap
+                                                                                                        .values()) {
+                                                                                                long total = (long) stats
+                                                                                                                .get("totalExecutions");
+                                                                                                long successful = (long) stats
+                                                                                                                .get("successfulExecutions");
+
+                                                                                                if (total > 0) {
+                                                                                                        // Calculate
+                                                                                                        // success rate
+                                                                                                        double successRate = (successful
+                                                                                                                        * 100.0)
+                                                                                                                        / total;
+                                                                                                        stats.put("successRate",
+                                                                                                                        Math.round(successRate
+                                                                                                                                        * 10.0)
+                                                                                                                                        / 10.0);
+
+                                                                                                        // Calculate
+                                                                                                        // average
+                                                                                                        // execution
+                                                                                                        // time
+                                                                                                        String taskId = (String) stats
+                                                                                                                        .get("taskId");
+                                                                                                        double avgTime = executions
+                                                                                                                        .stream()
+                                                                                                                        .filter(e -> taskId
+                                                                                                                                        .equals(e.getTaskId()))
+                                                                                                                        .filter(e -> e.getExecutionDurationMs() != null
+                                                                                                                                        && e.getExecutionDurationMs() > 0)
+                                                                                                                        .mapToLong(AgentExecution::getExecutionDurationMs)
+                                                                                                                        .average()
+                                                                                                                        .orElse(0.0);
+                                                                                                        stats.put("averageExecutionTimeMs",
+                                                                                                                        Math.round(avgTime
+                                                                                                                                        * 100.0)
+                                                                                                                                        / 100.0);
+                                                                                                }
+                                                                                        }
+
+                                                                                        return Map.of(
+                                                                                                        "agentId",
+                                                                                                        agentId,
+                                                                                                        "teamId",
+                                                                                                        teamId,
+                                                                                                        "taskStatistics",
+                                                                                                        taskStatsMap.values()
+                                                                                                                        .stream()
+                                                                                                                        .toList());
+                                                                                });
+                                                        });
+                                });
+        }
+
+        /**
          * Calculate execution progress based on status
          */
         private double calculateExecutionProgress(org.lite.gateway.entity.LinqWorkflowExecution execution) {

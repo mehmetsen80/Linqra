@@ -13,6 +13,7 @@ import agentTaskService from '../../../services/agentTaskService';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { format, isValid, parseISO } from 'date-fns';
 import AgentStats from '../../../components/dashboard/AgentStats';
+import AgentTasksAnalytics from '../../../components/dashboard/AgentTasksAnalytics';
 import Footer from '../../../components/common/Footer';
 import './styles.css';
 import CreateAgentTaskModal from '../../../components/agents/CreateAgentTaskModal';
@@ -661,6 +662,9 @@ function ViewAgent() {
                     )}
                 </Card.Body>
             </Card>
+
+            {/* Task Performance Analytics */}
+            <AgentTasksAnalytics agentId={agentId} teamId={currentTeam?.id} />
 
             {performance && (
                 <Row className="mb-4">

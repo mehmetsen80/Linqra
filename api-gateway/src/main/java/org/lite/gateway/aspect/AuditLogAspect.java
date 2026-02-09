@@ -12,6 +12,7 @@ import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditEventType;
 import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.service.AuditService;
+import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.UserContextService;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.stereotype.Component;
@@ -37,9 +38,9 @@ import java.time.LocalDateTime;
 @Slf4j
 @RequiredArgsConstructor
 public class AuditLogAspect {
-    
+
     private final AuditService auditService;
-    
+
     /**
      * Intercept methods annotated with @AuditLog
      */
@@ -47,11 +48,11 @@ public class AuditLogAspect {
     public Object auditLog(ProceedingJoinPoint joinPoint) throws Throwable {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         Method method = signature.getMethod();
-        
+
         // Get annotation from method, or from class if method doesn't have it
         AuditLog methodAnnotation = AnnotationUtils.findAnnotation(method, AuditLog.class);
         AuditLog classAnnotation = AnnotationUtils.findAnnotation(joinPoint.getTarget().getClass(), AuditLog.class);
-        
+
         // Determine which annotation to use and merge defaults if needed
         final AuditLog auditLogAnnotation;
         if (methodAnnotation != null) {
@@ -62,28 +63,28 @@ public class AuditLogAspect {
             // No annotation found, proceed normally
             return joinPoint.proceed();
         }
-        
+
         // Extract context
         Object[] args = joinPoint.getArgs();
         final ServerWebExchange exchange = extractServerWebExchange(args);
-        
+
         // Extract resource IDs from method parameters
         String extractedResourceId = extractParameterValue(args, method, auditLogAnnotation.resourceIdParam());
         final String documentId = extractParameterValue(args, method, auditLogAnnotation.documentIdParam());
         final String collectionId = extractParameterValue(args, method, auditLogAnnotation.collectionIdParam());
-        
+
         // If resourceId not explicitly specified, try common parameter names
         if (extractedResourceId == null || extractedResourceId.isEmpty()) {
             extractedResourceId = extractCommonResourceId(args, method);
         }
         final String resourceId = extractedResourceId;
-        
+
         // Determine event type, action, resource type (extract to final variables)
         // If method annotation exists, use it; otherwise use class annotation defaults
         final AuditEventType eventType;
         final AuditActionType actionEnum;
         final AuditResourceType resourceTypeEnum;
-        
+
         if (methodAnnotation != null) {
             eventType = methodAnnotation.eventType();
             actionEnum = methodAnnotation.action();
@@ -94,27 +95,27 @@ public class AuditLogAspect {
             actionEnum = classAnnotation.defaultAction();
             resourceTypeEnum = classAnnotation.defaultResourceType();
         }
-        
+
         final String action = actionEnum.name();
         final String resourceType = resourceTypeEnum.name();
         final String reason = auditLogAnnotation.reason();
         final boolean logOnSuccessOnly = auditLogAnnotation.logOnSuccessOnly();
-        
+
         final LocalDateTime startTime = LocalDateTime.now();
-        
+
         try {
             // For reactive methods (returning Mono/Flux)
             Object result = joinPoint.proceed();
-            
+
             if (result instanceof Mono) {
                 @SuppressWarnings("unchecked")
                 Mono<Object> monoResult = (Mono<Object>) result;
-                
+
                 return monoResult
                         .doOnSuccess(response -> {
                             LocalDateTime endTime = LocalDateTime.now();
                             long durationMs = Duration.between(startTime, endTime).toMillis();
-                            
+
                             logAuditEvent(exchange, eventType, action, resourceType, resourceId,
                                     documentId, collectionId, "SUCCESS", reason, durationMs, null, auditLogAnnotation);
                         })
@@ -122,10 +123,12 @@ public class AuditLogAspect {
                             if (!logOnSuccessOnly) {
                                 LocalDateTime endTime = LocalDateTime.now();
                                 long durationMs = Duration.between(startTime, endTime).toMillis();
-                                
-                                String errorMsg = error.getMessage() != null ? error.getMessage() : error.getClass().getSimpleName();
+
+                                String errorMsg = error.getMessage() != null ? error.getMessage()
+                                        : error.getClass().getSimpleName();
                                 logAuditEvent(exchange, eventType, action, resourceType, resourceId,
-                                        documentId, collectionId, "FAILED", reason, durationMs, errorMsg, auditLogAnnotation);
+                                        documentId, collectionId, "FAILED", reason, durationMs, errorMsg,
+                                        auditLogAnnotation);
                             }
                         });
             } else if (result instanceof reactor.core.publisher.Flux) {
@@ -137,10 +140,10 @@ public class AuditLogAspect {
                 // Non-reactive method - log synchronously
                 LocalDateTime endTime = LocalDateTime.now();
                 long durationMs = Duration.between(startTime, endTime).toMillis();
-                
+
                 logAuditEvent(exchange, eventType, action, resourceType, resourceId,
                         documentId, collectionId, "SUCCESS", reason, durationMs, null, auditLogAnnotation);
-                
+
                 return result;
             }
         } catch (Throwable throwable) {
@@ -148,15 +151,16 @@ public class AuditLogAspect {
             if (!logOnSuccessOnly) {
                 LocalDateTime endTime = LocalDateTime.now();
                 long durationMs = Duration.between(startTime, endTime).toMillis();
-                
-                String errorMsg = throwable.getMessage() != null ? throwable.getMessage() : throwable.getClass().getSimpleName();
+
+                String errorMsg = throwable.getMessage() != null ? throwable.getMessage()
+                        : throwable.getClass().getSimpleName();
                 logAuditEvent(exchange, eventType, action, resourceType, resourceId,
                         documentId, collectionId, "FAILED", reason, durationMs, errorMsg, auditLogAnnotation);
             }
             throw throwable;
         }
     }
-    
+
     /**
      * Extract ServerWebExchange from method arguments
      */
@@ -168,7 +172,7 @@ public class AuditLogAspect {
         }
         return null;
     }
-    
+
     /**
      * Extract parameter value by name from method arguments
      */
@@ -176,12 +180,12 @@ public class AuditLogAspect {
         if (paramName == null || paramName.isEmpty()) {
             return null;
         }
-        
+
         Parameter[] parameters = method.getParameters();
         for (int i = 0; i < parameters.length; i++) {
-            if (parameters[i].getName().equals(paramName) || 
-                parameters[i].getName().equals("arg" + i)) { // Handle synthetic parameter names
-                
+            if (parameters[i].getName().equals(paramName) ||
+                    parameters[i].getName().equals("arg" + i)) { // Handle synthetic parameter names
+
                 Object value = args[i];
                 if (value != null) {
                     // Handle path variables, request params, etc.
@@ -195,14 +199,14 @@ public class AuditLogAspect {
         }
         return null;
     }
-    
+
     /**
      * Extract common resource IDs from method parameters (documentId, userId, etc.)
      */
     private String extractCommonResourceId(Object[] args, Method method) {
         Parameter[] parameters = method.getParameters();
-        String[] commonNames = {"documentId", "userId", "collectionId", "resourceId", "id"};
-        
+        String[] commonNames = { "documentId", "userId", "collectionId", "resourceId", "id" };
+
         for (int i = 0; i < parameters.length; i++) {
             String paramName = parameters[i].getName().toLowerCase();
             for (String commonName : commonNames) {
@@ -216,15 +220,22 @@ public class AuditLogAspect {
         }
         return null;
     }
-    
+
+    /**
+     * Log the audit event
+     */
+    private final TeamContextService teamContextService;
+
+    // ... (rest of class) ...
+
     /**
      * Log the audit event
      */
     private void logAuditEvent(ServerWebExchange exchange, AuditEventType eventType, String action,
-                               String resourceType, String resourceId, String documentId, String collectionId,
-                               String result, String reason, long durationMs, String errorMessage,
-                               AuditLog annotation) {
-        
+            String resourceType, String resourceId, String documentId, String collectionId,
+            String result, String reason, long durationMs, String errorMessage,
+            AuditLog annotation) {
+
         if (exchange != null) {
             // Use ServerWebExchange-based logging
             AuditMetadata metadata = AuditMetadata.builder()
@@ -232,43 +243,45 @@ public class AuditLogAspect {
                     .durationMs(durationMs)
                     .errorMessage(errorMessage)
                     .build();
-            
+
             auditService.logEvent(exchange, eventType, action, resourceType, resourceId, result, metadata)
                     .subscribe(
                             null, // onSuccess
-                            error -> log.error("Failed to log audit event: {}", error.getMessage(), error)
-                    );
+                            error -> log.error("Failed to log audit event: {}", error.getMessage(), error));
         } else {
-            // Fallback: use explicit context logging (system user)
-            String ipAddress = null;
-            String userAgent = null;
-            
+            // Fallback: try to resolve context from security context
             AuditMetadata metadata = AuditMetadata.builder()
                     .reason(reason)
                     .durationMs(durationMs)
                     .errorMessage(errorMessage)
                     .build();
-            
-            auditService.logEvent(
-                    UserContextService.SYSTEM_USER,
-                    UserContextService.SYSTEM_USER,
-                    null, // teamId
-                    ipAddress,
-                    userAgent,
-                    eventType,
-                    action,
-                    resourceType,
-                    resourceId,
-                    documentId,
-                    collectionId,
-                    result,
-                    metadata,
-                    null // complianceFlags
-            ).subscribe(
-                    null,
-                    error -> log.error("Failed to log audit event: {}", error.getMessage(), error)
-            );
+
+            // Try to resolve teamId from context
+            teamContextService.getTeamFromContext()
+                    .defaultIfEmpty("") // Handle empty context gracefully
+                    .flatMap(teamId -> {
+                        String finalTeamId = teamId.isEmpty() ? null : teamId;
+
+                        return auditService.logEvent(
+                                UserContextService.SYSTEM_USER,
+                                UserContextService.SYSTEM_USER,
+                                finalTeamId,
+                                null, // ipAddress
+                                null, // userAgent
+                                eventType,
+                                action,
+                                resourceType,
+                                resourceId,
+                                documentId,
+                                collectionId,
+                                result,
+                                metadata,
+                                null // complianceFlags
+                        );
+                    })
+                    .subscribe(
+                            null,
+                            error -> log.error("Failed to log audit event (fallback): {}", error.getMessage(), error));
         }
     }
 }
-

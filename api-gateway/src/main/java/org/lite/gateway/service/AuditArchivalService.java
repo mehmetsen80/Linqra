@@ -107,4 +107,12 @@ public interface AuditArchivalService {
             this.newestLogTimestamp = newestLogTimestamp;
         }
     }
+
+    /**
+     * Get statistics about archival process for a specific team
+     * 
+     * @param teamId Team ID to get stats for
+     * @return Mono with archival statistics for the team
+     */
+    Mono<ArchivalStats> getArchivalStats(String teamId);
 }

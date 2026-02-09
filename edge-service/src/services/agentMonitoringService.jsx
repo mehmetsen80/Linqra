@@ -2,7 +2,7 @@ import axiosInstance from './axiosInstance';
 
 const agentMonitoringService = {
     // ==================== AGENT HEALTH MONITORING ====================
-    
+
     getAgentHealth: async (agentId) => {
         try {
             const response = await axiosInstance.get(`/api/agents/monitoring/${agentId}/health`, {
@@ -207,10 +207,31 @@ const agentMonitoringService = {
             return {
                 success: false,
                 error: error.response?.data?.message || 'Failed to fetch workflow execution status'
+            }
+        }
+    },
+
+    getAgentTasksStatistics: async (agentId, teamId) => {
+        try {
+            const response = await axiosInstance.get(`/api/agents/monitoring/${agentId}/tasks-stats`, {
+                params: { teamId },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+            return {
+                success: true,
+                data: response.data
+            };
+        } catch (error) {
+            console.error('Error fetching agent tasks statistics:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch agent tasks statistics'
             };
         }
     }
 };
 
 export default agentMonitoringService;
-

@@ -50,29 +50,27 @@ public class HealthCheckServiceController {
 
     private void sendHealthUpdate() {
         healthCheckService.getHealthCheckEnabledRoutes()
-            .flatMap(route -> healthCheckService.getServiceStatus(route.getRouteIdentifier())
-                .map(status -> {
-                    log.debug("Service {} status: {}", route.getRouteIdentifier(), status.getStatus());
-                    return new DashboardUpdate(
-                        route.getRouteIdentifier(),
-                        status,
-                        metricsAggregator.analyzeTrends(route.getRouteIdentifier())
-                    );
+                .flatMap(route -> healthCheckService.getServiceStatus(route.getRouteIdentifier())
+                        .map(status -> {
+                            log.debug("Service {} status: {}", route.getRouteIdentifier(), status.getStatus());
+                            return new DashboardUpdate(
+                                    route.getRouteIdentifier(),
+                                    status,
+                                    metricsAggregator.analyzeTrends(route.getRouteIdentifier()));
+                        })
+                        .onErrorResume(e -> {
+                            log.error("Error getting status for {}: {}", route.getRouteIdentifier(), e.getMessage());
+                            return Mono.empty();
+                        }))
+                .collectList()
+                .doOnNext(updates -> {
+                    if (updates.isEmpty()) {
+                        log.warn("No service updates available - all services might be down");
+                    } else {
+                        log.info("Collected updates for {} services", updates.size());
+                    }
                 })
-                .onErrorResume(e -> {
-                    log.error("Error getting status for {}: {}", route.getRouteIdentifier(), e.getMessage());
-                    return Mono.empty();
-                })
-            )
-            .collectList()
-            .doOnNext(updates -> {
-                if (updates.isEmpty()) {
-                    log.warn("No service updates available - all services might be down");
-                } else {
-                    log.info("Collected updates for {} services", updates.size());
-                }
-            })
-            .subscribe(this::sendHealthUpdate);
+                .subscribe(this::sendHealthUpdate);
     }
 
     private void sendHealthUpdate(List<DashboardUpdate> payload) {
@@ -130,7 +128,7 @@ public class HealthCheckServiceController {
 
         // Get service health status
         Mono<Boolean> healthStatus = healthCheckService.isServiceHealthy(serviceId);
-        
+
         // Get trends analysis
         Map<String, TrendAnalysis> trends = healthCheckService.analyzeServiceTrends(serviceId);
 
@@ -144,4 +142,4 @@ public class HealthCheckServiceController {
             return dashboardData;
         });
     }
-} 
+}

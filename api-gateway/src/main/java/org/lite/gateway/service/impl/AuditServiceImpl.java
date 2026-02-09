@@ -182,6 +182,14 @@ public class AuditServiceImpl implements AuditService {
 
         @Override
         public Mono<AuditLogPageResponse> queryAuditLogs(AuditLogQueryRequest request) {
+                // Ensure teamId is present
+                if (request.getTeamId() == null || request.getTeamId().trim().isEmpty()) {
+                        log.error("Attempted to query audit logs without teamId. Request: {}", request);
+                        return Mono.error(new IllegalArgumentException("Team ID is required for audit log queries"));
+                }
+
+                log.debug("Querying audit logs for team: {}", request.getTeamId());
+
                 // Build query based on filters
                 Flux<AuditLog> logFlux;
 

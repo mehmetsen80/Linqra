@@ -364,35 +364,79 @@ public class AuditArchivalServiceImpl implements AuditArchivalService {
 
     @Override
     public Mono<ArchivalStats> getArchivalStats() {
+        // ... existing global implementation
+        // For backward compatibility or super admin global view if needed
+        // But for now let's keep it as is or redirect to a global implementation
+        return getArchivalStats(null); // Or keep existing implementation
+    }
+
+    @Override
+    public Mono<ArchivalStats> getArchivalStats(String teamId) {
         LocalDateTime threshold = LocalDateTime.now().minusDays(DEFAULT_RETENTION_DAYS);
 
+        // If teamId is null, use global stats (existing implementation)
+        if (teamId == null) {
+            return Mono.zip(
+                    // Total logs in MongoDB
+                    auditLogRepository.count().defaultIfEmpty(0L),
+
+                    // Logs ready for archival
+                    auditLogRepository.countLogsReadyForArchival(threshold).defaultIfEmpty(0L),
+
+                    // Archived logs count (logs with archivedAt set)
+                    auditLogRepository.findAll()
+                            .filter(log -> log.getArchivedAt() != null)
+                            .count()
+                            .defaultIfEmpty(0L),
+
+                    // Oldest log timestamp
+                    auditLogRepository.findAll()
+                            .sort((a, b) -> a.getTimestamp().compareTo(b.getTimestamp()))
+                            .next()
+                            .map(AuditLog::getTimestamp)
+                            .defaultIfEmpty(LocalDateTime.now()),
+
+                    // Newest log timestamp
+                    auditLogRepository.findAll()
+                            .sort((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
+                            .next()
+                            .map(AuditLog::getTimestamp)
+                            .defaultIfEmpty(LocalDateTime.now()))
+                    .map(tuple -> {
+                        ArchivalStats stats = new ArchivalStats();
+                        stats.setTotalLogsInMongoDB(tuple.getT1());
+                        stats.setLogsReadyForArchival(tuple.getT2());
+                        stats.setArchivedLogsCount(tuple.getT3());
+                        stats.setOldestLogTimestamp(tuple.getT4());
+                        stats.setNewestLogTimestamp(tuple.getT5());
+                        return stats;
+                    });
+        }
+
+        // Team-specific stats
+        log.debug("Calculating archival stats for teamId: {}", teamId);
         return Mono.zip(
-                // Total logs in MongoDB
-                auditLogRepository.count().defaultIfEmpty(0L),
+                // Total logs in MongoDB for this team
+                auditLogRepository.countByTeamId(teamId).defaultIfEmpty(0L),
 
-                // Logs ready for archival
-                auditLogRepository.countLogsReadyForArchival(threshold).defaultIfEmpty(0L),
+                // Logs ready for archival for this team
+                auditLogRepository.countLogsReadyForArchivalByTeam(teamId, threshold).defaultIfEmpty(0L),
 
-                // Archived logs count (logs with archivedAt set)
-                auditLogRepository.findAll()
-                        .filter(log -> log.getArchivedAt() != null)
-                        .count()
-                        .defaultIfEmpty(0L),
+                // Archived logs count for this team
+                auditLogRepository.countByTeamIdAndArchivedAtNotNull(teamId).defaultIfEmpty(0L),
 
-                // Oldest log timestamp
-                auditLogRepository.findAll()
-                        .sort((a, b) -> a.getTimestamp().compareTo(b.getTimestamp()))
-                        .next()
+                // Oldest log timestamp for this team
+                auditLogRepository.findTopByTeamIdOrderByTimestampAsc(teamId)
                         .map(AuditLog::getTimestamp)
                         .defaultIfEmpty(LocalDateTime.now()),
 
-                // Newest log timestamp
-                auditLogRepository.findAll()
-                        .sort((a, b) -> b.getTimestamp().compareTo(a.getTimestamp()))
-                        .next()
+                // Newest log timestamp for this team
+                auditLogRepository.findTopByTeamIdOrderByTimestampDesc(teamId)
                         .map(AuditLog::getTimestamp)
                         .defaultIfEmpty(LocalDateTime.now()))
                 .map(tuple -> {
+                    log.debug("Stats for team {}: total={}, ready={}, archived={}", teamId, tuple.getT1(),
+                            tuple.getT2(), tuple.getT3());
                     ArchivalStats stats = new ArchivalStats();
                     stats.setTotalLogsInMongoDB(tuple.getT1());
                     stats.setLogsReadyForArchival(tuple.getT2());

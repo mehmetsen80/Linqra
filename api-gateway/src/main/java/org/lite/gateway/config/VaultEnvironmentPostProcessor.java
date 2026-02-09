@@ -88,14 +88,56 @@ public class VaultEnvironmentPostProcessor implements EnvironmentPostProcessor {
                 }
             }
 
-            // Resolve vault file path - try YAML first, then fallback
-            String vaultFilePath = environment.getProperty("vault.file.path", "/app/secrets/vault.encrypted");
-            // Resolve path to handle IDE vs Docker
-            if (vaultFilePath.equals("/app/secrets/vault.encrypted")) {
+            // Determine environment for vault file
+            String vaultEnv = System.getenv("VAULT_ENVIRONMENT");
+            if (vaultEnv == null || vaultEnv.isEmpty()) {
+                // Fallback to active profile if VAULT_ENVIRONMENT is not set
+                String activeProfileStr = "dev";
+
+                if (activeProfiles.length > 0) {
+                    activeProfileStr = activeProfiles[0];
+                } else {
+                    // Try property directly if not in activeProfiles array yet
+                    String propProfile = environment.getProperty("spring.profiles.active");
+                    if (propProfile != null && !propProfile.isEmpty()) {
+                        activeProfileStr = propProfile;
+                    }
+                }
+
+                if (activeProfileStr.contains("prod") || activeProfileStr.contains("ec2")) {
+                    vaultEnv = "ec2";
+                } else if (activeProfileStr.contains("staging")) {
+                    vaultEnv = "staging";
+                } else if (activeProfileStr.contains("remote-dev")) {
+                    vaultEnv = "remote-dev";
+                } else {
+                    vaultEnv = "dev";
+                }
+            }
+
+            log.info("Detected environment for vault: {}", vaultEnv);
+
+            // Construct vault file path: secrets/vault-{env}.encrypted
+            String vaultFileName = "vault-" + vaultEnv + ".encrypted";
+            String vaultFilePath = environment.getProperty("vault.file.path", "/app/secrets/" + vaultFileName);
+
+            // Resolve path to handle IDE usage (check local secrets/ dir)
+            if (vaultFilePath.startsWith("/app/secrets/")) {
                 String projectRoot = System.getProperty("user.dir");
-                File ideFile = new File(projectRoot, "secrets/vault.encrypted");
-                if (ideFile.exists()) {
-                    vaultFilePath = ideFile.getAbsolutePath();
+                File localSecretsDir = new File(projectRoot, "secrets");
+                File localVaultFile = new File(localSecretsDir, vaultFileName);
+
+                if (localVaultFile.exists()) {
+                    vaultFilePath = localVaultFile.getAbsolutePath();
+                    log.info("Found local vault file at: {}", vaultFilePath);
+                } else {
+                    // Check legacy file just to warn
+                    File legacyFile = new File(localSecretsDir, "vault.encrypted");
+                    if (legacyFile.exists()) {
+                        log.warn(
+                                "Expected vault file {} not found, but legacy vault.encrypted exists. Please migrate or set VAULT_ENVIRONMENT correctly.",
+                                vaultFileName);
+                    }
                 }
             }
 

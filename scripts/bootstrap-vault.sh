@@ -44,7 +44,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-VAULT_FILE="$PROJECT_ROOT/secrets/vault.encrypted"
+# VAULT_FILE will be determined after parsing ENVIRONMENT
+# Default fallback if needed
+DEFAULT_VAULT_FILE="$PROJECT_ROOT/secrets/vault.encrypted"
+
 VAULT_READER_JAR="${VAULT_READER_JAR:-$PROJECT_ROOT/vault-reader/target/vault-reader.jar}"
 VAULT_READER_DIR="${VAULT_READER_DIR:-$PROJECT_ROOT/vault-reader}"
 ENV_FILE="${ENV_FILE:-$PROJECT_ROOT/.env}"
@@ -98,6 +101,13 @@ if [ -z "$JSON_FILE" ] || [[ "$JSON_FILE" =~ ^(dev|ec2|prod|dev-docker)$ ]]; the
 else
     # First argument is a file, second is environment
     ENVIRONMENT="${2:-${VAULT_ENVIRONMENT:-dev}}"
+fi
+
+# Set VAULT_FILE based on environment
+if [ -z "$ENVIRONMENT" ]; then
+    VAULT_FILE="$DEFAULT_VAULT_FILE"
+else
+    VAULT_FILE="$PROJECT_ROOT/secrets/vault-$ENVIRONMENT.encrypted"
 fi
 
 # Colors for output
@@ -295,8 +305,8 @@ if [ -z "$JSON_FILE" ]; then
     echo -e "${RED}ERROR: JSON file is required${NC}"
     echo ""
     echo "Usage: ./scripts/bootstrap-vault.sh [secrets-file] [environment]"
-    echo "   Example: ./scripts/bootstrap-vault.sh ./secrets/secrets.json dev"
-    echo "   Example: ./scripts/bootstrap-vault.sh ./secrets/secrets.json ec2"
+    echo "   Example: ./scripts/bootstrap-vault.sh ./secrets/secrets-dev.json dev"
+    echo "   Example: ./scripts/bootstrap-vault.sh ./secrets/secrets-ec2.json ec2"
     echo ""
     echo "If no file is provided, script will auto-detect secrets.json in ./secrets/ directory"
     exit 1

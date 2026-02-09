@@ -11,10 +11,10 @@
 
 set -e
 
-VAULT_FILE="${VAULT_FILE:-/app/secrets/vault.encrypted}"
+VAULT_ENVIRONMENT="${VAULT_ENVIRONMENT:-dev}"
+VAULT_FILE="${VAULT_FILE:-/app/secrets/vault-${VAULT_ENVIRONMENT}.encrypted}"
 VAULT_READER_JAR="${VAULT_READER_JAR:-/app/vault-reader/vault-reader.jar}"
 VAULT_MASTER_KEY="${VAULT_MASTER_KEY}"
-VAULT_ENVIRONMENT="${VAULT_ENVIRONMENT:-dev}"
 VAULT_REQUIRED_VARS="${VAULT_REQUIRED_VARS}"
 
 # Check if vault file and reader exist

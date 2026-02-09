@@ -604,7 +604,7 @@ function ViewAgent() {
                                 <thead>
                                     <tr>
                                         <th>Task Name</th>
-                                        <th>Task Type</th>
+                                        {/* <th>Task Type</th> */}
                                         <th>Status</th>
                                         <th>Trigger</th>
                                         <th>Cron</th>
@@ -617,6 +617,7 @@ function ViewAgent() {
                                     {tasks.map((task) => (
                                         <tr key={task.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/agents/${agentId}/tasks/${task.id}`)}>
                                             <td>{task.name}</td>
+                                            {/* TODO: Re-enable Task Type column once new task types are implemented
                                             <td>
                                                 <Badge bg={
                                                     task.taskType === 'WORKFLOW_TRIGGER' ? 'primary' :
@@ -626,7 +627,7 @@ function ViewAgent() {
                                                 }>
                                                     {task.taskType?.replace(/_/g, ' ')}
                                                 </Badge>
-                                            </td>
+                                            </td> */}
                                             <td>
                                                 <Badge bg={task.enabled ? 'success' : 'secondary'}>
                                                     {task.enabled ? 'Active' : 'Inactive'}

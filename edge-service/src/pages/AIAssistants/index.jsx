@@ -126,6 +126,7 @@ function AIAssistants() {
                 m.active !== false &&
                 m.modelCategory?.toLowerCase().includes('chat')
             );
+
             setAvailableModels(activeTeamModels);
         } catch (err) {
             console.error('Error loading available models:', err);

@@ -231,8 +231,9 @@ const EditAIAssistantModal = ({
     }
   };
 
-  // Prepare model options for react-select
+  // Prepare model options for react-select - filter by selected provider
   const modelOptions = availableModels
+    ?.filter(m => m.provider === formData.defaultModel?.provider)
     ?.map(m => {
       const costs = m.inputPricePer1M && m.outputPricePer1M
         ? ` ($${m.inputPricePer1M}/$${m.outputPricePer1M} per 1M)`
@@ -240,7 +241,7 @@ const EditAIAssistantModal = ({
 
       return {
         value: m.modelName,
-        label: `${m.displayName || m.modelName} (${m.provider}, ${m.modelName})${costs}`,
+        label: `${m.displayName || m.modelName}${costs}`,
         modelCategory: m.modelCategory,
         provider: m.provider
       };
@@ -259,7 +260,11 @@ const EditAIAssistantModal = ({
       ...base,
       minHeight: '38px'
     }),
-    menuPortal: (base) => ({ ...base, zIndex: 9999 })
+    menu: (base) => ({
+      ...base,
+      zIndex: 10000
+    }),
+    menuPortal: (base) => ({ ...base, zIndex: 10000 })
   };
 
   if (!assistant) return null;
@@ -358,7 +363,8 @@ const EditAIAssistantModal = ({
                         onChange={handleModelChange}
                         placeholder="Select a model..."
                         styles={customSelectStyles}
-                        menuPortalTarget={document.body}
+                        menuPosition="fixed"
+                        menuPlacement="auto"
                         isSearchable
                       />
                     </Form.Group>

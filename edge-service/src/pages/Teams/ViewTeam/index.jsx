@@ -188,11 +188,12 @@ function ViewTeam() {
   };
 
   const fetchKnowledgeCollections = async () => {
+    if (!teamId) return;
     try {
       setKnowledgeCollectionsLoading(true);
       setKnowledgeCollectionsError(null);
 
-      const { success, data, error } = await knowledgeHubCollectionService.getAllCollections();
+      const { success, data, error } = await knowledgeHubCollectionService.getAllCollections(teamId);
       if (!success) {
         throw new Error(error || 'Failed to load knowledge hub collections');
       }

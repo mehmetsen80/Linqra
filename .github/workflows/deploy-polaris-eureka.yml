@@ -52,12 +52,12 @@ jobs:
           bash scripts/bootstrap-vault.sh secrets/secrets.json ec2
           
           # Verify vault file was created
-          if [ ! -f secrets/vault.encrypted ]; then
-            echo "ERROR: vault.encrypted was not created"
+          if [ ! -f secrets/vault-ec2.encrypted ]; then
+            echo "ERROR: vault-ec2.encrypted was not created"
             exit 1
           fi
           
-          echo "✅ vault.encrypted created successfully"
+          echo "✅ vault-ec2.encrypted created successfully"
 
       - name: Install SSH key
         uses: webfactory/ssh-agent@v0.9.0
@@ -87,7 +87,7 @@ jobs:
             $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/
             
           # Transfer secrets (Encrypted only)
-          rsync -avz secrets/vault.encrypted $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/secrets/
+          rsync -avz secrets/vault-ec2.encrypted $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/secrets/
           
           # Transfer Eureka specific files
           rsync -avz --delete .kube/eureka/ $EC2_USERNAME@$EC2_HOST:$TARGET_DIR/.kube/eureka/
@@ -111,7 +111,7 @@ jobs:
             rm -f $TARGET_DIR/discovery-server/src/main/resources/application-dev.yml
 
             # Set Secrets Permissions
-            sudo chmod 644 secrets/vault.encrypted
+            sudo chmod 644 secrets/vault-ec2.encrypted
 
             # Export Master Key
             export VAULT_MASTER_KEY=$VAULT_MASTER_KEY

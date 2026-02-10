@@ -221,8 +221,9 @@ const CreateAIAssistantModal = ({
     }
   };
 
-  // Prepare model options for react-select
+  // Prepare model options for react-select - filter by selected provider
   const modelOptions = availableModels
+    ?.filter(m => m.provider === formData.defaultModel?.provider)
     ?.map(m => {
       const costs = m.inputPricePer1M && m.outputPricePer1M
         ? ` ($${m.inputPricePer1M}/$${m.outputPricePer1M} per 1M)`
@@ -346,7 +347,8 @@ const CreateAIAssistantModal = ({
                         onChange={handleModelChange}
                         placeholder="Select a model..."
                         styles={customSelectStyles}
-                        menuPortalTarget={document.body}
+                        menuPosition="fixed"
+                        menuPlacement="auto"
                         isSearchable
                       />
                     </Form.Group>

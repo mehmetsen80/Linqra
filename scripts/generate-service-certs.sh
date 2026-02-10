@@ -2,7 +2,10 @@
 # generate-service-certs.sh
 
 # i.e.
+# cd scripts
 # sudo ./generate-service-certs.sh komunas-app
+# sudo ./generate-service-certs.sh medastex-app
+# sudo ./generate-service-certs.sh mytrux-app
 
 SERVICE_NAME=$1
 if [ -z "$SERVICE_NAME" ]; then

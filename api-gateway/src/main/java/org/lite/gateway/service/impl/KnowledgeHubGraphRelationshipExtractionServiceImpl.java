@@ -221,29 +221,36 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl
                                                                 // when multiple relationships share the same nodes
                                                                 return Flux.fromIterable(result.relationships)
                                                                         .concatMap(rel -> {
-                                                                            String fromType = (String) rel
+                                                                            final String fromType = (String) rel
                                                                                     .get("fromType");
-                                                                            String fromId = (String) rel.get("fromId");
-                                                                            String relationshipType = (String) rel
+                                                                            final String fromId = (String) rel
+                                                                                    .get("fromId");
+                                                                            final String relationshipType = (String) rel
                                                                                     .get("type");
-                                                                            String toType = (String) rel.get("toType");
-                                                                            String toId = (String) rel.get("toId");
+                                                                            final String toType = (String) rel
+                                                                                    .get("toType");
+                                                                            final String toId = (String) rel
+                                                                                    .get("toId");
 
-                                                                            // Create a mutable copy of properties map
-                                                                            // to avoid UnsupportedOperationException
-                                                                            // when the original map from LLM response
-                                                                            // is immutable (e.g., Map.of(),
-                                                                            // Collections.emptyMap())
+                                                                            // Skip relationships where either endpoint
+                                                                            // is truly null/empty.
+                                                                            // Note: literal "null" is allowed here
+                                                                            // because it refers to a specific node.
+                                                                            if (fromId == null || fromId.isEmpty()
+                                                                                    || toId == null || toId.isEmpty()) {
+                                                                                log.warn(
+                                                                                        "Skipping relationship {} because fromId='{}' or toId='{}' is null/empty",
+                                                                                        relationshipType, fromId, toId);
+                                                                                return Mono.empty();
+                                                                            }
+
                                                                             Map<String, Object> properties = new HashMap<>();
-
                                                                             @SuppressWarnings("unchecked")
                                                                             Object propertiesObj = rel
                                                                                     .get("properties");
                                                                             if (propertiesObj instanceof Map) {
-                                                                                Map<String, Object> originalProperties = (Map<String, Object>) propertiesObj;
-                                                                                // Copy all properties to new mutable
-                                                                                // map
-                                                                                properties.putAll(originalProperties);
+                                                                                properties.putAll(
+                                                                                        (Map<String, Object>) propertiesObj);
                                                                             }
 
                                                                             // Add our metadata fields
@@ -726,9 +733,13 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl
 
                         log.debug("Parsed {} relationships from LLM response", relationships.size());
 
+                        // Translate synthetic IDs (E0, E1...) back to actual IDs from the entities list
+                        List<Map<String, Object>> translatedRelationships = translateRelationshipIds(relationships,
+                                entities);
+
                         // Return both relationships and token usage with model information
                         return Mono.just(new RelationshipExtractionResult(
-                                relationships,
+                                translatedRelationships,
                                 tokenUsage,
                                 llmModel.getModelName(),
                                 llmModel.getModelCategory(),
@@ -748,7 +759,9 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl
             Map<String, Object> entity = entities.get(i);
             StringBuilder entityJson = new StringBuilder("  {\n");
             entityJson.append("    \"type\": \"").append(entity.get("type")).append("\",\n");
-            entityJson.append("    \"id\": \"").append(entity.get("id")).append("\",\n");
+            // Use synthetic ID (E0, E1...) for the prompt to avoid collisions if multiple
+            // entities have null/generic IDs. We map these back during storage.
+            entityJson.append("    \"id\": \"").append("E").append(i).append("\",\n");
             entityJson.append("    \"name\": \"").append(entity.getOrDefault("name", "")).append("\"");
             if (entity.containsKey("description")) {
                 entityJson.append(",\n    \"description\": \"").append(entity.get("description")).append("\"");
@@ -764,6 +777,9 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl
 
         return String.format(
                 "Analyze the following entities and identify relationships between them.\n" +
+                        "\n" +
+                        "CRITICAL: Use the provide synthetic 'id' (e.g. E0, E1) for fromId and toId in your response.\n"
+                        +
                         "\n" +
                         "Focus on these relationship types:\n" +
                         "- **MENTIONS**: Entity A mentions or references Entity B\n" +
@@ -917,6 +933,21 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl
                     }
                 }
 
+                // Ollama format: { "message": { "role": "assistant", "content": "..." } }
+                if (resultMap.containsKey("message")) {
+                    Object messageObj = resultMap.get("message");
+                    if (messageObj instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> message = (Map<String, Object>) messageObj;
+                        if (message.containsKey("content")) {
+                            String content = (String) message.get("content");
+                            if (content != null) {
+                                return cleanJsonText(content);
+                            }
+                        }
+                    }
+                }
+
                 // Fallback: try to find "text" or "content" directly
                 if (resultMap.containsKey("text")) {
                     return cleanJsonText((String) resultMap.get("text"));
@@ -1001,7 +1032,7 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl
 
     /**
      * Extract token usage from raw LLM response and calculate cost (similar to
-     * ChatExecutionServiceImpl)
+     * BaseChatExecutionService)
      */
     @SuppressWarnings("unchecked")
     private TokenUsageResult extractTokenUsageFromResponse(
@@ -1024,7 +1055,7 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl
         String model = modelName;
 
         // Extract token usage based on model category (same logic as
-        // ChatExecutionServiceImpl)
+        // BaseChatExecutionService)
         if ("openai-chat".equals(modelCategory) && resultMap.containsKey("usage")) {
             Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
             if (usage != null) {
@@ -1183,6 +1214,51 @@ public class KnowledgeHubGraphRelationshipExtractionServiceImpl
                     log.error("Error saving relationship extraction costs to metadata: {}", error.getMessage());
                     return Mono.empty(); // Don't fail the extraction if cost saving fails
                 });
+    }
+
+    /**
+     * Translates synthetic IDs (E0, E1...) in extracted relationships back to their
+     * actual IDs.
+     * 
+     * @param relationships The extracted relationships from LLM
+     * @param entities      The original source entities with valid IDs
+     * @return List of relationships with actual IDs
+     */
+    private List<Map<String, Object>> translateRelationshipIds(List<Map<String, Object>> relationships,
+            List<Map<String, Object>> entities) {
+        List<Map<String, Object>> translated = new ArrayList<>();
+
+        for (Map<String, Object> rel : relationships) {
+            String fromIdStr = (String) rel.get("fromId");
+            String toIdStr = (String) rel.get("toId");
+
+            String realFromId = fromIdStr;
+            String realToId = toIdStr;
+
+            try {
+                if (fromIdStr != null && fromIdStr.startsWith("E")) {
+                    int index = Integer.parseInt(fromIdStr.substring(1));
+                    if (index >= 0 && index < entities.size()) {
+                        realFromId = (String) entities.get(index).get("id");
+                    }
+                }
+                if (toIdStr != null && toIdStr.startsWith("E")) {
+                    int index = Integer.parseInt(toIdStr.substring(1));
+                    if (index >= 0 && index < entities.size()) {
+                        realToId = (String) entities.get(index).get("id");
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed to translate synthetic ID in relationship: {} or {}", fromIdStr, toIdStr);
+            }
+
+            Map<String, Object> translatedRel = new HashMap<>(rel);
+            translatedRel.put("fromId", realFromId);
+            translatedRel.put("toId", realToId);
+            translated.add(translatedRel);
+        }
+
+        return translated;
     }
 
     /**

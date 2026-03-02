@@ -907,17 +907,37 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     private Map<String, Object> resolvePlaceholdersForMap(Map<String, Object> input, WorkflowExecutionContext context) {
+        return resolvePlaceholdersForMap(input, context, 0);
+    }
+
+    private Map<String, Object> resolvePlaceholdersForMap(Map<String, Object> input, WorkflowExecutionContext context,
+            int depth) {
         if (input == null)
             return new HashMap<>();
         Map<String, Object> resolved = new HashMap<>();
-        input.forEach((key, value) -> resolved.put(key, resolvePlaceholders(value, context)));
+        input.forEach((key, value) -> resolved.put(key, resolvePlaceholders(value, context, depth)));
         return resolved;
     }
 
     private Object resolvePlaceholders(Object input, WorkflowExecutionContext context) {
+        return resolvePlaceholders(input, context, 0);
+    }
+
+    private Object resolvePlaceholders(Object input, WorkflowExecutionContext context, int depth) {
         if (input == null)
             return null;
+
+        if (depth > 5) {
+            log.warn(
+                    "⚠️ Placeholder resolution depth exceeded limit (5). Returning potentially partially resolved input.");
+            return input;
+        }
+
         if (input instanceof String stringInput) {
+            if (!stringInput.contains("{{")) {
+                return stringInput;
+            }
+
             // Check if the entire string is EXACTLY a single placeholder
             // If so, return the actual object instead of converting to string
             Pattern singlePlaceholderPattern = Pattern
@@ -927,27 +947,33 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 String placeholderContent = singleMatcher.group(1);
                 Object resolvedObject = extractObjectValue(placeholderContent, context);
                 if (resolvedObject != null) {
-                    log.debug("🔍 Resolved placeholder {{{}}} as object type: {}", placeholderContent,
-                            resolvedObject.getClass().getSimpleName());
-                    return resolvedObject;
+                    log.debug("🔍 Resolved single placeholder {{{}}} at depth {} as object type: {}",
+                            placeholderContent, depth, resolvedObject.getClass().getSimpleName());
+                    // Recursively resolve the object in case it's also a placeholder OR contains
+                    // them
+                    return resolvePlaceholders(resolvedObject, context, depth + 1);
                 }
             }
             // Otherwise, resolve as string (for string interpolation cases)
-            return resolvePlaceholder(stringInput, context);
+            String resolvedString = resolvePlaceholder(stringInput, context);
+            if (resolvedString != null && resolvedString.contains("{{") && !resolvedString.equals(stringInput)) {
+                log.debug("🔄 Recursively resolving interpolated string at depth {}: {}", depth, resolvedString);
+                return resolvePlaceholders(resolvedString, context, depth + 1);
+            }
+            return resolvedString;
         }
         if (input instanceof List<?> list) {
             return list.stream()
-                    .map(item -> resolvePlaceholders(item, context))
+                    .map(item -> resolvePlaceholders(item, context, depth))
                     .collect(Collectors.toList());
         }
         if (input instanceof Map<?, ?> map) {
             return resolvePlaceholdersForMap(map.entrySet().stream()
-                    .filter(entry -> entry.getKey() != null && entry.getValue() != null) // Filter out null keys and
-                                                                                         // values
+                    .filter(entry -> entry.getKey() != null && entry.getValue() != null)
                     .collect(Collectors.toMap(
                             entry -> entry.getKey().toString(),
                             Map.Entry::getValue)),
-                    context);
+                    context, depth);
         }
         return input;
     }

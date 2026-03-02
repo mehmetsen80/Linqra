@@ -1,6 +1,5 @@
 package org.lite.gateway.controller;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.ErrorResponse;
 import org.lite.gateway.dto.ErrorCode;
@@ -12,6 +11,7 @@ import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
 import org.lite.gateway.service.TeamService;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -24,7 +24,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/ai-assistants")
-@RequiredArgsConstructor
 @Slf4j
 public class AIAssistantController {
 
@@ -33,7 +32,38 @@ public class AIAssistantController {
         private final UserContextService userContextService;
         private final UserService userService;
         private final TeamService teamService;
-        private final ChatExecutionService chatExecutionService;
+        private final ChatExecutionService standardChatExecutionService;
+        private final ChatExecutionService docReviewChatExecutionService;
+
+        public AIAssistantController(
+                        AIAssistantService aiAssistantService,
+                        TeamContextService teamContextService,
+                        UserContextService userContextService,
+                        UserService userService,
+                        TeamService teamService,
+                        @Qualifier("standardChatExecutionService") ChatExecutionService standardChatExecutionService,
+                        @Qualifier("docReviewChatExecutionService") ChatExecutionService docReviewChatExecutionService) {
+                this.aiAssistantService = aiAssistantService;
+                this.teamContextService = teamContextService;
+                this.userContextService = userContextService;
+                this.userService = userService;
+                this.teamService = teamService;
+                this.standardChatExecutionService = standardChatExecutionService;
+                this.docReviewChatExecutionService = docReviewChatExecutionService;
+        }
+
+        // Helper to resolve the correct ChatExecutionService based on assistant
+        // category
+        private ChatExecutionService resolveChatExecutionService(AIAssistant assistant) {
+                if (assistant.getCategory() == AIAssistant.Category.REVIEW_DOC) {
+                        log.debug("Routing to DocReviewChatExecutionService for assistant: {}",
+                                        assistant.getId());
+                        return docReviewChatExecutionService;
+                }
+                log.debug("Routing to StandardChatExecutionService for assistant: {}",
+                                assistant.getId());
+                return standardChatExecutionService;
+        }
 
         // ==================== AI ASSISTANT CRUD OPERATIONS ====================
 
@@ -575,8 +605,11 @@ public class AIAssistantController {
                                                                         linqRequest.setQuery(query);
                                                                         linqRequest.setExecutedBy(user.getUsername());
 
-                                                                        // Execute chat using ChatExecutionService
-                                                                        return chatExecutionService
+                                                                        // Execute chat using resolved
+                                                                        // ChatExecutionService
+                                                                        ChatExecutionService resolvedService = resolveChatExecutionService(
+                                                                                        assistant);
+                                                                        return resolvedService
                                                                                         .executeChat(linqRequest)
                                                                                         .map(response -> {
                                                                                                 Map<String, Object> result = new HashMap<>();

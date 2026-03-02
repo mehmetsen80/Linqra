@@ -47,7 +47,8 @@ export const capabilityOptions = [
 ];
 
 export const customSelectStyles = {
-  menuPortal: base => ({ ...base, zIndex: 9999 }),
+  menuPortal: base => ({ ...base, zIndex: 99999 }),
+  menu: base => ({ ...base, zIndex: 99999 }),
   control: (base, state) => ({
     ...base,
     borderColor: state.isFocused ? '#0d6efd' : base.borderColor,

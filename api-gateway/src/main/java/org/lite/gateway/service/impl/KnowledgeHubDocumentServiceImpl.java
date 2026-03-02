@@ -9,6 +9,7 @@ import org.lite.gateway.event.KnowledgeHubDocumentProcessingEvent;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
+import org.lite.gateway.repository.DocReviewAssistantRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentVersionRepository;
 import org.lite.gateway.entity.KnowledgeHubDocumentVersion;
 import org.lite.gateway.repository.TeamRepository;
@@ -51,6 +52,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         private final LinqMilvusStoreService milvusStoreService;
         private final org.lite.gateway.service.Neo4jGraphService neo4jGraphService;
         private final org.lite.gateway.repository.GraphExtractionJobRepository graphExtractionJobRepository;
+        private final DocReviewAssistantRepository docReviewAssistantRepository;
         private final AuditLogHelper auditLogHelper;
 
         @Override
@@ -443,10 +445,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         @Override
         public Mono<KnowledgeHubDocument> getDocumentById(String documentId, String teamId) {
                 return documentRepository.findByDocumentId(documentId)
-                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)))
-                                .filter(document -> document.getTeamId().equals(teamId))
-                                .switchIfEmpty(Mono.error(new RuntimeException(
-                                                "Document not found or access denied: " + documentId)));
+                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)));
         }
 
         @Override
@@ -746,11 +745,42 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                         })
                                                         .then();
 
-                                        // Delete all version records for this document
-                                        // Delete all version records for this document
-                                        Mono<Void> deleteVersions = versionRepository.deleteAllByDocumentId(documentId)
+                                        // Delete DocReviewAssistant records (Cascade Delete)
+                                        Mono<Void> deleteDocReviews = docReviewAssistantRepository
+                                                        .deleteByDocumentId(documentId)
                                                         .doOnSuccess(v -> log.info(
-                                                                        "Deleted version history for document: {}",
+                                                                        "✅ Deleted associated DocReviewAssistant records for document: {}",
+                                                                        documentId))
+                                                        .onErrorResume(error -> {
+                                                                log.warn("⚠️ Failed to delete DocReviewAssistant records for document {}, continuing: {}",
+                                                                                documentId, error.getMessage());
+                                                                return Mono.empty();
+                                                        });
+
+                                        // Delete all version records and their S3 files
+                                        Mono<Void> deleteVersions = versionRepository
+                                                        .findAllByDocumentIdOrderByVersionNumberDesc(documentId)
+                                                        .flatMap(version -> {
+                                                                if (version.getS3Key() != null
+                                                                                && !version.getS3Key().isEmpty()) {
+                                                                        return objectStorageService
+                                                                                        .deleteFile(version.getS3Key())
+                                                                                        .doOnSuccess(v -> log.info(
+                                                                                                        "✅ Deleted S3 file for version {}: {}",
+                                                                                                        version.getVersionNumber(),
+                                                                                                        version.getS3Key()))
+                                                                                        .onErrorResume(e -> {
+                                                                                                log.warn("⚠️ Failed to delete S3 file for version {}: {}",
+                                                                                                                version.getVersionNumber(),
+                                                                                                                e.getMessage());
+                                                                                                return Mono.empty();
+                                                                                        });
+                                                                }
+                                                                return Mono.empty();
+                                                        })
+                                                        .then(versionRepository.deleteAllByDocumentId(documentId))
+                                                        .doOnSuccess(v -> log.info(
+                                                                        "Deleted version history records for document: {}",
                                                                         documentId))
                                                         .doOnError(error -> log.warn(
                                                                         "Error deleting versions for document {}: {}",
@@ -765,7 +795,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                         deleteMilvusEmbeddings,
                                                                         deleteGraphExtractionJobs,
                                                                         deleteGraphRelationships,
-                                                                        deleteGraphEntities)
+                                                                        deleteGraphEntities, deleteDocReviews)
                                                         .then(documentRepository.deleteById(document.getId()))
                                                         .doOnSuccess(success -> log.info(
                                                                         "Successfully hard deleted document: {}",
@@ -889,9 +919,11 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         }
 
         @Override
-        public Mono<Void> updateDocumentContent(String documentId, byte[] content) {
+        public Mono<Void> updateDocumentContent(String documentId, String teamId, byte[] content) {
                 return documentRepository.findByDocumentId(documentId)
                                 .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)))
+                                .filter(doc -> doc.getTeamId().equals(teamId))
+                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found or access denied")))
                                 .flatMap(document -> {
                                         // 1. Create a version record for the CURRENT state (before update)
                                         KnowledgeHubDocumentVersion version = KnowledgeHubDocumentVersion.builder()
@@ -944,7 +976,12 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                                                 .uploadFileBytes(
                                                                                                                 newS3Key,
                                                                                                                 finalContent,
-                                                                                                                document.getContentType(),
+                                                                                                                "text/html", // Content
+                                                                                                                             // is
+                                                                                                                             // always
+                                                                                                                             // HTML
+                                                                                                                             // from
+                                                                                                                             // editor
                                                                                                                 keyVersion)
                                                                                                 .then(Mono.defer(() -> {
                                                                                                         // 3. Update
@@ -956,11 +993,20 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                                                                         newVersionNumber);
                                                                                                         document.setFileSize(
                                                                                                                         (long) finalContent.length);
+                                                                                                        document.setContentType(
+                                                                                                                        "text/html"); // Update
+                                                                                                                                      // content
+                                                                                                                                      // type
                                                                                                         document.setProcessedAt(
                                                                                                                         LocalDateTime.now());
+                                                                                                        document.setStatus(
+                                                                                                                        DocumentStatus.UPLOADED);
 
                                                                                                         return documentRepository
                                                                                                                         .save(document)
+                                                                                                                        .doOnSuccess(doc -> publishProcessingEvent(
+                                                                                                                                        doc,
+                                                                                                                                        documentId))
                                                                                                                         .then();
                                                                                                 })));
                                                         });
@@ -1107,8 +1153,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         public reactor.core.publisher.Flux<KnowledgeHubDocumentVersion> getDocumentVersions(String documentId,
                         String teamId) {
                 return documentRepository.findByDocumentId(documentId)
-                                .filter(doc -> doc.getTeamId().equals(teamId))
-                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found or access denied")))
+                                .switchIfEmpty(Mono.error(new RuntimeException("Document not found")))
                                 .flatMapMany(doc -> versionRepository
                                                 .findAllByDocumentIdOrderByVersionNumberDesc(documentId));
         }
@@ -1116,7 +1161,6 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
         @Override
         public Mono<KnowledgeHubDocument> restoreVersion(String documentId, Integer versionNumber, String teamId) {
                 return documentRepository.findByDocumentId(documentId)
-                                .filter(doc -> doc.getTeamId().equals(teamId))
                                 .switchIfEmpty(Mono.error(new RuntimeException("Document not found or access denied")))
                                 .flatMap(currentDoc -> {
                                         return versionRepository

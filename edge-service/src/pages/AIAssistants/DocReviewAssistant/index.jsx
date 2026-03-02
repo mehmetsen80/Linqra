@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-toastify';
 import IconSidebar from './components/IconSidebar';
 import ChatPane from './components/ChatPane';
@@ -6,6 +6,8 @@ import DocumentViewer from './components/DocumentViewer';
 import ReviewSuggestionsPanel from './components/ReviewSuggestionsPanel';
 import DocReviewHistoryModal from './components/DocReviewHistoryModal';
 import docReviewService from '../../../services/docReviewService';
+import { knowledgeHubDocumentService } from '../../../services/knowledgeHubDocumentService';
+import { chatWebSocketService } from '../../../services/chatWebSocketService';
 import './styles.css';
 
 const DocReviewAssistant = () => {
@@ -18,16 +20,103 @@ const DocReviewAssistant = () => {
     const [analyzing, setAnalyzing] = useState(false);
 
     const [activePointId, setActivePointId] = useState(null);
+    const [statusMessages, setStatusMessages] = useState([]);
+    const editorContentRef = useRef('');
+    const documentViewerRef = useRef(null);
+    const [externalHtml, setExternalHtml] = useState(null);
+    const [activeSelection, setActiveSelection] = useState(null);
+
+    const handleEditorChange = (newContent) => {
+        editorContentRef.current = newContent;
+        // If user edits, clear the external override to prevent re-application
+        if (externalHtml) {
+            setExternalHtml(null);
+        }
+    };
+
+    const handleSelectionChange = (selection) => {
+        setActiveSelection(selection);
+    };
 
     useEffect(() => {
         fetchDocReviewAssistant();
     }, []);
+
+    // Subscribe to WebSocket chat updates
+    useEffect(() => {
+        const conversationId = reviewSession?.conversationId;
+        if (!conversationId) return;
+
+        console.log(`🔌 Subscribing to Doc Review WebSocket for conversation: ${conversationId}`);
+        const unsubscribe = chatWebSocketService.subscribeToConversation(conversationId, (update) => {
+            switch (update.type) {
+                case 'LLM_RESPONSE_STREAMING_STARTED':
+                case 'LLM_RESPONSE_STREAMING_COMPLETE':
+                case 'LLM_RESPONSE_STREAMING_CANCELLED':
+                    setStatusMessages([]);
+                    break;
+
+                case 'AGENT_TASKS_EXECUTING':
+                    setStatusMessages(['Starting agent tasks...']);
+                    break;
+
+                case 'AGENT_TASKS_COMPLETED':
+                    setStatusMessages(prev => {
+                        const completionMessage = 'Agent tasks completed.';
+                        const lastMessage = prev.length > 0 ? prev[prev.length - 1] : '';
+                        if (completionMessage !== lastMessage) {
+                            return [...prev, completionMessage];
+                        }
+                        return prev;
+                    });
+
+                    // Refresh review points from backend
+                    if (reviewSession?.id) {
+                        console.log('🔄 Agent tasks completed. Refreshing review points...');
+                        docReviewService.getReview(reviewSession.id).then(response => {
+                            if (response.success && response.data?.reviewPoints) {
+                                setReviewPoints(response.data.reviewPoints);
+                                setReviewSession(prev => ({ ...prev, reviewPoints: response.data.reviewPoints }));
+                                toast.success('Agent analysis results loaded!');
+                            }
+                        }).catch(err => console.error('Error refreshing session after agent completion:', err));
+                    }
+                    break;
+
+                case 'LLM_CALL_STARTED':
+                    setStatusMessages(prev => {
+                        const provider = update.provider || '';
+                        const llmMessage = `Calling ${provider ? `${provider} ` : ''}${update.modelName || 'AI model'}...`;
+                        const lastMessage = prev.length > 0 ? prev[prev.length - 1] : '';
+                        if (llmMessage !== lastMessage) {
+                            return [...prev, llmMessage];
+                        }
+                        return prev;
+                    });
+                    break;
+
+                default:
+                    break;
+            }
+        });
+
+        // Connect WebSocket if not connected
+        if (!chatWebSocketService.connected) {
+            chatWebSocketService.connect();
+        }
+
+        return () => {
+            unsubscribe();
+        };
+    }, [reviewSession?.conversationId]);
 
     // Load review points when session changes
     useEffect(() => {
         if (reviewSession?.reviewPoints) {
             setReviewPoints(reviewSession.reviewPoints);
         }
+        // Clear status messages when switching sessions
+        setStatusMessages([]);
     }, [reviewSession]);
 
     const fetchDocReviewAssistant = async () => {
@@ -85,7 +174,16 @@ const DocReviewAssistant = () => {
     const triggerAIAnalysis = async (reviewId, documentId) => {
         setAnalyzing(true);
         try {
-            const response = await docReviewService.analyzeDocument(reviewId, documentId, assistant.id);
+            // Get current content from editor ref
+            const currentContent = editorContentRef.current;
+
+            const response = await docReviewService.analyzeDocument(
+                reviewId,
+                documentId,
+                assistant.id,
+                currentContent
+            );
+
             if (response.success && response.data?.reviewPoints) {
                 setReviewPoints(response.data.reviewPoints);
                 setReviewSession(prev => ({ ...prev, reviewPoints: response.data.reviewPoints }));
@@ -100,28 +198,116 @@ const DocReviewAssistant = () => {
         }
     };
 
+    const [pendingReplacement, setPendingReplacement] = useState(null);
+
     const handleReviewPointAction = async (pointId, accepted) => {
-        // Update local state immediately
+        const point = reviewPoints.find(p => p.id === pointId);
+        if (!point) return;
+
+        // CASE 1: Rejecting a point
+        // We update local state and backend immediately as no document change is involved
+        if (!accepted) {
+            setReviewPoints(prev =>
+                prev.map(p => p.id === pointId ? { ...p, userAccepted: false } : p)
+            );
+
+            try {
+                const updatedPoints = reviewPoints.map(p =>
+                    p.id === pointId ? { ...p, userAccepted: false } : p
+                );
+                await docReviewService.updateReview(reviewSession.id, {
+                    reviewPoints: updatedPoints
+                });
+            } catch (error) {
+                console.error('Error updating review point (reject):', error);
+                toast.error('Failed to save decision');
+            }
+            return;
+        }
+
+        // CASE 2: Accepting a point with a suggested replacement
+        // We trigger the editor replacement first. Persistence happens in handleReplacementApplied.
+        if (point.suggestedReplacement) {
+            setPendingReplacement({
+                pointId: point.id, // Include pointId to identify which one succeeded
+                originalText: point.originalText,
+                newText: point.suggestedReplacement
+            });
+            toast.info('Analyzing document for replacement...');
+        } else {
+            // CASE 3: Accepting a point without a replacement (just acknowledgment)
+            setReviewPoints(prev =>
+                prev.map(p => p.id === pointId ? { ...p, userAccepted: true } : p)
+            );
+            try {
+                const updatedPoints = reviewPoints.map(p =>
+                    p.id === pointId ? { ...p, userAccepted: true } : p
+                );
+                await docReviewService.updateReview(reviewSession.id, {
+                    reviewPoints: updatedPoints
+                });
+            } catch (error) {
+                console.error('Error updating review point (accept, no replacement):', error);
+            }
+        }
+    };
+
+    /**
+     * Called by the Editor when a replacement attempt completes.
+     * This implements the 'Two-Phase Commit' for accepting suggestions.
+     */
+    const handleReplacementApplied = async (success, pointId) => {
+        // Clear the pending request regardless of success
+        setPendingReplacement(null);
+
+        if (!success) {
+            // Error handling is done by the RichTextEditor (showErrorToast)
+            return;
+        }
+
+        // Phase 2: Success! Update local state and persist to backend
         setReviewPoints(prev =>
-            prev.map(point =>
-                point.id === pointId
-                    ? { ...point, userAccepted: accepted }
-                    : point
-            )
+            prev.map(p => p.id === pointId ? {
+                ...p,
+                userAccepted: true,
+                originalText: p.suggestedReplacement || p.originalText // Sync text for future highlights
+            } : p)
         );
 
-        // Persist to backend
         try {
-            const updatedPoints = reviewPoints.map(point =>
-                point.id === pointId ? { ...point, userAccepted: accepted } : point
+            const updatedPoints = reviewPoints.map(p =>
+                p.id === pointId ? {
+                    ...p,
+                    userAccepted: true,
+                    originalText: p.suggestedReplacement || p.originalText
+                } : p
             );
+
+            // 1. Update review point metadata
             await docReviewService.updateReview(reviewSession.id, {
                 reviewPoints: updatedPoints
             });
+
+            // 2. AUTO-SAVE: Sync document content to Knowledge Hub
+            if (currentDocument?.documentId) {
+                await knowledgeHubDocumentService.updateDocumentContent(
+                    currentDocument.documentId,
+                    editorContentRef.current
+                );
+                console.log("💾 Auto-saved document content to Knowledge Hub after Accept");
+            }
+
+            // Final success toast is handled by Editor for UI feedback
         } catch (error) {
-            console.error('Error updating review point:', error);
-            toast.error('Failed to save decision');
+            console.error('Error persisting accepted state after replacement:', error);
+            toast.error('Replacement succeeded but failed to save session status');
         }
+    };
+
+    const stripHtml = (html) => {
+        if (!html) return '';
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        return doc.body.textContent || "";
     };
 
     return (
@@ -138,19 +324,76 @@ const DocReviewAssistant = () => {
                     <ChatPane
                         assistant={assistant}
                         reviewSession={reviewSession}
+                        statusMessages={statusMessages}
                         onSessionUpdate={(updates) => setReviewSession(prev => ({ ...prev, ...updates }))}
-                        onLoadSession={(session) => {
+                        onLoadSession={async (session) => {
                             setReviewSession(session);
-                            setCurrentDocument({
+
+                            // Fetch latest metadata to ensure we have the correct contentType (especially if converted to HTML)
+                            let docData = {
                                 id: session.documentId,
                                 documentId: session.documentId, // This is the UUID needed for API calls
                                 fileName: session.documentName
-                            });
+                            };
+
+                            try {
+                                const response = await knowledgeHubDocumentService.getDocumentStatus(session.documentId);
+                                if (response.success) {
+                                    docData = response.data;
+                                    console.log("📄 Loaded document metadata for session:", docData.contentType);
+                                }
+                            } catch (error) {
+                                console.warn('Failed to fetch latest document metadata, falling back to session data:', error);
+                            }
+
+                            setCurrentDocument(docData);
                             // Always update review points, defaulting to empty if null
                             // This prevents stale suggestions from persisting when switching to a fresh session
                             setReviewPoints(session.reviewPoints || []);
 
                             toast.info('Loaded previous review session');
+                        }}
+                        getEditorContent={() => {
+                            const selection = documentViewerRef.current?.getSelectionContext();
+                            return {
+                                content: editorContentRef.current,
+                                selectedText: selection?.text || null
+                            };
+                        }}
+                        activeSelection={activeSelection}
+                        onApplyAiEdit={(newContent, type = 'full') => {
+                            console.log(`[DocReviewAssistant] Applying AI edit. Type: ${type}, Content length: ${newContent?.length}`);
+
+                            if (type === 'partial') {
+                                const applied = documentViewerRef.current?.applyPartialUpdate(newContent);
+                                console.log(`[DocReviewAssistant] Partial update result: ${applied}`);
+                                if (applied) {
+                                    toast.success('Document section updated by AI');
+                                    return;
+                                }
+                                // If partial failed (e.g. no selection), fall back or notify
+                                console.warn('AI requested partial update but no selection found/application failed.');
+                                toast.info('No selection found. Applying change as full update.');
+                            }
+                            // Heuristic Safety Check: If type 'full' but suspiciously short
+                            const currentLen = editorContentRef.current?.length || 0;
+                            const newLen = newContent?.length || 0;
+                            if (type === 'full' && currentLen > 1500 && newLen < currentLen * 0.4) {
+                                console.warn("Detected likely fragment in full update tag. Attempting partial update.");
+                                const applied = documentViewerRef.current?.applyPartialUpdate(newContent);
+                                if (applied) {
+                                    toast.info('AI suggested a fragment; applied to your selection/cursor to prevent data loss.');
+                                    return;
+                                } else {
+                                    toast.error('AI suggested a replacement that seems incomplete. Update blocked.');
+                                    return;
+                                }
+                            }
+
+                            // Full document update
+                            setExternalHtml(newContent);
+                            editorContentRef.current = newContent;
+                            toast.success('Document updated by AI');
                         }}
                     />
                 </div>
@@ -158,6 +401,7 @@ const DocReviewAssistant = () => {
                 {/* Document Viewer - Main area */}
                 <div className="flex-grow-1">
                     <DocumentViewer
+                        ref={documentViewerRef}
                         onDocumentSelected={handleDocumentSelected}
                         document={currentDocument}
                         loading={loading}
@@ -165,17 +409,55 @@ const DocReviewAssistant = () => {
                         onReviewPointAction={handleReviewPointAction}
                         activePointId={activePointId}
                         onPointSelect={setActivePointId}
-                        onContentUpdated={() => {
-                            // Clear review points as they are now stale
-                            setReviewPoints([]);
+                        onSelectionChange={handleSelectionChange}
+                        externalContent={externalHtml}
+                        pendingReplacement={pendingReplacement}
+                        onReplacementApplied={handleReplacementApplied}
+                        onContentUpdated={(newContent, newVersion, isHighlight, isSuggestion) => {
+                            // 1. Skip if this is just a highlight update or an automated suggestion application
+                            if (isHighlight || isSuggestion) {
+                                // Still need to update the ref if content changed
+                                if (typeof newContent === 'string') {
+                                    handleEditorChange(newContent);
+                                }
+                                return;
+                            }
 
-                            // Optional: Could automatically trigger new analysis or prompt user
-                            toast.info('Document updated. Previous suggestions cleared.');
+                            // 2. Check if text content actually changed to avoid clearing points on formatting
+                            const oldText = stripHtml(editorContentRef.current);
+                            const newText = newContent ? stripHtml(newContent) : oldText;
+                            const textChanged = oldText !== newText;
 
-                            // Update session status if needed, or create new session
-                            // For now, just clearing points avoids the confusion of stale suggestions
-                            if (reviewSession) {
-                                setReviewSession(prev => ({ ...prev, reviewPoints: [] }));
+                            // 3. Protection for initial load: if editorContentRef was empty, this is the first load from DB
+                            const isInitialLoad = !oldText && !!newText;
+
+                            // Update ref
+                            if (typeof newContent === 'string') {
+                                handleEditorChange(newContent);
+                            }
+
+                            // Clear review points ONLY if:
+                            // - It's not the initial load (which is just document fetching)
+                            // - AND (Text actually changed OR it's a new version/save/restore)
+                            if (!isInitialLoad && (textChanged || newVersion)) {
+                                console.log("🧹 Clearing review points due to content change or new version");
+                                setReviewPoints([]);
+
+                                // Update session with new version if provided
+                                if (reviewSession) {
+                                    const updates = { reviewPoints: [] };
+                                    if (newVersion) {
+                                        updates.documentVersion = newVersion;
+                                    }
+                                    setReviewSession(prev => ({ ...prev, ...updates }));
+
+                                    // Persist version change to backend for the session if saved manually
+                                    if (newVersion) {
+                                        docReviewService.updateReview(reviewSession.id, {
+                                            documentVersion: newVersion
+                                        }).catch(err => console.error("Failed to sync version to session:", err));
+                                    }
+                                }
                             }
                         }}
                     />

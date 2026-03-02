@@ -275,6 +275,17 @@ public class KnowledgeHubDocumentViewController {
                 final String finalKeyVersion = keyVersion;
                 List<Mono<Void>> decryptionTasks = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
 
+                // Decrypt HTML content
+                if (processedDoc.getHtmlContent() != null && !processedDoc.getHtmlContent().isEmpty()) {
+                        decryptionTasks.add(chunkEncryptionService.decryptChunkText(
+                                        processedDoc.getHtmlContent(),
+                                        teamId,
+                                        finalKeyVersion)
+                                        .doOnNext(processedDoc::setHtmlContent)
+                                        .onErrorResume(e -> Mono.empty())
+                                        .then());
+                }
+
                 // Decrypt chunk text
                 if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
                         for (ProcessedDocumentDto.ChunkDto chunk : processedDoc.getChunks()) {

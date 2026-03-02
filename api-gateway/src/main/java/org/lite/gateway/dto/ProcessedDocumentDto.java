@@ -18,7 +18,8 @@ import java.util.List;
 @AllArgsConstructor
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ProcessedDocumentDto {
-    
+
+    private String htmlContent;
     private ProcessingMetadata processingMetadata;
     private SourceDocument sourceDocument;
     private ExtractedMetadata extractedMetadata;
@@ -27,14 +28,15 @@ public class ProcessedDocumentDto {
     private List<FormField> formFields;
     private Statistics statistics;
     private QualityChecks qualityChecks;
-    
+
     /**
-     * Encryption key version used to encrypt sensitive fields in this processed document.
+     * Encryption key version used to encrypt sensitive fields in this processed
+     * document.
      * Format: "v1", "v2", etc.
      * Null or "v1" = default/legacy key or unencrypted
      */
     private String encryptionKeyVersion; // e.g., "v1", "v2"
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -48,7 +50,7 @@ public class ProcessedDocumentDto {
         private Long processingTimeMs;
         private String status;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -62,7 +64,7 @@ public class ProcessedDocumentDto {
         private Integer pageNumber;
         private Boolean required;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -76,7 +78,7 @@ public class ProcessedDocumentDto {
         private String uploadedAt;
         private String uploadedBy;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -100,7 +102,7 @@ public class ProcessedDocumentDto {
         private String creationDate;
         private String modificationDate;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -112,7 +114,7 @@ public class ProcessedDocumentDto {
         private Integer overlapTokens;
         private String tokenizer;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -131,7 +133,7 @@ public class ProcessedDocumentDto {
         private Double qualityScore;
         private Boolean metadataOnly;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -150,7 +152,7 @@ public class ProcessedDocumentDto {
         private Integer characterCount;
         private String language;
     }
-    
+
     @Data
     @Builder
     @NoArgsConstructor
@@ -162,4 +164,3 @@ public class ProcessedDocumentDto {
         private List<String> errors;
     }
 }
-

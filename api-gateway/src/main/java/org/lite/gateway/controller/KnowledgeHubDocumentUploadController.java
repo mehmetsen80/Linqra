@@ -423,4 +423,26 @@ public class KnowledgeHubDocumentUploadController {
                                                                         + error.getMessage()));
                                 });
         }
+
+        /**
+         * Update document content (e.g. after editing)
+         */
+        @PutMapping("/{documentId}/content")
+        @AuditLog(eventType = AuditEventType.DOCUMENT_UPDATED, action = AuditActionType.UPDATE, resourceType = AuditResourceType.DOCUMENT, resourceIdParam = "documentId", documentIdParam = "documentId", reason = "Document content updated by user")
+        public Mono<ResponseEntity<Object>> updateDocumentContent(@PathVariable String documentId,
+                        @RequestBody String content,
+                        ServerWebExchange exchange) {
+                log.info("Updating content for document: {}", documentId);
+
+                return teamContextService.getTeamFromContext(exchange)
+                                .flatMap(teamId -> documentService
+                                                .updateDocumentContent(documentId, teamId, content.getBytes())
+                                                .then(Mono.just(ResponseEntity.ok().build())))
+                                .onErrorResume(error -> {
+                                        log.error("Error updating document content: {}", documentId, error);
+                                        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                                        .body("Failed to update document content: "
+                                                                        + error.getMessage()));
+                                });
+        }
 }

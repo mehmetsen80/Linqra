@@ -34,173 +34,138 @@ public class TeamsController {
     @GetMapping
     public Flux<TeamDTO> getAllTeams() {
         return teamService.getAllTeams()
-            .onErrorResume(TeamOperationException.class, e ->
-                Flux.error(new TeamOperationException(
-                    ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_OPERATION_ERROR,
-                        "Failed to fetch teams",
-                        HttpStatus.INTERNAL_SERVER_ERROR.value()
-                    ).getMessage()
-                ))
-            );
+                .onErrorResume(TeamOperationException.class, e -> Flux.error(new TeamOperationException(
+                        ErrorResponse.fromErrorCode(
+                                ErrorCode.TEAM_OPERATION_ERROR,
+                                "Failed to fetch teams",
+                                HttpStatus.INTERNAL_SERVER_ERROR.value()).getMessage())));
     }
 
     @GetMapping("/{id}")
     public Mono<ResponseEntity<?>> getTeam(@PathVariable String id) {
         return teamService.getTeamById(id)
-            .<ResponseEntity<?>>map(ResponseEntity::ok)
-            .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(ErrorResponse.fromErrorCode(
-                    ErrorCode.TEAM_NOT_FOUND,
-                    String.format("Team with id %s not found", id),
-                    HttpStatus.NOT_FOUND.value()
-                ))))
-            .onErrorResume(TeamOperationException.class, e ->
-                Mono.just(ResponseEntity.badRequest()
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_OPERATION_ERROR,
-                        e.getMessage(),
-                        HttpStatus.BAD_REQUEST.value()
-                    ))));
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .switchIfEmpty(Mono.just(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.TEAM_NOT_FOUND,
+                                String.format("Team with id %s not found", id),
+                                HttpStatus.NOT_FOUND.value()))))
+                .onErrorResume(TeamOperationException.class, e -> Mono.just(ResponseEntity.badRequest()
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.TEAM_OPERATION_ERROR,
+                                e.getMessage(),
+                                HttpStatus.BAD_REQUEST.value()))));
     }
 
     @PostMapping
-    @AuditLog(
-        eventType = AuditEventType.TEAM_CREATED,
-        action = AuditActionType.CREATE,
-        resourceType = AuditResourceType.TEAM,
-        reason = "Team creation"
-    )
+    @AuditLog(eventType = AuditEventType.TEAM_CREATED, action = AuditActionType.CREATE, resourceType = AuditResourceType.TEAM, reason = "Team creation")
     public Mono<ResponseEntity<?>> createTeam(
             @Valid @RequestBody Team team,
             ServerWebExchange exchange) {
         return userContextService.getCurrentUsername(exchange)
-            .flatMap(username -> {
-                team.setCreatedBy(username);
-                team.setUpdatedBy(username);
-                return teamService.createTeam(team, username);
-            })
-            .<ResponseEntity<?>>map(ResponseEntity::ok)
-            .onErrorResume(TeamOperationException.class, e -> {
-                return Mono.just(ResponseEntity.badRequest()
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_OPERATION_ERROR,
-                        e.getMessage(),
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
-            })
-            .onErrorResume(InvalidAuthenticationException.class,
-                    e -> Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ErrorResponse.fromErrorCode(
-                    ErrorCode.AUTHENTICATION_FAILED,
-                    e.getMessage(),
-                    HttpStatus.UNAUTHORIZED.value()
-                ))));
+                .flatMap(username -> {
+                    team.setCreatedBy(username);
+                    team.setUpdatedBy(username);
+                    return teamService.createTeam(team, username);
+                })
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .onErrorResume(TeamOperationException.class, e -> {
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.TEAM_OPERATION_ERROR,
+                                    e.getMessage(),
+                                    HttpStatus.BAD_REQUEST.value())));
+                })
+                .onErrorResume(InvalidAuthenticationException.class,
+                        e -> Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                                .body(ErrorResponse.fromErrorCode(
+                                        ErrorCode.AUTHENTICATION_FAILED,
+                                        e.getMessage(),
+                                        HttpStatus.UNAUTHORIZED.value()))));
     }
 
     @PutMapping("/{id}")
-    @AuditLog(
-        eventType = AuditEventType.TEAM_UPDATED,
-        action = AuditActionType.UPDATE,
-        resourceType = AuditResourceType.TEAM,
-        resourceIdParam = "id",
-        reason = "Team updated"
-    )
+    @AuditLog(eventType = AuditEventType.TEAM_UPDATED, action = AuditActionType.UPDATE, resourceType = AuditResourceType.TEAM, resourceIdParam = "id", reason = "Team updated")
     public Mono<ResponseEntity<?>> updateTeam(
             @PathVariable String id,
             @Valid @RequestBody Team team,
             ServerWebExchange exchange) {
         return userContextService.getCurrentUsername(exchange)
-            .flatMap(username -> {
-                team.setUpdatedBy(username);
-                return teamService.updateTeam(id, team);
-            })
-            .<ResponseEntity<?>>map(ResponseEntity::ok)
-            .onErrorResume(TeamOperationException.class, e -> {
-                log.error("Team operation error: {}", e.getMessage());
-                return Mono.just(ResponseEntity.badRequest()
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_OPERATION_ERROR,
-                        e.getMessage(),
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
-            })
-            .onErrorResume(InvalidAuthenticationException.class, e -> {
-                log.error("Authentication error: {}", e.getMessage());
-                return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.AUTHENTICATION_FAILED,
-                        e.getMessage(),
-                        HttpStatus.UNAUTHORIZED.value()
-                    )));
-            })
-            .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
+                .flatMap(username -> {
+                    team.setUpdatedBy(username);
+                    return teamService.updateTeam(id, team);
+                })
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .onErrorResume(TeamOperationException.class, e -> {
+                    log.error("Team operation error: {}", e.getMessage());
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.TEAM_OPERATION_ERROR,
+                                    e.getMessage(),
+                                    HttpStatus.BAD_REQUEST.value())));
+                })
+                .onErrorResume(InvalidAuthenticationException.class, e -> {
+                    log.error("Authentication error: {}", e.getMessage());
+                    return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.AUTHENTICATION_FAILED,
+                                    e.getMessage(),
+                                    HttpStatus.UNAUTHORIZED.value())));
+                })
+                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
     }
 
     @DeleteMapping("/{id}")
-    @AuditLog(
-        eventType = AuditEventType.TEAM_DELETED,
-        action = AuditActionType.DELETE,
-        resourceType = AuditResourceType.TEAM,
-        resourceIdParam = "id",
-        reason = "Team deleted"
-    )
+    @AuditLog(eventType = AuditEventType.TEAM_DELETED, action = AuditActionType.DELETE, resourceType = AuditResourceType.TEAM, resourceIdParam = "id", reason = "Team deleted")
     public Mono<ResponseEntity<?>> deleteTeam(
             @PathVariable String id,
             ServerWebExchange exchange) {
         return teamService.deleteTeam(id)
-            .<ResponseEntity<?>>thenReturn(ResponseEntity.noContent().build())
-            .onErrorResume(TeamOperationException.class, e -> {
-                log.error("Error deleting team: {}", e.getMessage());
-                return Mono.just(ResponseEntity.badRequest()
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_DELETE_ERROR,
-                        e.getMessage(),
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
-            });
+                .<ResponseEntity<?>>thenReturn(ResponseEntity.noContent().build())
+                .onErrorResume(TeamOperationException.class, e -> {
+                    log.error("Error deleting team: {}", e.getMessage());
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.TEAM_DELETE_ERROR,
+                                    e.getMessage(),
+                                    HttpStatus.BAD_REQUEST.value())));
+                });
     }
 
     @PutMapping("/{id}/deactivate")
     public Mono<ResponseEntity<?>> deactivateTeam(@PathVariable String id) {
         return teamService.deactivateTeam(id)
-            .<ResponseEntity<?>>map(team -> ResponseEntity.ok().body(team))
-            .onErrorResume(TeamOperationException.class, e ->
-                Mono.just(ResponseEntity.badRequest()
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_DEACTIVATE_ERROR,
-                        e.getMessage(),
-                        HttpStatus.BAD_REQUEST.value()
-                    ))));
+                .<ResponseEntity<?>>map(team -> ResponseEntity.ok().body(team))
+                .onErrorResume(TeamOperationException.class, e -> Mono.just(ResponseEntity.badRequest()
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.TEAM_DEACTIVATE_ERROR,
+                                e.getMessage(),
+                                HttpStatus.BAD_REQUEST.value()))));
     }
 
     @PutMapping("/{id}/activate")
     public Mono<ResponseEntity<?>> activateTeam(@PathVariable String id) {
         return teamService.activateTeam(id)
-            .<ResponseEntity<?>>map(team -> ResponseEntity.ok().body(team))
-            .onErrorResume(TeamOperationException.class, e ->
-                Mono.just(ResponseEntity.badRequest()
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_ACTIVATE_ERROR,
-                        e.getMessage(),
-                        HttpStatus.BAD_REQUEST.value()
-                    ))));
+                .<ResponseEntity<?>>map(team -> ResponseEntity.ok().body(team))
+                .onErrorResume(TeamOperationException.class, e -> Mono.just(ResponseEntity.badRequest()
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.TEAM_ACTIVATE_ERROR,
+                                e.getMessage(),
+                                HttpStatus.BAD_REQUEST.value()))));
     }
 
     // Team Members endpoints
     @GetMapping("/{teamId}/members")
     public Mono<ResponseEntity<?>> getTeamMembers(@PathVariable String teamId) {
         return teamService.getTeamMembers(teamId)
-            .collectList()
-            .<ResponseEntity<?>>map(ResponseEntity::ok)
-            .onErrorResume(TeamOperationException.class, e ->
-                Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_OPERATION_ERROR,
-                        "Failed to fetch team members",
-                        HttpStatus.INTERNAL_SERVER_ERROR.value()
-                    )))
-            );
+                .collectList()
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .onErrorResume(TeamOperationException.class,
+                        e -> Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(ErrorResponse.fromErrorCode(
+                                        ErrorCode.TEAM_OPERATION_ERROR,
+                                        "Failed to fetch team members",
+                                        HttpStatus.INTERNAL_SERVER_ERROR.value()))));
     }
 
     @PostMapping("/{teamId}/members")
@@ -214,10 +179,10 @@ public class TeamsController {
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid role: " + role);
         }
-        
+
         return teamService.addMemberToTeam(teamId, username, userRole)
-            .then(teamService.getTeamById(teamId))
-            .map(ResponseEntity::ok);
+                .then(teamService.getTeamById(teamId))
+                .map(ResponseEntity::ok);
     }
 
     @DeleteMapping("/{teamId}/members/{userId}")
@@ -225,11 +190,10 @@ public class TeamsController {
             @PathVariable String teamId,
             @PathVariable String userId) {
         return teamService.removeMemberFromTeam(teamId, userId)
-            .then(teamService.getTeamById(teamId))
-            .map(ResponseEntity::ok)
-            .switchIfEmpty(Mono.error(new ResourceNotFoundException(
-                String.format("Team with id %s not found", teamId), ErrorCode.TEAM_NOT_FOUND
-            )));
+                .then(teamService.getTeamById(teamId))
+                .map(ResponseEntity::ok)
+                .switchIfEmpty(Mono.error(new ResourceNotFoundException(
+                        String.format("Team with id %s not found", teamId), ErrorCode.TEAM_NOT_FOUND)));
     }
 
     // Team Routes endpoints
@@ -241,7 +205,7 @@ public class TeamsController {
     @GetMapping("/routes/all")
     public Flux<TeamRouteDTO> getAllTeamRoutes(ServerWebExchange exchange) {
         return userContextService.getCurrentUsername(exchange)
-            .flatMapMany(teamService::getAllTeamRoutes);
+                .flatMapMany(teamService::getAllTeamRoutes);
     }
 
     @PostMapping("/route-assignment")
@@ -249,21 +213,17 @@ public class TeamsController {
             @Valid @RequestBody TeamRouteRequest request,
             ServerWebExchange exchange) {
         return userContextService.getCurrentUsername(exchange)
-            .flatMap(username -> teamService.addTeamRoute(
-                request.getTeamId(), 
-                request.getRouteId(), 
-                username,
-                request.getPermissions()
-            ))
-            .<ResponseEntity<?>>map(ResponseEntity::ok)
-            .onErrorResume(TeamOperationException.class, e ->
-                Mono.just(ResponseEntity.badRequest()
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_OPERATION_ERROR,
-                        e.getMessage(),
-                        HttpStatus.BAD_REQUEST.value()
-                    ))
-                ));
+                .flatMap(username -> teamService.addTeamRoute(
+                        request.getTeamId(),
+                        request.getRouteId(),
+                        username,
+                        request.getPermissions()))
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
+                .onErrorResume(TeamOperationException.class, e -> Mono.just(ResponseEntity.badRequest()
+                        .body(ErrorResponse.fromErrorCode(
+                                ErrorCode.TEAM_OPERATION_ERROR,
+                                e.getMessage(),
+                                HttpStatus.BAD_REQUEST.value()))));
     }
 
     @DeleteMapping("/{teamId}/routes/{routeId}")
@@ -271,37 +231,36 @@ public class TeamsController {
             @PathVariable String teamId,
             @PathVariable String routeId) {
         return teamService.removeTeamRoute(teamId, routeId)
-            .map(ResponseEntity::ok)
-            .defaultIfEmpty(ResponseEntity.notFound().build());
+                .map(ResponseEntity::ok)
+                .defaultIfEmpty(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/search")
     public Flux<TeamDTO> searchTeams(@RequestParam String query) {
         return teamService.searchTeams(query)
-            .onErrorResume(e -> Mono.error(new TeamOperationException("Failed to search teams", e)));
+                .onErrorResume(e -> Mono.error(new TeamOperationException("Failed to search teams", e)));
     }
 
     @GetMapping("/user/{userId}")
     public Flux<TeamDTO> getTeamsByUserId(@PathVariable String userId) {
         return teamService.getTeamsByUserId(userId)
-            .onErrorResume(e -> Mono.error(new TeamOperationException(
-                String.format("Failed to fetch teams for user %s", userId), e
-            )));
+                .onErrorResume(e -> Mono.error(new TeamOperationException(
+                        String.format("Failed to fetch teams for user %s", userId), e)));
     }
 
     @GetMapping("/user/current")
     public Flux<TeamDTO> getCurrentUserTeams(ServerWebExchange exchange) {
         return userContextService.getCurrentUsername(exchange)
-            .flatMapMany(username -> {
-                log.info("Fetching teams for username: {}", username);
-                return teamService.getTeamsByUsername(username)
-                    .doOnError(e -> log.error("Error fetching teams for user {}: {}", username, e.getMessage()))
-                    .switchIfEmpty(Flux.empty());
-            })
-            .onErrorResume(e -> {
-                log.error("Error in getCurrentUserTeams: {}", e.getMessage());
-                return Flux.empty();
-            });
+                .flatMapMany(username -> {
+                    log.info("Fetching teams for username: {}", username);
+                    return teamService.getTeamsByUsername(username)
+                            .doOnError(e -> log.error("Error fetching teams for user {}: {}", username, e.getMessage()))
+                            .switchIfEmpty(Flux.empty());
+                })
+                .onErrorResume(e -> {
+                    log.error("Error in getCurrentUserTeams: {}", e.getMessage());
+                    return Flux.empty();
+                });
     }
 
     @PutMapping("/{teamId}/members/last-active")
@@ -309,25 +268,23 @@ public class TeamsController {
             @PathVariable String teamId,
             ServerWebExchange exchange) {
         return userContextService.getCurrentUsername(exchange)
-            .flatMap(username -> teamService.updateMemberLastActiveAt(teamId, username))
-            .<ResponseEntity<?>>thenReturn(ResponseEntity.ok().build())
-            .onErrorResume(TeamOperationException.class, e -> {
-                log.error("Error updating last active timestamp: {}", e.getMessage());
-                return Mono.just(ResponseEntity.badRequest()
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.TEAM_OPERATION_ERROR,
-                        e.getMessage(),
-                        HttpStatus.BAD_REQUEST.value()
-                    )));
-            })
-            .onErrorResume(InvalidAuthenticationException.class, e -> {
-                log.error("Authentication error: {}", e.getMessage());
-                return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(ErrorResponse.fromErrorCode(
-                        ErrorCode.AUTHENTICATION_FAILED,
-                        e.getMessage(),
-                        HttpStatus.UNAUTHORIZED.value()
-                    )));
-            });
-    }    
-} 
+                .flatMap(username -> teamService.updateMemberLastActiveAt(teamId, username))
+                .<ResponseEntity<?>>thenReturn(ResponseEntity.ok().build())
+                .onErrorResume(TeamOperationException.class, e -> {
+                    log.error("Error updating last active timestamp: {}", e.getMessage());
+                    return Mono.just(ResponseEntity.badRequest()
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.TEAM_OPERATION_ERROR,
+                                    e.getMessage(),
+                                    HttpStatus.BAD_REQUEST.value())));
+                })
+                .onErrorResume(InvalidAuthenticationException.class, e -> {
+                    log.error("Authentication error: {}", e.getMessage());
+                    return Mono.just(ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                            .body(ErrorResponse.fromErrorCode(
+                                    ErrorCode.AUTHENTICATION_FAILED,
+                                    e.getMessage(),
+                                    HttpStatus.UNAUTHORIZED.value())));
+                });
+    }
+}

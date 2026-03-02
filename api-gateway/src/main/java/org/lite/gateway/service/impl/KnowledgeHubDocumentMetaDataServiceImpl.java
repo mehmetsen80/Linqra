@@ -912,6 +912,20 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
 
         List<Mono<Void>> decryptionTasks = new ArrayList<>();
 
+        // Decrypt HTML content
+        if (processedDoc.getHtmlContent() != null && !processedDoc.getHtmlContent().isEmpty()) {
+            decryptionTasks
+                    .add(chunkEncryptionService.decryptChunkText(processedDoc.getHtmlContent(), teamId, keyVersion)
+                            .doOnNext(processedDoc::setHtmlContent)
+                            .onErrorResume(e -> {
+                                log.debug(
+                                        "Failed to decrypt HTML content for team {} with key version {}: {}. Keeping encrypted value.",
+                                        teamId, keyVersion, e.getMessage());
+                                return Mono.empty();
+                            })
+                            .then());
+        }
+
         // Decrypt chunk text
         if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
             for (ProcessedDocumentDto.ChunkDto chunk : processedDoc.getChunks()) {

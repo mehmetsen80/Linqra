@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
 import { Spinner, Alert, ButtonGroup, Nav, Tab, Modal, ListGroup, Badge } from 'react-bootstrap';
+import { showSuccessToast, showErrorToast } from '../../../../utils/toastConfig';
 import Button from '../../../../components/common/Button';
+
 import { HiDatabase, HiDocumentText, HiDownload, HiPencil, HiEye, HiInformationCircle, HiClock, HiRefresh } from 'react-icons/hi';
 import KnowledgeHubPicker from './KnowledgeHubPicker';
 import { knowledgeHubDocumentService } from '../../../../services/knowledgeHubDocumentService';
@@ -13,7 +15,14 @@ import 'react-pdf/dist/Page/TextLayer.css';
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
-const DocumentViewer = ({ onDocumentSelected, document, loading, reviewPoints = [], onReviewPointAction, activePointId, onPointSelect, onContentUpdated }) => {
+const DocumentViewer = forwardRef(({ onDocumentSelected, document, loading, reviewPoints = [], onReviewPointAction, activePointId, onPointSelect, onContentUpdated, onSelectionChange, externalContent, pendingReplacement, onReplacementApplied }, ref) => {
+    const editorRef = useRef(null);
+
+    // Expose editor methods to parent
+    useImperativeHandle(ref, () => ({
+        getSelectionContext: () => editorRef.current?.getSelectionContext(),
+        applyPartialUpdate: (newFragment) => editorRef.current?.applyPartialUpdate(newFragment)
+    }), []);
     const [showPicker, setShowPicker] = useState(false);
     const [contentLoading, setContentLoading] = useState(false);
     const [numPages, setNumPages] = useState(null);
@@ -22,11 +31,19 @@ const DocumentViewer = ({ onDocumentSelected, document, loading, reviewPoints = 
     const [originalUrl, setOriginalUrl] = useState(null);
     const [editorContent, setEditorContent] = useState('');
 
+    // Update editor content when externalContent changes (from AI)
+    useEffect(() => {
+        if (externalContent) {
+            setEditorContent(externalContent);
+        }
+    }, [externalContent]);
+
     // History State
     const [showHistoryModal, setShowHistoryModal] = useState(false);
     const [versions, setVersions] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [restoringVersion, setRestoringVersion] = useState(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Fetch document content when document changes
     useEffect(() => {
@@ -36,6 +53,16 @@ const DocumentViewer = ({ onDocumentSelected, document, loading, reviewPoints = 
             setContentLoading(false);
         }
     }, [document?.id]);
+
+    // Strip backend <style> block and outer <div class="docx-content"> wrapper
+    // Tiptap doesn't understand these and would silently drop them with their children.
+    const extractEditorHtml = (html) => {
+        if (!html) return '';
+        let cleaned = html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+        const match = cleaned.match(/<div[^>]*class="docx-content"[^>]*>([\s\S]*)<\/div>/i);
+        if (match) cleaned = match[1];
+        return cleaned.trim();
+    };
 
     const fetchDocumentContent = async (doc) => {
         setContentLoading(true);
@@ -50,18 +77,38 @@ const DocumentViewer = ({ onDocumentSelected, document, loading, reviewPoints = 
                 const url = downloadResponse.data.downloadUrl;
                 setOriginalUrl(url);
 
-                // If it's a DOCX file, convert to HTML for the editor
-                if (doc.fileName && doc.fileName.toLowerCase().endsWith('.docx')) {
+                // Determine content type: prefer explicit metadata, fall back to extension
+                const isHtml = doc.contentType === 'text/html' || doc.contentType === 'text/plain';
+                const isDocx = !isHtml && doc.fileName && doc.fileName.toLowerCase().endsWith('.docx');
+                const isPdf = !isHtml && doc.fileName && doc.fileName.toLowerCase().endsWith('.pdf');
+
+                if (isHtml) {
                     try {
                         const response = await fetch(url);
-                        const arrayBuffer = await response.arrayBuffer();
-                        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
-                        setEditorContent(result.value);
+                        const text = await response.text();
+                        setEditorContent(extractEditorHtml(text));
+                    } catch (error) {
+                        console.error("Error loading HTML content:", error);
+                        setEditorContent(`<p>Error loading content: ${error.message}</p>`);
+                    }
+                } else if (isDocx) {
+                    // Prefer backend-generated HTML (rich: tables, lists, styles) over browser-side mammoth
+                    try {
+                        const processedResponse = await knowledgeHubDocumentService.getProcessedJson(doc.documentId);
+                        if (processedResponse.success && processedResponse.data?.htmlContent) {
+                            setEditorContent(extractEditorHtml(processedResponse.data.htmlContent));
+                        } else {
+                            // Fallback: convert the raw DOCX file in the browser
+                            const response = await fetch(url);
+                            const arrayBuffer = await response.arrayBuffer();
+                            const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+                            setEditorContent(result.value);
+                        }
                     } catch (conversionError) {
-                        console.error("Error converting DOCX to HTML:", conversionError);
+                        console.error("Error loading DOCX content:", conversionError);
                         setEditorContent(`<p>Error loading document content: ${conversionError.message}</p>`);
                     }
-                } else if (doc.fileName && doc.fileName.toLowerCase().endsWith('.pdf')) {
+                } else if (isPdf) {
                     // For PDF files, try to fetch extracted text from backend
                     try {
                         const textResponse = await knowledgeHubDocumentService.getDocumentText(doc.documentId);
@@ -130,20 +177,63 @@ const DocumentViewer = ({ onDocumentSelected, document, loading, reviewPoints = 
                 // Refresh document content
                 await fetchDocumentContent(document);
                 setShowHistoryModal(false);
-                alert(`Successfully restored version ${versionNumber}`);
+                showSuccessToast(`Successfully restored version ${versionNumber}`);
 
                 // Notify parent that content has changed so it can reset AI reviews
                 if (onContentUpdated) {
-                    onContentUpdated();
+                    onContentUpdated(null, response.data.currentVersion);
                 }
             } else {
-                alert(`Failed to restore: ${response.error}`);
+                showErrorToast(`Failed to restore: ${response.error}`);
             }
         } catch (error) {
             console.error("Restore failed:", error);
-            alert("An error occurred while restoring the version.");
+            showErrorToast("An error occurred while restoring the version.");
         } finally {
             setRestoringVersion(null);
+        }
+    };
+
+    const handleSave = async (contentOverride = null) => {
+        if (!document?.documentId) return;
+
+        const contentToSave = contentOverride !== null ? contentOverride : editorContent;
+        const isAutoSave = contentOverride !== null;
+
+        if (isAutoSave) console.log(`[DocumentViewer] Auto-saving AI edit for v${(document.currentVersion || 1) + 1}...`);
+
+        setIsSaving(true);
+        try {
+            const response = await knowledgeHubDocumentService.updateDocumentContent(
+                document.documentId,
+                contentToSave
+            );
+
+            if (response.success) {
+                // Determine new version number (current + 1)
+                const nextVersion = (document.currentVersion || (versions.length > 0 ? versions[0].versionNumber + 1 : 1)) + 1;
+
+                if (!isAutoSave) {
+                    showSuccessToast(`Document saved successfully as v${nextVersion}`);
+                } else {
+                    console.log(`[DocumentViewer] Auto-saved v${nextVersion}`);
+                }
+
+                // Refresh history to show new version
+                fetchHistory();
+
+                // Notify parent about version change
+                if (onContentUpdated) {
+                    onContentUpdated(contentToSave, nextVersion);
+                }
+            } else {
+                showErrorToast('Failed to save document');
+            }
+        } catch (error) {
+            console.error("Save failed:", error);
+            showErrorToast("An error occurred while saving the document.");
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -172,12 +262,29 @@ const DocumentViewer = ({ onDocumentSelected, document, loading, reviewPoints = 
         return (
             <div className="h-100 d-flex flex-column bg-light">
                 {/* Header */}
-                <div className="p-3 border-bottom bg-white d-flex justify-content-between align-items-center">
+                <div className="p-3 border-bottom bg-white d-flex flex-column gap-3">
                     <div className="d-flex align-items-center">
                         <HiDocumentText className="text-primary me-2" size={24} />
                         <h5 className="m-0">{document.fileName}</h5>
                     </div>
-                    <div className="d-flex gap-2">
+                    <div className="d-flex gap-2 justify-content-end">
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleSave}
+                            disabled={isSaving || activeTab !== 'editing'}
+                        >
+                            {isSaving ? (
+                                <>
+                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" className="me-1" />
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <HiPencil className="me-1" /> Save
+                                </>
+                            )}
+                        </Button>
                         <Button variant="outline-secondary" size="sm" onClick={openHistory}>
                             <HiClock className="me-1" /> History
                         </Button>
@@ -213,9 +320,23 @@ const DocumentViewer = ({ onDocumentSelected, document, loading, reviewPoints = 
                                     <RichTextEditor
                                         readOnly={false}
                                         content={editorContent}
+                                        onUpdate={(newContent, isHighlight, isSuggestion) => {
+                                            setEditorContent(newContent);
+                                            if (onContentUpdated) {
+                                                onContentUpdated(newContent, null, isHighlight, isSuggestion);
+                                            }
+                                            // AUTO-SAVE on AI Suggestions
+                                            if (isSuggestion) {
+                                                handleSave(newContent);
+                                            }
+                                        }}
                                         reviewPoints={reviewPoints}
                                         activePointId={activePointId}
                                         onPointSelect={onPointSelect}
+                                        onSelectionChange={onSelectionChange}
+                                        pendingReplacement={pendingReplacement}
+                                        onReplacementApplied={onReplacementApplied}
+                                        ref={editorRef}
                                     />
                                 </div>
                             </Tab.Pane>
@@ -382,6 +503,6 @@ const DocumentViewer = ({ onDocumentSelected, document, loading, reviewPoints = 
             />
         </div>
     );
-};
+});
 
 export default DocumentViewer;

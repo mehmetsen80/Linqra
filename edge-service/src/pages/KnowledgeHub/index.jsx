@@ -1124,7 +1124,7 @@ function KnowledgeHub() {
 
                           return (
                             <tr
-                              key={entity.id || idx}
+                              key={`${entity.id}-${idx}`}
                               style={{ cursor: 'pointer' }}
                               onClick={() => handleOpenPropertiesModal(
                                 'Entity Properties',
@@ -1134,7 +1134,7 @@ function KnowledgeHub() {
                               )}
                             >
                               <td>
-                                <code className="small">{entity.id || 'N/A'}</code>
+                                <code className="small" title={entity.id}>{entity.id || 'N/A'}</code>
                               </td>
                               <td>
                                 <code className="small" title={entity.name || entity.id || 'Unnamed'}>

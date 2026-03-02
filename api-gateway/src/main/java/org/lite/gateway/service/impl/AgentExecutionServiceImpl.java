@@ -63,6 +63,12 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                 Map<String, Object> overrides = inputOverrides != null ? new HashMap<>(inputOverrides)
                                 : new HashMap<>();
                 overrides.entrySet().removeIf(entry -> entry.getValue() == null);
+
+                // Inject execution context into parameters
+                if (executedBy != null) {
+                        overrides.putIfAbsent("username", executedBy);
+                        overrides.putIfAbsent("userId", executedBy); // userId defaults to username if not specific
+                }
                 Object questionValue = overrides.get("question");
                 if (questionValue instanceof String) {
                         String trimmed = ((String) questionValue).trim();

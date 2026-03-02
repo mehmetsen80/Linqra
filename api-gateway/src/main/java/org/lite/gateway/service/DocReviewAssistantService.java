@@ -14,5 +14,5 @@ public interface DocReviewAssistantService {
     Flux<DocReviewAssistant> getReviewsByTeam(String teamId);
 
     Mono<DocReviewAssistant> analyzeDocument(String reviewId, String documentId, String assistantId,
-            String teamId, String username);
+            String teamId, String username, String content);
 }

@@ -1,4 +1,4 @@
-package service;
+package org.lite.gateway.service;
 
 import org.junit.jupiter.api.Test;
 import java.util.Collections;

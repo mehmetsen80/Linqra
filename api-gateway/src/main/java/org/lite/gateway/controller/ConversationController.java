@@ -2,6 +2,7 @@ package org.lite.gateway.controller;
 
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
+import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.AIAssistant;
 import org.lite.gateway.entity.Conversation;
 import org.lite.gateway.entity.ConversationMessage;
@@ -137,9 +138,9 @@ public class ConversationController {
 
                                                         // Resolve and execute with the correct service
                                                         return resolveChatExecutionService(assistantId)
-                                                                        .flatMap(chatExecutionService -\u003e chatExecutionService
+                                                                        .flatMap(chatExecutionService -> chatExecutionService
                                                                                         .executeChat(linqRequest))
-                                                                        .map(response -> {
+                                                                        .map((LinqResponse response) -> {
                                                                                 Map<String, Object> result = new HashMap<>();
                                                                                 if (response.getChatResult() != null) {
                                                                                         result.put("conversationId",
@@ -277,9 +278,9 @@ public class ConversationController {
                                                                                                                 // service
                                                                                                                 return resolveChatExecutionService(
                                                                                                                                 conversation.getAssistantId())
-                                                                                                                                .flatMap(chatExecutionService -\u003e chatExecutionService
+                                                                                                                                .flatMap(chatExecutionService -> chatExecutionService
                                                                                                                                                 .executeChat(linqRequest))
-                                                                                                                                .map(response -> {
+                                                                                                                                .map((LinqResponse response) -> {
                                                                                                                                         Map<String, Object> result = new HashMap<>();
                                                                                                                                         if (response.getChatResult() != null) {
                                                                                                                                                 result.put("conversationId",

@@ -74,10 +74,11 @@ public interface KnowledgeHubDocumentService {
      * This will overwrite the file in storage and update metadata.
      *
      * @param documentId The document ID
+     * @param teamId     The requesting team ID for access control
      * @param content    The new content bytes
      * @return Mono<Void>
      */
-    Mono<Void> updateDocumentContent(String documentId, byte[] content);
+    Mono<Void> updateDocumentContent(String documentId, String teamId, byte[] content);
 
     /**
      * Generate a presigned download URL for the document.

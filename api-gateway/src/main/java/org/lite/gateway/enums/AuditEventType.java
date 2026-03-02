@@ -14,12 +14,12 @@ public enum AuditEventType {
     GRAPH_RELATIONSHIP_ACCESSED,
     RAG_QUERY,
     VECTOR_SEARCH,
-    
+
     // RAG/Vector Collection Events
     RAG_COLLECTION_CREATED,
     RAG_COLLECTION_DELETED,
     RAG_COLLECTION_UPDATED,
-    
+
     // Data Modification Events
     DOCUMENT_UPLOADED,
     DOCUMENT_PROCESSING_STARTED,
@@ -28,6 +28,7 @@ public enum AuditEventType {
     DOCUMENT_PROCESSING_SKIPPED,
     DOCUMENT_DELETED,
     DOCUMENT_HARD_DELETED,
+    DOCUMENT_UPDATED,
     CHUNK_CREATED,
     CHUNK_DELETED,
     METADATA_EXTRACTED,
@@ -39,13 +40,13 @@ public enum AuditEventType {
     GRAPH_ENTITY_DELETED,
     GRAPH_RELATIONSHIP_CREATED,
     GRAPH_RELATIONSHIP_DELETED,
-    
+
     // Data Export Events
     EXPORT_INITIATED,
     EXPORT_COMPLETED,
     EXPORT_FAILED,
     EXPORT_DOWNLOADED,
-    
+
     // Authentication & Authorization Events
     USER_LOGIN,
     USER_LOGOUT,
@@ -54,7 +55,7 @@ public enum AuditEventType {
     ROLE_CHANGED,
     PERMISSION_MODIFIED,
     TEAM_SWITCHED,
-    
+
     // Security Events
     ACCESS_DENIED,
     UNAUTHORIZED_ACCESS_ATTEMPT,
@@ -64,7 +65,7 @@ public enum AuditEventType {
     KEY_ROTATION_STARTED,
     KEY_ROTATION_COMPLETED,
     PII_DETECTED,
-    
+
     // Administrative Actions
     USER_CREATED,
     USER_DELETED,
@@ -79,7 +80,7 @@ public enum AuditEventType {
     API_ROUTE_UPDATED,
     API_ROUTE_DELETED,
     CONFIGURATION_CHANGED,
-    
+
     // Agent & Workflow Events
     AGENT_TASK_EXECUTION_STARTED,
     AGENT_TASK_EXECUTION_COMPLETED,
@@ -88,7 +89,7 @@ public enum AuditEventType {
     WORKFLOW_EXECUTION_COMPLETED,
     WORKFLOW_EXECUTION_FAILED,
     WORKFLOW_STEP_EXECUTED,
-    
+
     // LLM Events
     LLM_REQUEST_STARTED,
     LLM_REQUEST_COMPLETED,
@@ -96,7 +97,7 @@ public enum AuditEventType {
     CHAT_EXECUTION_STARTED,
     CHAT_EXECUTION_COMPLETED,
     CHAT_EXECUTION_FAILED,
-    
+
     // System Events
     ARCHIVAL_STARTED,
     ARCHIVAL_COMPLETED,
@@ -104,4 +105,3 @@ public enum AuditEventType {
     BACKUP_CREATED,
     BACKUP_RESTORED
 }
-

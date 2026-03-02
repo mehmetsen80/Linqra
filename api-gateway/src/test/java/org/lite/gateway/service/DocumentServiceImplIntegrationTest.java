@@ -1,4 +1,4 @@
-package service;
+package org.lite.gateway.service;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,6 +7,7 @@ import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentVersionRepository;
+import org.lite.gateway.repository.DocReviewAssistantRepository;
 import org.lite.gateway.repository.GraphExtractionJobRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
@@ -113,6 +114,9 @@ class DocumentServiceImplIntegrationTest {
     @Autowired(required = false)
     private AuditLogHelper auditLogHelper;
 
+    @MockitoBean
+    private DocReviewAssistantRepository docReviewAssistantRepository;
+
     private KnowledgeHubDocumentServiceImpl documentService;
     private ObjectStorageServiceImpl objectStorageService;
     private StorageProperties storageProperties;
@@ -140,6 +144,9 @@ class DocumentServiceImplIntegrationTest {
                 ? auditLogHelper
                 : createNoOpAuditLogHelper();
 
+        // Mock DocReviewAssistantRepository delete method
+        when(docReviewAssistantRepository.deleteByDocumentId(anyString())).thenReturn(Mono.empty());
+
         // Create KnowledgeHubDocumentServiceImpl
         this.documentService = new KnowledgeHubDocumentServiceImpl(
                 documentRepository,
@@ -155,7 +162,8 @@ class DocumentServiceImplIntegrationTest {
                 milvusStoreService,
                 neo4jGraphService,
                 graphExtractionJobRepository,
-                mockAuditLogHelper);
+                docReviewAssistantRepository,
+                auditLogHelper);
 
         // Mock Milvus Store Service methods
         when(milvusStoreService.deleteDocumentEmbeddings(any(), any(), any()))

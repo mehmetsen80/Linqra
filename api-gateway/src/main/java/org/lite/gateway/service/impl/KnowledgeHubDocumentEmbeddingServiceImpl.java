@@ -1189,6 +1189,19 @@ public class KnowledgeHubDocumentEmbeddingServiceImpl implements KnowledgeHubDoc
 
         List<Mono<Void>> tasks = new ArrayList<>();
 
+        // Decrypt HTML content
+        if (processedDoc.getHtmlContent() != null && !processedDoc.getHtmlContent().isEmpty()) {
+            tasks.add(chunkEncryptionService.decryptChunkText(processedDoc.getHtmlContent(), teamId, finalKeyVersion)
+                    .doOnNext(processedDoc::setHtmlContent)
+                    .onErrorResume(e -> {
+                        log.debug(
+                                "Failed to decrypt HTML content for team {} with key version {}: {}. Keeping encrypted value.",
+                                teamId, finalKeyVersion, e.getMessage());
+                        return Mono.empty();
+                    })
+                    .then());
+        }
+
         // Decrypt chunk text
         if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {
             tasks.add(Flux.fromIterable(processedDoc.getChunks())

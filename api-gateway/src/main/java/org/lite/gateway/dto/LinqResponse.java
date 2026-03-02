@@ -8,7 +8,7 @@ import java.util.Map;
 
 @Data
 public class LinqResponse {
-    private Object result;  // Can be WorkflowResult, List, Map, or any other type
+    private Object result; // Can be WorkflowResult, List, Map, or any other type
     private Metadata metadata;
     private ChatResult chatResult; // For AI Assistant chat responses
 
@@ -16,19 +16,19 @@ public class LinqResponse {
     public static class Metadata {
         private String source; // e.g., "quotes-service", "openai", "workflow"
         private String status; // e.g., "success", "error"
-        private String teamId;   // e.g., "67d0aeb17172416c411d419e"
+        private String teamId; // e.g., "67d0aeb17172416c411d419e"
         private boolean cacheHit; // e.g., false
-        private List<WorkflowStepMetadata> workflowMetadata;  // Optional, only for workflow responses
-        private List<QueuedWorkflowStep> asyncSteps;  // Status of async steps
+        private List<WorkflowStepMetadata> workflowMetadata; // Optional, only for workflow responses
+        private List<QueuedWorkflowStep> asyncSteps; // Status of async steps
     }
 
     @Data
     public static class WorkflowResult {
         private List<WorkflowStep> steps;
         private String finalResult;
-        private List<String> pendingAsyncSteps;  // IDs of steps that will be executed asynchronously
+        private List<String> pendingAsyncSteps; // IDs of steps that will be executed asynchronously
     }
-    
+
     @Data
     public static class ChatResult {
         private String conversationId; // Conversation ID
@@ -41,7 +41,7 @@ public class LinqResponse {
         private Map<String, Object> taskResults; // Results from executed tasks (taskId -> result)
         private TokenUsage tokenUsage; // Token usage for the chat response
         private Map<String, Object> metadata; // Additional metadata (context, entities, etc.)
-        
+
         @Data
         public static class TokenUsage {
             private long promptTokens;
@@ -56,7 +56,7 @@ public class LinqResponse {
         private int step;
         private String target; // e.g., "quotes-service"
         private Object result; // Step output, e.g., {"name": "Socrates"}
-        private boolean isAsync;  // Whether this step is executed asynchronously
+        private boolean isAsync; // Whether this step is executed asynchronously
         private Map<String, Object> params; // Step parameters
         private String action; // Step action
         private String intent; // Step intent
@@ -70,17 +70,17 @@ public class LinqResponse {
         private String status;
         private long durationMs;
         private String target;
-        private LocalDateTime executedAt;  // When the step was executed
-        private TokenUsage tokenUsage;     // Token usage for AI models
-        private boolean isAsync;  // Whether this step was executed asynchronously
-        private String model;     // The model used for this step (e.g., "gpt-4o-2024-08-06", "gemini-2.0-flash")
-        
+        private LocalDateTime executedAt; // When the step was executed
+        private TokenUsage tokenUsage; // Token usage for AI models
+        private boolean isAsync; // Whether this step was executed asynchronously
+        private String model; // The model used for this step (e.g., "gpt-4o-2024-08-06", "gemini-2.0-flash")
+
         @Data
         public static class TokenUsage {
             private long promptTokens;
             private long completionTokens;
             private long totalTokens;
-            private Double costUsd;  // Cost calculated at execution time with prices from that period
+            private Double costUsd; // Cost calculated at execution time with prices from that period
         }
     }
 

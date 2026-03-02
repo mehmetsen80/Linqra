@@ -6,13 +6,14 @@ import { HiCheck, HiX, HiExclamation, HiLightBulb } from 'react-icons/hi';
 
 const ReviewSuggestionsPanel = ({ reviewPoints = [], onAction, loading, activePointId, onPointSelect, documentName }) => {
     const getVerdictBadge = (verdict) => {
-        switch (verdict?.toUpperCase()) {
-            case 'ACCEPT':
-                return <Badge bg="success"><HiCheck className="me-1" />Accept</Badge>;
-            case 'REJECT':
-                return <Badge bg="danger"><HiX className="me-1" />Reject</Badge>;
-            case 'WARNING':
-                return <Badge bg="warning" text="dark"><HiExclamation className="me-1" />Warning</Badge>;
+        const v = verdict?.toUpperCase();
+        switch (v) {
+            case 'CRITICAL':
+                return <Badge bg="danger"><HiExclamation className="me-1" />Critical Risk</Badge>;
+            case 'RISK':
+                return <Badge bg="warning" text="dark"><HiExclamation className="me-1" />Moderate Risk</Badge>;
+            case 'SUGGESTION':
+                return <Badge bg="info"><HiLightBulb className="me-1" />Suggestion</Badge>;
             default:
                 return <Badge bg="secondary">{verdict || 'Review'}</Badge>;
         }
@@ -37,9 +38,9 @@ const ReviewSuggestionsPanel = ({ reviewPoints = [], onAction, loading, activePo
                     <HiLightBulb className="me-2 text-warning" />
                     AI Analysis
                 </h6>
-                <div className="text-center text-muted py-4">
-                    <div className="spinner-border spinner-border-sm me-2" role="status" />
-                    Analyzing document...
+                <div className="text-center text-muted py-4 d-flex flex-column align-items-center">
+                    <div className="spinner-border spinner-border-sm mb-2" role="status" />
+                    <span>Analyzing document...</span>
                 </div>
             </div>
         );
@@ -116,12 +117,22 @@ const ReviewSuggestionsPanel = ({ reviewPoints = [], onAction, loading, activePo
                                     </div>
                                 )}
 
-                                {/* Suggestion */}
+                                {/* Suggestion (Executive Summary) */}
                                 {point.suggestion && (
-                                    <div className="mb-3">
-                                        <small className="text-muted d-block mb-1">Suggestion:</small>
-                                        <div className="p-2 bg-success bg-opacity-10 rounded small" style={{ borderLeft: '3px solid var(--bs-success)' }}>
+                                    <div className="mb-2">
+                                        <small className="text-muted d-block mb-1">AI Recommendation:</small>
+                                        <div className="p-2 border border-success border-opacity-25 rounded small bg-white">
                                             {point.suggestion}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Suggested Replacement (The Literal Text) */}
+                                {point.suggestedReplacement && (
+                                    <div className="mb-3">
+                                        <small className="text-muted d-block mb-1">Proposed Change:</small>
+                                        <div className="p-2 bg-success bg-opacity-10 rounded small font-monospace" style={{ borderLeft: '3px solid var(--bs-success)', fontSize: '0.8rem' }}>
+                                            {point.suggestedReplacement}
                                         </div>
                                     </div>
                                 )}

@@ -399,6 +399,23 @@ export const knowledgeHubDocumentService = {
     }
   },
 
+  // Get the processed document JSON (includes backend-generated htmlContent with full formatting)
+  getProcessedJson: async (documentId) => {
+    try {
+      const response = await axiosInstance.get(`/api/documents/view/${documentId}/processed`);
+      return {
+        success: true,
+        data: response.data // Returns ProcessedDocumentDto { htmlContent, chunks, ... }
+      };
+    } catch (error) {
+      console.error('Error fetching processed JSON:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch processed document'
+      };
+    }
+  },
+
   // Get full document text
   getDocumentText: async (documentId) => {
     try {
@@ -412,6 +429,26 @@ export const knowledgeHubDocumentService = {
       return {
         success: false,
         error: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch document text'
+      };
+    }
+  },
+
+  // Update document content
+  updateDocumentContent: async (documentId, content) => {
+    try {
+      await axiosInstance.put(`/api/documents/${documentId}/content`, content, {
+        headers: {
+          'Content-Type': 'text/plain'
+        }
+      });
+      return {
+        success: true
+      };
+    } catch (error) {
+      console.error('Error updating document content:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || 'Failed to update document content'
       };
     }
   },

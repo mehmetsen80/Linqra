@@ -158,7 +158,8 @@ public class SecuritySentinelService {
         log.warn("SECURITY INCIDENT DETECTED: [{}] {}", ruleName, description);
 
         // Auto-Lock Logic for CRITICAL incidents
-        if (severity == IncidentSeverity.CRITICAL && userId != null) {
+        // Skip auto-lock for systemic "SYSTEM" user
+        if (severity == IncidentSeverity.CRITICAL && userId != null && !"SYSTEM".equalsIgnoreCase(username)) {
             return userRepository.findById(userId)
                     .flatMap(user -> {
                         log.error("AUTO-LOCKING ACCOUNT: {} due to CRITICAL incident", username);

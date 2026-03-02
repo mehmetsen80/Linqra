@@ -7,6 +7,7 @@ import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
 import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
 import org.lite.gateway.service.KnowledgeHubDocumentProcessingService;
 import org.lite.gateway.service.KnowledgeHubDocumentService;
+import org.lite.gateway.service.impl.BaseChatExecutionService;
 import org.lite.gateway.service.ChatExecutionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
@@ -39,35 +40,35 @@ import org.springframework.util.StringUtils;
 public class WebSocketConfig {
 
     private final Sinks.Many<String> messagesSink = Sinks.many()
-        .multicast()
-        .onBackpressureBuffer(1024, false);
+            .multicast()
+            .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> executionMessagesSink = Sinks.many()
-        .multicast()
-        .onBackpressureBuffer(1024, false);
+            .multicast()
+            .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> chatMessagesSink = Sinks.many()
-        .multicast()
-        .onBackpressureBuffer(1024, false);
+            .multicast()
+            .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> graphExtractionMessagesSink = Sinks.many()
-        .multicast()
-        .onBackpressureBuffer(1024, false);
+            .multicast()
+            .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> collectionExportMessageSink = Sinks.many()
-        .multicast()
-        .onBackpressureBuffer(1024, false);
+            .multicast()
+            .onBackpressureBuffer(1024, false);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
-    
+
     @Autowired(required = false)
     private KnowledgeHubDocumentProcessingService documentProcessingService;
-    
+
     @Autowired(required = false)
     private KnowledgeHubDocumentService documentService;
-    
+
     @Autowired(required = false)
     private KnowledgeHubDocumentMetaDataService metadataService;
 
     @Autowired(required = false)
     private KnowledgeHubDocumentEmbeddingService documentEmbeddingService;
-    
+
     @Autowired(required = false)
     private ChatExecutionService chatExecutionService;
 
@@ -90,15 +91,15 @@ public class WebSocketConfig {
                         result = messagesSink.tryEmitNext(jsonPayload);
                         if (result.isFailure()) {
                             attempts++;
-                            log.warn("Attempt {} failed to emit message. Reason: {}. Retrying...", 
-                                attempts, result.name());
+                            log.warn("Attempt {} failed to emit message. Reason: {}. Retrying...",
+                                    attempts, result.name());
                             Thread.sleep(100); // Small delay before retry
                         }
                     } while (result.isFailure() && attempts < 3);
-                    
+
                     if (result.isFailure()) {
-                        log.error("Failed to emit message after {} attempts. Reason: {}. Payload: {}", 
-                            attempts, result.name(), jsonPayload);
+                        log.error("Failed to emit message after {} attempts. Reason: {}. Payload: {}",
+                                attempts, result.name(), jsonPayload);
                         return false;
                     }
                     log.debug("Successfully emitted message after {} attempts", attempts + 1);
@@ -132,15 +133,15 @@ public class WebSocketConfig {
                         result = executionMessagesSink.tryEmitNext(jsonPayload);
                         if (result.isFailure()) {
                             attempts++;
-                            log.warn("Attempt {} failed to emit execution message. Reason: {}. Retrying...", 
-                                attempts, result.name());
+                            log.warn("Attempt {} failed to emit execution message. Reason: {}. Retrying...",
+                                    attempts, result.name());
                             Thread.sleep(100); // Small delay before retry
                         }
                     } while (result.isFailure() && attempts < 3);
-                    
+
                     if (result.isFailure()) {
-                        log.error("Failed to emit execution message after {} attempts. Reason: {}. Payload: {}", 
-                            attempts, result.name(), jsonPayload);
+                        log.error("Failed to emit execution message after {} attempts. Reason: {}. Payload: {}",
+                                attempts, result.name(), jsonPayload);
                         return false;
                     }
                     log.debug("Successfully emitted execution message after {} attempts", attempts + 1);
@@ -173,15 +174,15 @@ public class WebSocketConfig {
                         result = chatMessagesSink.tryEmitNext(jsonPayload);
                         if (result.isFailure()) {
                             attempts++;
-                            log.warn("Attempt {} failed to emit chat message. Reason: {}. Retrying...", 
-                                attempts, result.name());
+                            log.warn("Attempt {} failed to emit chat message. Reason: {}. Retrying...",
+                                    attempts, result.name());
                             Thread.sleep(100); // Small delay before retry
                         }
                     } while (result.isFailure() && attempts < 3);
-                    
+
                     if (result.isFailure()) {
-                        log.error("Failed to emit chat message after {} attempts. Reason: {}. Payload: {}", 
-                            attempts, result.name(), jsonPayload);
+                        log.error("Failed to emit chat message after {} attempts. Reason: {}. Payload: {}",
+                                attempts, result.name(), jsonPayload);
                         return false;
                     }
                     log.debug("Successfully emitted chat message after {} attempts", attempts + 1);
@@ -214,15 +215,15 @@ public class WebSocketConfig {
                         result = graphExtractionMessagesSink.tryEmitNext(jsonPayload);
                         if (result.isFailure()) {
                             attempts++;
-                            log.warn("Attempt {} failed to emit graph extraction message. Reason: {}. Retrying...", 
-                                attempts, result.name());
+                            log.warn("Attempt {} failed to emit graph extraction message. Reason: {}. Retrying...",
+                                    attempts, result.name());
                             Thread.sleep(100); // Small delay before retry
                         }
                     } while (result.isFailure() && attempts < 3);
-                    
+
                     if (result.isFailure()) {
-                        log.error("Failed to emit graph extraction message after {} attempts. Reason: {}. Payload: {}", 
-                            attempts, result.name(), jsonPayload);
+                        log.error("Failed to emit graph extraction message after {} attempts. Reason: {}. Payload: {}",
+                                attempts, result.name(), jsonPayload);
                         return false;
                     }
                     log.debug("Successfully emitted graph extraction message after {} attempts", attempts + 1);
@@ -255,15 +256,15 @@ public class WebSocketConfig {
                         result = collectionExportMessageSink.tryEmitNext(jsonPayload);
                         if (result.isFailure()) {
                             attempts++;
-                            log.warn("Attempt {} failed to emit export message. Reason: {}. Retrying...", 
-                                attempts, result.name());
+                            log.warn("Attempt {} failed to emit export message. Reason: {}. Retrying...",
+                                    attempts, result.name());
                             Thread.sleep(100); // Small delay before retry
                         }
                     } while (result.isFailure() && attempts < 3);
-                    
+
                     if (result.isFailure()) {
-                        log.error("Failed to emit export message after {} attempts. Reason: {}. Payload: {}", 
-                            attempts, result.name(), jsonPayload);
+                        log.error("Failed to emit export message after {} attempts. Reason: {}. Payload: {}",
+                                attempts, result.name(), jsonPayload);
                         return false;
                     }
                     log.debug("Successfully emitted export message after {} attempts", attempts + 1);
@@ -304,57 +305,54 @@ public class WebSocketConfig {
             sessions.put(sessionId, session);
             log.info("WebSocket session connected: {}", sessionId);
 
-            // Handle outbound messages - merge health, execution, chat, graph extraction, and export updates
+            // Handle outbound messages - merge health, execution, chat, graph extraction,
+            // and export updates
             Flux<WebSocketMessage> outbound = Flux.merge(
                     messagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/health")),
                     executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution")),
                     chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat")),
                     graphExtractionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/graph-extraction")),
-                    collectionExportMessageSink.asFlux().map(msg -> createStompFrame(msg, "/topic/collection-export"))
-                )
-                .onBackpressureBuffer(256)
-                .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
-                    .maxBackoff(Duration.ofSeconds(1))
-                    .doBeforeRetry(signal -> 
-                        log.warn("Retrying message delivery for session {}, attempt {}", 
-                            sessionId, signal.totalRetries() + 1)))
-                .doOnNext(message -> log.debug("Processing outbound message for session {}: {}", 
-                    sessionId, message))
-                .map(message -> {
-                    log.debug("Created STOMP frame for session {}: {}", sessionId, message);
-                    return session.textMessage(message);
-                })
-                .doOnSubscribe(sub -> 
-                    log.info("Session {} subscribed to message stream", sessionId))
-                .doOnCancel(() -> 
-                    log.info("Session {} message stream cancelled", sessionId))
-                .onErrorContinue((error, obj) -> {
-                    log.error("Error in message processing for session {}: {}", 
-                        sessionId, error.getMessage());
-                })
-                .doOnError(error -> log.error("Error in outbound stream for session {}: {}", 
-                    sessionId, error.getMessage()));
+                    collectionExportMessageSink.asFlux().map(msg -> createStompFrame(msg, "/topic/collection-export")))
+                    .onBackpressureBuffer(256)
+                    .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
+                            .maxBackoff(Duration.ofSeconds(1))
+                            .doBeforeRetry(signal -> log.warn("Retrying message delivery for session {}, attempt {}",
+                                    sessionId, signal.totalRetries() + 1)))
+                    .doOnNext(message -> log.debug("Processing outbound message for session {}: {}",
+                            sessionId, message))
+                    .map(message -> {
+                        log.debug("Created STOMP frame for session {}: {}", sessionId, message);
+                        return session.textMessage(message);
+                    })
+                    .doOnSubscribe(sub -> log.info("Session {} subscribed to message stream", sessionId))
+                    .doOnCancel(() -> log.info("Session {} message stream cancelled", sessionId))
+                    .onErrorContinue((error, obj) -> {
+                        log.error("Error in message processing for session {}: {}",
+                                sessionId, error.getMessage());
+                    })
+                    .doOnError(error -> log.error("Error in outbound stream for session {}: {}",
+                            sessionId, error.getMessage()));
 
             // Handle inbound messages
             Flux<WebSocketMessage> inbound = session.receive()
-                .doOnNext(msg -> log.debug("Received message from session {}: {}", 
-                    sessionId, msg.getPayloadAsText()))
-                .map(msg -> handleInboundMessage(session, msg))
-                .doOnError(error -> log.error("Error in inbound stream for session {}: {}", 
-                    sessionId, error.getMessage()));
+                    .doOnNext(msg -> log.debug("Received message from session {}: {}",
+                            sessionId, msg.getPayloadAsText()))
+                    .map(msg -> handleInboundMessage(session, msg))
+                    .doOnError(error -> log.error("Error in inbound stream for session {}: {}",
+                            sessionId, error.getMessage()));
 
             // Clean up on session close
             session.closeStatus()
-                .subscribe(status -> {
-                    log.info("WebSocket session {} closed with status: {}", sessionId, status);
-                    sessions.remove(sessionId);
-                });
+                    .subscribe(status -> {
+                        log.info("WebSocket session {} closed with status: {}", sessionId, status);
+                        sessions.remove(sessionId);
+                    });
 
             return session.send(Flux.merge(inbound, outbound))
-                .doOnError(error -> {
-                    log.error("Error in session {}: {}", sessionId, error.getMessage());
-                    sessions.remove(sessionId);
-                });
+                    .doOnError(error -> {
+                        log.error("Error in session {}: {}", sessionId, error.getMessage());
+                        sessions.remove(sessionId);
+                    });
         };
     }
 
@@ -367,13 +365,12 @@ public class WebSocketConfig {
                         content-type:application/json
                         subscription:sub-0
                         message-id:%s
-                        
+
                         %s
                         \u0000""",
-            destination,
-            UUID.randomUUID().toString(),
-            message
-        );
+                destination,
+                UUID.randomUUID().toString(),
+                message);
     }
 
     private WebSocketMessage handleInboundMessage(WebSocketSession session, WebSocketMessage msg) {
@@ -388,18 +385,16 @@ public class WebSocketConfig {
                                 CONNECTED
                                 version:1.2
                                 heart-beat:0,0
-                                
-                                \u0000"""
-                );
+
+                                \u0000""");
             } else if (payload.startsWith("SUBSCRIBE")) {
                 log.debug("Handling SUBSCRIBE frame for session: {}", session.getId());
                 return session.textMessage(
                         """
                                 RECEIPT
                                 receipt-id:sub-0
-                                
-                                \u0000"""
-                );
+
+                                \u0000""");
             } else if (payload.startsWith("SEND")) {
                 // Handle SEND command for document processing
                 log.debug("Handling SEND frame for session: {}", session.getId());
@@ -408,46 +403,42 @@ public class WebSocketConfig {
                         """
                                 RECEIPT
                                 receipt-id:send-0
-                                
-                                \u0000"""
-                );
+
+                                \u0000""");
             } else if (payload.startsWith("DISCONNECT")) {
                 sessions.remove(session.getId());
                 return session.textMessage(
                         """
                                 RECEIPT
                                 receipt-id:disconnect-0
-                                
-                                \u0000"""
-                );
+
+                                \u0000""");
             }
 
             return session.textMessage(
                     """
                             ERROR
                             message:Unknown command
-                            
-                            \u0000"""
-            );
+
+                            \u0000""");
         } catch (Exception e) {
             log.error("Error processing message: {}", e.getMessage());
             return session.textMessage(
-                "ERROR\n" +
-                "message:" + e.getMessage() + "\n\n" +
-                "\u0000"
-            );
+                    "ERROR\n" +
+                            "message:" + e.getMessage() + "\n\n" +
+                            "\u0000");
         }
     }
-    
+
     private void handleSendCommand(WebSocketSession session, String payload) {
         try {
             // Parse STOMP SEND frame
             Map<String, String> headers = new HashMap<>();
             String body = "";
-            
+
             String[] lines = payload.split("\n");
             int i = 1;
-            
+
             // Parse headers
             while (i < lines.length && !lines[i].isEmpty()) {
                 int colonIndex = lines[i].indexOf(':');
@@ -458,47 +449,45 @@ public class WebSocketConfig {
                 }
                 i++;
             }
-            
+
             // Skip empty line and get body
             i++;
             if (i < lines.length) {
                 body = lines[i].replace("\u0000", "").trim();
             }
-            
+
             String destination = headers.get("destination");
-            
+
             if (destination != null && destination.startsWith("/app/document-processing")) {
                 // Handle document processing command asynchronously
                 log.info("Received document processing command: {}", body);
                 processDocumentProcessingCommand(body).subscribe(
-                    null,
-                    error -> log.error("Error processing document command: {}", error.getMessage(), error)
-                );
+                        null,
+                        error -> log.error("Error processing document command: {}", error.getMessage(), error));
             } else if (destination != null && destination.startsWith("/app/metadata-extraction")) {
                 // Handle metadata extraction command asynchronously
                 log.info("Received metadata extraction command: {}", body);
                 processMetadataExtractionCommand(body).subscribe(
-                    null,
-                    error -> log.error("Error processing metadata extraction command: {}", error.getMessage(), error)
-                );
+                        null,
+                        error -> log.error("Error processing metadata extraction command: {}", error.getMessage(),
+                                error));
             } else if (destination != null && destination.startsWith("/app/document-embedding")) {
                 log.info("Received document embedding command: {}", body);
                 processDocumentEmbeddingCommand(body).subscribe(
                         null,
-                        error -> log.error("Error processing document embedding command: {}", error.getMessage(), error)
-                );
+                        error -> log.error("Error processing document embedding command: {}", error.getMessage(),
+                                error));
             } else if (destination != null && destination.startsWith("/app/chat-cancel")) {
                 log.info("Received chat cancel command: {}", body);
                 processChatCancelCommand(body).subscribe(
                         null,
-                        error -> log.error("Error processing chat cancel command: {}", error.getMessage(), error)
-                );
+                        error -> log.error("Error processing chat cancel command: {}", error.getMessage(), error));
             }
         } catch (Exception e) {
             log.error("Error processing SEND command: {}", e.getMessage(), e);
         }
     }
-    
+
     private Mono<Void> processDocumentProcessingCommand(String body) {
         try {
             @SuppressWarnings("unchecked")
@@ -506,37 +495,38 @@ public class WebSocketConfig {
             String documentId = command.get("documentId");
             String status = command.get("status");
             String teamId = command.get("teamId");
-            
+
             if (documentId == null || status == null) {
                 log.warn("Invalid document processing command: missing documentId or status");
                 return Mono.empty();
             }
-            
-            log.info("Processing document command - documentId: {}, status: {}, teamId: {}", 
+
+            log.info("Processing document command - documentId: {}, status: {}, teamId: {}",
                     documentId, status, teamId);
-            
+
             if (documentProcessingService == null || documentService == null) {
                 log.warn("Document processing services not available");
                 return Mono.empty();
             }
-            
+
             if (teamId != null) {
                 // Update document status first, then trigger processing
                 return documentService.updateStatus(documentId, status, null)
-                    .then(documentProcessingService.processDocument(documentId, teamId))
-                    .doOnSuccess(v -> log.info("Document processing triggered via WebSocket for document: {}", documentId))
-                    .doOnError(error -> log.error("Error processing document via WebSocket: {}", documentId, error))
-                    .onErrorResume(error -> Mono.empty())
-                    .then();
+                        .then(documentProcessingService.processDocument(documentId, teamId))
+                        .doOnSuccess(v -> log.info("Document processing triggered via WebSocket for document: {}",
+                                documentId))
+                        .doOnError(error -> log.error("Error processing document via WebSocket: {}", documentId, error))
+                        .onErrorResume(error -> Mono.empty())
+                        .then();
             }
-            
+
             return Mono.empty();
         } catch (Exception e) {
             log.error("Error processing document processing command: {}", e.getMessage(), e);
             return Mono.empty();
         }
     }
-    
+
     private Mono<Void> processMetadataExtractionCommand(String body) {
         try {
             @SuppressWarnings("unchecked")
@@ -544,30 +534,31 @@ public class WebSocketConfig {
             String documentId = command.get("documentId");
             String status = command.get("status");
             String teamId = command.get("teamId");
-            
+
             if (documentId == null || status == null) {
                 log.warn("Invalid metadata extraction command: missing documentId or status");
                 return Mono.empty();
             }
-            
-            log.info("Processing metadata extraction command - documentId: {}, status: {}, teamId: {}", 
+
+            log.info("Processing metadata extraction command - documentId: {}, status: {}, teamId: {}",
                     documentId, status, teamId);
-            
+
             if (metadataService == null || documentService == null) {
                 log.warn("Metadata or document service not available");
                 return Mono.empty();
             }
-            
+
             if (teamId != null) {
                 // Update document status first, then trigger metadata extraction
                 return documentService.updateStatus(documentId, status, null)
-                    .then(metadataService.extractMetadata(documentId, teamId))
-                    .doOnSuccess(metadata -> log.info("Metadata extraction completed via WebSocket for document: {}", documentId))
-                    .doOnError(error -> log.error("Error extracting metadata via WebSocket: {}", documentId, error))
-                    .onErrorResume(error -> Mono.empty())
-                    .then();
+                        .then(metadataService.extractMetadata(documentId, teamId))
+                        .doOnSuccess(metadata -> log
+                                .info("Metadata extraction completed via WebSocket for document: {}", documentId))
+                        .doOnError(error -> log.error("Error extracting metadata via WebSocket: {}", documentId, error))
+                        .onErrorResume(error -> Mono.empty())
+                        .then();
             }
-            
+
             return Mono.empty();
         } catch (Exception e) {
             log.error("Error processing metadata extraction command: {}", e.getMessage(), e);
@@ -596,16 +587,20 @@ public class WebSocketConfig {
             Mono<?> statusUpdate = Mono.empty();
             if (StringUtils.hasText(status)) {
                 statusUpdate = documentService.updateStatus(documentId, status, null)
-                        .doOnSuccess(doc -> log.debug("Updated document {} status to {} via WebSocket", documentId, status))
+                        .doOnSuccess(
+                                doc -> log.debug("Updated document {} status to {} via WebSocket", documentId, status))
                         .onErrorResume(error -> {
-                            log.error("Failed to update status before embedding for document {}: {}", documentId, error.getMessage());
+                            log.error("Failed to update status before embedding for document {}: {}", documentId,
+                                    error.getMessage());
                             return Mono.empty();
                         });
             }
 
             return statusUpdate.then(documentEmbeddingService.embedDocument(documentId, teamId))
-                    .doOnSuccess(v -> log.info("Document embedding triggered via WebSocket for document: {}", documentId))
-                    .doOnError(error -> log.error("Error triggering document embedding via WebSocket: {}", error.getMessage(), error))
+                    .doOnSuccess(
+                            v -> log.info("Document embedding triggered via WebSocket for document: {}", documentId))
+                    .doOnError(error -> log.error("Error triggering document embedding via WebSocket: {}",
+                            error.getMessage(), error))
                     .onErrorResume(error -> Mono.empty())
                     .then();
         } catch (Exception e) {
@@ -619,26 +614,25 @@ public class WebSocketConfig {
             @SuppressWarnings("unchecked")
             Map<String, String> command = objectMapper.readValue(body, Map.class);
             String conversationId = command.get("conversationId");
-            
+
             if (conversationId == null) {
                 log.warn("Invalid chat cancel command: missing conversationId");
                 return Mono.empty();
             }
-            
+
             log.info("Processing chat cancel command - conversationId: {}", conversationId);
-            
+
             if (chatExecutionService == null) {
                 log.warn("Chat execution service not available");
                 return Mono.empty();
             }
-            
+
             // Cancel streaming for this conversation
-            if (chatExecutionService instanceof org.lite.gateway.service.impl.ChatExecutionServiceImpl) {
-                ((org.lite.gateway.service.impl.ChatExecutionServiceImpl) chatExecutionService)
-                    .cancelStreaming(conversationId);
+            if (chatExecutionService instanceof BaseChatExecutionService) {
+                ((BaseChatExecutionService) chatExecutionService).cancelStreaming(conversationId);
                 log.info("Chat streaming cancelled for conversation: {}", conversationId);
             }
-            
+
             return Mono.empty();
         } catch (Exception e) {
             log.error("Error processing chat cancel command: {}", e.getMessage(), e);

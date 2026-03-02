@@ -250,7 +250,8 @@ const CreateAIAssistantModal = ({
       ...base,
       minHeight: '38px'
     }),
-    menuPortal: (base) => ({ ...base, zIndex: 9999 })
+    menu: (base) => ({ ...base, zIndex: 10100 }),
+    menuPortal: (base) => ({ ...base, zIndex: 10100 })
   };
 
   return (
@@ -380,7 +381,7 @@ const CreateAIAssistantModal = ({
                         type="number"
                         min="1"
                         name="settings.max_tokens"
-                        value={formData.defaultModel.settings?.max_tokens || 2000}
+                        value={formData.defaultModel.settings?.max_tokens || 5000}
                         onChange={handleInputChange}
                       />
                       <Form.Text className="text-muted">

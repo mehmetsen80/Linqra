@@ -23,7 +23,7 @@ const EditAIAssistantModal = ({
       modelCategory: 'openai-chat',
       settings: {
         temperature: 0.7,
-        max_tokens: 2000
+        max_tokens: 5000
       }
     },
     systemPrompt: 'You are a helpful AI assistant.',
@@ -35,7 +35,7 @@ const EditAIAssistantModal = ({
     contextManagement: {
       strategy: 'sliding_window',
       maxRecentMessages: 10,
-      maxTotalTokens: 4000
+      maxTotalTokens: 6000
     },
     guardrails: {
       piiDetectionEnabled: true,
@@ -58,7 +58,7 @@ const EditAIAssistantModal = ({
           modelCategory: 'openai-chat',
           settings: {
             temperature: 0.7,
-            max_tokens: 2000
+            max_tokens: 5000
           }
         },
         systemPrompt: assistant.systemPrompt || 'You are a helpful AI assistant.',
@@ -70,7 +70,7 @@ const EditAIAssistantModal = ({
         contextManagement: assistant.contextManagement || {
           strategy: 'sliding_window',
           maxRecentMessages: 10,
-          maxTotalTokens: 4000
+          maxTotalTokens: 6000
         },
         guardrails: assistant.guardrails || {
           piiDetectionEnabled: true,
@@ -262,9 +262,9 @@ const EditAIAssistantModal = ({
     }),
     menu: (base) => ({
       ...base,
-      zIndex: 10000
+      zIndex: 10100
     }),
-    menuPortal: (base) => ({ ...base, zIndex: 10000 })
+    menuPortal: (base) => ({ ...base, zIndex: 10100 })
   };
 
   if (!assistant) return null;
@@ -396,7 +396,7 @@ const EditAIAssistantModal = ({
                         type="number"
                         min="1"
                         name="settings.max_tokens"
-                        value={formData.defaultModel?.settings?.max_tokens || 2000}
+                        value={formData.defaultModel?.settings?.max_tokens || 5000}
                         onChange={handleInputChange}
                       />
                       <Form.Text className="text-muted">

@@ -1,23 +1,54 @@
 package org.lite.gateway.service.impl;
 
-import lombok.RequiredArgsConstructor;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.dto.LinqRequest;
+import org.lite.gateway.entity.AIAssistant;
 import org.lite.gateway.entity.DocReviewAssistant;
 import org.lite.gateway.repository.DocReviewAssistantRepository;
+import org.lite.gateway.service.AIAssistantService;
+import org.lite.gateway.service.ChatExecutionService;
 import org.lite.gateway.service.DocReviewAssistantService;
+import org.lite.gateway.service.KnowledgeHubDocumentService;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class DocReviewAssistantServiceImpl implements DocReviewAssistantService {
 
     private final DocReviewAssistantRepository docReviewAssistantRepository;
+    private final KnowledgeHubDocumentService knowledgeHubDocumentService;
+    private final ChatExecutionService chatExecutionService;
+    private final AIAssistantService aiAssistantService;
+    private final ObjectMapper objectMapper;
+
+    public DocReviewAssistantServiceImpl(
+            DocReviewAssistantRepository docReviewAssistantRepository,
+            KnowledgeHubDocumentService knowledgeHubDocumentService,
+            @Qualifier("docReviewChatExecutionService") ChatExecutionService chatExecutionService,
+            AIAssistantService aiAssistantService,
+            ObjectMapper objectMapper) {
+        this.docReviewAssistantRepository = docReviewAssistantRepository;
+        this.knowledgeHubDocumentService = knowledgeHubDocumentService;
+        this.chatExecutionService = chatExecutionService;
+        this.aiAssistantService = aiAssistantService;
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     public Mono<DocReviewAssistant> createReview(DocReviewAssistant review) {
@@ -27,7 +58,15 @@ public class DocReviewAssistantServiceImpl implements DocReviewAssistantService 
         if (review.getStatus() == null) {
             review.setStatus(DocReviewAssistant.ReviewStatus.IN_PROGRESS);
         }
-        return docReviewAssistantRepository.save(review);
+
+        // Initialize document version from the current document record
+        return knowledgeHubDocumentService.getDocumentById(review.getDocumentId(), review.getTeamId())
+                .map(doc -> {
+                    review.setDocumentVersion(doc.getCurrentVersion());
+                    return review;
+                })
+                .defaultIfEmpty(review)
+                .flatMap(docReviewAssistantRepository::save);
     }
 
     @Override
@@ -45,6 +84,8 @@ public class DocReviewAssistantServiceImpl implements DocReviewAssistantService 
                         existing.setReviewPoints(updates.getReviewPoints());
                     if (updates.getConversationId() != null)
                         existing.setConversationId(updates.getConversationId());
+                    if (updates.getDocumentVersion() != null)
+                        existing.setDocumentVersion(updates.getDocumentVersion());
 
                     existing.setUpdatedAt(LocalDateTime.now());
                     return docReviewAssistantRepository.save(existing);
@@ -58,52 +99,138 @@ public class DocReviewAssistantServiceImpl implements DocReviewAssistantService 
 
     @Override
     public Mono<DocReviewAssistant> analyzeDocument(String reviewId, String documentId,
-            String assistantId, String teamId, String username) {
+            String assistantId, String teamId, String username, String content) {
         log.info("Analyzing document {} for review {} with assistant {}", documentId, reviewId, assistantId);
 
-        return docReviewAssistantRepository.findById(reviewId)
-                .flatMap(review -> {
-                    // TODO: In production, this would:
-                    // 1. Fetch the document content from Knowledge Hub
-                    // 2. Send to AI Assistant with a system prompt for document review
-                    // 3. Parse the AI response into ReviewPoint objects
-                    // 4. Save and return the updated review
+        return Mono.zip(
+                docReviewAssistantRepository.findById(reviewId),
+                aiAssistantService.getAssistantById(assistantId))
+                .flatMap(tuple -> {
+                    DocReviewAssistant review = tuple.getT1();
+                    AIAssistant assistant = tuple.getT2();
 
-                    // For demo purposes, return mock review points
-                    log.info("Document analysis initiated for review: {}", reviewId);
+                    // determine content source
+                    Mono<String> contentMono = (content != null && !content.isEmpty())
+                            ? Mono.just(content)
+                            : knowledgeHubDocumentService.getDocumentText(documentId, teamId);
 
-                    // Create mock review points for demo
-                    List<DocReviewAssistant.ReviewPoint> mockPoints = List.of(
-                            DocReviewAssistant.ReviewPoint.builder()
-                                    .id("rp-1")
-                                    .originalText("Section 1.1 - Definitions")
-                                    .verdict("WARNING")
-                                    .reasoning(
-                                            "The definitions section may benefit from additional clarity on key terms.")
-                                    .suggestion("Consider adding definitions for 'Party A' and 'Party B' explicitly.")
-                                    .userAccepted(null)
-                                    .build(),
-                            DocReviewAssistant.ReviewPoint.builder()
-                                    .id("rp-2")
-                                    .originalText("Section 3.2 - Payment Terms")
-                                    .verdict("REJECT")
-                                    .reasoning(
-                                            "The payment terms specify NET-60 which may impact cash flow significantly.")
-                                    .suggestion("Negotiate for NET-30 payment terms to improve cash flow.")
-                                    .userAccepted(null)
-                                    .build(),
-                            DocReviewAssistant.ReviewPoint.builder()
-                                    .id("rp-3")
-                                    .originalText("Section 5.1 - Liability Clause")
-                                    .verdict("ACCEPT")
-                                    .reasoning("The liability cap is reasonable and aligns with industry standards.")
-                                    .suggestion("No changes recommended.")
-                                    .userAccepted(null)
-                                    .build());
+                    return contentMono.flatMap(documentText -> {
+                        if (!StringUtils.hasText(documentText)) {
+                            log.warn("Document text is empty for document: {}", documentId);
+                            review.setReviewPoints(Collections.emptyList());
+                            review.setStatus(DocReviewAssistant.ReviewStatus.COMPLETED);
+                            review.setUpdatedAt(LocalDateTime.now());
+                            return docReviewAssistantRepository.save(review);
+                        }
 
-                    review.setReviewPoints(mockPoints);
-                    review.setUpdatedAt(LocalDateTime.now());
-                    return docReviewAssistantRepository.save(review);
+                        log.info("Document text length: {}", documentText.length());
+
+                        // Build LinqRequest using standard assistant chat pattern
+                        LinqRequest request = new LinqRequest();
+                        request.setExecutedBy(username);
+
+                        LinqRequest.Link link = new LinqRequest.Link();
+                        link.setTarget("assistant");
+                        link.setAction("chat");
+                        request.setLink(link);
+
+                        LinqRequest.Query query = new LinqRequest.Query();
+                        query.setIntent("chat");
+
+                        Map<String, Object> params = new HashMap<>();
+                        params.put("teamId", teamId);
+                        params.put("username", username);
+                        query.setParams(params);
+
+                        LinqRequest.Query.ChatConversation chat = new LinqRequest.Query.ChatConversation();
+                        chat.setAssistantId(assistantId);
+                        // The user message triggers the analysis.
+                        // The structured JSON requirement should be in the assistant's own system
+                        // prompt.
+                        chat.setMessage("Please analyze this document and identify legal risks or suggestions.");
+
+                        // Pass document context needed by DocReviewChatExecutionServiceImpl
+                        Map<String, Object> context = new HashMap<>();
+                        context.put("documentId", documentId);
+                        context.put("documentContent", documentText);
+                        context.put("teamId", teamId);
+                        context.put("contractReviewId", reviewId);
+                        chat.setContext(context);
+
+                        query.setChat(chat);
+                        request.setQuery(query);
+
+                        // Execute via the specialized DocReview chat service
+                        // This service will handle Agent Tasks (if any) and use the assistant's default
+                        // prompt/model
+                        return chatExecutionService.executeChat(request)
+                                .flatMap(response -> {
+                                    if (response.getChatResult() != null
+                                            && response.getChatResult().getMessage() != null) {
+                                        String responseText = response.getChatResult().getMessage();
+                                        log.info("AI Analysis Response received (length: {})", responseText.length());
+
+                                        // Robust JSON Extraction
+                                        String jsonOnly = "";
+                                        int startIndex = responseText.indexOf("[");
+                                        int endIndex = responseText.lastIndexOf("]");
+
+                                        if (startIndex != -1 && endIndex != -1 && endIndex > startIndex) {
+                                            jsonOnly = responseText.substring(startIndex, endIndex + 1);
+                                        } else {
+                                            log.error("Could not find JSON array in response. First 100 chars: {}",
+                                                    responseText.substring(0, Math.min(responseText.length(), 100)));
+                                            review.setStatus(DocReviewAssistant.ReviewStatus.FAILED);
+                                            review.setUpdatedAt(LocalDateTime.now());
+                                            return docReviewAssistantRepository.save(review);
+                                        }
+
+                                        try {
+                                            List<ReviewPointDto> dtos = objectMapper.readValue(jsonOnly,
+                                                    new TypeReference<List<ReviewPointDto>>() {
+                                                    });
+
+                                            log.info("Successfully parsed {} review points", dtos.size());
+
+                                            List<DocReviewAssistant.ReviewPoint> points = dtos.stream()
+                                                    .map(dto -> DocReviewAssistant.ReviewPoint.builder()
+                                                            .id(UUID.randomUUID().toString())
+                                                            .originalText(dto.getOriginalText())
+                                                            .verdict(dto.getVerdict())
+                                                            .reasoning(dto.getReasoning())
+                                                            .suggestion(dto.getSuggestion())
+                                                            .suggestedReplacement(dto.getSuggestedReplacement())
+                                                            .userAccepted(null)
+                                                            .build())
+                                                    .toList();
+
+                                            review.setReviewPoints(points);
+                                            review.setUpdatedAt(LocalDateTime.now());
+                                            review.setStatus(DocReviewAssistant.ReviewStatus.COMPLETED);
+                                            return docReviewAssistantRepository.save(review);
+
+                                        } catch (Exception e) {
+                                            log.error("Failed to parse AI JSON: {}", jsonOnly, e);
+                                            review.setStatus(DocReviewAssistant.ReviewStatus.FAILED);
+                                            review.setUpdatedAt(LocalDateTime.now());
+                                            return docReviewAssistantRepository.save(review);
+                                        }
+                                    }
+                                    return Mono.error(new RuntimeException("Empty response from AI analysis"));
+                                });
+                    });
                 });
+    }
+
+    // DTO for JSON parsing
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    private static class ReviewPointDto {
+        private String originalText;
+        private String verdict;
+        private String reasoning;
+        private String suggestion;
+        private String suggestedReplacement;
     }
 }

@@ -1,4 +1,4 @@
-package service;
+package org.lite.gateway.service;
 
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.Test;

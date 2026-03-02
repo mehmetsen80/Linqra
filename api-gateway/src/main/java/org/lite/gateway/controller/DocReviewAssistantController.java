@@ -21,66 +21,68 @@ import java.util.Map;
 @Slf4j
 public class DocReviewAssistantController {
 
-    private final DocReviewAssistantService docReviewAssistantService;
-    private final UserContextService userContextService;
+        private final DocReviewAssistantService docReviewAssistantService;
+        private final UserContextService userContextService;
 
-    private final TeamContextService teamContextService;
+        private final TeamContextService teamContextService;
 
-    @PostMapping
-    public Mono<ResponseEntity<DocReviewAssistant>> createReview(@RequestBody DocReviewAssistant review,
-            ServerWebExchange exchange) {
-        return userContextService.getCurrentUsername(exchange)
-                .flatMap(username -> teamContextService.getTeamFromContext(exchange)
-                        .flatMap(teamId -> {
-                            review.setUserId(username);
-                            review.setTeamId(teamId);
-                            return docReviewAssistantService.createReview(review);
-                        }))
-                .map(ResponseEntity::ok)
-                .switchIfEmpty(Mono.error(new RuntimeException("Context not found")));
-    }
+        @PostMapping
+        public Mono<ResponseEntity<DocReviewAssistant>> createReview(@RequestBody DocReviewAssistant review,
+                        ServerWebExchange exchange) {
+                return userContextService.getCurrentUsername(exchange)
+                                .flatMap(username -> teamContextService.getTeamFromContext(exchange)
+                                                .flatMap(teamId -> {
+                                                        review.setUserId(username);
+                                                        review.setTeamId(teamId);
+                                                        return docReviewAssistantService.createReview(review);
+                                                }))
+                                .map(ResponseEntity::ok)
+                                .switchIfEmpty(Mono.error(new RuntimeException("Context not found")));
+        }
 
-    @GetMapping("/{id}")
-    public Mono<ResponseEntity<DocReviewAssistant>> getReview(@PathVariable String id) {
-        return docReviewAssistantService.getReview(id)
-                .map(ResponseEntity::ok)
-                .defaultIfEmpty(ResponseEntity.notFound().build());
-    }
+        @GetMapping("/{id}")
+        public Mono<ResponseEntity<DocReviewAssistant>> getReview(@PathVariable String id) {
+                return docReviewAssistantService.getReview(id)
+                                .map(ResponseEntity::ok)
+                                .defaultIfEmpty(ResponseEntity.notFound().build());
+        }
 
-    @PutMapping("/{id}")
-    public Mono<ResponseEntity<DocReviewAssistant>> updateReview(@PathVariable String id,
-            @RequestBody DocReviewAssistant updates) {
-        return docReviewAssistantService.updateReview(id, updates)
-                .map(ResponseEntity::ok)
-                .defaultIfEmpty(ResponseEntity.notFound().build());
-    }
+        @PutMapping("/{id}")
+        public Mono<ResponseEntity<DocReviewAssistant>> updateReview(@PathVariable String id,
+                        @RequestBody DocReviewAssistant updates) {
+                return docReviewAssistantService.updateReview(id, updates)
+                                .map(ResponseEntity::ok)
+                                .defaultIfEmpty(ResponseEntity.notFound().build());
+        }
 
-    @GetMapping("/team/{teamId}")
-    public Flux<DocReviewAssistant> getReviewsByTeam(@PathVariable String teamId) {
-        return docReviewAssistantService.getReviewsByTeam(teamId);
-    }
+        @GetMapping("/team/{teamId}")
+        public Flux<DocReviewAssistant> getReviewsByTeam(@PathVariable String teamId) {
+                return docReviewAssistantService.getReviewsByTeam(teamId);
+        }
 
-    @PostMapping("/{id}/analyze")
-    public Mono<ResponseEntity<DocReviewAssistant>> analyzeDocument(
-            @PathVariable String id,
-            @RequestBody Map<String, String> request,
-            ServerWebExchange exchange) {
+        @PostMapping("/{id}/analyze")
+        public Mono<ResponseEntity<DocReviewAssistant>> analyzeDocument(
+                        @PathVariable String id,
+                        @RequestBody Map<String, String> request,
+                        ServerWebExchange exchange) {
 
-        String documentId = request.get("documentId");
-        String assistantId = request.get("assistantId");
+                String documentId = request.get("documentId");
+                String assistantId = request.get("assistantId");
+                String content = request.get("content"); // Optional content override
 
-        log.info("Starting document analysis for review {} with document {} using assistant {}",
-                id, documentId, assistantId);
+                log.info("Starting document analysis for review {} with document {} using assistant {}",
+                                id, documentId, assistantId);
 
-        return userContextService.getCurrentUsername(exchange)
-                .flatMap(username -> teamContextService.getTeamFromContext(exchange)
-                        .flatMap(teamId -> docReviewAssistantService.analyzeDocument(
-                                id, documentId, assistantId, teamId, username)))
-                .map(ResponseEntity::ok)
-                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()))
-                .onErrorResume(error -> {
-                    log.error("Error analyzing document: {}", error.getMessage(), error);
-                    return Mono.just(ResponseEntity.badRequest().build());
-                });
-    }
+                return userContextService.getCurrentUsername(exchange)
+                                .flatMap(username -> teamContextService.getTeamFromContext(exchange)
+                                                .flatMap(teamId -> docReviewAssistantService.analyzeDocument(
+                                                                id, documentId, assistantId, teamId, username,
+                                                                content)))
+                                .map(ResponseEntity::ok)
+                                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()))
+                                .onErrorResume(error -> {
+                                        log.error("Error analyzing document: {}", error.getMessage(), error);
+                                        return Mono.just(ResponseEntity.badRequest().build());
+                                });
+        }
 }

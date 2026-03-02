@@ -638,6 +638,7 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
         long processingTime = System.currentTimeMillis() - startTime;
 
         return ProcessedDocumentDto.builder()
+                .htmlContent(parseResult.getHtml())
                 .processingMetadata(ProcessedDocumentDto.ProcessingMetadata.builder()
                         .documentId(document.getDocumentId())
                         .processedAt(Instant.now().toString())
@@ -1078,8 +1079,9 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
             KnowledgeHubDocument document,
             List<ChunkingService.ChunkResult> chunkResults) {
 
-        // Get current key version first
-        return chunkEncryptionService.getCurrentKeyVersion(document.getTeamId())
+        // 1. Delete old chunks first to avoid duplicates on re-processing
+        return chunkRepository.deleteAllByDocumentId(document.getDocumentId())
+                .then(chunkEncryptionService.getCurrentKeyVersion(document.getTeamId()))
                 .flatMap(currentKeyVersion -> {
                     // Process chunks reactively
                     return Flux.fromIterable(chunkResults)
@@ -1211,6 +1213,16 @@ public class KnowledgeHubDocumentProcessingServiceImpl implements KnowledgeHubDo
                 .flatMap(encryptionKeyVersion -> {
                     processedDoc.setEncryptionKeyVersion(encryptionKeyVersion);
                     List<Mono<Void>> encryptionTasks = new ArrayList<>();
+
+                    // Encrypt HTML content
+                    if (processedDoc.getHtmlContent() != null && !processedDoc.getHtmlContent().isEmpty()) {
+                        encryptionTasks.add(chunkEncryptionService.encryptChunkText(
+                                processedDoc.getHtmlContent(),
+                                teamId,
+                                encryptionKeyVersion)
+                                .doOnNext(processedDoc::setHtmlContent)
+                                .then());
+                    }
 
                     // Encrypt chunk text
                     if (processedDoc.getChunks() != null && !processedDoc.getChunks().isEmpty()) {

@@ -1,4 +1,4 @@
-package service;
+package org.lite.gateway.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -49,8 +49,6 @@ class CronDescriptionServiceImplTest {
         // Then
         assertEquals("Every minute at second 0", result);
     }
-
-
 
     @Test
     void testGetCronDescription_EveryFridayAtMidnight() {
@@ -396,10 +394,6 @@ class CronDescriptionServiceImplTest {
         // Then
         assertEquals("Every day at 12:00 PM", result);
     }
-
-
-
-
 
     @Test
     void testGetCronDescription_EveryDayAt11AM() {
@@ -995,8 +989,6 @@ class CronDescriptionServiceImplTest {
         assertEquals("Every 15 minutes at second 0", result);
     }
 
-
-
     @Test
     void testGetCronDescription_Every10Seconds() {
         // Given
@@ -1417,8 +1409,6 @@ class CronDescriptionServiceImplTest {
 
     // ===== NEW TEST CASES FOR COMPLEX TIME PATTERNS =====
 
-
-
     @Test
     void testGetCronDescription_EveryHourAtSpecificMinuteAndSecond() {
         // Given
@@ -1430,8 +1420,6 @@ class CronDescriptionServiceImplTest {
         // Then
         assertEquals("Every day at minute 30 at second 15", result);
     }
-
-
 
     // ===== NEW TEST CASES FOR UNUSUAL COMBINATIONS =====
 
@@ -1744,7 +1732,6 @@ class CronDescriptionServiceImplTest {
         // Then
         assertEquals("Every day 1 of the month at 9:00 AM", result);
     }
-
 
     // ===== COMPLEX COMBINATIONS TEST CASES =====
     @Test
@@ -2216,4 +2203,4 @@ class CronDescriptionServiceImplTest {
         // Then
         assertEquals("Every Wednesday at 2:00 PM", result);
     }
-} 
+}

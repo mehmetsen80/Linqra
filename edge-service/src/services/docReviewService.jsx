@@ -51,6 +51,19 @@ const docReviewService = {
         }
     },
 
+    getReview: async (reviewId) => {
+        try {
+            const response = await axiosInstance.get(`/api/doc-reviews/${reviewId}`);
+            return { success: true, data: response.data };
+        } catch (error) {
+            console.error('Error fetching doc review:', error);
+            return {
+                success: false,
+                error: error.response?.data?.message || 'Failed to fetch doc review'
+            };
+        }
+    },
+
     getDocReviewAssistant: async () => {
         try {
             const response = await axiosInstance.get('/api/ai-assistants/category/REVIEW_DOC');
@@ -80,10 +93,11 @@ const docReviewService = {
         }
     },
 
-    sendReviewMessage: async (conversationId, message) => {
+    sendReviewMessage: async (conversationId, message, context) => {
         try {
             const response = await axiosInstance.post(`/api/conversations/${conversationId}/messages`, {
-                message
+                message,
+                context
             });
             return { success: true, data: response.data };
         } catch (error) {
@@ -120,11 +134,12 @@ const docReviewService = {
      * @param {string} assistantId - The AI assistant ID
      * @returns {Promise<{success: boolean, data: any, error: any}>}
      */
-    analyzeDocument: async (reviewId, documentId, assistantId) => {
+    analyzeDocument: async (reviewId, documentId, assistantId, content = null) => {
         try {
             const response = await axiosInstance.post(`/api/doc-reviews/${reviewId}/analyze`, {
                 documentId,
-                assistantId
+                assistantId,
+                content
             });
             return { success: true, data: response.data };
         } catch (error) {

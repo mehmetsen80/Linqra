@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useImperativeHandle, forwardRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
+import { showSuccessToast, showErrorToast } from '../../../../utils/toastConfig';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
 import Underline from '@tiptap/extension-underline';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { FontFamily } from '@tiptap/extension-font-family';
 import TextAlign from '@tiptap/extension-text-align';
+import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table';
 import { Box, Paper, ToggleButton, ToggleButtonGroup, Divider, Toolbar } from '@mui/material';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
@@ -355,8 +357,12 @@ const MenuBar = ({ editor }) => {
     );
 };
 
-const RichTextEditor = ({ content = '', onUpdate, readOnly = false, reviewPoints = [], activePointId, onPointSelect }) => {
-    // Force re-render when editor state changes (selection, content, etc.)
+const normalizeFuzzy = (text) => {
+    if (!text) return '';
+    return text.toLowerCase().replace(/[^a-z0-9]/g, '');
+};
+
+const RichTextEditor = forwardRef(({ content = '', onUpdate, readOnly = false, reviewPoints = [], activePointId, onPointSelect, onSelectionChange, pendingReplacement, onReplacementApplied }, ref) => {
     const [_, forceUpdate] = React.useReducer((x) => x + 1, 0);
 
     const editor = useEditor({
@@ -369,45 +375,57 @@ const RichTextEditor = ({ content = '', onUpdate, readOnly = false, reviewPoints
             TextAlign.configure({
                 types: ['heading', 'paragraph'],
             }),
+            Table.configure({ resizable: false }),
+            TableRow,
+            TableCell,
+            TableHeader,
         ],
         content: content,
         editable: !readOnly,
-        onUpdate: ({ editor }) => {
+        onUpdate: ({ editor, transaction }) => {
+            const isHighlight = transaction.getMeta('isHighlightUpdate');
+            const isSuggestion = transaction.getMeta('isSuggestionApplication');
             if (onUpdate) {
-                onUpdate(editor.getHTML());
+                onUpdate(editor.getHTML(), isHighlight, isSuggestion);
             }
+            forceUpdate();
+        },
+        onTransaction: () => {
             forceUpdate();
         },
         onSelectionUpdate: ({ editor }) => {
             forceUpdate();
 
+            const { from, to, empty } = editor.state.selection;
+
+            // Notify parent about selection for the "Selection Context" badge
+            if (onSelectionChange) {
+                if (empty) {
+                    onSelectionChange(null);
+                } else {
+                    onSelectionChange(editor.state.doc.textBetween(from, to, ' '));
+                }
+            }
+
             // Reverse Linking: Selection -> Review Point
-            if (onPointSelect && !editor.state.selection.empty) {
-                const selectedText = editor.state.doc.textBetween(
-                    editor.state.selection.from,
-                    editor.state.selection.to,
-                    ' '
-                );
+            if (onPointSelect && !empty) {
+                const selectedText = editor.state.doc.textBetween(from, to, ' ');
 
                 if (selectedText && selectedText.length > 5 && reviewPoints.length > 0) {
-                    // Find a point that matches this text
-                    // We use partial matching or exact matching? Exact is safer for now.
-                    // Or check if the selected text contains the point's text (looser).
-                    const matchedPoint = reviewPoints.find(p =>
-                        p.originalText && (
-                            selectedText.includes(p.originalText) ||
-                            p.originalText.includes(selectedText)
-                        )
-                    );
+                    const normalizedSelected = normalizeFuzzy(selectedText);
+                    const matchedPoint = reviewPoints.find(p => {
+                        const normalizedPoint = normalizeFuzzy(p.originalText);
+                        return normalizedPoint && (
+                            normalizedSelected.includes(normalizedPoint) ||
+                            normalizedPoint.includes(normalizedSelected)
+                        );
+                    });
 
                     if (matchedPoint) {
                         onPointSelect(matchedPoint.id);
                     }
                 }
             }
-        },
-        onTransaction: () => {
-            forceUpdate();
         },
         editorProps: {
             attributes: {
@@ -416,40 +434,179 @@ const RichTextEditor = ({ content = '', onUpdate, readOnly = false, reviewPoints
         },
     });
 
+    // Expose methods to parent via ref
+    const [recentlyUpdated, setRecentlyUpdated] = React.useState(false);
+
+    React.useEffect(() => {
+        if (recentlyUpdated) {
+            const timer = setTimeout(() => setRecentlyUpdated(false), 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [recentlyUpdated]);
+
+    useImperativeHandle(ref, () => ({
+        getSelectionContext: () => {
+            if (!editor) return { text: null, html: null };
+            const { from, to } = editor.state.selection;
+            return {
+                text: editor.state.doc.textBetween(from, to),
+                html: editor.getHTML() // Simplification: in a real app would extract subset
+            };
+        },
+        applyPartialUpdate: (newFragment) => {
+            if (!editor) return false;
+
+            const { from, to, empty } = editor.state.selection;
+            console.log(`[RichTextEditor] applyPartialUpdate. Range: ${from}-${to}, Empty: ${empty}, Focused: ${editor.isFocused}`);
+            console.log(`[RichTextEditor] Content to insert: ${newFragment.substring(0, 100)}...`);
+
+            const chain = editor.chain().focus().setMeta('isSuggestionApplication', true);
+
+            if (!empty) {
+                // Replace selection (AI's target)
+                chain.unsetAllMarks().deleteRange({ from, to }).insertContent(newFragment).run();
+            } else {
+                // FALLBACK: Insert at current cursor position
+                // Since AI didn't provide metadata, and user didn't select, 
+                // cursor is the only deterministic target.
+                chain.unsetAllMarks().insertContent(newFragment).run();
+            }
+
+            setRecentlyUpdated(true);
+            return true;
+        }
+    }), [editor]);
+
+    // Handle Text Replacement (Accept Suggestion)
+    React.useEffect(() => {
+        if (!editor || !pendingReplacement) return;
+
+        const { originalText, newText, pointId } = pendingReplacement;
+        console.log(`🔄 Applying replacement: "${originalText}" -> "${newText}"`);
+
+        const range = findTextPosition(editor.state.doc, originalText);
+
+        if (range) {
+            editor.chain()
+                .focus()
+                .setMeta('isSuggestionApplication', true) // Flag this as an automated AI edit
+                .insertContentAt(range, newText)
+                .scrollIntoView()
+                .run();
+
+            showSuccessToast('Suggestion applied to document');
+
+            if (onReplacementApplied) {
+                onReplacementApplied(true, pointId);
+            }
+        } else {
+            console.error(`❌ Could not find text for replacement: "${originalText}"`);
+            showErrorToast('Could not find the text to replace in the document.');
+
+            if (onReplacementApplied) {
+                onReplacementApplied(false, pointId);
+            }
+        }
+    }, [editor, pendingReplacement, onReplacementApplied]);
+
+    // Helper to find text position across multiple nodes with robust fuzzy (alphanumeric, case-insensitive) matching
+    const findTextPosition = (doc, searchText) => {
+        if (!searchText) return null;
+
+        let rawText = '';
+        const rawPosMap = []; // index in rawText -> document position
+
+        // 1. Traverse document to build raw text and position map
+        doc.descendants((node, pos) => {
+            if (node.isText) {
+                for (let i = 0; i < node.text.length; i++) {
+                    rawText += node.text[i];
+                    rawPosMap.push(pos + i);
+                }
+            } else if (node.isBlock || node.type.name === 'hardBreak') {
+                rawText += ' '; // Convert blocks/breaks to spaces for search
+                rawPosMap.push(pos);
+            }
+        });
+
+        // 2. Build FUZZY text (lowercase alphanumeric only) and map it back to rawText indices
+        let fuzzyText = '';
+        const fuzzyToRawMap = []; // index in fuzzyText -> index in rawText
+
+        for (let i = 0; i < rawText.length; i++) {
+            const char = rawText[i].toLowerCase();
+            // Match only alphanumeric characters for the fuzzy search
+            if (/[a-z0-9]/.test(char)) {
+                fuzzyText += char;
+                fuzzyToRawMap.push(i);
+            }
+        }
+
+        // 3. Normalize search query to fuzzy format
+        let fuzzyQuery = '';
+        for (let i = 0; i < searchText.length; i++) {
+            const char = searchText[i].toLowerCase();
+            if (/[a-z0-9]/.test(char)) {
+                fuzzyQuery += char;
+            }
+        }
+
+        if (!fuzzyQuery) return null;
+
+        // 4. Search in fuzzy text
+        const matchIndex = fuzzyText.indexOf(fuzzyQuery);
+        if (matchIndex === -1) return null;
+
+        // 5. Map match range back to document positions
+        // We get the start and end of the match in the FUZZY string
+        const startFuzzyIdx = matchIndex;
+        const endFuzzyIdx = matchIndex + fuzzyQuery.length - 1;
+
+        // Map these back to RAW indices
+        const startRawIndex = fuzzyToRawMap[startFuzzyIdx];
+        const endRawIndex = fuzzyToRawMap[endFuzzyIdx];
+
+        // Finally map back to ProseMirror positions
+        const from = rawPosMap[startRawIndex];
+        const to = rawPosMap[endRawIndex] + 1;
+
+        return { from, to };
+    };
+
     // Handle Active Point: Highlight and Scroll
     React.useEffect(() => {
         if (editor && activePointId && reviewPoints.length > 0) {
             const point = reviewPoints.find(p => p.id === activePointId);
             if (point && point.originalText) {
-                // Find text position
-                let foundPos = null;
-
-                // Simple search in text nodes
-                // TODO: Handle text spanning multiple nodes if needed
-                editor.state.doc.descendants((node, pos) => {
-                    if (foundPos) return false;
-                    if (node.isText) {
-                        const idx = node.text.indexOf(point.originalText);
-                        if (idx !== -1) {
-                            foundPos = { from: pos + idx, to: pos + idx + point.originalText.length };
-                        }
-                    }
-                });
+                // Find text position using robust multi-node search
+                const foundPos = findTextPosition(editor.state.doc, point.originalText);
 
                 if (foundPos) {
-                    // Clear previous highlights first? Maybe not needed if we just select.
-                    // We simply set selection to the found text.
-                    // Tiptap's highlight extension requires us to apply mark.
-
+                    // 1. Clear ALL existing highlights first to ensure only one is active
+                    // 2. Set selection and apply new highlight
+                    // Use setMeta to flag this as a highlight update
                     editor.chain()
+                        .setMeta('isHighlightUpdate', true)
                         .focus()
+                        .selectAll()
+                        .unsetHighlight()
                         .setTextSelection(foundPos)
-                        .unsetHighlight() // Clear old highlight on this selection if any
-                        .setHighlight({ color: '#ffecb3' }) // Apply new highlight
+                        .setHighlight({ color: '#ffecb3' })
                         .scrollIntoView()
                         .run();
+                } else {
+                    console.warn(`Could not find text for highlight: "${point.originalText}"`);
                 }
             }
+        } else if (editor && !activePointId) {
+            // Clear highlights if no point is selected
+            editor.chain()
+                .setMeta('isHighlightUpdate', true)
+                .focus()
+                .selectAll()
+                .unsetHighlight()
+                .setTextSelection(0)
+                .run();
         }
     }, [activePointId, editor, reviewPoints]);
 
@@ -457,26 +614,41 @@ const RichTextEditor = ({ content = '', onUpdate, readOnly = false, reviewPoints
     React.useEffect(() => {
         if (editor && content) {
             if (editor.getHTML() !== content) {
-                editor.commands.setContent(content);
+                editor.commands.setContent(content, false, { preserveWhitespace: 'full' });
+                // If this prop update came from setExternalHtml in index.jsx, 
+                // we want it to trigger the isSuggestion auto-save in DocumentViewer
+                editor.view.dispatch(editor.state.tr.setMeta('isSuggestionApplication', true));
             }
         }
     }, [content, editor]);
 
     return (
-        <Box sx={{
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 1,
-            bgcolor: 'background.paper',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100%'
-        }}>
+        <Box
+            className={recentlyUpdated ? 'suggestion-applied' : ''}
+            sx={{
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1,
+                bgcolor: 'background.paper',
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                transition: 'all 0.3s ease'
+            }}
+        >
             <MenuBar editor={editor} />
             <Box sx={{ flexGrow: 1, overflowY: 'auto', p: 2 }}>
                 <EditorContent editor={editor} style={{ height: '100%' }} />
             </Box>
             <style>{`
+                .suggestion-applied {
+                    animation: pulse-border 1s ease-in-out;
+                }
+                @keyframes pulse-border {
+                    0% { border-color: #dee2e6; box-shadow: 0 0 0 rgba(0, 123, 255, 0); }
+                    50% { border-color: #0d6efd; box-shadow: 0 0 10px rgba(13, 110, 253, 0.5); }
+                    100% { border-color: #dee2e6; box-shadow: 0 0 0 rgba(0, 123, 255, 0); }
+                }
                 .ProseMirror {
                     height: 100%;
                     outline: none;
@@ -497,9 +669,32 @@ const RichTextEditor = ({ content = '', onUpdate, readOnly = false, reviewPoints
                     border-radius: 2px;
                     padding: 0 2px;
                 }
+                /* Table styles from backend HTML */
+                .ProseMirror table {
+                    border-collapse: collapse;
+                    margin: 1em 0;
+                    width: 100%;
+                    table-layout: auto;
+                }
+                .ProseMirror th,
+                .ProseMirror td {
+                    border: 1px solid #000;
+                    padding: 6px 8px;
+                    vertical-align: top;
+                    text-align: left;
+                    min-width: 60px;
+                }
+                .ProseMirror th {
+                    background: #f5f5f5;
+                    font-weight: bold;
+                }
+                /* Preserve &nbsp; spacing from backend HTML */
+                .ProseMirror p {
+                    white-space: pre-wrap;
+                }
             `}</style>
         </Box>
     );
-};
+});
 
 export default RichTextEditor;

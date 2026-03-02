@@ -42,6 +42,7 @@ public class DocReviewAssistant {
     @Indexed
     private String documentId; // Link to Knowledge Hub Document
     private String documentName;
+    private Integer documentVersion; // Specific version of the document being reviewed
 
     private ReviewStatus status;
 
@@ -56,6 +57,7 @@ public class DocReviewAssistant {
     public enum ReviewStatus {
         IN_PROGRESS,
         COMPLETED,
+        FAILED,
         ARCHIVED
     }
 
@@ -69,6 +71,7 @@ public class DocReviewAssistant {
         private String verdict; // ACCEPT, REJECT, WARNING
         private String reasoning;
         private String suggestion;
+        private String suggestedReplacement; // Drop-in replacement text
         private Boolean userAccepted; // Did user accept AI suggestion?
     }
 }

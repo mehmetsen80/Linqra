@@ -326,6 +326,7 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
                                                                                                                    // (it's
                                                                                                                    // a
                                                                                                                    // label)
+                                                                                        properties.put("id", entityId);
                                                                                         properties.put("documentId",
                                                                                                 documentId);
                                                                                         properties.put("extractedAt",
@@ -972,14 +973,16 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
     }
 
     private String generateEntityId(String entityType, Map<String, Object> entity) {
-        // Try to use the provided ID, otherwise generate from name or type
+        // Try to use the provided ID, otherwise generate from name or type.
+        // Guard against the LLM returning placeholders like "null", "N/A", "Unnamed"
+        // etc.
         Object id = entity.get("id");
-        if (id != null && !id.toString().isEmpty()) {
+        if (id != null && !isInvalidIdentifier(id.toString())) {
             return id.toString();
         }
 
         Object name = entity.get("name");
-        if (name != null && !name.toString().isEmpty()) {
+        if (name != null && !isInvalidIdentifier(name.toString())) {
             // Generate ID from name (sanitize)
             return entityType + "_" + name.toString()
                     .replaceAll("[^a-zA-Z0-9_]", "_")
@@ -991,8 +994,28 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
     }
 
     /**
+     * Checks if a string value is a generic placeholder (like "null", "N/A",
+     * "Unnamed")
+     * that should be treated as missing for identity purposes.
+     */
+    private boolean isInvalidIdentifier(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return true;
+        }
+        String normalized = value.trim().toLowerCase();
+        return normalized.equals("null") ||
+                normalized.equals("n/a") ||
+                normalized.equals("unknown") ||
+                normalized.equals("unnamed") ||
+                normalized.equals("none") ||
+                normalized.equals("not available") ||
+                normalized.equals("undefined") ||
+                normalized.equals("n.a.");
+    }
+
+    /**
      * Extract token usage from raw LLM response and calculate cost (similar to
-     * ChatExecutionServiceImpl)
+     * BaseChatExecutionService)
      */
     @SuppressWarnings("unchecked")
     private TokenUsageResult extractTokenUsageFromResponse(
@@ -1015,7 +1038,7 @@ public class KnowledgeHubGraphEntityExtractionServiceImpl implements KnowledgeHu
         String model = modelName;
 
         // Extract token usage based on model category (same logic as
-        // ChatExecutionServiceImpl)
+        // BaseChatExecutionService)
         if ("openai-chat".equals(modelCategory) && resultMap.containsKey("usage")) {
             Map<?, ?> usage = (Map<?, ?>) resultMap.get("usage");
             if (usage != null) {

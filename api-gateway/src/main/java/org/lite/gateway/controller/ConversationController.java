@@ -1,17 +1,19 @@
 package org.lite.gateway.controller;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
+import org.lite.gateway.entity.AIAssistant;
 import org.lite.gateway.entity.Conversation;
 import org.lite.gateway.entity.ConversationMessage;
+import org.lite.gateway.service.AIAssistantService;
 import org.lite.gateway.service.ChatExecutionService;
 import org.lite.gateway.service.ConversationService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.UserContextService;
 import org.lite.gateway.service.UserService;
 import org.lite.gateway.service.TeamService;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -27,16 +29,52 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/conversations")
-@RequiredArgsConstructor
 @Slf4j
 public class ConversationController {
 
         private final ConversationService conversationService;
-        private final ChatExecutionService chatExecutionService;
+        private final ChatExecutionService standardChatExecutionService;
+        private final ChatExecutionService docReviewChatExecutionService;
+        private final AIAssistantService aiAssistantService;
         private final TeamContextService teamContextService;
         private final UserContextService userContextService;
         private final UserService userService;
         private final TeamService teamService;
+
+        public ConversationController(
+                        ConversationService conversationService,
+                        @Qualifier("standardChatExecutionService") ChatExecutionService standardChatExecutionService,
+                        @Qualifier("docReviewChatExecutionService") ChatExecutionService docReviewChatExecutionService,
+                        AIAssistantService aiAssistantService,
+                        TeamContextService teamContextService,
+                        UserContextService userContextService,
+                        UserService userService,
+                        TeamService teamService) {
+                this.conversationService = conversationService;
+                this.standardChatExecutionService = standardChatExecutionService;
+                this.docReviewChatExecutionService = docReviewChatExecutionService;
+                this.aiAssistantService = aiAssistantService;
+                this.teamContextService = teamContextService;
+                this.userContextService = userContextService;
+                this.userService = userService;
+                this.teamService = teamService;
+        }
+
+        // Helper to resolve the correct ChatExecutionService based on assistant
+        // category
+        private Mono<ChatExecutionService> resolveChatExecutionService(String assistantId) {
+                return aiAssistantService.getAssistantById(assistantId)
+                                .map(assistant -> {
+                                        if (assistant.getCategory() == AIAssistant.Category.REVIEW_DOC) {
+                                                log.debug("Routing to DocReviewChatExecutionService for assistant: {}",
+                                                                assistantId);
+                                                return docReviewChatExecutionService;
+                                        }
+                                        log.debug("Routing to StandardChatExecutionService for assistant: {}",
+                                                        assistantId);
+                                        return standardChatExecutionService;
+                                });
+        }
 
         // Helper for authorization check
         private Mono<Boolean> checkAccessAuthorization(String conversationId, String username, String teamId,
@@ -98,8 +136,11 @@ public class ConversationController {
                                                         linqRequest.setQuery(query);
                                                         linqRequest.setExecutedBy(user.getUsername());
 
-                                                        return chatExecutionService.executeChat(linqRequest)
-                                                                        .map(response -> {
+                                                        // Resolve and execute with the correct service
+                                                        return resolveChatExecutionService(assistantId)
+                                                                        .flatMap(chatExecutionService -> chatExecutionService
+                                                                                        .executeChat(linqRequest))
+                                                                        .map((LinqResponse response) -> {
                                                                                 Map<String, Object> result = new HashMap<>();
                                                                                 if (response.getChatResult() != null) {
                                                                                         result.put("conversationId",
@@ -232,9 +273,14 @@ public class ConversationController {
 
                                                                                                                 // Execute
                                                                                                                 // chat
-                                                                                                                return chatExecutionService
-                                                                                                                                .executeChat(linqRequest)
-                                                                                                                                .map(response -> {
+                                                                                                                // with
+                                                                                                                // resolved
+                                                                                                                // service
+                                                                                                                return resolveChatExecutionService(
+                                                                                                                                conversation.getAssistantId())
+                                                                                                                                .flatMap(chatExecutionService -> chatExecutionService
+                                                                                                                                                .executeChat(linqRequest))
+                                                                                                                                .map((LinqResponse response) -> {
                                                                                                                                         Map<String, Object> result = new HashMap<>();
                                                                                                                                         if (response.getChatResult() != null) {
                                                                                                                                                 result.put("conversationId",

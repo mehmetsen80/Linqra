@@ -3,6 +3,7 @@ package org.lite.gateway.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.lite.gateway.config.StorageProperties;
+import org.lite.gateway.dto.DocumentInitiationResult;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
@@ -16,10 +17,6 @@ import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentServiceImpl;
 import org.lite.gateway.service.impl.ObjectStorageServiceImpl;
 import org.lite.gateway.util.AuditLogHelper;
-import org.lite.gateway.service.LinqMilvusStoreService;
-import org.lite.gateway.service.LinqraVaultService;
-import org.lite.gateway.service.Neo4jGraphService;
-import org.lite.gateway.service.ChunkEncryptionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
@@ -44,6 +41,7 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -140,7 +138,7 @@ class DocumentServiceImplIntegrationTest {
 
         // Create a no-op AuditLogHelper for testing (audit logging not needed in
         // integration tests)
-        org.lite.gateway.util.AuditLogHelper mockAuditLogHelper = auditLogHelper != null
+        AuditLogHelper unusedMockAuditLogHelper = auditLogHelper != null
                 ? auditLogHelper
                 : createNoOpAuditLogHelper();
 
@@ -172,8 +170,7 @@ class DocumentServiceImplIntegrationTest {
 
     private ChunkEncryptionService createNoOpEncryptionService() {
         return new ChunkEncryptionService() {
-            private final java.util.concurrent.atomic.AtomicInteger versionCounter = new java.util.concurrent.atomic.AtomicInteger(
-                    1);
+            private final AtomicInteger versionCounter = new AtomicInteger(1);
 
             @Override
             public Mono<String> encryptChunkText(String plaintext, String teamId) {

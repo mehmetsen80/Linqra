@@ -604,7 +604,7 @@ const ExecutionMonitoring = () => {
                                                     return (
                                                         <Chip
                                                             key={stepNumber}
-                                                            label={`Step ${stepNumber}`}
+                                                            label={`Stepp ${stepNumber}`}
                                                             size="small"
                                                             color={isCurrentStep ? 'primary' : isCompleted ? 'success' : 'default'}
                                                             variant={isCurrentStep ? 'filled' : 'outlined'}

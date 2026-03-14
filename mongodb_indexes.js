@@ -815,6 +815,245 @@ db.audit_logs.createIndex(
 );
 
 // ============================================================================
+// RESOURCE_SUBSCRIPTIONS COLLECTION
+// ============================================================================
+
+// 1. User Resource Unique Index
+db.resource_subscriptions.createIndex(
+  { "userId": 1, "resourceCategory": 1, "resourceId": 1 },
+  {
+    "name": "user_resource_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// 2. Team Resource Index
+db.resource_subscriptions.createIndex(
+  { "teamId": 1, "resourceCategory": 1, "resourceId": 1 },
+  {
+    "name": "team_resource_idx",
+    "background": true
+  }
+);
+
+// 3. Resource Enabled Index
+db.resource_subscriptions.createIndex(
+  { "resourceCategory": 1, "resourceId": 1, "enabled": 1 },
+  {
+    "name": "resource_enabled_idx",
+    "background": true
+  }
+);
+
+// ============================================================================
+// RESOURCE_NOTIFICATIONS COLLECTION
+// ============================================================================
+
+// 1. Subscription Created Index
+db.resource_notifications.createIndex(
+  { "subscriptionId": 1, "createdAt": -1 },
+  {
+    "name": "sub_created_idx",
+    "background": true
+  }
+);
+
+// 2. Category Resource Created Index
+db.resource_notifications.createIndex(
+  { "resourceCategory": 1, "resourceId": 1, "createdAt": -1 },
+  {
+    "name": "cat_res_idx",
+    "background": true
+  }
+);
+
+// 3. Read Status Index
+db.resource_notifications.createIndex(
+  { "read": 1 },
+  {
+    "name": "read_idx",
+    "background": true
+  }
+);
+
+// 4. Subscription Link Index
+db.resource_notifications.createIndex(
+  { "subscriptionId": 1 },
+  {
+    "name": "subscriptionId_idx",
+    "background": true
+  }
+);
+
+
+// ============================================================================
+// API_KEYS COLLECTION
+// ============================================================================
+
+// 1. Api Key Unique Index
+db.api_keys.createIndex(
+  { "key": 1 },
+  {
+    "name": "apikey_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+
+// ============================================================================
+// DOC_REVIEWS COLLECTION
+// ============================================================================
+
+// 1. Team Index
+db.doc_reviews.createIndex(
+  { "teamId": 1 },
+  {
+    "name": "docreview_team_idx",
+    "background": true
+  }
+);
+
+// 2. User Index
+db.doc_reviews.createIndex(
+  { "userId": 1 },
+  {
+    "name": "docreview_user_idx",
+    "background": true
+  }
+);
+
+// 3. Assistant Index
+db.doc_reviews.createIndex(
+  { "assistantId": 1 },
+  {
+    "name": "docreview_assistant_idx",
+    "background": true
+  }
+);
+
+// 4. Conversation Index
+db.doc_reviews.createIndex(
+  { "conversationId": 1 },
+  {
+    "name": "docreview_conversation_idx",
+    "background": true
+  }
+);
+
+// 5. Document Index
+db.doc_reviews.createIndex(
+  { "documentId": 1 },
+  {
+    "name": "docreview_document_idx",
+    "background": true
+  }
+);
+
+
+// ============================================================================
+// KNOWLEDGE_HUB_DOCUMENT_VERSIONS COLLECTION
+// ============================================================================
+
+// 1. Document Index
+db.knowledge_hub_document_versions.createIndex(
+  { "documentId": 1 },
+  {
+    "name": "khdocver_document_idx",
+    "background": true
+  }
+);
+
+// 2. Team Index
+db.knowledge_hub_document_versions.createIndex(
+  { "teamId": 1 },
+  {
+    "name": "khdocver_team_idx",
+    "background": true
+  }
+);
+
+
+// ============================================================================
+// LLM_MODELS COLLECTION
+// ============================================================================
+
+// 1. Model Name Unique Index
+db.llm_models.createIndex(
+  { "modelName": 1 },
+  {
+    "name": "llmmodel_name_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+
+// ============================================================================
+// ORGANIZATIONS COLLECTION
+// ============================================================================
+
+// 1. Organization Name Unique Index
+db.organizations.createIndex(
+  { "name": 1 },
+  {
+    "name": "org_name_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+
+// ============================================================================
+// TEAMS COLLECTION
+// ============================================================================
+
+// 1. Team Name Unique Index
+db.teams.createIndex(
+  { "name": 1 },
+  {
+    "name": "team_name_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// 2. Organization Index
+db.teams.createIndex(
+  { "organizationId": 1 },
+  {
+    "name": "team_organization_idx",
+    "background": true
+  }
+);
+
+
+// ============================================================================
+// USERS COLLECTION
+// ============================================================================
+
+// 1. Username Unique Index
+db.users.createIndex(
+  { "username": 1 },
+  {
+    "name": "user_username_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// 2. Email Unique Index
+db.users.createIndex(
+  { "email": 1 },
+  {
+    "name": "user_email_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// ============================================================================
 // VERIFY ALL INDEXES
 // ============================================================================
 
@@ -956,8 +1195,63 @@ db.collection_export_jobs.getIndexes().forEach(function (index) {
   printjson(index.key);
 });
 
+print("\n=== RESOURCE_SUBSCRIPTIONS Indexes ===");
+db.resource_subscriptions.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== RESOURCE_NOTIFICATIONS Indexes ===");
+db.resource_notifications.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+
 print("\n=== AUDIT_LOGS Indexes ===");
 db.audit_logs.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== API_KEYS Indexes ===");
+db.api_keys.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== DOC_REVIEWS Indexes ===");
+db.doc_reviews.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== KNOWLEDGE_HUB_DOCUMENT_VERSIONS Indexes ===");
+db.knowledge_hub_document_versions.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== LLM_MODELS Indexes ===");
+db.llm_models.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== ORGANIZATIONS Indexes ===");
+db.organizations.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== TEAMS Indexes ===");
+db.teams.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== USERS Indexes ===");
+db.users.getIndexes().forEach(function (index) {
   print("Index: " + index.name);
   printjson(index.key);
 });

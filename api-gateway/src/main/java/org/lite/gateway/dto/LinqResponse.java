@@ -55,12 +55,14 @@ public class LinqResponse {
     public static class WorkflowStep {
         private int step;
         private String target; // e.g., "quotes-service"
+        private String status; // e.g., "success", "skipped", "error"
         private Object result; // Step output, e.g., {"name": "Socrates"}
         private boolean isAsync; // Whether this step is executed asynchronously
         private Map<String, Object> params; // Step parameters
         private String action; // Step action
         private String intent; // Step intent
         private String executionId; // Unique identifier for this execution of the step
+        private String description; // Optional description explaining what this step does
         private LinqRequest.Query.LlmConfig llmConfig; // LLM configuration for AI tools
     }
 

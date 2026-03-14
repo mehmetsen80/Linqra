@@ -16,19 +16,20 @@ import { format } from 'date-fns';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import ExecutionDetailsModal from '../../../components/workflows/ExecutionDetailsModal';
 import StepDescriptions from '../../../components/workflows/StepDescriptions';
+import WorkflowGraphModal from '../../../components/workflows/WorkflowGraphModal';
 import { HiPlay, HiArrowLeft, HiChatAlt } from 'react-icons/hi';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
-import { 
-    Table, 
-    TableBody, 
-    TableCell, 
-    TableContainer, 
-    TableHead, 
-    TableRow, 
+import {
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
     Paper,
     TextField,
     Box,
-    InputAdornment 
+    InputAdornment
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import './styles.css';
@@ -58,6 +59,7 @@ function ViewAgentTask() {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [stats, setStats] = useState(null);
     const [metrics, setMetrics] = useState(null);
+    const [showGraphModal, setShowGraphModal] = useState(false);
     const [executionHistory, setExecutionHistory] = useState([]);
     const [workflowStats, setWorkflowStats] = useState(null);
     const [loadingWorkflowStats, setLoadingWorkflowStats] = useState(false);
@@ -81,10 +83,10 @@ function ViewAgentTask() {
     const [showSchedulingModal, setShowSchedulingModal] = useState(false);
     const [showUnscheduleModal, setShowUnscheduleModal] = useState(false);
     const [unscheduling, setUnscheduling] = useState(false);
-    
+
     // Timezone conversion utilities
     const getUserTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
-    
+
     const convertUTCToLocal = (utcHour, utcMinute) => {
         const utcDate = new Date();
         utcDate.setUTCHours(utcHour, utcMinute, 0, 0);
@@ -93,7 +95,7 @@ function ViewAgentTask() {
             minute: utcDate.getMinutes()
         };
     };
-    
+
     const convertLocalToUTC = (localHour, localMinute) => {
         const localDate = new Date();
         localDate.setHours(localHour, localMinute, 0, 0);
@@ -102,7 +104,7 @@ function ViewAgentTask() {
             minute: localDate.getUTCMinutes()
         };
     };
-    
+
     const [cronFields, setCronFields] = useState({
         seconds: '',
         minutes: '',
@@ -130,8 +132,8 @@ function ViewAgentTask() {
 
     useEffect(() => {
         if (task?.linq_config && !isEditingConfig) {
-            const configString = typeof task.linq_config === 'object' 
-                ? JSON.stringify(task.linq_config, null, 2) 
+            const configString = typeof task.linq_config === 'object'
+                ? JSON.stringify(task.linq_config, null, 2)
                 : task.linq_config || '';
             setConfigText(configString);
             setValidationError(null);
@@ -171,7 +173,7 @@ function ViewAgentTask() {
     useEffect(() => {
         const currentExpression = buildCronExpression(cronFields);
         const previousExpression = task?.cronExpression || '';
-        
+
         // Only reset validation if the expression actually changed
         if (currentExpression !== previousExpression) {
             setCronValidationError('');
@@ -253,10 +255,10 @@ function ViewAgentTask() {
 
     const loadWorkflowStats = async () => {
         if (!task) return;
-        
+
         try {
             setLoadingWorkflowStats(true);
-            
+
             // For WORKFLOW_TRIGGER tasks, fetch stats by workflowId
             if (task.taskType === 'WORKFLOW_TRIGGER' && task.linq_config?.query?.workflowId) {
                 const workflowId = task.linq_config.query.workflowId;
@@ -272,7 +274,7 @@ function ViewAgentTask() {
                     setWorkflowStats(response.data);
                 }
             }
-            
+
         } catch (err) {
             console.error('Error loading workflow stats:', err);
         } finally {
@@ -305,7 +307,7 @@ function ViewAgentTask() {
 
     const handleInputChange = (e) => {
         const { name, value, type, checked } = e.target;
-        
+
         setTask(prev => ({
             ...prev,
             [name]: type === 'checkbox' ? checked : value
@@ -350,35 +352,35 @@ function ViewAgentTask() {
 
     const validateAndGenerateCronDescription = async () => {
         const cronExpression = buildCronExpression(cronFields);
-        
+
         // Clear previous errors
         setCronValidationError('');
         setCronDescriptionError('');
-        
+
         // Basic validation - check if all fields are filled
         const parts = cronExpression.trim().split(/\s+/).filter(part => part.trim());
         if (parts.length !== 6) {
             setCronValidationError('All cron fields must be filled');
             return;
         }
-        
+
         // Check for empty fields
         const hasEmptyFields = Object.values(cronFields).some(field => !field.trim());
         if (hasEmptyFields) {
             setCronValidationError('All cron fields must be filled');
             return;
         }
-        
+
         // Quartz-specific validation: Cannot use * for both dayOfMonth and dayOfWeek
         if (cronFields.dayOfMonth === '*' && cronFields.dayOfWeek === '*') {
             setCronValidationError('Cannot use * for both Day of Month and Day of Week. Use ? for one of them.');
             return;
         }
-        
+
         try {
             setIsValidatingCron(true);
             const response = await agentTaskService.getCronDescription(cronExpression);
-            
+
             if (response.success && response.description) {
                 setTask(prev => ({
                     ...prev,
@@ -412,7 +414,7 @@ function ViewAgentTask() {
         if (!cronExpression) {
             return { seconds: '', minutes: '', hours: '', dayOfMonth: '', month: '', dayOfWeek: '' };
         }
-        
+
         const parts = cronExpression.trim().split(/\s+/);
         return {
             seconds: parts[0] || '',
@@ -428,19 +430,19 @@ function ViewAgentTask() {
         // For Quartz cron expressions, we cannot use * for both dayOfMonth and dayOfWeek
         // If dayOfMonth is *, then dayOfWeek should be ?
         const dayOfWeek = fields.dayOfMonth === '*' ? '?' : fields.dayOfWeek;
-        
+
         // The fields already contain UTC time (what user enters), so use them directly
         return `${fields.seconds} ${fields.minutes} ${fields.hours} ${fields.dayOfMonth} ${fields.month} ${dayOfWeek}`.trim();
     };
-    
+
     const parseCronExpressionToUTC = (cronExpression) => {
         if (!cronExpression) return { seconds: '', minutes: '', hours: '', dayOfMonth: '', month: '', dayOfWeek: '' };
-        
+
         const parts = cronExpression.split(' ');
         if (parts.length !== 6) return { seconds: '', minutes: '', hours: '', dayOfMonth: '', month: '', dayOfWeek: '' };
-        
+
         const [seconds, utcMinutes, utcHours, dayOfMonth, month, dayOfWeek] = parts;
-        
+
         // Return UTC time directly (what gets stored)
         return {
             seconds: seconds || '',
@@ -455,28 +457,28 @@ function ViewAgentTask() {
     const handleCronFieldChange = (field, value) => {
         // Limit to 6 characters and only allow valid cron characters
         const sanitizedValue = value.replace(/[^0-9*,\-\/\s]/g, '').substring(0, 6);
-        
+
         setCronFields(prev => {
             const newFields = { ...prev, [field]: sanitizedValue };
             const cronExpression = buildCronExpression(newFields);
-            
+
             // Update the task's cron expression
             setTask(prevTask => ({
                 ...prevTask,
                 cronExpression: cronExpression
             }));
-            
+
             // Clear any previous validation errors when user starts typing
             setCronValidationError('');
             setCronDescriptionError('');
-            
+
             return newFields;
         });
     };
 
     const isCronExpressionValid = () => {
         const cronExpression = buildCronExpression(cronFields);
-        
+
         if (!cronExpression || cronExpression.trim() === '') {
             return false;
         }
@@ -499,7 +501,7 @@ function ViewAgentTask() {
         const text = event.target.value;
         setIsEditingConfig(true);
         setConfigText(text);
-        
+
         try {
             const parsed = JSON.parse(text);
             setTask(prev => ({
@@ -597,7 +599,7 @@ function ViewAgentTask() {
     const handleMetadataSave = async () => {
         try {
             setSaving(true);
-            
+
             // Create a new version with updated metadata
             // Note: Backend will auto-detect and update task type based on linq_config structure
             const response = await agentTaskVersionService.createNewVersion(taskId, task);
@@ -622,19 +624,19 @@ function ViewAgentTask() {
 
         try {
             setExecuting(true);
-            
+
             // Show success message and redirect immediately
             showSuccessToast('Task execution started! Redirecting to monitoring...');
             navigate('/execution-monitoring');
-            
+
             // Execute the task in the background
             const response = await agentTaskService.executeTask(taskId);
             console.log('Execute task response:', response);
-            
+
             if (!response.success) {
                 showErrorToast(response.error || 'Failed to execute task');
             }
-            
+
         } catch (err) {
             console.error('Error executing task:', err);
             const errorMessage = err.response?.data?.message || err.message || 'Failed to execute task';
@@ -694,10 +696,10 @@ function ViewAgentTask() {
 
     const handleEnableDisable = async () => {
         try {
-            const response = task.enabled 
+            const response = task.enabled
                 ? await agentTaskService.disableTask(taskId)
                 : await agentTaskService.enableTask(taskId);
-            
+
             if (response.success) {
                 showSuccessToast(`Task ${task.enabled ? 'disabled' : 'enabled'} successfully`);
                 loadTask();
@@ -712,11 +714,11 @@ function ViewAgentTask() {
     const handleExecutionClick = async (execution) => {
         try {
             setLoadingExecutionDetails(true);
-            
+
             // Fetch the full execution details by agentExecutionId
             // This works for both embedded workflows and workflow triggers
             const response = await workflowService.getExecutionByAgentExecutionId(execution.executionId);
-            
+
             if (response.success && response.data) {
                 setSelectedExecution(response.data);
                 setShowExecutionModal(true);
@@ -773,7 +775,7 @@ function ViewAgentTask() {
                 const hour = date[3];
                 const minute = date[4];
                 const second = date[5] || 0;
-                
+
                 // Create UTC date
                 dateObj = new Date(Date.UTC(year, month, day, hour, minute, second));
             } else {
@@ -789,9 +791,9 @@ function ViewAgentTask() {
 
     const highlightDifferences = (obj1, obj2, path = '') => {
         if (!obj1 || !obj2) return {};
-        
+
         const result = {};
-        
+
         if (Array.isArray(obj1) && Array.isArray(obj2)) {
             obj1.forEach((item, index) => {
                 if (index < obj2.length) {
@@ -801,36 +803,36 @@ function ViewAgentTask() {
             });
             return result;
         }
-        
+
         if (typeof obj1 === 'object' && typeof obj2 === 'object') {
             const allKeys = new Set([...Object.keys(obj1), ...Object.keys(obj2)]);
-            
+
             allKeys.forEach(key => {
                 const currentPath = path ? `${path}.${key}` : key;
-                
-                if (obj1[key] && obj2[key] && 
+
+                if (obj1[key] && obj2[key] &&
                     typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
                     const nestedDiffs = highlightDifferences(obj1[key], obj2[key], currentPath);
                     Object.assign(result, nestedDiffs);
-                } 
+                }
                 else if (JSON.stringify(obj1[key]) !== JSON.stringify(obj2[key])) {
                     result[currentPath] = true;
                 }
             });
-            
+
             return result;
         }
-        
+
         if (JSON.stringify(obj1) !== JSON.stringify(obj2)) {
             result[path] = true;
         }
-        
+
         return result;
     };
 
     const renderJsonWithHighlights = (obj, differences, path = '') => {
         if (!obj) return null;
-        
+
         if (Array.isArray(obj)) {
             return (
                 <div>
@@ -847,7 +849,7 @@ function ViewAgentTask() {
                 </div>
             );
         }
-        
+
         if (typeof obj === 'object' && obj !== null) {
             return (
                 <div>
@@ -856,7 +858,7 @@ function ViewAgentTask() {
                         {Object.entries(obj).map(([key, value], index, array) => {
                             const currentPath = path ? `${path}.${key}` : key;
                             const isDifferent = differences[currentPath];
-                            
+
                             return (
                                 <div key={key} className={isDifferent ? 'diff-changed' : ''}>
                                     <span className="json-key">"{key}"</span>: {renderJsonWithHighlights(value, differences, currentPath)}
@@ -869,7 +871,7 @@ function ViewAgentTask() {
                 </div>
             );
         }
-        
+
         return (
             <span className="json-value">
                 {typeof obj === 'string' ? `"${obj}"` : String(obj)}
@@ -903,8 +905,8 @@ function ViewAgentTask() {
                     Agent Task Details
                 </h4>
                 <div className="d-flex gap-2">
-                    <Button 
-                        variant="secondary" 
+                    <Button
+                        variant="secondary"
                         onClick={() => navigate(`/agents/${task?.agentId}`)}
                     >
                         <HiArrowLeft className="me-1" /> Back to Agent
@@ -918,8 +920,8 @@ function ViewAgentTask() {
                         }
                     >
                         <div>
-                            <Button 
-                                variant="primary" 
+                            <Button
+                                variant="primary"
                                 onClick={() => setShowExecuteConfirm(true)}
                                 disabled={!task?.enabled || executing}
                             >
@@ -954,7 +956,7 @@ function ViewAgentTask() {
                         }
                     >
                         <div>
-                            <Button 
+                            <Button
                                 variant={task?.enabled ? 'secondary' : 'success'}
                                 onClick={handleEnableDisable}
                                 disabled={!canEditTask}
@@ -972,8 +974,8 @@ function ViewAgentTask() {
                         }
                     >
                         <div>
-                            <Button 
-                                variant="secondary" 
+                            <Button
+                                variant="secondary"
                                 onClick={() => setShowMetadataModal(true)}
                                 disabled={!canEditTask}
                             >
@@ -1035,16 +1037,16 @@ function ViewAgentTask() {
                         </h5>
                         {canEditTask && task?.executionTrigger !== 'MANUAL' && (
                             <div className="d-flex gap-2">
-                                <Button 
-                                    variant="outline-danger" 
+                                <Button
+                                    variant="outline-danger"
                                     size="sm"
                                     onClick={() => setShowUnscheduleModal(true)}
                                 >
                                     <i className="fas fa-calendar-times me-1"></i>
                                     Unschedule
                                 </Button>
-                                <Button 
-                                    variant="outline-primary" 
+                                <Button
+                                    variant="outline-primary"
                                     size="sm"
                                     onClick={() => setShowSchedulingModal(true)}
                                 >
@@ -1064,8 +1066,8 @@ function ViewAgentTask() {
                                 This task is set to manual execution. It will not run automatically.
                             </p>
                             {canEditTask && (
-                                <Button 
-                                    variant="outline-primary" 
+                                <Button
+                                    variant="outline-primary"
                                     size="sm"
                                     onClick={() => setShowSchedulingModal(true)}
                                 >
@@ -1084,7 +1086,7 @@ function ViewAgentTask() {
                                     <div className="mb-2">
                                         <small className="text-muted">
                                             <i className="fas fa-map-marker-alt me-1"></i>
-                                            Local Time ({Intl.DateTimeFormat().resolvedOptions().timeZone}): 
+                                            Local Time ({Intl.DateTimeFormat().resolvedOptions().timeZone}):
                                             <strong className="ms-1">
                                                 {(() => {
                                                     const parts = task.cronExpression.split(' ');
@@ -1120,7 +1122,7 @@ function ViewAgentTask() {
                                     </div>
                                 </div>
                             )}
-                            
+
                             <Row className="mt-3">
                                 <Col md={6}>
                                     <div className="p-3 border rounded">
@@ -1215,8 +1217,8 @@ function ViewAgentTask() {
                                         }
                                     >
                                         <div>
-                                            <Button 
-                                                variant="primary" 
+                                            <Button
+                                                variant="primary"
                                                 onClick={() => setShowConfirmModal(true)}
                                                 disabled={saving || !canEditTask || validationError}
                                             >
@@ -1242,6 +1244,14 @@ function ViewAgentTask() {
                     </Card>
 
                     {/* Workflow Steps Visualization */}
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                        <h5 className="mb-0">Workflow Visualization</h5>
+                        {task?.linq_config && (task.linq_config.query?.workflow || task.linq_config.query?.workflowId) && (
+                            <Button variant="outline-primary" size="sm" onClick={() => setShowGraphModal(true)}>
+                                <i className="fas fa-project-diagram me-2"></i> Open Interactive Graph
+                            </Button>
+                        )}
+                    </div>
                     {task?.linq_config && (() => {
                         // For WORKFLOW_TRIGGER: Use the linked workflow
                         if (task.linq_config.query?.workflowId && linkedWorkflow) {
@@ -1369,9 +1379,9 @@ function ViewAgentTask() {
                                 <div className="detail-value">
                                     <Badge bg={
                                         task?.taskType === 'WORKFLOW_TRIGGER' ? 'primary' :
-                                        task?.taskType === 'WORKFLOW_EMBEDDED' ? 'info' :
-                                        task?.taskType === 'API_CALL' ? 'warning' :
-                                        'secondary'
+                                            task?.taskType === 'WORKFLOW_EMBEDDED' ? 'info' :
+                                                task?.taskType === 'API_CALL' ? 'warning' :
+                                                    'secondary'
                                     }>
                                         {task?.taskType?.replace(/_/g, ' ')}
                                     </Badge>
@@ -1390,9 +1400,9 @@ function ViewAgentTask() {
                                 <div className="detail-value">
                                     <Badge bg={
                                         task?.executionTrigger === 'MANUAL' ? 'secondary' :
-                                        task?.executionTrigger === 'CRON' ? 'primary' :
-                                        task?.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
-                                        'info'
+                                            task?.executionTrigger === 'CRON' ? 'primary' :
+                                                task?.executionTrigger === 'EVENT_DRIVEN' ? 'warning' :
+                                                    'info'
                                     }>
                                         {task?.executionTrigger}
                                     </Badge>
@@ -1665,9 +1675,9 @@ function ViewAgentTask() {
                         <h5 className="mb-0">Execution History ({executionHistory.length} total)</h5>
                     </Card.Header>
                     <Card.Body className="p-0">
-                        <TableContainer 
-                            component={Paper} 
-                            sx={{ 
+                        <TableContainer
+                            component={Paper}
+                            sx={{
                                 maxHeight: 600,
                                 boxShadow: 'none',
                                 '& .MuiTableHead-root': {
@@ -1820,10 +1830,10 @@ function ViewAgentTask() {
                                 </TableHead>
                                 <TableBody>
                                     {filteredExecutions.map((execution) => (
-                                        <TableRow 
+                                        <TableRow
                                             key={execution.executionId}
                                             onClick={() => handleExecutionClick(execution)}
-                                            sx={{ 
+                                            sx={{
                                                 cursor: 'pointer',
                                                 '&:hover': {
                                                     backgroundColor: '#f5f5f5'
@@ -1841,9 +1851,9 @@ function ViewAgentTask() {
                                             <TableCell>
                                                 <Badge bg={
                                                     execution.status === 'COMPLETED' ? 'success' :
-                                                    execution.status === 'RUNNING' ? 'primary' :
-                                                    execution.status === 'FAILED' ? 'danger' :
-                                                    'secondary'
+                                                        execution.status === 'RUNNING' ? 'primary' :
+                                                            execution.status === 'FAILED' ? 'danger' :
+                                                                'secondary'
                                                 }>
                                                     {execution.status}
                                                 </Badge>
@@ -1851,9 +1861,9 @@ function ViewAgentTask() {
                                             <TableCell>
                                                 <Badge bg={
                                                     execution.result === 'SUCCESS' ? 'success' :
-                                                    execution.result === 'FAILURE' ? 'danger' :
-                                                    execution.result === 'PARTIAL_SUCCESS' ? 'warning' :
-                                                    'secondary'
+                                                        execution.result === 'FAILURE' ? 'danger' :
+                                                            execution.result === 'PARTIAL_SUCCESS' ? 'warning' :
+                                                                'secondary'
                                                 }>
                                                     {execution.result}
                                                 </Badge>
@@ -1904,7 +1914,7 @@ function ViewAgentTask() {
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis dataKey="step" />
                                                 <YAxis />
-                                                <RechartsTooltip 
+                                                <RechartsTooltip
                                                     formatter={(value, name) => {
                                                         if (name === 'duration') {
                                                             return [`${value.toFixed(2)}ms`, 'Avg. Duration'];
@@ -1948,7 +1958,7 @@ function ViewAgentTask() {
                                                         <Cell key={`cell-${index}`} fill={['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'][index % 6]} />
                                                     ))}
                                                 </Pie>
-                                                <RechartsTooltip 
+                                                <RechartsTooltip
                                                     formatter={(value, name) => {
                                                         const total = Object.values(workflowStats.targetStats)
                                                             .reduce((sum, data) => sum + data.totalExecutions, 0);
@@ -2012,7 +2022,7 @@ function ViewAgentTask() {
                                                         <Cell key={`cell-${index}`} fill={['#28a745', '#007bff', '#dc3545', '#6c757d'][index % 4]} />
                                                     ))}
                                                 </Pie>
-                                                <RechartsTooltip 
+                                                <RechartsTooltip
                                                     formatter={(value, name) => {
                                                         const total = executionHistory.length;
                                                         const percentage = ((value / total) * 100).toFixed(1);
@@ -2062,7 +2072,7 @@ function ViewAgentTask() {
                                                         <Cell key={`cell-${index}`} fill={['#28a745', '#dc3545', '#ffc107', '#6c757d'][index % 4]} />
                                                     ))}
                                                 </Pie>
-                                                <RechartsTooltip 
+                                                <RechartsTooltip
                                                     formatter={(value, name) => {
                                                         const total = executionHistory.length;
                                                         const percentage = ((value / total) * 100).toFixed(1);
@@ -2095,8 +2105,8 @@ function ViewAgentTask() {
                                                 time: formatDate(exec.startedAt)
                                             })).reverse()}>
                                                 <CartesianGrid strokeDasharray="3 3" />
-                                                <XAxis 
-                                                    dataKey="execution" 
+                                                <XAxis
+                                                    dataKey="execution"
                                                     angle={-45}
                                                     textAnchor="end"
                                                     height={80}
@@ -2104,7 +2114,7 @@ function ViewAgentTask() {
                                                     tick={{ fontSize: 12 }}
                                                 />
                                                 <YAxis label={{ value: 'Duration (ms)', angle: -90, position: 'insideLeft' }} />
-                                                <RechartsTooltip 
+                                                <RechartsTooltip
                                                     formatter={(value) => [`${value}ms`, 'Duration']}
                                                     labelFormatter={(label) => `Execution ${label}`}
                                                     contentStyle={{
@@ -2183,7 +2193,7 @@ function ViewAgentTask() {
                                                     )}
                                                 </pre>
                                             </div>
-                                            
+
                                             {/* Scheduling Information */}
                                             <div className="diff-section mb-3">
                                                 <h6 className="diff-title">Scheduling</h6>
@@ -2215,7 +2225,7 @@ function ViewAgentTask() {
                                                     )}
                                                 </pre>
                                             </div>
-                                            
+
                                             {/* Linq Configuration */}
                                             <div className="diff-section">
                                                 <h6 className="diff-title">Linq Configuration</h6>
@@ -2280,7 +2290,7 @@ function ViewAgentTask() {
                                                                 )}
                                                             </pre>
                                                         </div>
-                                                        
+
                                                         {/* Scheduling Information */}
                                                         <div className="diff-section mb-3">
                                                             <h6 className="diff-title">Scheduling</h6>
@@ -2309,7 +2319,7 @@ function ViewAgentTask() {
                                                                 )}
                                                             </pre>
                                                         </div>
-                                                        
+
                                                         {/* Linq Configuration */}
                                                         <div className="diff-section">
                                                             <h6 className="diff-title">Linq Configuration</h6>
@@ -2465,8 +2475,8 @@ function ViewAgentTask() {
                         }
                     >
                         <div>
-                            <Button 
-                                variant="primary" 
+                            <Button
+                                variant="primary"
                                 onClick={handleMetadataSave}
                                 disabled={!canEditTask}
                             >
@@ -2599,7 +2609,7 @@ function ViewAgentTask() {
                                 <Form.Text className="text-muted mt-2">
                                     Examples: <code>0 0 9 * * ?</code> (Daily at 9 AM UTC), <code>0 */15 * * * ?</code> (Every 15 minutes), <code>0 0 17 ? * MON-FRI</code> (Weekdays at 5 PM UTC)
                                 </Form.Text>
-                                
+
                                 {/* Timezone Conversion Display - Inside the card */}
                                 {cronFields.hours && cronFields.minutes && (
                                     <div className="mt-3 p-2 bg-light border rounded">
@@ -2617,11 +2627,11 @@ function ViewAgentTask() {
                                         </small>
                                     </div>
                                 )}
-                                
+
                                 {/* Timezone Information */}
                                 <div className="alert alert-info mt-3 mb-0">
                                     <i className="fas fa-info-circle me-2"></i>
-                                    <strong>Timezone Note:</strong> Enter times in UTC (what gets stored). 
+                                    <strong>Timezone Note:</strong> Enter times in UTC (what gets stored).
                                     We'll show you what that translates to in your local timezone ({Intl.DateTimeFormat().resolvedOptions().timeZone}) below.
                                 </div>
                             </Card.Body>
@@ -2636,141 +2646,141 @@ function ViewAgentTask() {
                                 </Accordion.Header>
                                 <Accordion.Body>
                                     <div className="table-responsive">
-                                    <table className="table table-sm table-bordered">
-                                        <thead className="table-light">
-                                            <tr>
-                                                <th style={{ width: '30%' }}>Expression</th>
-                                                <th style={{ width: '70%' }}>Description</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr>
-                                                <td><code>0 0 9 * * ?</code></td>
-                                                <td>Every day at 9:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 */15 * * * ?</code></td>
-                                                <td>Every 15 minutes</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 17 ? * MON-FRI</code></td>
-                                                <td>Every weekday at 5:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 12 ? * SAT,SUN</code></td>
-                                                <td>Every weekend at 12:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 0 1 * ?</code></td>
-                                                <td>First day of every month at midnight</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 9 L * ?</code></td>
-                                                <td>Last day of every month at 9:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 9 ? * MON</code></td>
-                                                <td>Every Monday at 9:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 9-17 * * ?</code></td>
-                                                <td>Every hour from 9:00 AM to 5:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 */30 6-18 * * ?</code></td>
-                                                <td>Every 30 minutes from 6:00 AM to 6:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 0 1 1 ?</code></td>
-                                                <td>New Year's Day at midnight</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 8 ? * MON,WED,FRI</code></td>
-                                                <td>Every Monday, Wednesday, Friday at 8:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 6 ? * TUE-THU</code></td>
-                                                <td>Every Tuesday through Thursday at 6:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 18 ? * WED-SAT</code></td>
-                                                <td>Every Wednesday through Saturday at 6:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 0 15 * ?</code></td>
-                                                <td>15th day of every month at midnight</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 9 1,15,30 * ?</code></td>
-                                                <td>1st, 15th, and 30th of every month at 9:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 7 * 3-5 ?</code></td>
-                                                <td>Every day from March to May at 7:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 8 * 6-8 ?</code></td>
-                                                <td>Every day from June to August at 8:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 9 * 9-11 ?</code></td>
-                                                <td>Every day from September to November at 9:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 10 * 12,1,2 ?</code></td>
-                                                <td>Every day December, January, February at 10:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 0 1 1,4,7,10 ?</code></td>
-                                                <td>First day of every quarter at midnight</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 9 ? * 2#1</code></td>
-                                                <td>First Tuesday of every month at 9:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 14 ? * 6#3</code></td>
-                                                <td>Third Saturday of every month at 2:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 9 15W * ?</code></td>
-                                                <td>Nearest weekday to 15th of every month at 9:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 9 LW * ?</code></td>
-                                                <td>Last weekday of every month at 9:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 */5 9-17 * * ?</code></td>
-                                                <td>Every 5 minutes from 9:00 AM to 5:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 */10 * ? * SAT,SUN</code></td>
-                                                <td>Every 10 minutes on weekends</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 */2 6-22 * ?</code></td>
-                                                <td>Every 2 hours from 6:00 AM to 10:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 */3 7-19 * ?</code></td>
-                                                <td>Every 3 hours from 7:00 AM to 7:00 PM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 22-6 * * ?</code></td>
-                                                <td>Every hour from 10:00 PM to 6:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td><code>0 0 0 L 12 ?</code></td>
-                                                <td>Last day of December at midnight</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                    <small className="text-muted">
-                                        <i className="fas fa-info-circle me-1"></i>
-                                        <strong>Note:</strong> Use <code>?</code> for Day of Week when specifying Day of Month, and use <code>?</code> for Day of Month when specifying Day of Week.
-                                    </small>
-                                </div>
+                                        <table className="table table-sm table-bordered">
+                                            <thead className="table-light">
+                                                <tr>
+                                                    <th style={{ width: '30%' }}>Expression</th>
+                                                    <th style={{ width: '70%' }}>Description</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr>
+                                                    <td><code>0 0 9 * * ?</code></td>
+                                                    <td>Every day at 9:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 */15 * * * ?</code></td>
+                                                    <td>Every 15 minutes</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 17 ? * MON-FRI</code></td>
+                                                    <td>Every weekday at 5:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 12 ? * SAT,SUN</code></td>
+                                                    <td>Every weekend at 12:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 0 1 * ?</code></td>
+                                                    <td>First day of every month at midnight</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 9 L * ?</code></td>
+                                                    <td>Last day of every month at 9:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 9 ? * MON</code></td>
+                                                    <td>Every Monday at 9:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 9-17 * * ?</code></td>
+                                                    <td>Every hour from 9:00 AM to 5:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 */30 6-18 * * ?</code></td>
+                                                    <td>Every 30 minutes from 6:00 AM to 6:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 0 1 1 ?</code></td>
+                                                    <td>New Year's Day at midnight</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 8 ? * MON,WED,FRI</code></td>
+                                                    <td>Every Monday, Wednesday, Friday at 8:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 6 ? * TUE-THU</code></td>
+                                                    <td>Every Tuesday through Thursday at 6:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 18 ? * WED-SAT</code></td>
+                                                    <td>Every Wednesday through Saturday at 6:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 0 15 * ?</code></td>
+                                                    <td>15th day of every month at midnight</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 9 1,15,30 * ?</code></td>
+                                                    <td>1st, 15th, and 30th of every month at 9:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 7 * 3-5 ?</code></td>
+                                                    <td>Every day from March to May at 7:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 8 * 6-8 ?</code></td>
+                                                    <td>Every day from June to August at 8:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 9 * 9-11 ?</code></td>
+                                                    <td>Every day from September to November at 9:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 10 * 12,1,2 ?</code></td>
+                                                    <td>Every day December, January, February at 10:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 0 1 1,4,7,10 ?</code></td>
+                                                    <td>First day of every quarter at midnight</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 9 ? * 2#1</code></td>
+                                                    <td>First Tuesday of every month at 9:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 14 ? * 6#3</code></td>
+                                                    <td>Third Saturday of every month at 2:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 9 15W * ?</code></td>
+                                                    <td>Nearest weekday to 15th of every month at 9:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 9 LW * ?</code></td>
+                                                    <td>Last weekday of every month at 9:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 */5 9-17 * * ?</code></td>
+                                                    <td>Every 5 minutes from 9:00 AM to 5:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 */10 * ? * SAT,SUN</code></td>
+                                                    <td>Every 10 minutes on weekends</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 */2 6-22 * ?</code></td>
+                                                    <td>Every 2 hours from 6:00 AM to 10:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 */3 7-19 * ?</code></td>
+                                                    <td>Every 3 hours from 7:00 AM to 7:00 PM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 22-6 * * ?</code></td>
+                                                    <td>Every hour from 10:00 PM to 6:00 AM</td>
+                                                </tr>
+                                                <tr>
+                                                    <td><code>0 0 0 L 12 ?</code></td>
+                                                    <td>Last day of December at midnight</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                        <small className="text-muted">
+                                            <i className="fas fa-info-circle me-1"></i>
+                                            <strong>Note:</strong> Use <code>?</code> for Day of Week when specifying Day of Month, and use <code>?</code> for Day of Month when specifying Day of Week.
+                                        </small>
+                                    </div>
                                 </Accordion.Body>
                             </Accordion.Item>
                         </Accordion>
@@ -2825,71 +2835,71 @@ function ViewAgentTask() {
                                         <Form.Control
                                             type="text"
                                             value={(() => {
-                                        const utcHour = parseInt(cronFields.hours) || 0;
-                                        const utcMinute = parseInt(cronFields.minutes) || 0;
-                                        const localTime = convertUTCToLocal(utcHour, utcMinute);
-                                        
-                                        // Replace UTC time references with local time in the description
-                                        let localDescription = task.cronDescription;
-                                        
-                                        // Convert UTC time to 12-hour format for description matching
-                                        const utcHour12 = utcHour === 0 ? 12 : utcHour > 12 ? utcHour - 12 : utcHour;
-                                        const utcAmPm = utcHour >= 12 ? 'PM' : 'AM';
-                                        
-                                        // Convert local time to 12-hour format for replacement
-                                        const localHour12 = localTime.hour === 0 ? 12 : localTime.hour > 12 ? localTime.hour - 12 : localTime.hour;
-                                        const localAmPm = localTime.hour >= 12 ? 'PM' : 'AM';
-                                        
-                                        // Try to find and replace the time pattern in the description
-                                        // Start with the most specific pattern first to avoid partial matches
-                                        
-                                        // Pattern 1: 12-hour format with minutes and AM/PM (e.g., "11:11 PM")
-                                        const utcPattern1 = `${utcHour12}:${utcMinute.toString().padStart(2, '0')} ${utcAmPm}`;
-                                        const localPattern1 = `${localHour12}:${localTime.minute.toString().padStart(2, '0')} ${localAmPm}`;
-                                        
-                                        if (localDescription.includes(utcPattern1)) {
-                                            console.log(`Converting: "${utcPattern1}" → "${localPattern1}"`);
-                                            localDescription = localDescription.replace(new RegExp(utcPattern1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern1);
-                                        } 
-                                        // Pattern 2: 24-hour format with minutes (e.g., "23:11")
-                                        else if (localDescription.includes(`${utcHour}:${utcMinute.toString().padStart(2, '0')}`)) {
-                                            const utcPattern2 = `${utcHour}:${utcMinute.toString().padStart(2, '0')}`;
-                                            const localPattern2 = `${localTime.hour}:${localTime.minute.toString().padStart(2, '0')}`;
-                                            console.log(`Converting: "${utcPattern2}" → "${localPattern2}"`);
-                                            localDescription = localDescription.replace(new RegExp(utcPattern2.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern2);
-                                        }
-                                        // Pattern 3: 24-hour format padded (e.g., "23:11")
-                                        else if (localDescription.includes(`${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')}`)) {
-                                            const utcPattern3 = `${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')}`;
-                                            const localPattern3 = `${localTime.hour.toString().padStart(2, '0')}:${localTime.minute.toString().padStart(2, '0')}`;
-                                            console.log(`Converting: "${utcPattern3}" → "${localPattern3}"`);
-                                            localDescription = localDescription.replace(new RegExp(utcPattern3.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern3);
-                                        }
-                                        // Pattern 4: 12-hour format without minutes (e.g., "11 PM") - only if no minutes pattern matched
-                                        else if (localDescription.includes(`${utcHour12} ${utcAmPm}`)) {
-                                            const utcPattern4 = `${utcHour12} ${utcAmPm}`;
-                                            const localPattern4 = `${localHour12} ${localAmPm}`;
-                                            console.log(`Converting: "${utcPattern4}" → "${localPattern4}"`);
-                                            localDescription = localDescription.replace(new RegExp(utcPattern4.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern4);
-                                        }
-                                        
-                                        console.log(`UTC Description: "${task.cronDescription}"`);
-                                        console.log(`Local Description: "${localDescription}"`);
-                                        console.log(`UTC Time: ${utcHour}:${utcMinute.toString().padStart(2, '0')}`);
-                                        console.log(`Local Time: ${localTime.hour}:${localTime.minute.toString().padStart(2, '0')}`);
-                                        console.log(`UTC Hour 12: ${utcHour12}, UTC AM/PM: ${utcAmPm}`);
-                                        console.log(`Local Hour 12: ${localHour12}, Local AM/PM: ${localAmPm}`);
-                                        console.log(`Local minute: ${localTime.minute}, padded: ${localTime.minute.toString().padStart(2, '0')}`);
-                                        
-                                        return localDescription;
-                                    })()}
+                                                const utcHour = parseInt(cronFields.hours) || 0;
+                                                const utcMinute = parseInt(cronFields.minutes) || 0;
+                                                const localTime = convertUTCToLocal(utcHour, utcMinute);
+
+                                                // Replace UTC time references with local time in the description
+                                                let localDescription = task.cronDescription;
+
+                                                // Convert UTC time to 12-hour format for description matching
+                                                const utcHour12 = utcHour === 0 ? 12 : utcHour > 12 ? utcHour - 12 : utcHour;
+                                                const utcAmPm = utcHour >= 12 ? 'PM' : 'AM';
+
+                                                // Convert local time to 12-hour format for replacement
+                                                const localHour12 = localTime.hour === 0 ? 12 : localTime.hour > 12 ? localTime.hour - 12 : localTime.hour;
+                                                const localAmPm = localTime.hour >= 12 ? 'PM' : 'AM';
+
+                                                // Try to find and replace the time pattern in the description
+                                                // Start with the most specific pattern first to avoid partial matches
+
+                                                // Pattern 1: 12-hour format with minutes and AM/PM (e.g., "11:11 PM")
+                                                const utcPattern1 = `${utcHour12}:${utcMinute.toString().padStart(2, '0')} ${utcAmPm}`;
+                                                const localPattern1 = `${localHour12}:${localTime.minute.toString().padStart(2, '0')} ${localAmPm}`;
+
+                                                if (localDescription.includes(utcPattern1)) {
+                                                    console.log(`Converting: "${utcPattern1}" → "${localPattern1}"`);
+                                                    localDescription = localDescription.replace(new RegExp(utcPattern1.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern1);
+                                                }
+                                                // Pattern 2: 24-hour format with minutes (e.g., "23:11")
+                                                else if (localDescription.includes(`${utcHour}:${utcMinute.toString().padStart(2, '0')}`)) {
+                                                    const utcPattern2 = `${utcHour}:${utcMinute.toString().padStart(2, '0')}`;
+                                                    const localPattern2 = `${localTime.hour}:${localTime.minute.toString().padStart(2, '0')}`;
+                                                    console.log(`Converting: "${utcPattern2}" → "${localPattern2}"`);
+                                                    localDescription = localDescription.replace(new RegExp(utcPattern2.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern2);
+                                                }
+                                                // Pattern 3: 24-hour format padded (e.g., "23:11")
+                                                else if (localDescription.includes(`${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')}`)) {
+                                                    const utcPattern3 = `${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')}`;
+                                                    const localPattern3 = `${localTime.hour.toString().padStart(2, '0')}:${localTime.minute.toString().padStart(2, '0')}`;
+                                                    console.log(`Converting: "${utcPattern3}" → "${localPattern3}"`);
+                                                    localDescription = localDescription.replace(new RegExp(utcPattern3.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern3);
+                                                }
+                                                // Pattern 4: 12-hour format without minutes (e.g., "11 PM") - only if no minutes pattern matched
+                                                else if (localDescription.includes(`${utcHour12} ${utcAmPm}`)) {
+                                                    const utcPattern4 = `${utcHour12} ${utcAmPm}`;
+                                                    const localPattern4 = `${localHour12} ${localAmPm}`;
+                                                    console.log(`Converting: "${utcPattern4}" → "${localPattern4}"`);
+                                                    localDescription = localDescription.replace(new RegExp(utcPattern4.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), localPattern4);
+                                                }
+
+                                                console.log(`UTC Description: "${task.cronDescription}"`);
+                                                console.log(`Local Description: "${localDescription}"`);
+                                                console.log(`UTC Time: ${utcHour}:${utcMinute.toString().padStart(2, '0')}`);
+                                                console.log(`Local Time: ${localTime.hour}:${localTime.minute.toString().padStart(2, '0')}`);
+                                                console.log(`UTC Hour 12: ${utcHour12}, UTC AM/PM: ${utcAmPm}`);
+                                                console.log(`Local Hour 12: ${localHour12}, Local AM/PM: ${localAmPm}`);
+                                                console.log(`Local minute: ${localTime.minute}, padded: ${localTime.minute.toString().padStart(2, '0')}`);
+
+                                                return localDescription;
+                                            })()}
                                             readOnly
                                             disabled
                                             style={{ backgroundColor: '#f8f9fa', cursor: 'not-allowed' }}
                                         />
                                     </Form.Group>
                                 )}
-                                
+
                                 {/* Error Messages */}
                                 {(cronValidationError || cronDescriptionError) && (
                                     <div className="mt-3">
@@ -2907,7 +2917,7 @@ function ViewAgentTask() {
                                         )}
                                     </div>
                                 )}
-                                
+
                                 <Form.Text className="text-muted mt-2">
                                     Click "Get Description" to validate your cron expression and generate a human-readable description.
                                 </Form.Text>
@@ -2933,20 +2943,20 @@ function ViewAgentTask() {
                     <Button variant="secondary" onClick={() => setShowSchedulingModal(false)}>
                         Cancel
                     </Button>
-                    <Button 
-                        variant="primary" 
+                    <Button
+                        variant="primary"
                         onClick={async () => {
                             console.log('🖱️ Save Scheduling button clicked!');
                             try {
                                 setSaving(true);
-                                
+
                                 // Validate cron expression before saving
                                 const cronExpression = buildCronExpression(cronFields);
                                 if (cronExpression.trim() && !isCronExpressionValid()) {
                                     showErrorToast('Please fix the cron expression errors before saving');
                                     return;
                                 }
-                                
+
                                 // Send only the scheduling-related fields using the new endpoint
                                 const schedulingUpdate = {
                                     cronExpression: cronExpression,
@@ -3049,6 +3059,19 @@ function ViewAgentTask() {
                 onQuestionChange={handleQuestionChange}
                 onExecute={handleExecuteWithQuestion}
                 executing={executing}
+            />
+
+            {/* Workflow Graph Modal */}
+            <WorkflowGraphModal
+                show={showGraphModal}
+                onHide={() => setShowGraphModal(false)}
+                workflowData={task?.linq_config}
+                agentTask={task}
+                onSave={(newConfig) => {
+                    setConfigText(JSON.stringify(newConfig, null, 2));
+                    setTask(prev => ({ ...prev, linq_config: newConfig }));
+                    setShowConfirmModal(true);
+                }}
             />
         </div>
     );

@@ -54,6 +54,9 @@ public class WebSocketConfig {
     private final Sinks.Many<String> collectionExportMessageSink = Sinks.many()
             .multicast()
             .onBackpressureBuffer(1024, false);
+    private final Sinks.Many<String> agentNotificationSink = Sinks.many()
+            .multicast()
+            .onBackpressureBuffer(1024, false);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -277,6 +280,42 @@ public class WebSocketConfig {
         };
     }
 
+    @Bean("notificationMessageChannel")
+    public MessageChannel notificationMessageChannel(ObjectMapper objectMapper) {
+        return new AbstractMessageChannel() {
+            @Override
+            protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
+                try {
+                    if (sessions.isEmpty()) {
+                        log.debug("🔔 No active WebSocket sessions, skipping notification emission");
+                        return true;
+                    }
+
+                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
+                    log.debug("🔔 WebSocket sending agent notification: {}", jsonPayload);
+                    Sinks.EmitResult result;
+                    int attempts = 0;
+                    do {
+                        result = agentNotificationSink.tryEmitNext(jsonPayload);
+                        if (result.isFailure()) {
+                            attempts++;
+                            Thread.sleep(100);
+                        }
+                    } while (result.isFailure() && attempts < 3);
+
+                    if (result.isFailure()) {
+                        log.error("Failed to emit notification after {} attempts. Reason: {}", attempts, result.name());
+                        return false;
+                    }
+                    return true;
+                } catch (Exception e) {
+                    log.error("Error converting notification to JSON", e);
+                    return false;
+                }
+            }
+        };
+    }
+
     @Bean
     public HandlerMapping webSocketHandlerMapping() {
         Map<String, WebSocketHandler> map = new HashMap<>();
@@ -312,7 +351,8 @@ public class WebSocketConfig {
                     executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution")),
                     chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat")),
                     graphExtractionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/graph-extraction")),
-                    collectionExportMessageSink.asFlux().map(msg -> createStompFrame(msg, "/topic/collection-export")))
+                    collectionExportMessageSink.asFlux().map(msg -> createStompFrame(msg, "/topic/collection-export")),
+                    agentNotificationSink.asFlux().map(msg -> createStompFrame(msg, "/topic/notifications")))
                     .onBackpressureBuffer(256)
                     .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
                             .maxBackoff(Duration.ofSeconds(1))

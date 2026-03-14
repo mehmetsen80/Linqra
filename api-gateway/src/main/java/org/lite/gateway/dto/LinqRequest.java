@@ -14,42 +14,60 @@ import java.util.HashMap;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.NoArgsConstructor;
+
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class LinqRequest {
     @Required(message = "Link configuration is required")
     private Link link;
-    
+
     @Required(message = "Query configuration is required")
     private Query query;
-    
+
     private String executedBy; // Username of the user who initiated the workflow execution
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Link {
         @Required(message = "Link target is required")
         private String target; // e.g., "quotes-service", "openai", "workflow"
-        
+
         @Required(message = "Link action is required")
         @ValidAction
         private String action; // e.g., "fetch", "generate", "execute"
     }
 
     @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Query {
-        private String intent; // e.g., "random", "generate", "get_historical_saying", "uscis_marriage_based_qna"
-        private String workflowId;  // Add this field to link to predefined workflows
+        private String intent; // e.g., "random", "generate", "get_historical_saying",
+                               // "uscis_marriage_based_qna"
+        private String workflowId; // Add this field to link to predefined workflows
         @JsonInclude(JsonInclude.Include.ALWAYS)
+        @Builder.Default
         private Map<String, Object> params = new HashMap<>();
         private Object payload; // Request body for POST/PUT/PATCH
         private LlmConfig llmConfig; // For AI LLM Configuration
-        
+
         @ValidStep
         private List<WorkflowStep> workflow; // For chained steps (workflow execution)
-        
+
         // Chat conversation support
         private ChatConversation chat; // For AI Assistant chat conversations
 
         @Data
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
         public static class LlmConfig {
             @Required(message = "Model is required when llmConfig is present")
             private String model; // e.g., "gpt-4o", "gemini-1.5-pro"
@@ -59,20 +77,20 @@ public class LinqRequest {
         @Data
         public static class WorkflowStep {
             private int step; // Step number (e.g., 1, 2)
-            
+
             @Required(message = "Step target is required")
             private String target; // e.g., "quotes-service", "openai"
-            
+
             @Required(message = "Step action is required")
             @ValidAction
             private String action; // e.g., "fetch", "generate"
-            
+
             @Required(message = "Step intent is required")
             private String intent; // e.g., "random", "generate"
-            
+
             private Map<String, Object> params; // e.g., {"prompt": "{{step1.result.name}}"}
             private Object payload; // Request body, e.g., [{"role": "user", "content": "..."}]
-            
+
             @ValidLlmConfig
             private LlmConfig llmConfig; // For AI tools
 
@@ -81,6 +99,18 @@ public class LinqRequest {
             private CacheConfig cacheConfig; // Cache configuration for this step
 
             private String description; // Optional description explaining what this step does
+
+            private String summary; // Optional short label (2-4 words) shown in the workflow graph UI
+
+            private String condition; // Optional condition to evaluate before executing this step
+
+            private JumpConfig jump; // Optional jump configuration
+
+            @Data
+            public static class JumpConfig {
+                private String condition; // Condition to trigger the jump
+                private Integer targetStep; // Step number to jump to (null or 0 means terminal)
+            }
 
             @Data
             public static class CacheConfig {
@@ -101,7 +131,7 @@ public class LinqRequest {
                 }
             }
 
-            //Do not delete this, it's being used internally by the json
+            // Do not delete this, it's being used internally by the json
             public void setLlmConfig(LlmConfig llmConfig) {
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     Map<String, Object> settings = new HashMap<>(llmConfig.getSettings());
@@ -114,15 +144,18 @@ public class LinqRequest {
                 this.llmConfig = llmConfig;
             }
         }
-        
+
         @Data
+        @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
         public static class ChatConversation {
             private String conversationId; // Existing conversation ID (for multi-turn)
             private String assistantId; // AI Assistant ID
             private String message; // User's message/query
             private List<ChatMessage> history; // Conversation history (for context)
             private Map<String, Object> context; // Additional context data
-            
+
             @Data
             public static class ChatMessage {
                 private String role; // "user" or "assistant"

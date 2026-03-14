@@ -33,6 +33,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -54,8 +55,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {
         LocalDateTime startTime = LocalDateTime.now();
         List<LinqRequest.Query.WorkflowStep> steps = request.getQuery().getWorkflow();
-        Map<Integer, Object> stepResults = new HashMap<>();
-        List<LinqResponse.WorkflowStepMetadata> stepMetadata = new ArrayList<>();
+        Map<Integer, Object> stepResults = new ConcurrentHashMap<>();
+        List<LinqResponse.WorkflowStepMetadata> stepMetadata = Collections.synchronizedList(new ArrayList<>());
         Map<String, Object> globalParams = request.getQuery().getParams();
         WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
 
@@ -109,8 +110,62 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         return startAuditLog.then(Mono.defer(() -> {
             // Execute steps synchronously or asynchronously based on configuration
             Mono<LinqResponse> workflowMono = Mono.just(new LinqResponse());
+            if (steps == null) {
+                return workflowMono;
+            }
             for (LinqRequest.Query.WorkflowStep step : steps) {
                 workflowMono = workflowMono.flatMap(response -> {
+                    log.debug("📍 Processing Step {}. Stopped status: {}", step.getStep(), context.isStopped());
+                    if (context.isStopped()) {
+                        log.info("✋ Stopping execution before Step {} because workflow is stopped.", step.getStep());
+                        return Mono.just(response);
+                    }
+
+                    // Evaluate condition if present
+                    boolean conditionMet = evaluateCondition(step.getCondition(), context);
+
+                    // Branch logic: Skip until jump target is reached
+                    boolean isJumpSkipping = context.getJumpTarget() > 0 && context.getJumpTarget() != step.getStep();
+
+                    if (!conditionMet || isJumpSkipping) {
+                        String skipReason = !conditionMet ? "Condition evaluated to false"
+                                : "Skipped due to jump to Step " + context.getJumpTarget();
+                        log.info("⏭️ Skipping workflow step {}: {}", step.getStep(), skipReason);
+
+                        // Add skipped metadata to response result steps
+                        LinqResponse.WorkflowStep skipResultStep = new LinqResponse.WorkflowStep();
+                        skipResultStep.setStep(step.getStep());
+                        skipResultStep.setStatus("skipped");
+                        skipResultStep.setTarget(step.getTarget());
+                        skipResultStep.setDescription(step.getDescription());
+                        skipResultStep.setResult(Map.of("message", skipReason,
+                                "condition", step.getCondition() != null ? step.getCondition() : "none"));
+
+                        if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
+                            if (workflowResult.getSteps() == null) {
+                                workflowResult.setSteps(new ArrayList<>());
+                            }
+                            workflowResult.getSteps().add(skipResultStep);
+                        }
+
+                        // Add skipped metadata
+                        LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                        meta.setStep(step.getStep());
+                        meta.setStatus("skipped");
+                        meta.setDurationMs(0);
+                        meta.setTarget(step.getTarget());
+                        meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+                        stepMetadata.add(meta);
+
+                        return Mono.just(response);
+                    }
+
+                    // Reset jump target if we just reached it
+                    if (context.getJumpTarget() == step.getStep()) {
+                        log.info("🎯 Reached jump target Step {}", step.getStep());
+                        context.setJumpTarget(-1);
+                    }
+
                     Instant start = Instant.now();
 
                     // Send step progress update
@@ -174,7 +229,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                 stepRequest.setLink(stepLink);
 
                                 LinqRequest.Query stepQuery = new LinqRequest.Query();
-                                stepQuery.setIntent(step.getIntent());
+                                stepQuery.setIntent(resolvePlaceholder(step.getIntent(), context));
                                 stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), context));
                                 stepQuery.setPayload(resolvePlaceholders(step.getPayload(), context));
                                 stepQuery.setLlmConfig(step.getLlmConfig());
@@ -275,6 +330,30 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                             }
 
                                             stepResults.put(step.getStep(), stepResponse.getResult());
+
+                                            // Process Jump configuration after success
+                                            if (step.getJump() != null && step.getJump().getCondition() != null) {
+                                                boolean jumpConditionMet = evaluateCondition(
+                                                        step.getJump().getCondition(), context);
+                                                log.info("🔎 Step {} jump condition '{}' result: {}", step.getStep(),
+                                                        step.getJump().getCondition(), jumpConditionMet);
+
+                                                if (jumpConditionMet) {
+                                                    Integer target = step.getJump().getTargetStep();
+                                                    if (target == null || target <= 0) {
+                                                        log.info(
+                                                                "🛑 Step {} triggered terminal jump. Setting stopped = true.",
+                                                                step.getStep());
+                                                        context.setStopped(true);
+                                                    } else {
+                                                        log.info(
+                                                                "↪️ Step {} triggered jump to Step {}. Setting jumpTarget = {}",
+                                                                step.getStep(), target, target);
+                                                        context.setJumpTarget(target);
+                                                    }
+                                                }
+                                            }
+
                                             long durationMs = Duration.between(start, Instant.now()).toMillis();
                                             LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
                                             meta.setStep(step.getStep());
@@ -308,20 +387,46 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             return workflowMono.map(response -> {
                 // Build WorkflowResult
                 LinqResponse.WorkflowResult workflowResult = new LinqResponse.WorkflowResult();
+                if (steps == null || steps.isEmpty()) {
+                    response.setResult(workflowResult);
+                    return response;
+                }
                 List<LinqResponse.WorkflowStep> stepResultList = steps.stream()
                         .map(step -> {
                             LinqResponse.WorkflowStep stepResult = new LinqResponse.WorkflowStep();
                             stepResult.setStep(step.getStep());
                             stepResult.setTarget(step.getTarget());
-                            stepResult.setResult(stepResults.get(step.getStep()));
+                            stepResult.setDescription(step.getDescription());
+
+                            // Find matching metadata to get status
+                            String status = stepMetadata.stream()
+                                    .filter(m -> m.getStep() == step.getStep())
+                                    .map(LinqResponse.WorkflowStepMetadata::getStatus)
+                                    .findFirst()
+                                    .orElse("unknown");
+
+                            stepResult.setStatus(status);
+                            Object result = stepResults.get(step.getStep());
+
+                            // If skipped and no result, provide a descriptive object
+                            if ("skipped".equals(status) && result == null) {
+                                result = Map.of(
+                                        "status", "skipped",
+                                        "reason", "Condition evaluated to false",
+                                        "condition", step.getCondition() != null ? step.getCondition() : "none");
+                            }
+
+                            stepResult.setResult(result);
                             return stepResult;
                         })
                         .collect(Collectors.toList());
                 workflowResult.setSteps(stepResultList);
 
                 // Set final result (from last step)
-                Object lastResult = stepResults.get(steps.getLast().getStep());
-                workflowResult.setFinalResult(extractFinalResult(lastResult));
+                if (steps != null && !steps.isEmpty()) {
+                    Object lastResult = stepResults.get(steps.getLast().getStep());
+                    workflowResult.setFinalResult(extractFinalResult(lastResult));
+                }
 
                 // Set response
                 response.setResult(workflowResult);
@@ -1052,29 +1157,44 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
     private String resolvePlaceholder(String value, WorkflowExecutionContext context) {
         String result = value;
-        // Step result pattern - updated to handle complex JSON paths including arrays
-        // and nested objects
-        Pattern stepPattern = Pattern.compile("\\{\\{step(\\d+)\\.result(?:\\.([^}]+))?\\}\\}");
+        // Step result pattern - updated to handle fallbacks via ?? symbol
+        // Regex explanation: {{stepX.result(.path)?(??fallback)?}}
+        Pattern stepPattern = Pattern.compile("\\{\\{step(\\d+)\\.result(?:\\.([^?]+?))?(?:\\?\\?([^}]+))?\\}\\}");
         Matcher stepMatcher = stepPattern.matcher(value);
         while (stepMatcher.find()) {
             int stepNum = Integer.parseInt(stepMatcher.group(1));
             String path = stepMatcher.group(2);
+            String fallback = stepMatcher.group(3);
             Object stepResult = context.getStepResults().get(stepNum);
+
             String replacement = "";
             if (stepResult != null) {
                 replacement = path != null ? extractValue(stepResult, path) : String.valueOf(stepResult);
             }
+
+            if (replacement.isEmpty() && fallback != null) {
+                replacement = fallback;
+            }
+
             result = result.replace(stepMatcher.group(0), replacement);
         }
-        // Global params pattern
-        Pattern paramsPattern = Pattern.compile("\\{\\{params\\.([\\w.]+)\\}\\}");
+
+        // Global params pattern - updated to handle fallbacks via ??
+        Pattern paramsPattern = Pattern.compile("\\{\\{params\\.([^?]+?)(?:\\?\\?([^}]+))?\\}\\}");
         Matcher paramsMatcher = paramsPattern.matcher(result);
         while (paramsMatcher.find()) {
             String paramPath = paramsMatcher.group(1);
+            String fallback = paramsMatcher.group(2);
+
             String replacement = "";
             if (context.getGlobalParams() != null) {
                 replacement = extractValue(context.getGlobalParams(), paramPath);
             }
+
+            if (replacement.isEmpty() && fallback != null) {
+                replacement = fallback;
+            }
+
             result = result.replace(paramsMatcher.group(0), replacement);
         }
         return result;
@@ -1305,5 +1425,82 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             return str;
         }
         return str.substring(0, 1).toUpperCase() + str.substring(1);
+    }
+
+    /**
+     * Evaluates a condition string against the current execution context.
+     * Supports Boolean literals and placeholders like {{step1.result.shouldSync}}.
+     */
+    private boolean evaluateCondition(String condition, WorkflowExecutionContext context) {
+        if (condition == null || condition.trim().isEmpty()) {
+            return true;
+        }
+
+        String rawCondition = condition.trim();
+
+        // Handle explicit comparison (e.g. {{step1.result.value}} == false)
+        if (rawCondition.contains(" == ")) {
+            String[] parts = rawCondition.split(" == ");
+            if (parts.length == 2) {
+                Object left = resolvePlaceholders(parts[0].trim(), context);
+                Object right = resolvePlaceholders(parts[1].trim(), context);
+
+                String leftStr = normalizeForComparison(left);
+                String rightStr = normalizeForComparison(right);
+
+                boolean result = java.util.Objects.equals(leftStr, rightStr);
+                log.debug("🔍 Comparison ' == ' evaluated: '{}' == '{}' -> {}", leftStr, rightStr, result);
+                return result;
+            }
+        }
+        if (rawCondition.contains(" != ")) {
+            String[] parts = rawCondition.split(" != ");
+            if (parts.length == 2) {
+                Object left = resolvePlaceholders(parts[0].trim(), context);
+                Object right = resolvePlaceholders(parts[1].trim(), context);
+
+                String leftStr = normalizeForComparison(left);
+                String rightStr = normalizeForComparison(right);
+
+                boolean result = !java.util.Objects.equals(leftStr, rightStr);
+                log.debug("🔍 Comparison ' != ' evaluated: '{}' != '{}' -> {}", leftStr, rightStr, result);
+                return result;
+            }
+        }
+
+        boolean negate = false;
+        if (rawCondition.startsWith("!")) {
+            negate = true;
+            rawCondition = rawCondition.substring(1).trim();
+        }
+
+        log.debug("🔍 Evaluating workflow step condition: {} (negate={})", rawCondition, negate);
+        Object resolved = resolvePlaceholders(rawCondition, context);
+
+        boolean baseResult;
+        if (resolved == null) {
+            baseResult = false; // null is falsy
+        } else if (resolved instanceof Boolean bool) {
+            baseResult = bool;
+        } else {
+            String resolvedStr = String.valueOf(resolved).toLowerCase().trim();
+            baseResult = !"false".equals(resolvedStr) && !"0".equals(resolvedStr) && !resolvedStr.isEmpty()
+                    && !"null".equals(resolvedStr);
+        }
+
+        boolean finalResult = negate ? !baseResult : baseResult;
+        log.debug("🔍 Condition '{}' evaluated to: {}", condition, finalResult);
+        return finalResult;
+    }
+
+    private String normalizeForComparison(Object value) {
+        if (value == null) {
+            return "false";
+        }
+        String str = String.valueOf(value).toLowerCase().trim();
+        if ("null".equals(str) || str.contains("{{") || str.isEmpty()) {
+            return "false";
+        }
+        return str;
     }
 }

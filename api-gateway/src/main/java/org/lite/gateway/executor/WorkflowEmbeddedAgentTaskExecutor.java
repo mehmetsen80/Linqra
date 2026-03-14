@@ -151,21 +151,24 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                 return Mono.error(new RuntimeException("Invalid embedded workflow request: target must be 'workflow'"));
             }
 
-            // Merge additional parameters if provided
-            if (!parameters.isEmpty() && request.getQuery() != null) {
-                Map<String, Object> existingParams = request.getQuery().getParams();
-                if (existingParams == null) {
-                    request.getQuery().setParams(new HashMap<>(parameters));
-                } else {
-                    Map<String, Object> mergedParams = new HashMap<>(existingParams);
-                    mergedParams.putAll(parameters);
-                    request.getQuery().setParams(mergedParams);
-                }
-            }
-
-            // Add execution context for monitoring
-            if (request.getQuery() != null && request.getQuery().getParams() != null) {
+            // Merge additional parameters and add execution context for monitoring
+            if (request.getQuery() != null) {
                 Map<String, Object> params = request.getQuery().getParams();
+                if (params == null) {
+                    params = new HashMap<>();
+                    request.getQuery().setParams(params);
+                } else {
+                    // Ensure it's mutable
+                    params = new HashMap<>(params);
+                    request.getQuery().setParams(params);
+                }
+
+                // Add additional parameters from task/execution
+                if (parameters != null && !parameters.isEmpty()) {
+                    params.putAll(parameters);
+                }
+
+                // Add execution context for monitoring (REQUIRED)
                 params.put("agentExecutionId", execution.getExecutionId());
                 params.put("agentId", agentId);
                 params.put("agentName", execution.getAgentName());

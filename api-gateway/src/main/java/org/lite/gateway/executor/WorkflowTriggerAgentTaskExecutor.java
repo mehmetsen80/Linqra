@@ -20,6 +20,7 @@ import reactor.util.retry.Retry;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -208,13 +209,26 @@ public class WorkflowTriggerAgentTaskExecutor extends AgentTaskExecutor {
                                 execution.setTaskName(taskName);
                                 agentExecutionRepository.save(execution).subscribe();
 
-                                Map<String, Object> agentContext = Map.of(
-                                        "agentId", agentId,
-                                        "agentName", agentName,
-                                        "agentTaskId", agentTaskId,
-                                        "agentTaskName", taskName,
-                                        "executionSource", "agent",
-                                        "agentExecutionId", execution.getExecutionId());
+                                Map<String, Object> agentContext = new HashMap<>();
+                                agentContext.put("agentId", agentId);
+                                agentContext.put("agentName", agentName);
+                                agentContext.put("agentTaskId", agentTaskId);
+                                agentContext.put("agentTaskName", taskName);
+                                agentContext.put("executionSource", "agent");
+                                agentContext.put("agentExecutionId", execution.getExecutionId());
+                                agentContext.put("teamId", teamId);
+
+                                // Crucial: Inject agentContext into request params for monitoring
+                                Map<String, Object> params = request.getQuery().getParams();
+                                if (params == null) {
+                                    params = new HashMap<>();
+                                    request.getQuery().setParams(params);
+                                } else {
+                                    // Ensure it's mutable
+                                    params = new HashMap<>(params);
+                                    request.getQuery().setParams(params);
+                                }
+                                params.putAll(agentContext);
 
                                 return workflowExecutionService
                                         .initializeExecutionWithAgentContext(request, agentContext)

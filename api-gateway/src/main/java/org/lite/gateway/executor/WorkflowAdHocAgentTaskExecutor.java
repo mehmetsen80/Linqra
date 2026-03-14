@@ -22,6 +22,7 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
@@ -88,13 +89,29 @@ public class WorkflowAdHocAgentTaskExecutor extends AgentTaskExecutor {
                 return agentExecutionRepository.save(execution)
                                 .flatMap(saved -> buildLinqRequest(agentTask, teamId, executedBy)
                                                 .flatMap(request -> {
-                                                        Map<String, Object> agentContext = Map.of(
-                                                                        "agentId", "adhoc",
-                                                                        "agentName", "AdHoc",
-                                                                        "agentTaskId", taskId,
-                                                                        "agentTaskName", agentTask.getName(),
-                                                                        "executionSource", "agent_embedded_adhoc",
-                                                                        "agentExecutionId", saved.getExecutionId());
+                                                        Map<String, Object> agentContext = new HashMap<>();
+                                                        agentContext.put("agentId", "adhoc");
+                                                        agentContext.put("agentName", "AdHoc");
+                                                        agentContext.put("agentTaskId", taskId);
+                                                        agentContext.put("agentTaskName", agentTask.getName());
+                                                        agentContext.put("executionSource", "agent_embedded_adhoc");
+                                                        agentContext.put("agentExecutionId", saved.getExecutionId());
+                                                        agentContext.put("teamId", teamId);
+
+                                                        // Crucial: Inject agentContext into request params for
+                                                        // monitoring
+                                                        if (request.getQuery() == null) {
+                                                                request.setQuery(new LinqRequest.Query());
+                                                        }
+                                                        Map<String, Object> params = request.getQuery().getParams();
+                                                        if (params == null) {
+                                                                params = new HashMap<>();
+                                                                request.getQuery().setParams(params);
+                                                        } else {
+                                                                params = new HashMap<>(params);
+                                                                request.getQuery().setParams(params);
+                                                        }
+                                                        params.putAll(agentContext);
 
                                                         return workflowExecutionService
                                                                         .initializeExecutionWithAgentContext(request,

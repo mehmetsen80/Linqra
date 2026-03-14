@@ -20,175 +20,218 @@ import java.util.Map;
 @Slf4j
 public class AgentTaskMonitoringController {
 
-    private final AgentAuthContextService agentAuthContextService;
-    private final AgentExecutionService agentExecutionService;
-    private final AgentTaskService agentTaskService;
+        private final AgentAuthContextService agentAuthContextService;
+        private final AgentExecutionService agentExecutionService;
+        private final AgentTaskService agentTaskService;
 
+        @GetMapping("/{taskId}/execution-history")
+        public Mono<ResponseEntity<Object>> getTaskExecutionHistory(
+                        @PathVariable String taskId,
+                        @RequestParam(defaultValue = "10") int limit,
+                        ServerWebExchange exchange) {
 
-    
-    @GetMapping("/{taskId}/execution-history")
-    public Mono<ResponseEntity<Object>> getTaskExecutionHistory(
-            @PathVariable String taskId,
-            @RequestParam(defaultValue = "10") int limit,
-            ServerWebExchange exchange) {
-        
-        log.info("Getting execution history for task {} (limit: {})", taskId, limit);
-        
-        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> {
-                    return agentExecutionService.getTaskExecutionHistory(taskId, limit)
-                            .map(execution -> {
-                                Map<String, Object> executionMap = new java.util.HashMap<>();
-                                executionMap.put("executionId", execution.getExecutionId());
-                                executionMap.put("status", execution.getStatus());
-                                executionMap.put("result", execution.getResult());
-                                executionMap.put("startedAt", execution.getStartedAt());
-                                executionMap.put("completedAt", execution.getCompletedAt()); // can be null
-                                executionMap.put("executionDurationMs", execution.getExecutionDurationMs()); // can be null
-                                executionMap.put("errorMessage", execution.getErrorMessage()); // can be null
-                                return executionMap;
-                            })
-                            .collectList()
-                            .map(executions -> ResponseEntity.ok((Object) executions));
-                })
-                .onErrorResume(error -> {
-                    log.warn("Authorization or processing failed for getTaskExecutionHistory {}: {}", taskId, error.getMessage());
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) Map.of("error", error.getMessage())));
-                });
-    }
-    
-    @GetMapping("/{taskId}/metrics")
-    public Mono<ResponseEntity<Object>> getTaskMetrics(
-            @PathVariable String taskId,
-            @RequestParam(required = false) String from,
-            @RequestParam(required = false) String to,
-            ServerWebExchange exchange) {
-        
-        log.info("Getting metrics for task {} from {} to {}", taskId, from, to);
-        
-        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> {
-                    try {
-                        // Set default date range if not provided
-                        LocalDateTime fromDate = from != null ? 
-                            LocalDateTime.parse(from) : 
-                            LocalDateTime.now().minusDays(30); // Last 30 days by default
-                        
-                        LocalDateTime toDate = to != null ? 
-                            LocalDateTime.parse(to) : 
-                            LocalDateTime.now(); // Until now
-                        
-                        log.info("Using date range: {} to {} for task {} metrics in team {}", 
-                                fromDate, toDate, taskId, authContext.getTeamId());
-                        
-                        return agentExecutionService.getTaskExecutionHistory(taskId, 1000) // Get more data for metrics
-                                .filter(execution -> {
-                                    LocalDateTime startedAt = execution.getStartedAt();
-                                    return startedAt != null && 
-                                           !startedAt.isBefore(fromDate) && 
-                                           !startedAt.isAfter(toDate);
+                log.info("Getting execution history for task {} (limit: {})", taskId, limit);
+
+                return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+                                .flatMap(authContext -> {
+                                        return agentExecutionService.getTaskExecutionHistory(taskId, limit)
+                                                        .map(execution -> {
+                                                                Map<String, Object> executionMap = new java.util.HashMap<>();
+                                                                executionMap.put("executionId",
+                                                                                execution.getExecutionId());
+                                                                executionMap.put("status", execution.getStatus());
+                                                                executionMap.put("result", execution.getResult());
+                                                                executionMap.put("startedAt", execution.getStartedAt());
+                                                                executionMap.put("completedAt",
+                                                                                execution.getCompletedAt()); // can be
+                                                                                                             // null
+                                                                executionMap.put("executionDurationMs",
+                                                                                execution.getExecutionDurationMs()); // can
+                                                                                                                     // be
+                                                                                                                     // null
+                                                                executionMap.put("errorMessage",
+                                                                                execution.getErrorMessage()); // can be
+                                                                                                              // null
+                                                                return executionMap;
+                                                        })
+                                                        .collectList()
+                                                        .map(executions -> ResponseEntity.ok((Object) executions));
                                 })
-                                .collectList()
-                                .map(executions -> {
-                                    // Calculate metrics
-                                    long totalExecutions = executions.size();
-                                    long successfulExecutions = executions.stream()
-                                            .mapToLong(e -> "SUCCESS".equals(e.getResult().toString()) ? 1 : 0)
-                                            .sum();
-                                    long failedExecutions = totalExecutions - successfulExecutions;
-                                    
-                                    double successRate = totalExecutions > 0 ? 
-                                            (double) successfulExecutions / totalExecutions * 100 : 0;
-                                    
-                                    double avgDuration = executions.stream()
-                                            .filter(e -> e.getExecutionDurationMs() != null)
-                                            .mapToLong(e -> e.getExecutionDurationMs())
-                                            .average()
-                                            .orElse(0.0);
-                                    
-                                    return Map.of(
-                                            "taskId", taskId,
-                                            "dateRange", Map.of("from", fromDate, "to", toDate),
-                                            "totalExecutions", totalExecutions,
-                                            "successfulExecutions", successfulExecutions,
-                                            "failedExecutions", failedExecutions,
-                                            "successRate", Math.round(successRate * 100.0) / 100.0,
-                                            "averageDurationMs", Math.round(avgDuration * 100.0) / 100.0
-                                    );
+                                .onErrorResume(error -> {
+                                        String message = error.getMessage() != null ? error.getMessage()
+                                                        : "Authorization or processing failed for getTaskExecutionHistory";
+                                        log.warn("Error in getTaskExecutionHistory for {}: {}", taskId, message);
+                                        return Mono.just(ResponseEntity
+                                                        .status(HttpStatus.FORBIDDEN)
+                                                        .body((Object) Map.of("error", message)));
+                                });
+        }
+
+        @GetMapping("/{taskId}/metrics")
+        public Mono<ResponseEntity<Object>> getTaskMetrics(
+                        @PathVariable String taskId,
+                        @RequestParam(required = false) String from,
+                        @RequestParam(required = false) String to,
+                        ServerWebExchange exchange) {
+
+                log.info("Getting metrics for task {} from {} to {}", taskId, from, to);
+
+                return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+                                .flatMap(authContext -> {
+                                        try {
+                                                // Set default date range if not provided
+                                                LocalDateTime fromDate = from != null ? LocalDateTime.parse(from)
+                                                                : LocalDateTime.now().minusDays(30); // Last 30 days by
+                                                                                                     // default
+
+                                                LocalDateTime toDate = to != null ? LocalDateTime.parse(to)
+                                                                : LocalDateTime.now(); // Until now
+
+                                                log.info("Using date range: {} to {} for task {} metrics in team {}",
+                                                                fromDate, toDate, taskId, authContext.getTeamId());
+
+                                                return agentExecutionService.getTaskExecutionHistory(taskId, 1000) // Get
+                                                                                                                   // more
+                                                                                                                   // data
+                                                                                                                   // for
+                                                                                                                   // metrics
+                                                                .filter(execution -> {
+                                                                        LocalDateTime startedAt = execution
+                                                                                        .getStartedAt();
+                                                                        return startedAt != null &&
+                                                                                        !startedAt.isBefore(fromDate) &&
+                                                                                        !startedAt.isAfter(toDate);
+                                                                })
+                                                                .collectList()
+                                                                .map(executions -> {
+                                                                        // Calculate metrics
+                                                                        long totalExecutions = executions.size();
+                                                                        long successfulExecutions = executions.stream()
+                                                                                        .mapToLong(e -> "SUCCESS"
+                                                                                                        .equals(e.getResult()
+                                                                                                                        .toString()) ? 1
+                                                                                                                                        : 0)
+                                                                                        .sum();
+                                                                        long failedExecutions = totalExecutions
+                                                                                        - successfulExecutions;
+
+                                                                        double successRate = totalExecutions > 0
+                                                                                        ? (double) successfulExecutions
+                                                                                                        / totalExecutions
+                                                                                                        * 100
+                                                                                        : 0;
+
+                                                                        double avgDuration = executions.stream()
+                                                                                        .filter(e -> e.getExecutionDurationMs() != null)
+                                                                                        .mapToLong(e -> e
+                                                                                                        .getExecutionDurationMs())
+                                                                                        .average()
+                                                                                        .orElse(0.0);
+
+                                                                        return Map.of(
+                                                                                        "taskId", taskId,
+                                                                                        "dateRange",
+                                                                                        Map.of("from", fromDate, "to",
+                                                                                                        toDate),
+                                                                                        "totalExecutions",
+                                                                                        totalExecutions,
+                                                                                        "successfulExecutions",
+                                                                                        successfulExecutions,
+                                                                                        "failedExecutions",
+                                                                                        failedExecutions,
+                                                                                        "successRate",
+                                                                                        Math.round(successRate * 100.0)
+                                                                                                        / 100.0,
+                                                                                        "averageDurationMs",
+                                                                                        Math.round(avgDuration * 100.0)
+                                                                                                        / 100.0);
+                                                                })
+                                                                .map(metrics -> ResponseEntity.ok((Object) metrics));
+                                        } catch (Exception e) {
+                                                log.error("Error parsing date parameters: {}", e.getMessage());
+                                                return Mono.just(ResponseEntity.badRequest()
+                                                                .body((Object) Map.of("error",
+                                                                                "Invalid date format. Use ISO format: yyyy-MM-ddTHH:mm:ss")));
+                                        }
                                 })
-                                .map(metrics -> ResponseEntity.ok((Object) metrics));
-                    } catch (Exception e) {
-                        log.error("Error parsing date parameters: {}", e.getMessage());
-                        return Mono.just(ResponseEntity.badRequest()
-                                .body((Object) Map.of("error", "Invalid date format. Use ISO format: yyyy-MM-ddTHH:mm:ss")));
-                    }
-                })
-                .onErrorResume(error -> {
-                    log.warn("Authorization or processing failed for getTaskMetrics {}: {}", taskId, error.getMessage());
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) Map.of("error", error.getMessage())));
-                });
-    }
-    
-    @GetMapping("/{taskId}/status")
-    public Mono<ResponseEntity<Object>> getTaskStatus(
-            @PathVariable String taskId,
-            ServerWebExchange exchange) {
-        
-        log.info("Getting current status for task {}", taskId);
-        
-        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> {
-                    // Get the most recent execution
-                    return agentExecutionService.getTaskExecutionHistory(taskId, 1)
-                            .next()
-                            .map(execution -> {
-                                Map<String, Object> statusMap = new java.util.HashMap<>();
-                                statusMap.put("taskId", taskId);
-                                statusMap.put("currentStatus", execution.getStatus());
-                                statusMap.put("lastResult", execution.getResult());
-                                statusMap.put("lastExecutionId", execution.getExecutionId());
-                                statusMap.put("lastStartedAt", execution.getStartedAt());
-                                statusMap.put("lastCompletedAt", execution.getCompletedAt()); // can be null
-                                statusMap.put("lastDurationMs", execution.getExecutionDurationMs()); // can be null
-                                statusMap.put("lastErrorMessage", execution.getErrorMessage()); // can be null
-                                return statusMap;
-                            })
-                            .defaultIfEmpty(Map.of(
-                                    "taskId", taskId,
-                                    "currentStatus", "NEVER_EXECUTED",
-                                    "message", "This task has never been executed"
-                            ))
-                            .map(status -> ResponseEntity.ok((Object) status));
-                })
-                .onErrorResume(error -> {
-                    log.warn("Authorization or processing failed for getTaskStatus {}: {}", taskId, error.getMessage());
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) Map.of("error", error.getMessage())));
-                });
-    }
-    
-    @GetMapping("/{taskId}/stats")
-    public Mono<ResponseEntity<Object>> getTaskStatistics(
-            @PathVariable String taskId,
-            ServerWebExchange exchange) {
-        
-        log.info("Getting statistics for task {}", taskId);
-        
-        return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
-                .flatMap(authContext -> {
-                    return agentTaskService.getTaskStatistics(taskId, authContext.getTeamId())
-                            .map(stats -> ResponseEntity.ok((Object) stats));
-                })
-                .onErrorResume(error -> {
-                    log.warn("Authorization or processing failed for getTaskStatistics {}: {}", taskId, error.getMessage());
-                    return Mono.just(ResponseEntity
-                            .status(HttpStatus.FORBIDDEN)
-                            .body((Object) Map.of("error", error.getMessage())));
-                });
-    }
-} 
+                                .onErrorResume(error -> {
+                                        String message = error.getMessage() != null ? error.getMessage()
+                                                        : "Authorization or processing failed for getTaskMetrics";
+                                        log.warn("Error in getTaskMetrics for {}: {}", taskId, message);
+                                        return Mono.just(ResponseEntity
+                                                        .status(HttpStatus.FORBIDDEN)
+                                                        .body((Object) Map.of("error", message)));
+                                });
+        }
+
+        @GetMapping("/{taskId}/status")
+        public Mono<ResponseEntity<Object>> getTaskStatus(
+                        @PathVariable String taskId,
+                        ServerWebExchange exchange) {
+
+                log.info("Getting current status for task {}", taskId);
+
+                return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+                                .flatMap(authContext -> {
+                                        // Get the most recent execution
+                                        return agentExecutionService.getTaskExecutionHistory(taskId, 1)
+                                                        .next()
+                                                        .map(execution -> {
+                                                                Map<String, Object> statusMap = new java.util.HashMap<>();
+                                                                statusMap.put("taskId", taskId);
+                                                                statusMap.put("currentStatus", execution.getStatus());
+                                                                statusMap.put("lastResult", execution.getResult());
+                                                                statusMap.put("lastExecutionId",
+                                                                                execution.getExecutionId());
+                                                                statusMap.put("lastStartedAt",
+                                                                                execution.getStartedAt());
+                                                                statusMap.put("lastCompletedAt",
+                                                                                execution.getCompletedAt()); // can be
+                                                                                                             // null
+                                                                statusMap.put("lastDurationMs",
+                                                                                execution.getExecutionDurationMs()); // can
+                                                                                                                     // be
+                                                                                                                     // null
+                                                                statusMap.put("lastErrorMessage",
+                                                                                execution.getErrorMessage()); // can be
+                                                                                                              // null
+                                                                return statusMap;
+                                                        })
+                                                        .defaultIfEmpty(Map.of(
+                                                                        "taskId", taskId,
+                                                                        "currentStatus", "NEVER_EXECUTED",
+                                                                        "message", "This task has never been executed"))
+                                                        .map(status -> ResponseEntity.ok((Object) status));
+                                })
+                                .onErrorResume(error -> {
+                                        String message = error.getMessage() != null ? error.getMessage()
+                                                        : "Authorization or processing failed for getTaskStatus";
+                                        log.warn("Error in getTaskStatus for {}: {}", taskId, message);
+                                        return Mono.just(ResponseEntity
+                                                        .status(HttpStatus.FORBIDDEN)
+                                                        .body((Object) Map.of("error", message)));
+                                });
+        }
+
+        @GetMapping("/{taskId}/stats")
+        public Mono<ResponseEntity<Object>> getTaskStatistics(
+                        @PathVariable String taskId,
+                        ServerWebExchange exchange) {
+
+                log.info("Getting statistics for task {}", taskId);
+
+                return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+                                .flatMap(authContext -> {
+                                        return agentTaskService.getTaskStatistics(taskId, authContext.getTeamId())
+                                                        .map(stats -> ResponseEntity.ok((Object) stats));
+                                })
+                                .onErrorResume(error -> {
+                                        String message = error.getMessage() != null ? error.getMessage()
+                                                        : "Authorization or processing failed for getTaskStatistics";
+                                        log.warn("Error in getTaskStatistics for {}: {}", taskId, message);
+                                        return Mono.just(ResponseEntity
+                                                        .status(HttpStatus.FORBIDDEN)
+                                                        .body((Object) Map.of("error", message)));
+                                });
+        }
+}

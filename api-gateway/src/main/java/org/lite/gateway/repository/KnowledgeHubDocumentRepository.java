@@ -27,6 +27,8 @@ public interface KnowledgeHubDocumentRepository extends ReactiveMongoRepository<
 
     Flux<KnowledgeHubDocument> findByCollectionIdAndStatus(String collectionId, String status);
 
+    Mono<KnowledgeHubDocument> findByCollectionIdAndFileName(String collectionId, String fileName);
+
     Flux<KnowledgeHubDocument> findByStatusAndDeletedAtBefore(DocumentStatus status,
             java.time.LocalDateTime threshold);
 }

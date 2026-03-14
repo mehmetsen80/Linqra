@@ -44,7 +44,7 @@ public class KnowledgeHubCollectionController {
         @PostMapping
         public Mono<ResponseEntity<KnowledgeCollectionResponse>> createCollection(
                         @Valid @RequestBody CreateKnowledgeCollectionRequest request,
-                        org.springframework.web.server.ServerWebExchange exchange) {
+                        ServerWebExchange exchange) {
 
                 log.info("Creating knowledge collection: {}", request.getName());
 
@@ -78,7 +78,7 @@ public class KnowledgeHubCollectionController {
         public Mono<ResponseEntity<KnowledgeCollectionResponse>> updateCollection(
                         @PathVariable String id,
                         @Valid @RequestBody UpdateKnowledgeCollectionRequest request,
-                        org.springframework.web.server.ServerWebExchange exchange) {
+                        ServerWebExchange exchange) {
 
                 log.info("Updating knowledge collection: {}", id);
 

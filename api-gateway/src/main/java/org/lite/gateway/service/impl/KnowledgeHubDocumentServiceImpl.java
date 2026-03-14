@@ -3,15 +3,18 @@ package org.lite.gateway.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.config.StorageProperties;
+import org.lite.gateway.dto.DocumentInitiationResult;
+import org.lite.gateway.dto.ResourceDeltaContentResponse;
 import org.lite.gateway.dto.UploadInitiateRequest;
 import org.lite.gateway.entity.KnowledgeHubDocument;
+import org.lite.gateway.entity.KnowledgeHubDocumentVersion;
+import org.lite.gateway.entity.KnowledgeHubChunk;
 import org.lite.gateway.event.KnowledgeHubDocumentProcessingEvent;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
 import org.lite.gateway.repository.KnowledgeHubChunkRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.DocReviewAssistantRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentVersionRepository;
-import org.lite.gateway.entity.KnowledgeHubDocumentVersion;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditEventType;
@@ -22,17 +25,21 @@ import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.LinqMilvusStoreService;
 import org.lite.gateway.util.AuditLogHelper;
 import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
-import org.lite.gateway.enums.AuditResultType;
 import org.lite.gateway.enums.DocumentStatus;
+import org.lite.gateway.enums.AuditResultType;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -182,7 +189,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                                         documentId,
                                                                                         collectionId).thenReturn(doc);
                                                                 })
-                                                                .doOnSuccess(doc -> publishProcessingEvent(doc,
+                                                                .flatMap(doc -> maybePublishProcessingEvent(doc,
                                                                                 documentId));
                                         }
 
@@ -338,7 +345,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                                                                         });
                                                                                                 }));
                                                         })
-                                                        .doOnSuccess(doc -> publishProcessingEvent(doc, documentId))
+                                                        .flatMap(doc -> maybePublishProcessingEvent(doc, documentId))
                                                         .onErrorResume(error -> {
                                                                 log.error("Error encrypting file for document {}: {}",
                                                                                 documentId, error.getMessage(),
@@ -409,11 +416,12 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                                                                                                // failed
                                                                                         ).thenReturn(doc);
                                                                                 })
-                                                                                .doOnSuccess(doc -> {
+                                                                                .flatMap(doc -> {
                                                                                         log.warn("Document {} uploaded but NOT encrypted due to error: {}",
                                                                                                         documentId,
                                                                                                         error.getMessage());
-                                                                                        publishProcessingEvent(doc,
+                                                                                        return maybePublishProcessingEvent(
+                                                                                                        doc,
                                                                                                         documentId);
                                                                                 });
                                                         });
@@ -796,10 +804,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                         deleteGraphExtractionJobs,
                                                                         deleteGraphRelationships,
                                                                         deleteGraphEntities, deleteDocReviews)
-                                                        .then(documentRepository.deleteById(document.getId()))
-                                                        .doOnSuccess(success -> log.info(
-                                                                        "Successfully hard deleted document: {}",
-                                                                        documentId));
+                                                        .then(documentRepository.deleteById(document.getId()));
                                 });
 
         }
@@ -824,9 +829,43 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
 
         @Override
         public Mono<String> getDocumentText(String documentId, String teamId) {
+                return getChunks(documentId, teamId)
+                                .map(this::reconstructText);
+        }
+
+        private String reconstructText(List<KnowledgeHubChunk> chunks) {
+                StringBuilder fullText = new StringBuilder();
+                int currentPage = -1;
+
+                for (KnowledgeHubChunk chunk : chunks) {
+                        String text = chunk.getText();
+                        if (!StringUtils.hasText(text)) {
+                                continue;
+                        }
+
+                        int page = (chunk.getPageNumbers() != null && !chunk.getPageNumbers().isEmpty())
+                                        ? chunk.getPageNumbers().get(0)
+                                        : -1;
+
+                        if (page != -1 && page != currentPage) {
+                                if (fullText.length() > 0) {
+                                        fullText.append("\n\n");
+                                }
+                                fullText.append("--- Page ").append(page).append(" ---\n\n");
+                                currentPage = page;
+                        } else if (fullText.length() > 0) {
+                                fullText.append("\n\n");
+                        }
+
+                        fullText.append(text);
+                }
+
+                return fullText.toString();
+        }
+
+        private Mono<List<KnowledgeHubChunk>> getChunks(String documentId, String teamId) {
                 return getDocumentById(documentId, teamId)
                                 .flatMap(document -> {
-                                        // Check encryption status from the document record
                                         boolean isEncrypted = Boolean.TRUE.equals(document.getEncrypted());
                                         String keyVersion = document.getEncryptionKeyVersion();
 
@@ -835,87 +874,41 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                                         c1.getChunkIndex(), c2.getChunkIndex()))
                                                         .flatMap(chunks -> {
                                                                 if (chunks.isEmpty()) {
-                                                                        return Mono.just("");
+                                                                        return Mono.just(List.of());
                                                                 }
 
-                                                                // Process chunks
-                                                                return reactor.core.publisher.Flux.fromIterable(chunks)
+                                                                return Flux.fromIterable(chunks)
                                                                                 .concatMap(chunk -> {
                                                                                         String text = chunk.getText();
                                                                                         if (!StringUtils.hasText(
                                                                                                         text)) {
-                                                                                                return Mono.empty();
+                                                                                                return Mono.just(chunk);
                                                                                         }
 
-                                                                                        Mono<String> decryptedTextMono;
                                                                                         if (isEncrypted && keyVersion != null) {
-                                                                                                decryptedTextMono = chunkEncryptionService
+                                                                                                return chunkEncryptionService
                                                                                                                 .decryptChunkText(
                                                                                                                                 text,
                                                                                                                                 teamId,
                                                                                                                                 keyVersion)
+                                                                                                                .map(decrypted -> {
+                                                                                                                        chunk.setText(decrypted);
+                                                                                                                        return chunk;
+                                                                                                                })
                                                                                                                 .onErrorResume(e -> {
-                                                                                                                        log.warn("Failed to decrypt chunk {} for document {}: {}",
+                                                                                                                        log.warn("Failed to decrypt chunk {} for document {}",
                                                                                                                                         chunk.getChunkIndex(),
-                                                                                                                                        documentId,
-                                                                                                                                        e.getMessage());
+                                                                                                                                        documentId);
+                                                                                                                        chunk.setText("[Decryption Failed]");
                                                                                                                         return Mono.just(
-                                                                                                                                        "[Decryption Failed]");
+                                                                                                                                        chunk);
                                                                                                                 });
-                                                                                        } else {
-                                                                                                decryptedTextMono = Mono
-                                                                                                                .just(text);
                                                                                         }
-
-                                                                                        return decryptedTextMono.map(
-                                                                                                        decrypted -> {
-                                                                                                                // Return
-                                                                                                                // object
-                                                                                                                // holding
-                                                                                                                // text
-                                                                                                                // and
-                                                                                                                // page
-                                                                                                                // info
-                                                                                                                int page = (chunk
-                                                                                                                                .getPageNumbers() != null
-                                                                                                                                && !chunk.getPageNumbers()
-                                                                                                                                                .isEmpty())
-                                                                                                                                                                ? chunk.getPageNumbers()
-                                                                                                                                                                                .get(0)
-                                                                                                                                                                : -1;
-                                                                                                                return new ChunkTextWithPage(
-                                                                                                                                decrypted,
-                                                                                                                                page);
-                                                                                                        });
+                                                                                        return Mono.just(chunk);
                                                                                 })
-                                                                                .collectList()
-                                                                                .map(chunkTexts -> {
-                                                                                        StringBuilder fullText = new StringBuilder();
-                                                                                        int currentPage = -1;
-
-                                                                                        for (ChunkTextWithPage cp : chunkTexts) {
-                                                                                                if (cp.page != -1
-                                                                                                                && cp.page != currentPage) {
-                                                                                                        if (fullText.length() > 0)
-                                                                                                                fullText.append("\n\n");
-                                                                                                        fullText.append("--- Page ")
-                                                                                                                        .append(cp.page)
-                                                                                                                        .append(" ---\n\n");
-                                                                                                        currentPage = cp.page;
-                                                                                                } else if (fullText
-                                                                                                                .length() > 0) {
-                                                                                                        fullText.append("\n\n");
-                                                                                                }
-                                                                                                fullText.append(cp.text);
-                                                                                        }
-                                                                                        return fullText.toString();
-                                                                                });
+                                                                                .collectList();
                                                         });
                                 });
-        }
-
-        // Helper record for text reconstruction
-        private record ChunkTextWithPage(String text, int page) {
         }
 
         @Override
@@ -1004,7 +997,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
 
                                                                                                         return documentRepository
                                                                                                                         .save(document)
-                                                                                                                        .doOnSuccess(doc -> publishProcessingEvent(
+                                                                                                                        .flatMap(doc -> maybePublishProcessingEvent(
                                                                                                                                         doc,
                                                                                                                                         documentId))
                                                                                                                         .then();
@@ -1064,7 +1057,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
                                                 return 0L;
                                         }))
                                         .onErrorResume(error -> {
-                                                log.warn("Error during Milvus embedding deletion for document {}: {}",
+                                                log.warn("Continuing after embedding deletion failure for document {}: {}",
                                                                 document.getDocumentId(),
                                                                 error.getMessage());
                                                 return Mono.just(0L);
@@ -1236,17 +1229,90 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
 
                                                                                         return documentRepository.save(
                                                                                                         currentDoc)
-                                                                                                        .doOnSuccess(doc -> {
+                                                                                                        .flatMap(doc -> {
                                                                                                                 log.info("Restored document {} to version {} (new version {})",
                                                                                                                                 documentId,
                                                                                                                                 versionNumber,
                                                                                                                                 newVersionNum);
-                                                                                                                publishProcessingEvent(
+                                                                                                                return maybePublishProcessingEvent(
                                                                                                                                 doc,
                                                                                                                                 documentId);
                                                                                                         });
                                                                                 });
                                                         });
                                 });
+        }
+
+        private Mono<KnowledgeHubDocument> maybePublishProcessingEvent(KnowledgeHubDocument doc, String documentId) {
+                if (!StringUtils.hasText(doc.getCollectionId())) {
+                        return Mono.just(doc);
+                }
+                return collectionRepository.findById(doc.getCollectionId())
+                                .flatMap(collection -> {
+                                        if (!StringUtils.hasText(collection.getMilvusCollectionName())
+                                                        || !StringUtils.hasText(collection.getEmbeddingModelName())) {
+                                                log.info("Skipping processing event for document {} as collection {} has no RAG configuration.",
+                                                                documentId, doc.getCollectionId());
+                                                return Mono.just(doc);
+                                        }
+                                        publishProcessingEvent(doc, documentId);
+                                        return Mono.just(doc);
+                                })
+                                .defaultIfEmpty(doc);
+        }
+
+        @Override
+        public Mono<ResourceDeltaContentResponse> fetchDeltaContent(String oldDocId, String newDocId, String teamId,
+                        String resourceId,
+                        String resourceCategory,
+                        List<String> categories) {
+                log.info("Fetching Delta Content for resource {} ({}) between {} and {} with categories: {}",
+                                resourceId, resourceCategory, oldDocId, newDocId, categories);
+
+                Mono<List<KnowledgeHubChunk>> oldChunksMono = StringUtils.hasText(oldDocId)
+                                ? getChunks(oldDocId, teamId)
+                                                .onErrorResume(e -> {
+                                                        log.warn("Old document {} not found, proceeding with empty content",
+                                                                        oldDocId);
+                                                        return Mono.just(Collections.emptyList());
+                                                })
+                                : Mono.just(Collections.emptyList());
+
+                return Mono.zip(
+                                oldChunksMono,
+                                getChunks(newDocId, teamId))
+                                .map(tuple -> {
+                                        java.util.List<KnowledgeHubChunk> oldChunks = tuple.getT1();
+                                        java.util.List<KnowledgeHubChunk> newChunks = tuple.getT2();
+
+                                        String oldText = filterChunksByCategories(oldChunks, categories);
+                                        String newText = filterChunksByCategories(newChunks, categories);
+
+                                        log.info("Narrowed content: old={} chars, new={} chars", oldText.length(),
+                                                        newText.length());
+
+                                        return ResourceDeltaContentResponse.builder()
+                                                        .oldText(oldText)
+                                                        .newText(newText)
+                                                        .build();
+                                });
+        }
+
+        private String filterChunksByCategories(List<KnowledgeHubChunk> chunks,
+                        List<String> categories) {
+                if (categories == null || categories.isEmpty()) {
+                        return reconstructText(chunks);
+                }
+
+                return chunks.stream()
+                                .filter(chunk -> {
+                                        String text = chunk.getText();
+                                        if (!StringUtils.hasText(text))
+                                                return false;
+                                        return categories.stream().anyMatch(
+                                                        cat -> text.toLowerCase().contains(cat.toLowerCase()));
+                                })
+                                .map(KnowledgeHubChunk::getText)
+                                .collect(Collectors.joining("\n---\n"));
         }
 }

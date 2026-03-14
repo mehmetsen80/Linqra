@@ -63,7 +63,142 @@ public class NotificationService {
                 .then();
     }
 
-    private void sendEmail(String to, String subject, String message, boolean isHtml) {
+    public void sendPremiumEmail(String to, String subject, String title, String summary, String details,
+            java.util.Map<String, Object> delta) {
+        if (!emailEnabled) {
+            return;
+        }
+
+        String htmlContent = String.format(
+                """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                        <style>
+                            body {
+                                margin: 0;
+                                padding: 0;
+                                background-color: #0d1117;
+                                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                                color: #c9d1d9;
+                            }
+                            .container {
+                                max-width: 600px;
+                                margin: 40px auto;
+                                padding: 30px;
+                                background: rgba(22, 27, 34, 0.8);
+                                border-radius: 16px;
+                                border: 1px solid rgba(255, 255, 255, 0.1);
+                                backdrop-filter: blur(10px);
+                                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+                            }
+                            .header {
+                                padding-bottom: 20px;
+                                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                                margin-bottom: 25px;
+                                text-align: center;
+                            }
+                            .logo {
+                                font-size: 28px;
+                                font-weight: 800;
+                                background: linear-gradient(135deg, #ed7534 0%%, #ff8c4c 100%%);
+                                -webkit-background-clip: text;
+                                -webkit-text-fill-color: transparent;
+                                letter-spacing: -1px;
+                            }
+                            .title {
+                                font-size: 22px;
+                                font-weight: 700;
+                                color: #ffffff;
+                                margin-bottom: 15px;
+                            }
+                            .badge {
+                                display: inline-block;
+                                padding: 4px 12px;
+                                border-radius: 20px;
+                                font-size: 12px;
+                                font-weight: 600;
+                                background: rgba(237, 117, 52, 0.2);
+                                color: #ff8c4c;
+                                margin-bottom: 20px;
+                                text-transform: uppercase;
+                                letter-spacing: 1px;
+                            }
+                            .summary {
+                                font-size: 16px;
+                                line-height: 1.6;
+                                color: #8b949e;
+                                margin-bottom: 25px;
+                            }
+                            .details-box {
+                                background: rgba(255, 255, 255, 0.03);
+                                border-radius: 8px;
+                                padding: 20px;
+                                border-left: 4px solid #ed7534;
+                                margin-bottom: 25px;
+                            }
+                            .details-title {
+                                font-size: 14px;
+                                font-weight: 600;
+                                color: #ffffff;
+                                margin-bottom: 10px;
+                                text-transform: uppercase;
+                            }
+                            .details-content {
+                                font-size: 15px;
+                                line-height: 1.5;
+                                white-space: pre-wrap;
+                            }
+                            .footer {
+                                text-align: center;
+                                font-size: 13px;
+                                color: #484f58;
+                                margin-top: 40px;
+                            }
+                            .cta-button {
+                                display: block;
+                                width: 100%%;
+                                padding: 14px;
+                                text-align: center;
+                                background: linear-gradient(135deg, #ed7534 0%%, #d65f1f 100%%);
+                                color: #ffffff;
+                                text-decoration: none;
+                                border-radius: 8px;
+                                font-weight: 700;
+                                margin-top: 30px;
+                            }
+                        </style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="header">
+                                    <span class="logo">LINQRA</span>
+                                </div>
+                                <div class="badge">AGENT ALERT</div>
+                                <div class="title">%s</div>
+                                <div class="summary">%s</div>
+                                <div class="details-box">
+                                    <div class="details-title">Analysis Details</div>
+                                    <div class="details-content">%s</div>
+                                </div>
+                                %s
+                                <a href="https://linqra.com" class="cta-button">View Full Report</a>
+                                <div class="footer">
+                                    &copy; 2026 Linqra Inc. &bull; Sovereign Agent Platform
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                        """,
+                title, summary, details,
+                (delta != null && !delta.isEmpty()) ? String.format(
+                        "<div class='details-box' style='border-left-color: #ff4081;'><div class='details-title'>Textual Delta</div><div class='details-content' style='font-family: monospace;'>%s</div></div>",
+                        delta.toString()) : "");
+
+        sendEmail(to, subject, htmlContent, true);
+    }
+
+    public void sendEmail(String to, String subject, String message, boolean isHtml) {
         if (!emailEnabled || mailSender == null) {
             log.debug("Email notifications are disabled");
             return;

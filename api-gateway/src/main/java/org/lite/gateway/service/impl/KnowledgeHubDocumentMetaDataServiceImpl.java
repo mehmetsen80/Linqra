@@ -13,6 +13,7 @@ import org.lite.gateway.enums.DocumentStatus;
 import org.lite.gateway.enums.AuditResultType;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
+import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.KnowledgeHubDocumentMetaDataService;
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
@@ -24,6 +25,7 @@ import org.springframework.data.util.Pair;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
@@ -50,6 +52,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
     private final KnowledgeHubDocumentEmbeddingService embeddingService;
     private final ChunkEncryptionService chunkEncryptionService;
     private final AuditLogHelper auditLogHelper;
+    private final KnowledgeHubCollectionRepository collectionRepository;
 
     public KnowledgeHubDocumentMetaDataServiceImpl(
             KnowledgeHubDocumentMetaDataRepository metadataRepository,
@@ -59,7 +62,8 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
             @Qualifier("executionMessageChannel") MessageChannel executionMessageChannel,
             KnowledgeHubDocumentEmbeddingService embeddingService,
             ChunkEncryptionService chunkEncryptionService,
-            AuditLogHelper auditLogHelper) {
+            AuditLogHelper auditLogHelper,
+            KnowledgeHubCollectionRepository collectionRepository) {
         this.metadataRepository = metadataRepository;
         this.documentRepository = documentRepository;
         this.objectStorageService = objectStorageService;
@@ -68,6 +72,7 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
         this.embeddingService = embeddingService;
         this.chunkEncryptionService = chunkEncryptionService;
         this.auditLogHelper = auditLogHelper;
+        this.collectionRepository = collectionRepository;
     }
 
     @Override
@@ -247,21 +252,35 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
             return Mono.empty();
         }
 
-        return documentRepository.findByDocumentId(document.getDocumentId())
-                .defaultIfEmpty(document)
-                .flatMap(doc -> {
-                    if (doc.getStatus() == DocumentStatus.AI_READY) {
-                        log.info("Document {} already AI_READY; skipping embedding trigger.", doc.getDocumentId());
+        return collectionRepository.findById(document.getCollectionId())
+                .flatMap(collection -> {
+                    if (!StringUtils.hasText(collection.getMilvusCollectionName())
+                            || !StringUtils.hasText(collection.getEmbeddingModelName())) {
+                        log.info("Skipping embedding for document {} as collection {} has no RAG configuration.",
+                                document.getDocumentId(), document.getCollectionId());
                         return Mono.empty();
                     }
 
-                    doc.setStatus(DocumentStatus.EMBEDDING);
-                    doc.setErrorMessage(null);
-                    return documentRepository.save(doc)
-                            .doOnSuccess(this::publishDocumentStatusUpdate)
-                            .flatMap(saved -> embeddingService.embedDocument(saved.getDocumentId(), saved.getTeamId()))
-                            .then();
-                });
+                    return documentRepository.findByDocumentId(document.getDocumentId())
+                            .defaultIfEmpty(document)
+                            .flatMap(doc -> {
+                                if (doc.getStatus() == DocumentStatus.AI_READY) {
+                                    log.info("Document {} already AI_READY; skipping embedding trigger.",
+                                            doc.getDocumentId());
+                                    return Mono.empty();
+                                }
+
+                                doc.setStatus(DocumentStatus.EMBEDDING);
+                                doc.setErrorMessage(null);
+                                return documentRepository.save(doc)
+                                        .doOnSuccess(this::publishDocumentStatusUpdate)
+                                        .flatMap(saved -> embeddingService.embedDocument(saved.getDocumentId(),
+                                                saved.getTeamId()))
+                                        .then();
+                            });
+                })
+                .defaultIfEmpty(null)
+                .then();
     }
 
     private Mono<KnowledgeHubDocumentMetaData> createMetadataFromProcessedJson(KnowledgeHubDocument document) {

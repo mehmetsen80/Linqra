@@ -9,10 +9,9 @@ import org.lite.gateway.entity.KnowledgeHubDocument;
 import org.lite.gateway.enums.DocumentStatus;
 import org.lite.gateway.repository.KnowledgeHubDocumentMetaDataRepository;
 import org.lite.gateway.repository.KnowledgeHubDocumentRepository;
+import org.lite.gateway.repository.KnowledgeHubCollectionRepository;
 import org.lite.gateway.service.impl.KnowledgeHubDocumentMetaDataServiceImpl;
 
-import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
-import org.lite.gateway.service.ChunkEncryptionService;
 import org.lite.gateway.service.impl.ObjectStorageServiceImpl;
 import org.lite.gateway.util.AuditLogHelper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,10 +43,8 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.lite.gateway.service.LinqraVaultService;
 import io.milvus.client.MilvusServiceClient;
 import org.neo4j.driver.Driver;
-import org.lite.gateway.service.LinqMilvusStoreService;
 
 /**
  * Integration tests for KnowledgeHubDocumentMetaDataService using real MongoDB
@@ -108,6 +105,9 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
         @MockitoBean
         private KnowledgeHubDocumentEmbeddingService embeddingService;
 
+        @MockitoBean
+        private KnowledgeHubCollectionRepository collectionRepository;
+
         private KnowledgeHubDocumentMetaDataServiceImpl metadataService;
         private ObjectStorageServiceImpl objectStorageService;
         private StorageProperties storageProperties;
@@ -166,7 +166,8 @@ class KnowledgeHubDocumentMetaDataServiceImplIntegrationTest {
                                 executionMessageChannel,
                                 embeddingService,
                                 chunkEncryptionService,
-                                auditLogHelper);
+                                auditLogHelper,
+                                collectionRepository);
         }
 
         private void setupRealObjectStorageService() {

@@ -443,3 +443,111 @@ When an AI Assistant needs to execute an Agent Task:
 
 The Agent Task execution uses the existing workflow protocol, while the AI Assistant orchestrates the conversation using the chat protocol.
 
+## Other Examples
+
+### Summarize Long Text - LOCAL LLM - Ollama
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "ollama_summarize_content",
+    "params": {
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "textToSummarize": "The history of the Internet has its origin in the efforts of wide area networking that originated in several computer science laboratories in the United States, United Kingdom, and France. The U.S. Department of Defense awarded contracts as early as the 1960s, including for the development of the ARPANET project, directed by Robert Taylor and managed by Lawrence Roberts. The first message was sent over the ARPANET in 1969 from computer science professor Leonard Kleinrock's laboratory at the University of California, Los Angeles (UCLA) to the second network node at Stanford Research Institute (SRI). Packet switching, a fundamental concept for data transfer, was proposed by Paul Baran in the early 1960s and independently by Donald Davies in 1965. This method allowed data to be broken into smaller blocks, sent independently, and reassembled at the destination, which was far more efficient than the circuit-switching methods used by telephone networks. Access to the ARPANET was expanded in 1981 when the National Science Foundation (NSF) funded the Computer Science Network (CSNET). In 1982, the Internet Protocol Suite (TCP/IP) was standardized, which permitted disparate networks to interconnect. NSFNet access provided connection to supercomputer sites in the United States from research and education organizations. Commercial internet service providers (ISPs) began to emerge in the very late 1980s and 1990s. The ARPANET was decommissioned in 1990. The Internet was commercialized in 1995 when NSFNet was decommissioned, removing the last restrictions on the use of the Internet to carry commercial traffic. The Internet rapidly expanded in Europe and Australia in the mid to late 1990s and to Asia. The culture of the Internet is distinct because it is not owned or controlled by any single entity."
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "target": "ollama-chat",
+        "action": "generate",
+        "intent": "generate",
+        "description": "Summarize the provided text using the local Ollama model.",
+        "params": null,
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a helpful assistant specialized in summarizing text. Provide a concise summary of the following content."
+          },
+          {
+            "role": "user",
+            "content": "{{params.textToSummarize}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "llama3",
+          "settings": {
+            "max.tokens": 500,
+            "temperature": 0.7
+          }
+        },
+        "async": null,
+        "cacheConfig": null
+      }
+    ]
+  }
+}
+```
+  
+### Read and Write F1 Questions Document - Ollama
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "visa_questions_and_answers_intent",
+    "params": {
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/milvus/collections/visa_files_ollama_nomic_embed_text_768/search",
+        "payload": {
+          "textField": "text",
+          "text": "{{params.question}}",
+          "teamId": "{{params.teamId}}",
+          "modelCategory": "ollama-embed",
+          "modelName": "nomic-embed-text",
+          "nResults": 10
+        },
+        "description": "Retrieve the most relevant knowledge snippets for the user’s question."
+      },
+      {
+        "step": 2,
+        "target": "ollama-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are an expert F1 Visa and US Immigration assistant. Your role is to provide specific, actionable answers to questions about F1 Visa rules, work authorization (OPT/CPT), business ownership, and immigration compliance. When provided with knowledge snippets from documents, use them as your primary source."
+          },
+          {
+            "role": "user",
+            "content": "Question: {{params.question}}\n\nContext snippets from knowledge base:\n{{step1.result.results}}\n\n**CRITICAL INSTRUCTIONS:**\n\n1. **Primary Goal**: Provide a SPECIFIC, DETAILED answer to the question above based on the provided context.\n\n2. **When context snippets are available and relevant**:\n   - Use them as the primary source\n   - Quote specific passages from the 'F1 Visa FAQ' or other documents if applicable\n\n3. **When context is insufficient**:\n   - State clearly that the provided documents do not fully answer the question, but provide general guidance based on standard F1 Visa regulations (e.g., prohibition on self-employment without OPT/CPT, passive investment rules).\n\n4. **Response Structure**:\n   **Direct Answer**: [Provide a clear Yes/No/Maybe answer with conditions]\n   \n   **Specific Details**: [Explain the rules, such as the difference between passive ownership and active management, or OPT requirements]\n   \n   **Action Items**: [Provide concrete steps, e.g., 'Consult DSO', 'Apply for OPT', 'Hire a manager']\n   \n   **Important Note**: [Disclaimer about legal advice and checking latest USCIS/SEVP guidelines]"
+          }
+        ],
+        "llmConfig": {
+          "model": "llama3",
+          "settings": {
+            "temperature": 0.3,
+            "max.tokens": 1000
+          }
+        },
+        "description": "Generate a comprehensive answer based on the search results."
+      }
+    ]
+  }
+}
+```

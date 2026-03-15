@@ -40,7 +40,8 @@ function ViewAgent() {
         taskType: 'WORKFLOW_EMBEDDED',
         priority: 5,
         maxRetries: 3,
-        timeoutMinutes: 120
+        timeoutMinutes: 120,
+        scheduleOnStartup: true
     });
     const [creatingTask, setCreatingTask] = useState(false);
     const [showEditAgentModal, setShowEditAgentModal] = useState(false);
@@ -257,7 +258,8 @@ function ViewAgent() {
                     taskType: 'WORKFLOW_EMBEDDED',
                     priority: 5,
                     maxRetries: 3,
-                    timeoutMinutes: 30
+                    timeoutMinutes: 30,
+                    scheduleOnStartup: true
                 });
                 loadAgentTasks(); // Reload tasks
                 // Navigate to the new task

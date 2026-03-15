@@ -444,7 +444,7 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                             style={{
                                 display: 'flex',
                                 flexDirection: 'row',
-                                gap: '80px',
+                                gap: '30px',
                                 zIndex: 2,
                                 position: 'relative',
                                 minWidth: 'max-content',
@@ -545,10 +545,11 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                             <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                color: '#495057',
-                                fontSize: '2rem',
+                                color: '#adb5bd',
+                                fontSize: '1.5rem',
                                 fontWeight: 'bold',
-                                flexShrink: 0
+                                flexShrink: 0,
+                                margin: '0 -10px'
                             }}>
                                 <i className="fas fa-angle-double-right"></i>
                             </div>
@@ -649,10 +650,11 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                             <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
-                                color: '#495057',
-                                fontSize: '2rem',
+                                color: '#adb5bd',
+                                fontSize: '1.5rem',
                                 fontWeight: 'bold',
-                                flexShrink: 0
+                                flexShrink: 0,
+                                margin: '0 -10px'
                             }}>
                                 <i className="fas fa-angle-double-right"></i>
                             </div>

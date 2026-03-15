@@ -23,8 +23,10 @@ public class KnowledgeHubSyncController {
 
     @GetMapping("/documents/{id}/exists")
     public Mono<Boolean> checkDocumentExists(@PathVariable String id) {
-        log.info("🔍 Received existence check for document: {}", id);
-        return documentRepository.existsById(id);
+        log.info("🔍 Received existence check for documentId: {}", id);
+        return documentRepository.findByDocumentId(id)
+                .map(doc -> true)
+                .defaultIfEmpty(false);
     }
 
     @PostMapping("/delta-content")

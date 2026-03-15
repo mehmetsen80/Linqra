@@ -506,6 +506,18 @@ class CronDescriptionServiceImplTest {
     }
 
     @Test
+    void testGetCronDescription_EveryDayAt2AMand2PM() {
+        // Given
+        String cronExpression = "0 0 2,14 * * ?";
+
+        // When
+        String result = cronDescriptionService.getCronDescription(cronExpression);
+
+        // Then
+        assertEquals("Every day at 2:00 AM and 2:00 PM", result);
+    }
+
+    @Test
     void testGetCronDescription_EveryDayAt10AM() {
         // Given
         String cronExpression = "0 0 10 * * ?";

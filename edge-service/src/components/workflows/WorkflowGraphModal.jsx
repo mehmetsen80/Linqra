@@ -47,75 +47,92 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
         if (!containerRef.current || steps.length === 0) return;
         const newLines = [];
 
-        steps.forEach((step, index) => {
-            const currentEl = nodeRefs.current[step.step];
-            if (!currentEl) return;
+        // 1. Map out all logical connection points
+        const connectionPoints = [];
+        connectionPoints.push({ id: 'start', type: 'terminal' });
 
-            const currentLeft = currentEl.offsetLeft;
-            const currentTop = currentEl.offsetTop;
-            const currentWidth = currentEl.offsetWidth;
-            const currentHeight = currentEl.offsetHeight;
-            const currentRight = currentLeft + currentWidth;
-            const currentBottom = currentTop + currentHeight;
-
-            // Sequential connection (Next step) straight line
-            if (index < steps.length - 1) {
-                const nextStep = steps[index + 1];
-                const nextEl = nodeRefs.current[nextStep.step];
-                if (nextEl) {
-                    const nextLeft = nextEl.offsetLeft;
-                    const nextTop = nextEl.offsetTop;
-                    const nextHeight = nextEl.offsetHeight;
-
-                    const startX = currentRight;
-                    const startY = currentTop + currentHeight / 2;
-                    const endX = nextLeft - 4; // offset for arrowhead
-                    const endY = nextTop + nextHeight / 2;
-                    newLines.push({
-                        id: `seq-${step.step}-${nextStep.step}`,
-                        path: `M ${startX} ${startY} L ${endX} ${endY}`,
-                        type: 'sequential'
-                    });
-                }
+        steps.forEach((step) => {
+            connectionPoints.push({ id: step.step, type: 'step', data: step });
+            if (step.jump) {
+                connectionPoints.push({ id: `dec-${step.step}`, type: 'decision', data: step });
             }
+        });
 
-            // Jump connection ABOVE the nodes
-            if (step.jump && (step.jump.targetStep !== undefined || step.jump.targetStep === 0)) {
-                let targetEl = null;
+        connectionPoints.push({ id: 'end', type: 'terminal' });
+
+        // 2. Draw sequential connections (Main track)
+        for (let i = 0; i < connectionPoints.length - 1; i++) {
+            const current = connectionPoints[i];
+            const next = connectionPoints[i + 1];
+
+            // Skip terminal decorative segments (START->Step and Step->END) as they use icons
+            if (current.id === 'start' || next.id === 'end') continue;
+
+            const currentEl = nodeRefs.current[current.id];
+            const nextEl = nodeRefs.current[next.id];
+
+            if (currentEl && nextEl) {
+                const startX = currentEl.offsetLeft + currentEl.offsetWidth;
+                const startY = currentEl.offsetTop + currentEl.offsetHeight / 2;
+                const endX = nextEl.offsetLeft;
+                const endY = nextEl.offsetTop + nextEl.offsetHeight / 2;
+
+                const midX = (startX + endX) / 2;
+                const midY = (startY + endY) / 2;
+
+                newLines.push({
+                    id: `seq-${current.id}-${next.id}`,
+                    path: `M ${startX} ${startY} L ${endX} ${endY}`,
+                    type: 'sequential',
+                    label: current.type === 'decision' ? 'YES' : null,
+                    labelX: midX - 10,
+                    labelY: midY - 10
+                });
+            }
+        }
+
+        // 3. Draw Jump/Branch (NO) connections
+        steps.forEach((step, index) => {
+            if (step.jump) {
+                const decEl = nodeRefs.current[`dec-${step.step}`];
+                if (!decEl) return;
+
+                const decWidth = decEl.offsetWidth;
+                const decHeight = decEl.offsetHeight;
+                const decLeft = decEl.offsetLeft;
+                const decTop = decEl.offsetTop;
 
                 if (step.jump.targetStep > 0) {
-                    targetEl = nodeRefs.current[step.jump.targetStep];
-                }
+                    const targetEl = nodeRefs.current[step.jump.targetStep];
+                    if (targetEl) {
+                        const targetLeft = targetEl.offsetLeft;
+                        const targetTop = targetEl.offsetTop;
+                        const targetWidth = targetEl.offsetWidth;
 
-                if (targetEl) {
-                    const targetLeft = targetEl.offsetLeft;
-                    const targetTop = targetEl.offsetTop;
-                    const targetWidth = targetEl.offsetWidth;
+                        const startX = decLeft + decWidth / 2;
+                        const startY = decTop; // Branch UP
+                        const endX = targetLeft + targetWidth / 2;
+                        const endY = targetTop - 10;
 
-                    const startX = currentLeft + currentWidth / 2;
-                    const startY = currentTop;
-                    const endX = targetLeft + targetWidth / 2;
-                    const endY = targetTop - 10; // Point slightly above top edge
+                        const midX = (startX + endX) / 2;
+                        const distance = Math.abs(index - steps.findIndex(s => s.step === step.jump.targetStep));
+                        const height = 60 + (distance * 20);
+                        const controlY = Math.min(startY, endY) - height;
 
-                    const midX = (startX + endX) / 2;
-                    // Height based on distance to avoid overlaps
-                    const distance = Math.abs(index - steps.findIndex(s => s.step === step.jump.targetStep));
-                    const height = 40 + (distance * 15);
-                    const controlY = Math.min(startY, endY) - height;
-
-                    newLines.push({
-                        id: `jump-${step.step}-${step.jump.targetStep}`,
-                        path: `M ${startX} ${startY} L ${startX} ${controlY} L ${endX} ${controlY} L ${endX} ${endY}`,
-                        type: 'jump',
-                        condition: step.jump.condition,
-                        labelX: midX,
-                        labelY: controlY - 10
-                    });
+                        newLines.push({
+                            id: `jump-${step.step}-${step.jump.targetStep}`,
+                            path: `M ${startX} ${startY} L ${startX} ${controlY} L ${endX} ${controlY} L ${endX} ${endY}`,
+                            type: 'jump',
+                            condition: step.jump.condition,
+                            labelX: midX,
+                            labelY: controlY - 22
+                        });
+                    }
                 } else if (step.jump.targetStep === 0) {
-                    // Terminal jump representation - straight down from bottom center
-                    const startX = currentLeft + currentWidth / 2;
-                    const startY = currentBottom;
-                    const terminalY = startY + 60; // Go DOWN
+                    // Terminal branch
+                    const startX = decLeft + decWidth / 2;
+                    const startY = decTop + decHeight; // Branch DOWN
+                    const terminalY = startY + 80;
 
                     newLines.push({
                         id: `jump-${step.step}-term`,
@@ -123,7 +140,7 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                         type: 'terminal',
                         condition: step.jump.condition,
                         labelX: startX,
-                        labelY: terminalY + 30, // Increased gap below the circle (circle r=10)
+                        labelY: terminalY + 45, // Moved further down to make room for STOP
                         terminalX: startX,
                         terminalY: terminalY
                     });
@@ -384,6 +401,40 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                     visibility: visible;
                     opacity: 1;
                 }
+                .decision-diamond {
+                    width: 100px;
+                    height: 100px;
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                    margin: 0;
+                    transition: all 0.2s;
+                    z-index: 5;
+                }
+                .decision-diamond:hover {
+                    transform: scale(1.05);
+                    background-color: #e67200;
+                    cursor: pointer;
+                    z-index: 10;
+                }
+                .decision-condition {
+                    color: white;
+                    font-size: 0.48rem;
+                    line-height: 1.1;
+                    font-weight: 800;
+                    text-align: center;
+                    word-break: break-all;
+                    max-width: 65px;
+                    position: absolute;
+                    z-index: 2;
+                    display: -webkit-box;
+                    WebkitLineClamp: 4;
+                    WebkitBoxOrient: 'vertical';
+                    overflow: hidden;
+                    text-transform: uppercase;
+                }
                 `}
             </style>
             <Modal.Header closeButton className="bg-light border-bottom workflow-modal-header">
@@ -434,7 +485,7 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                             flexDirection: 'column',
                             minWidth: 'max-content',
                             minHeight: 'max-content',
-                            margin: 'auto',             // Perfect centering if container is wider than row
+                            margin: 'auto',
                             transform: `scale(${zoom})`,
                             transformOrigin: 'top center',
                             transition: 'transform 0.2s ease-in-out'
@@ -444,16 +495,16 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                             style={{
                                 display: 'flex',
                                 flexDirection: 'row',
-                                gap: '30px',
+                                gap: '50px',
                                 zIndex: 2,
                                 position: 'relative',
                                 minWidth: 'max-content',
                                 justifyContent: 'center',
                                 alignItems: 'center',
-                                padding: '250px 60px 200px 60px' // Padding moved here so absolute SVG originates at top-left of this entire padded space
+                                padding: '350px 80px 300px 80px' // Padding for branches above/below
                             }}
                         >
-                            {/* SVG Connector Overlay - positioned over the minWidth row to scroll *with* it */}
+                            {/* SVG Connector Overlay */}
                             <svg
                                 style={{
                                     position: 'absolute',
@@ -484,32 +535,58 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                                             markerEnd={line.type !== 'terminal' ? (line.type === 'jump' ? "url(#arrowhead-jump)" : "url(#arrowhead)") : "none"}
                                         />
                                         {line.type === 'terminal' && (
-                                            <circle cx={line.terminalX} cy={line.terminalY} r="8" fill="#dc3545" />
+                                            <>
+                                                <circle cx={line.terminalX} cy={line.terminalY} r="8" fill="#dc3545" />
+                                                <text
+                                                    x={line.terminalX}
+                                                    y={line.terminalY + 22}
+                                                    fill="#dc3545"
+                                                    fontSize="10"
+                                                    fontWeight="800"
+                                                    textAnchor="middle"
+                                                    style={{ textShadow: '1px 1px 2px white, -1px -1px 2px white' }}
+                                                >
+                                                    STOP
+                                                </text>
+                                            </>
                                         )}
-                                        {(line.type === 'jump' || line.type === 'terminal') && line.condition && (
+                                        {line.label && (
                                             <text
                                                 x={line.labelX}
                                                 y={line.labelY}
-                                                fill="#dc3545"
-                                                fontSize="16"
+                                                fill={line.type === 'sequential' ? '#198754' : '#dc3545'}
+                                                fontSize="14"
                                                 fontWeight="bold"
                                                 textAnchor="middle"
                                                 style={{ textShadow: '1px 1px 2px white, -1px -1px 2px white', pointerEvents: 'none' }}
                                             >
-                                                {line.type === 'terminal' ? 'STOP IF' : 'JUMP IF'}
+                                                {line.label}
+                                            </text>
+                                        )}
+                                        {(line.type === 'jump' || line.type === 'terminal') && (
+                                            <text
+                                                x={line.labelX}
+                                                y={line.labelY}
+                                                fill={line.type === 'terminal' ? '#dc3545' : '#fd7e14'}
+                                                fontSize="14"
+                                                fontWeight="bold"
+                                                textAnchor="middle"
+                                                style={{ textShadow: '1px 1px 2px white, -1px -1px 2px white', pointerEvents: 'none' }}
+                                            >
+                                                NO
                                             </text>
                                         )}
                                         {(line.type === 'jump' || line.type === 'terminal') && line.condition && (
                                             <text
                                                 x={line.labelX}
-                                                y={line.labelY + 24} // Increased gap
+                                                y={line.type === 'terminal' ? line.labelY + 24 : line.labelY - 20}
                                                 fill="#6c757d"
-                                                fontSize="11"
+                                                fontSize="10"
                                                 fontFamily="monospace"
                                                 textAnchor="middle"
                                                 style={{ textShadow: '1px 1px 2px white, -1px -1px 2px white' }}
                                             >
-                                                [{line.condition}]
+                                                IF {line.condition}
                                             </text>
                                         )}
                                     </g>
@@ -517,15 +594,18 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                             </svg>
 
                             {/* START Terminal Node */}
-                            <div style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                width: '80px',
-                                flexShrink: 0
-                            }}>
+                            <div
+                                ref={(el) => setRef('start', el)}
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    width: '80px',
+                                    flexShrink: 0
+                                }}
+                            >
                                 <div style={{
                                     width: '64px',
                                     height: '64px',
@@ -538,10 +618,7 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                                 }}>
                                     <span style={{ color: 'white', fontSize: '0.7rem', fontWeight: '800', letterSpacing: '1px' }}>START</span>
                                 </div>
-
                             </div>
-
-                            {/* Arrow from START to first step */}
                             <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -549,104 +626,124 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                                 fontSize: '1.5rem',
                                 fontWeight: 'bold',
                                 flexShrink: 0,
-                                margin: '0 -10px'
+                                margin: '0 -30px'
                             }}>
                                 <i className="fas fa-angle-double-right"></i>
                             </div>
 
-                            {/* Draggable Step Nodes */}
+                            {/* Draggable Step Nodes & Diamonds */}
                             {steps.map((step, index) => {
                                 const stepLabels = getStepLabel(step.target, step.action, step.intent);
                                 const stepColor = getStepColor(step.target, step.intent);
                                 const stepIcon = getStepIcon(step.target, step.action, step.intent);
 
                                 return (
-                                    <div
-                                        key={`wrapper-${step.step}`}
-                                        draggable="true"
-                                        ref={(el) => setRef(step.step, el)}
-                                        onDragStart={(e) => handleDragStart(e, index)}
-                                        onDragOver={handleDragOver}
-                                        onDrop={(e) => handleDrop(e, index)}
-                                        onDragEnd={calculateLines}
-                                        style={{
-                                            cursor: 'grab',
-                                            height: 'fit-content',
-                                            width: '130px',
-                                            display: 'flex',
-                                            justifyContent: 'center'
-                                        }}
-                                    >
+                                    <React.Fragment key={`step-group-${step.step}`}>
                                         <div
-                                            className="step-box"
-                                            onClick={() => {
-                                                setSelectedStep(step.step);
-                                                setTimeout(() => {
-                                                    stepJsonRefs.current[step.step]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                }, 50);
-                                            }}
+                                            draggable="true"
+                                            ref={(el) => setRef(step.step, el)}
+                                            onDragStart={(e) => handleDragStart(e, index)}
+                                            onDragOver={handleDragOver}
+                                            onDrop={(e) => handleDrop(e, index)}
+                                            onDragEnd={calculateLines}
                                             style={{
-                                                '--step-color': stepColor,
+                                                cursor: 'grab',
+                                                height: 'fit-content',
                                                 width: '130px',
-                                                height: '130px', // Perfect square
                                                 display: 'flex',
-                                                flexDirection: 'column',
-                                                justifyContent: 'center',
-                                                alignItems: 'center',
-                                                padding: '10px',
-                                                boxShadow: step.async ? '0 0 10px rgba(13, 110, 253, 0.4)' : undefined,
-                                                borderColor: step.async ? '#0d6efd' : undefined,
-                                                margin: 0,
-                                                position: 'relative' // Critical for absolutely positioned tooltips to map bounds accurately
+                                                justifyContent: 'center'
                                             }}
                                         >
-                                            {/* Pure CSS Native Tooltip replaces Popper to avoid scale() math bugs */}
-                                            <div className="step-box-custom-tooltip">
-                                                <div className="tooltip-header mb-1">
-                                                    <strong>Step {step.step}: {step.target}</strong>
-                                                </div>
-                                                <div className="tooltip-action mt-2">
-                                                    <i className={stepIcon}></i> Action: {stepLabels.action}
-                                                </div>
-                                                {step.description && (
-                                                    <div className="tooltip-description mt-2 fst-italic">
-                                                        {step.description}
-                                                    </div>
-                                                )}
-                                                {step.intent && (
-                                                    <div className="tooltip-intent mt-1 font-monospace small" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                                                        {step.intent}
-                                                    </div>
-                                                )}
-                                            </div>
                                             <div
-                                                className="step-number"
-                                                style={{ backgroundColor: stepColor, top: '-10px', right: '-10px', position: 'absolute' }}
+                                                className="step-box"
+                                                onClick={() => {
+                                                    setSelectedStep(step.step);
+                                                    setTimeout(() => {
+                                                        stepJsonRefs.current[step.step]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                    }, 50);
+                                                }}
+                                                style={{
+                                                    '--step-color': stepColor,
+                                                    width: '130px',
+                                                    height: '130px',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    justifyContent: 'center',
+                                                    alignItems: 'center',
+                                                    padding: '10px',
+                                                    boxShadow: step.async ? '0 0 10px rgba(13, 110, 253, 0.4)' : undefined,
+                                                    borderColor: step.async ? '#0d6efd' : undefined,
+                                                    margin: 0,
+                                                    position: 'relative'
+                                                }}
                                             >
-                                                {step.step}
-                                            </div>
-                                            <div className="step-icon">
-                                                <i className={stepIcon} style={{ fontSize: '1.8rem' }}></i>
-                                            </div>
-                                            <div className="step-label" style={{ minHeight: 'auto', marginTop: '8px' }}>
-                                                <div className="step-target text-truncate w-100 px-1" title={stepLabels.target}>{stepLabels.target}</div>
-                                                <div className="step-action">
-                                                    {stepLabels.action}
-                                                    {step.async && <span className="ms-1 text-primary"><i className="fas fa-bolt" title="Async"></i></span>}
-                                                    {step.jump && <span className="ms-1 text-warning"><i className="fas fa-code-branch" title="Jump"></i></span>}
-                                                </div>
-                                                {step.summary && (
-                                                    <div className="text-truncate w-100 px-1" title={step.summary} style={{ fontSize: '0.65rem', color: '#6c757d', fontStyle: 'italic', marginTop: '3px', lineHeight: 1.2 }}>
-                                                        {step.summary}
+                                                <div className="step-box-custom-tooltip">
+                                                    <div className="tooltip-header mb-1">
+                                                        <strong>Step {step.step}: {step.summary || step.target}</strong>
                                                     </div>
-                                                )}
+                                                    <div className="tooltip-action mt-2">
+                                                        <i className={stepIcon}></i> Action: {stepLabels.action}
+                                                    </div>
+                                                    {step.description && <div className="tooltip-description mt-2 fst-italic">{step.description}</div>}
+                                                    {step.intent && <div className="tooltip-intent mt-1 font-monospace small" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>{step.intent}</div>}
+                                                </div>
+                                                <div
+                                                    className="step-number"
+                                                    style={{ backgroundColor: stepColor, top: '-10px', right: '-10px', position: 'absolute' }}
+                                                >
+                                                    {step.step}
+                                                </div>
+                                                <div className="step-icon">
+                                                    <i className={stepIcon} style={{ fontSize: '1.8rem' }}></i>
+                                                </div>
+                                                <div className="step-label" style={{ minHeight: 'auto', marginTop: '3px', width: '100%' }}>
+                                                    <div className="step-target text-truncate w-100 px-1" title={stepLabels.target}>{stepLabels.target}</div>
+                                                    <div className="step-action">
+                                                        {stepLabels.action}
+                                                        {step.async && <span className="ms-1 text-primary"><i className="fas fa-bolt" title="Async"></i></span>}
+                                                        {step.jump && <span className="ms-1 text-warning"><i className="fas fa-code-branch" title="Jump"></i></span>}
+                                                    </div>
+                                                    {step.summary && (
+                                                        <div className="w-100 px-1" title={step.summary} style={{
+                                                            fontSize: '0.65rem',
+                                                            color: '#6c757d',
+                                                            fontStyle: 'italic',
+                                                            marginTop: '3px',
+                                                            lineHeight: 1.2,
+                                                            display: '-webkit-box',
+                                                            WebkitLineClamp: 2,
+                                                            WebkitBoxOrient: 'vertical',
+                                                            overflow: 'hidden',
+                                                            wordBreak: 'break-word',
+                                                            whiteSpace: 'normal',
+                                                            textAlign: 'center'
+                                                        }}>
+                                                            {step.summary}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
+
+                                        {step.jump && (
+                                            <div
+                                                key={`dec-${step.step}`}
+                                                ref={(node) => setRef(`dec-${step.step}`, node)}
+                                                className="decision-diamond"
+                                                title={`Condition: ${step.jump.condition}`}
+                                            >
+                                                <svg width="100" height="100" style={{ position: 'absolute', top: 0, left: 0, zIndex: 1, filter: 'drop-shadow(0 4px 6px rgba(253, 126, 20, 0.4))' }}>
+                                                    <polygon points="50,0 100,50 50,100 0,50" fill="#fd7e14" />
+                                                </svg>
+                                                <div className="decision-condition">
+                                                    {step.jump.condition}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </React.Fragment>
                                 );
                             })}
 
-                            {/* Arrow from last step to END */}
                             <div style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -654,21 +751,24 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                                 fontSize: '1.5rem',
                                 fontWeight: 'bold',
                                 flexShrink: 0,
-                                margin: '0 -10px'
+                                margin: '0 -30px'
                             }}>
                                 <i className="fas fa-angle-double-right"></i>
                             </div>
 
                             {/* END Terminal Node */}
-                            <div style={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                width: '80px',
-                                flexShrink: 0
-                            }}>
+                            <div
+                                ref={(el) => setRef('end', el)}
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px',
+                                    width: '80px',
+                                    flexShrink: 0
+                                }}
+                            >
                                 <div style={{
                                     width: '64px',
                                     height: '64px',
@@ -681,7 +781,6 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                                 }}>
                                     <span style={{ color: 'white', fontSize: '0.7rem', fontWeight: '800', letterSpacing: '1px' }}>END</span>
                                 </div>
-
                             </div>
                         </div>
                     </div>
@@ -757,92 +856,94 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                 </div>
 
                 {/* JSON Inspector Panel */}
-                {selectedStep !== null && (() => {
-                    const fullJson = JSON.stringify(workflowData, null, 2);
-                    const workflowSteps = workflowData?.workflow || workflowData?.query?.workflow || [];
+                {
+                    selectedStep !== null && (() => {
+                        const fullJson = JSON.stringify(workflowData, null, 2);
+                        const workflowSteps = workflowData?.workflow || workflowData?.query?.workflow || [];
 
-                    return (
-                        <div style={{
-                            width: '380px',
-                            minWidth: '380px',
-                            height: '100%',
-                            borderLeft: '1px solid #dee2e6',
-                            backgroundColor: '#1e1e2e',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            overflow: 'hidden',
-                            flexShrink: 0,
-                            boxShadow: '-4px 0 16px rgba(0,0,0,0.15)'
-                        }}>
-                            {/* Panel Header */}
+                        return (
                             <div style={{
+                                width: '380px',
+                                minWidth: '380px',
+                                height: '100%',
+                                borderLeft: '1px solid #dee2e6',
+                                backgroundColor: '#1e1e2e',
                                 display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                padding: '10px 14px',
-                                backgroundColor: '#13131f',
-                                borderBottom: '1px solid #2d2d44',
-                                flexShrink: 0
+                                flexDirection: 'column',
+                                overflow: 'hidden',
+                                flexShrink: 0,
+                                boxShadow: '-4px 0 16px rgba(0,0,0,0.15)'
                             }}>
-                                <span style={{ color: '#a9b1d6', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 600 }}>
-                                    <i className="fas fa-code me-2" style={{ color: 'var(--primary-color)' }}></i>
-                                    workflow.json — Step {selectedStep}
-                                </span>
-                                <button onClick={() => setSelectedStep(null)} style={{
-                                    background: 'none', border: 'none', color: '#6c757d', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '2px 6px'
-                                }} title="Close Inspector">✕</button>
+                                {/* Panel Header */}
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '10px 14px',
+                                    backgroundColor: '#13131f',
+                                    borderBottom: '1px solid #2d2d44',
+                                    flexShrink: 0
+                                }}>
+                                    <span style={{ color: '#a9b1d6', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 600 }}>
+                                        <i className="fas fa-code me-2" style={{ color: 'var(--primary-color)' }}></i>
+                                        workflow.json — Step {selectedStep}
+                                    </span>
+                                    <button onClick={() => setSelectedStep(null)} style={{
+                                        background: 'none', border: 'none', color: '#6c757d', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, padding: '2px 6px'
+                                    }} title="Close Inspector">✕</button>
+                                </div>
+
+                                {/* Scrollable JSON body */}
+                                <div style={{ overflowY: 'auto', flex: 1, padding: '12px 0' }}>
+                                    {/* Top-level opening */}
+                                    <pre style={{ margin: 0, padding: '0 14px 4px', color: '#a9b1d6', fontSize: '0.72rem', fontFamily: 'monospace', lineHeight: 1.7 }}>
+                                        {`{\n  "link": ${JSON.stringify(workflowData?.link || workflowData?.query?.link, null, 2).replace(/\n/g, '\n  ')},\n  "query": {\n    "intent": ${JSON.stringify(workflowData?.query?.intent)},\n    "params": ${JSON.stringify(workflowData?.query?.params, null, 2).replace(/\n/g, '\n    ')},\n    "workflow": [`}
+                                    </pre>
+
+                                    {/* Each step block */}
+                                    {workflowSteps.map((step, idx) => {
+                                        const isSelected = step.step === selectedStep;
+                                        return (
+                                            <div
+                                                key={step.step}
+                                                ref={(el) => { stepJsonRefs.current[step.step] = el; }}
+                                                onClick={() => setSelectedStep(step.step)}
+                                                style={{
+                                                    margin: '2px 8px',
+                                                    borderRadius: '6px',
+                                                    backgroundColor: isSelected ? 'rgba(122, 162, 247, 0.15)' : 'transparent',
+                                                    border: isSelected ? '1px solid rgba(122, 162, 247, 0.4)' : '1px solid transparent',
+                                                    cursor: 'pointer',
+                                                    transition: 'background 0.2s',
+                                                    padding: '6px 6px'
+                                                }}
+                                            >
+                                                <pre style={{
+                                                    margin: 0,
+                                                    color: isSelected ? '#7aa2f7' : '#a9b1d6',
+                                                    fontSize: '0.72rem',
+                                                    fontFamily: 'monospace',
+                                                    lineHeight: 1.7,
+                                                    whiteSpace: 'pre-wrap',
+                                                    wordBreak: 'break-word'
+                                                }}>
+                                                    {(idx > 0 ? '' : '') + JSON.stringify(step, null, 2) + (idx < workflowSteps.length - 1 ? ',' : '')}
+                                                </pre>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {/* Closing brackets */}
+                                    <pre style={{ margin: 0, padding: '4px 14px 0', color: '#a9b1d6', fontSize: '0.72rem', fontFamily: 'monospace', lineHeight: 1.7 }}>
+                                        {`    ]\n  }\n}`}
+                                    </pre>
+                                </div>
                             </div>
+                        );
+                    })()
+                }
 
-                            {/* Scrollable JSON body */}
-                            <div style={{ overflowY: 'auto', flex: 1, padding: '12px 0' }}>
-                                {/* Top-level opening */}
-                                <pre style={{ margin: 0, padding: '0 14px 4px', color: '#a9b1d6', fontSize: '0.72rem', fontFamily: 'monospace', lineHeight: 1.7 }}>
-                                    {`{\n  "link": ${JSON.stringify(workflowData?.link || workflowData?.query?.link, null, 2).replace(/\n/g, '\n  ')},\n  "query": {\n    "intent": ${JSON.stringify(workflowData?.query?.intent)},\n    "params": ${JSON.stringify(workflowData?.query?.params, null, 2).replace(/\n/g, '\n    ')},\n    "workflow": [`}
-                                </pre>
-
-                                {/* Each step block */}
-                                {workflowSteps.map((step, idx) => {
-                                    const isSelected = step.step === selectedStep;
-                                    return (
-                                        <div
-                                            key={step.step}
-                                            ref={(el) => { stepJsonRefs.current[step.step] = el; }}
-                                            onClick={() => setSelectedStep(step.step)}
-                                            style={{
-                                                margin: '2px 8px',
-                                                borderRadius: '6px',
-                                                backgroundColor: isSelected ? 'rgba(122, 162, 247, 0.15)' : 'transparent',
-                                                border: isSelected ? '1px solid rgba(122, 162, 247, 0.4)' : '1px solid transparent',
-                                                cursor: 'pointer',
-                                                transition: 'background 0.2s',
-                                                padding: '6px 6px'
-                                            }}
-                                        >
-                                            <pre style={{
-                                                margin: 0,
-                                                color: isSelected ? '#7aa2f7' : '#a9b1d6',
-                                                fontSize: '0.72rem',
-                                                fontFamily: 'monospace',
-                                                lineHeight: 1.7,
-                                                whiteSpace: 'pre-wrap',
-                                                wordBreak: 'break-word'
-                                            }}>
-                                                {(idx > 0 ? '' : '') + JSON.stringify(step, null, 2) + (idx < workflowSteps.length - 1 ? ',' : '')}
-                                            </pre>
-                                        </div>
-                                    );
-                                })}
-
-                                {/* Closing brackets */}
-                                <pre style={{ margin: 0, padding: '4px 14px 0', color: '#a9b1d6', fontSize: '0.72rem', fontFamily: 'monospace', lineHeight: 1.7 }}>
-                                    {`    ]\n  }\n}`}
-                                </pre>
-                            </div>
-                        </div>
-                    );
-                })()}
-
-            </Modal.Body>
+            </Modal.Body >
         </Modal >
     );
 };

@@ -11,21 +11,21 @@ import java.util.stream.Collectors;
 @Slf4j
 public class CronDescriptionServiceImpl implements CronDescriptionService {
     private static final String[] MONTH_NAMES = {
-        "", "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December"
+            "", "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"
     };
     private static final String[] DAY_NAMES = {
-        "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+            "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
     };
     private static final String[] DAY_ABBREVIATIONS = {
-        "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"
+            "SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"
     };
 
-        public String getCronDescription(String cronExpression) {
+    public String getCronDescription(String cronExpression) {
         if (cronExpression == null || cronExpression.trim().isEmpty()) {
             throw new IllegalArgumentException("Cron expression cannot be null or empty");
         }
-                
+
         String[] parts = cronExpression.trim().split("\\s+");
         if (parts.length != 6) {
             throw new IllegalArgumentException("Invalid cron expression: must contain 6 fields");
@@ -46,7 +46,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
 
             // Handle special case: every minute
             if ("*".equals(second) && "*".equals(minute) && "*".equals(hour) &&
-                "*".equals(dayOfMonth) && "*".equals(month) && "*".equals(dayOfWeek)) {
+                    "*".equals(dayOfMonth) && "*".equals(month) && "*".equals(dayOfWeek)) {
                 return "Every minute";
             }
 
@@ -67,7 +67,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             if (dayOfWeekDesc.isEmpty() && dayOfMonthDesc.isEmpty() && monthDesc.isEmpty()) {
                 // Handle every second of specific minute at specific hour first
                 if (second.equals("*") && !minute.equals("*") && !hour.equals("*")) {
-                    description.append("second of minute ").append(minute).append(" at ").append(formatHour(Integer.parseInt(hour)));
+                    description.append("second of minute ").append(minute).append(" at ")
+                            .append(formatHour(Integer.parseInt(hour)));
                 } else if (hasTime) {
                     if (second.equals("0") && minute.equals("0") && hour.equals("*")) {
                         description.append("hour at minute 0");
@@ -78,7 +79,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                         } else {
                             description.append(stepValue).append(" hours at minute 0");
                         }
-                    } else if (second.equals("0") && minute.equals("0") && hour.startsWith("*/") && dayOfMonth.contains("-")) {
+                    } else if (second.equals("0") && minute.equals("0") && hour.startsWith("*/")
+                            && dayOfMonth.contains("-")) {
                         // Special case: step value with hour range (e.g., */3 with 7-19)
                         // Check if dayOfMonth range represents hours (0-23 range)
                         String[] range = dayOfMonth.split("-");
@@ -91,7 +93,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                                     String stepValue = hour.replace("*/", "");
                                     String startTime = formatHour(startHour);
                                     String endTime = formatHour(endHour);
-                                    description.append(stepValue).append(" hours from ").append(startTime).append(" to ").append(endTime);
+                                    description.append(stepValue).append(" hours from ").append(startTime)
+                                            .append(" to ").append(endTime);
                                 } else {
                                     // Fall back to regular step value handling
                                     String stepValue = hour.replace("*/", "");
@@ -124,7 +127,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                     } else if (second.startsWith("*/") && minute.equals("*") && hour.equals("*")) {
                         // Special case: step value in seconds (e.g., */5 for every 5 seconds)
                         String stepValue = second.replace("*/", "");
-                                                description.append(stepValue).append(" seconds");
+                        description.append(stepValue).append(" seconds");
                     } else if (!second.equals("0") && minute.equals("*") && hour.equals("*")) {
                         description.append("minute at second ").append(second);
                     } else if (second.equals("0") && minute.startsWith("*/") && hour.equals("*")) {
@@ -141,7 +144,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                                 int endHour = Integer.parseInt(range[1].trim());
                                 String startTime = formatHour(startHour);
                                 String endTime = formatHour(endHour);
-                                description.append(stepValue).append(" minutes from ").append(startTime).append(" to ").append(endTime);
+                                description.append(stepValue).append(" minutes from ").append(startTime).append(" to ")
+                                        .append(endTime);
                             } catch (NumberFormatException e) {
                                 // Fall back to regular handling
                                 description.append(stepValue).append(" minutes at second 0");
@@ -153,7 +157,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                         // Special case: minute range (e.g., 9-17 for minute 9 through minute 17)
                         String[] range = minute.split("-");
                         if (range.length == 2) {
-                            description.append("hour at minute ").append(range[0]).append(" through minute ").append(range[1]);
+                            description.append("hour at minute ").append(range[0]).append(" through minute ")
+                                    .append(range[1]);
                         } else {
                             description.append("hour at minute ").append(minute);
                         }
@@ -173,7 +178,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                     description.append("day");
                 }
             } else {
-                // Special case: step value with hour range in dayOfMonth field (e.g., */3 with 7-19)
+                // Special case: step value with hour range in dayOfMonth field (e.g., */3 with
+                // 7-19)
                 if (second.equals("0") && minute.equals("0") && hour.startsWith("*/") && dayOfMonth.contains("-")) {
                     String[] range = dayOfMonth.split("-");
                     if (range.length == 2) {
@@ -185,7 +191,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                                 String stepValue = hour.replace("*/", "");
                                 String startTime = formatHour(startHour);
                                 String endTime = formatHour(endHour);
-                                description.append(stepValue).append(" hours from ").append(startTime).append(" to ").append(endTime);
+                                description.append(stepValue).append(" hours from ").append(startTime).append(" to ")
+                                        .append(endTime);
                                 if (!dayOfWeekDesc.isEmpty()) {
                                     description.append(" ").append(dayOfWeekDesc);
                                 }
@@ -232,7 +239,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                         }
                     }
                 } else if (minute.startsWith("*/") && hour.equals("*") && !dayOfWeekDesc.isEmpty()) {
-                    // Special case: step value in minutes with day constraint (e.g., */5 with MON-FRI)
+                    // Special case: step value in minutes with day constraint (e.g., */5 with
+                    // MON-FRI)
                     String stepValue = minute.replace("*/", "");
                     description.append(stepValue).append(" minutes ");
                     description.append(dayOfWeekDesc);
@@ -243,15 +251,18 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                         description.append(" of ").append(monthDesc);
                     }
                 } else if (minute.startsWith("*/") && hour.equals("*") && !dayOfMonthDesc.isEmpty()) {
-                    // Special case: step value in minutes with day of month constraint (e.g., */5 with day 1)
+                    // Special case: step value in minutes with day of month constraint (e.g., */5
+                    // with day 1)
                     String stepValue = minute.replace("*/", "");
                     description.append(stepValue).append(" minutes ");
                     description.append(dayOfMonthDesc);
                     if (!monthDesc.isEmpty()) {
                         description.append(" of ").append(monthDesc);
                     }
-                } else if (second.equals("0") && minute.equals("0") && hour.startsWith("*/") && !dayOfWeekDesc.isEmpty()) {
-                    // Special case: step value in hours with day constraint (e.g., */2 with SAT,SUN)
+                } else if (second.equals("0") && minute.equals("0") && hour.startsWith("*/")
+                        && !dayOfWeekDesc.isEmpty()) {
+                    // Special case: step value in hours with day constraint (e.g., */2 with
+                    // SAT,SUN)
                     String stepValue = hour.replace("*/", "");
                     description.append(stepValue).append(" hours ");
                     description.append(dayOfWeekDesc);
@@ -259,21 +270,27 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                         description.append(" ").append(monthDesc);
                     }
                 } else if (second.equals("*") && !minute.equals("*") && !hour.equals("*") && !dayOfWeekDesc.isEmpty()) {
-                    // Special case: every second of specific minute at specific hour with day constraint (e.g., * 45 9 MON-FRI)
-                    description.append("second of minute ").append(minute).append(" at ").append(formatHour(Integer.parseInt(hour)));
+                    // Special case: every second of specific minute at specific hour with day
+                    // constraint (e.g., * 45 9 MON-FRI)
+                    description.append("second of minute ").append(minute).append(" at ")
+                            .append(formatHour(Integer.parseInt(hour)));
                     description.append(" ").append(dayOfWeekDesc);
                     if (!monthDesc.isEmpty()) {
                         description.append(" of ").append(monthDesc);
                     }
-                } else if (second.equals("*") && !minute.equals("*") && !hour.equals("*") && !dayOfMonthDesc.isEmpty()) {
-                    // Special case: every second of specific minute at specific hour with day of month constraint (e.g., * 45 9 L)
-                    description.append("second of minute ").append(minute).append(" at ").append(formatHour(Integer.parseInt(hour)));
+                } else if (second.equals("*") && !minute.equals("*") && !hour.equals("*")
+                        && !dayOfMonthDesc.isEmpty()) {
+                    // Special case: every second of specific minute at specific hour with day of
+                    // month constraint (e.g., * 45 9 L)
+                    description.append("second of minute ").append(minute).append(" at ")
+                            .append(formatHour(Integer.parseInt(hour)));
                     description.append(" ").append(dayOfMonthDesc);
                     if (!monthDesc.isEmpty()) {
                         description.append(" of ").append(monthDesc);
                     }
                 } else if (second.equals("*") && !minute.equals("*") && hour.equals("*") && !dayOfWeekDesc.isEmpty()) {
-                    // Special case: every second of specific minute of every hour with day constraint (e.g., * 30 * SAT,SUN)
+                    // Special case: every second of specific minute of every hour with day
+                    // constraint (e.g., * 30 * SAT,SUN)
                     description.append("second of minute ").append(minute).append(" ");
                     description.append(dayOfWeekDesc);
                     if (!monthDesc.isEmpty()) {
@@ -379,10 +396,6 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             return ""; // Let the main logic handle this case
         }
 
-
-
-
-
         // Handle step values in ranges (e.g., 1-5/2 for every 2nd value in range 1-5)
         if (hour.contains("/")) {
             String[] parts = hour.split("/");
@@ -406,16 +419,26 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             }
         }
 
+        // Handle list of hours (e.g., 2,14 for 2:00 AM and 2:00 PM)
+        if (hour.contains(",")) {
+            String[] hours = hour.split(",");
+            StringBuilder result = new StringBuilder();
+            for (int i = 0; i < hours.length; i++) {
+                if (i > 0) {
+                    if (i == hours.length - 1) {
+                        result.append(" and ");
+                    } else {
+                        result.append(", ");
+                    }
+                }
+                result.append(formatHour(Integer.parseInt(hours[i].trim())));
+            }
+            return result.toString();
+        }
+
         // Special case: when seconds and minutes are 0, format as time
         if ("0".equals(second) && "0".equals(minute) && !hour.equals("*")) {
-            int hourNum = Integer.parseInt(hour);
-            String amPm = hourNum < 12 ? "AM" : "PM";
-            if (hourNum == 0) {
-                hourNum = 12;
-            } else if (hourNum > 12) {
-                hourNum -= 12;
-            }
-            return String.format("%d:00 %s", hourNum, amPm);
+            return formatHour(Integer.parseInt(hour));
         }
 
         // Special case: when second is wildcard but minute and hour are specific
@@ -478,7 +501,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             String day = dayOfMonth.replace("W", "");
             return String.format("nearest weekday to day %s of the month", day);
         } else if (dayOfMonth.contains("/")) {
-            // Handle step values in day of month (e.g., 1/2 for every 2nd day starting from 1)
+            // Handle step values in day of month (e.g., 1/2 for every 2nd day starting from
+            // 1)
             String[] parts = dayOfMonth.split("/");
             if (parts.length == 2) {
                 return String.format("every %s days starting from day %s of the month", parts[1], parts[0]);
@@ -503,8 +527,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             // Handles: 1,4,7,10 → "January, April, July, October"
             String[] months = month.split(",");
             return Arrays.stream(months)
-                .map(m -> MONTH_NAMES[Integer.parseInt(m)])
-                .collect(Collectors.joining(", "));
+                    .map(m -> MONTH_NAMES[Integer.parseInt(m)])
+                    .collect(Collectors.joining(", "));
         }
         if (month.contains("-")) {
             String[] range = month.split("-");
@@ -522,7 +546,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
         if ("*".equals(dayOfWeek) || "?".equals(dayOfWeek)) {
             return "";
         }
-        
+
         // Handle Nth day of week (e.g., 6#3 for 3rd Friday)
         if (dayOfWeek.contains("#")) {
             String[] parts = dayOfWeek.split("#");
@@ -532,7 +556,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                 return String.format("%s %s of the month", getOrdinal(nth), day);
             }
         }
-        
+
         // Handle range patterns like MON-FRI
         if (dayOfWeek.contains("-")) {
             String[] range = dayOfWeek.split("-");
@@ -542,7 +566,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                 return String.format("%s through %s", startDay, endDay);
             }
         }
-        
+
         if (dayOfWeek.contains(",")) {
             String[] days = dayOfWeek.split(",");
             if (days.length == 2) {
@@ -566,7 +590,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                 return result.toString();
             }
         }
-        
+
         for (int i = 0; i < DAY_ABBREVIATIONS.length; i++) {
             if (DAY_ABBREVIATIONS[i].equalsIgnoreCase(dayOfWeek)) {
                 return DAY_NAMES[i];
@@ -574,20 +598,24 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
         }
         return DAY_NAMES[Integer.parseInt(dayOfWeek)];
     }
-    
+
     private String getOrdinal(String number) {
         int n = Integer.parseInt(number);
         if (n >= 11 && n <= 13) {
             return n + "th";
         }
         switch (n % 10) {
-            case 1: return n + "st";
-            case 2: return n + "nd";
-            case 3: return n + "rd";
-            default: return n + "th";
+            case 1:
+                return n + "st";
+            case 2:
+                return n + "nd";
+            case 3:
+                return n + "rd";
+            default:
+                return n + "th";
         }
     }
-    
+
     private String formatSingleDayOfWeek(String day) {
         for (int i = 0; i < DAY_ABBREVIATIONS.length; i++) {
             if (DAY_ABBREVIATIONS[i].equalsIgnoreCase(day)) {
@@ -601,7 +629,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
         }
     }
 
-    private void validateCronFields(String second, String minute, String hour, String dayOfMonth, String month, String dayOfWeek) {
+    private void validateCronFields(String second, String minute, String hour, String dayOfMonth, String month,
+            String dayOfWeek) {
         // Validate second (0-59)
         if (!isValidField(second, 0, 59) && !isSpecialValue(second)) {
             throw new IllegalArgumentException("Invalid second value: " + second);
@@ -631,10 +660,11 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
         if (!isValidDayOfWeek(dayOfWeek)) {
             throw new IllegalArgumentException("Invalid day of week value: " + dayOfWeek);
         }
-        
+
         // Quartz-specific validation: Cannot use * for both dayOfMonth and dayOfWeek
         if ("*".equals(dayOfMonth) && "*".equals(dayOfWeek)) {
-            throw new IllegalArgumentException("Cannot use '*' for both Day of Month and Day of Week. Use '?' for one of them in Quartz cron expressions.");
+            throw new IllegalArgumentException(
+                    "Cannot use '*' for both Day of Month and Day of Week. Use '?' for one of them in Quartz cron expressions.");
         }
     }
 
@@ -651,7 +681,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             }
             String base = parts[0];
             String step = parts[1];
-            
+
             // Validate step value
             try {
                 int stepValue = Integer.parseInt(step);
@@ -666,7 +696,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             if (base.contains("-")) {
                 return isValidRange(base, min, max);
             }
-            
+
             // If base is a specific value, validate it
             if (!base.equals("*")) {
                 try {
@@ -676,7 +706,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                     return false;
                 }
             }
-            
+
             return true;
         }
 
@@ -718,12 +748,12 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
         try {
             int start = Integer.parseInt(range[0].trim());
             int end = Integer.parseInt(range[1].trim());
-            
+
             // For hours, allow wrapping around midnight (e.g., 22-6 is valid)
             if (max == 23) { // This is the hour field
                 return start >= min && start <= max && end >= min && end <= max;
             }
-            
+
             // For other fields, require start <= end
             return start >= min && start <= max && end >= min && end <= max && start <= end;
         } catch (NumberFormatException e) {
@@ -732,8 +762,8 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
     }
 
     private boolean isValidDayOfMonth(String dayOfMonth) {
-        if (dayOfMonth.equals("*") || dayOfMonth.equals("?") || 
-            dayOfMonth.equals("L") || dayOfMonth.equals("LW")) {
+        if (dayOfMonth.equals("*") || dayOfMonth.equals("?") ||
+                dayOfMonth.equals("L") || dayOfMonth.equals("LW")) {
             return true;
         }
 
@@ -764,7 +794,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             }
             String day = parts[0];
             String nth = parts[1];
-            
+
             try {
                 int nthValue = Integer.parseInt(nth);
                 if (nthValue < 1 || nthValue > 5) {
@@ -795,7 +825,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
             if (range.length == 2) {
                 boolean startValid = false;
                 boolean endValid = false;
-                
+
                 // Check if start and end are valid day abbreviations
                 for (String abbreviation : DAY_ABBREVIATIONS) {
                     if (abbreviation.equalsIgnoreCase(range[0].trim())) {
@@ -805,7 +835,7 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
                         endValid = true;
                     }
                 }
-                
+
                 if (startValid && endValid) {
                     return true;
                 }
@@ -853,9 +883,9 @@ public class CronDescriptionServiceImpl implements CronDescriptionService {
         }
 
         // Handle month abbreviations (JAN, FEB, MAR, etc.)
-        String[] monthAbbreviations = {"JAN", "FEB", "MAR", "APR", "MAY", "JUN", 
-                                      "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"};
-        
+        String[] monthAbbreviations = { "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+                "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" };
+
         for (String abbreviation : monthAbbreviations) {
             if (abbreviation.equalsIgnoreCase(month)) {
                 return true;

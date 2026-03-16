@@ -551,3 +551,153 @@ The Agent Task execution uses the existing workflow protocol, while the AI Assis
   }
 }
 ```
+### USCIS Form Sync Workflow - Multi-Step with Conditionals
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_form_sync",
+    "params": {
+      "resourceCategory": "uscis-sentinel",
+      "resourceId": "I-485",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "collectionId": "69ac77018626a22133fff877",
+      "agentTaskId": "69aa53798626a22133fff865"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "I-485 Version Check",
+        "description": "Checking USCIS for latest form edition, mandatory dates, and instruction updates",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/sync/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "targetStep": 6
+        }
+      },
+      {
+        "step": 2,
+        "summary": "Form PDF Ingestion",
+        "description": "Ingressing latest primary Form PDF into the Knowledge Hub",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.resourceUrl}}",
+          "fileName": "{{params.resourceId}}_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Instructions Ingestion",
+        "description": "Ingressing latest Instructions PDF into the Knowledge Hub",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.instructionsUrl}}",
+          "fileName": "{{params.resourceId}}_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "Delta Extraction",
+        "description": "Extracting targeted content delta between versions",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "newDocumentId": "{{step2.result.documentId}}",
+          "resourceId": "{{params.resourceId}}",
+          "resourceCategory": "{{params.resourceCategory}}",
+          "categories": [
+            "Filing Fees",
+            "Addresses",
+            "Evidence",
+            "Signatures"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "summary": "AI Edition Analysis",
+        "description": "Generating Precise Edition Analysis via AI Assistant",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a USCIS Form Analyst. Compare document versions and identify changes.\n\nRULES:\n1. Output MUST be valid JSON.\n2. Do NOT speculate. If no evidence found, use status 'NO_CHANGE' and set \"changeDetected\": false.\n3. Cite exact changed passages if possible.\n4. details must be concise and based only on explicit textual differences.\n5. Output MUST follow this schema:\n{\n  \"resourceId\": \"{{params.resourceId}}\",\n  \"changeDetected\": true,\n  \"categories\": [\n    { \"name\": \"Filing Fees\", \"status\": \"NO_CHANGE\", \"details\": \"\" },\n    { \"name\": \"Evidence\", \"status\": \"CHANGED\", \"details\": \"New wording added regarding...\" }\n  ],\n  \"summary\": \"...\"\n}"
+          },
+          {
+            "role": "user",
+            "content": "Old Content:\n{{step4.result.oldText}}\n\nNew Content:\n{{step4.result.newText}}"
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "summary": "I-485 State Commit",
+        "description": "Committing sync state and analysis to sovereign database",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/sync/commit",
+        "payload": {
+          "resourceId": "{{params.resourceId}}",
+          "resourceCategory": "{{params.resourceCategory}}",
+          "version": "{{step1.result.newVersion}}",
+          "effectiveDate": "{{step1.result.effectiveDate}}",
+          "hash": "{{step1.result.currentHash}}",
+          "instructionsHash": "{{step1.result.instructionsHash}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "instructionsUrl": "{{step1.result.instructionsUrl}}",
+          "documentId": "{{step2.result.documentId??step1.result.oldDocumentId}}",
+          "instructionsDocumentId": "{{step3.result.documentId??step1.result.oldInstructionsDocumentId}}",
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "oldInstructionsDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "changeType": "EDITION_UPDATE",
+          "agentTaskId": "{{params.agentTaskId}}",
+          "changeDetected": "{{step5.result.changeDetected??false}}",
+          "summary": "{{step5.result.summary??USCIS Form I-485 scan completed - No changes detected to document content.}}",
+          "analysis": "{{step5.result??{ \"status\": \"NO_CHANGE\", \"changeDetected\": false, \"details\": \"The scan was completed and no changes were detected. The form and instructions are identical to the previous version verified.\" }}}"
+        },
+        "jump": {
+          "condition": "{{step6.result.changeDetected}} == false",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 7,
+        "summary": "Dispatch Notification",
+        "description": "Dispatching high-severity edition update notifications",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "resourceCategory": "{{params.resourceCategory}}",
+          "resourceId": "{{params.resourceId}}",
+          "type": "EDITION_UPDATE",
+          "severity": "HIGH",
+          "summary": "USCIS Form {{params.resourceId}} Updated to Edition {{step6.result.version}}",
+          "details": "{{step6.result.summary}}"
+        }
+      }
+    ]
+  }
+}
+```

@@ -34,6 +34,7 @@ public class ResourceUpdateNotification {
 
     private String resourceCategory; // e.g., "uscis-sentinel"
     private String resourceId; // e.g., "I-485"
+    private String appName; // e.g., "komunas-app"
 
     private String type; // e.g., "EDITION_UPDATE", "FEE_CHANGE"
     private String severity; // e.g., "HIGH", "MEDIUM", "LOW"
@@ -46,6 +47,9 @@ public class ResourceUpdateNotification {
 
     @Indexed
     private boolean read;
+
+    private String directEmail; // For mock/direct notifications
+    private String reportUrl; // Optional custom report link
 
     private LocalDateTime createdAt;
 }

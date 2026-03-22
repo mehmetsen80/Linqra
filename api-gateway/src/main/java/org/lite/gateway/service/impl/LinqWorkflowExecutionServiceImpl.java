@@ -335,8 +335,11 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                             if (step.getJump() != null && step.getJump().getCondition() != null) {
                                                 boolean jumpConditionMet = evaluateCondition(
                                                         step.getJump().getCondition(), context);
-                                                log.info("🔎 Step {} jump condition '{}' result: {}", step.getStep(),
-                                                        step.getJump().getCondition(), jumpConditionMet);
+                                                String desc = (step.getJump().getConditionDesc() != null)
+                                                        ? " [" + step.getJump().getConditionDesc() + "]"
+                                                        : "";
+                                                log.info("🔎 Step {} jump condition '{}'{} result: {}", step.getStep(),
+                                                        step.getJump().getCondition(), desc, jumpConditionMet);
 
                                                 if (jumpConditionMet) {
                                                     Integer target = step.getJump().getTargetStep();

@@ -11,7 +11,9 @@ import org.lite.gateway.entity.ResourceSubscription;
 @AllArgsConstructor
 @Builder
 public class ResourceSubscriptionRequest {
+    private String userId;
     private String resourceCategory;
     private String resourceId;
+    private String appName;
     private ResourceSubscription.DeliveryConfig delivery;
 }

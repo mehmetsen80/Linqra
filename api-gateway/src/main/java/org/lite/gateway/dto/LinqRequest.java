@@ -109,6 +109,7 @@ public class LinqRequest {
             @Data
             public static class JumpConfig {
                 private String condition; // Condition to trigger the jump
+                private String conditionDesc; // Human-readable description of the condition
                 private Integer targetStep; // Step number to jump to (null or 0 means terminal)
             }
 

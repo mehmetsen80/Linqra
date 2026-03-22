@@ -24,8 +24,8 @@ import java.util.Map;
 @AllArgsConstructor
 @Builder
 @CompoundIndexes({
-        @CompoundIndex(name = "user_resource_idx", def = "{'userId': 1, 'resourceCategory': 1, 'resourceId': 1}", unique = true),
-        @CompoundIndex(name = "team_resource_idx", def = "{'teamId': 1, 'resourceCategory': 1, 'resourceId': 1}"),
+        @CompoundIndex(name = "user_resource_idx", def = "{'userId': 1, 'resourceCategory': 1, 'resourceId': 1, 'appName': 1}", unique = true),
+        @CompoundIndex(name = "team_resource_idx", def = "{'teamId': 1, 'resourceCategory': 1, 'resourceId': 1, 'appName': 1}"),
         @CompoundIndex(name = "resource_enabled_idx", def = "{'resourceCategory': 1, 'resourceId': 1, 'enabled': 1}")
 })
 public class ResourceSubscription {
@@ -37,6 +37,7 @@ public class ResourceSubscription {
 
     private String resourceCategory; // e.g., "uscis-sentinel"
     private String resourceId; // Mandatory: e.g., "I-485"
+    private String appName; // e.g., "komunas-app"
 
     @Builder.Default
     private boolean enabled = true;
@@ -49,11 +50,10 @@ public class ResourceSubscription {
     @AllArgsConstructor
     @Builder
     public static class DeliveryConfig {
-        private boolean pushEnabled;
         private boolean emailEnabled;
-        private String overrideEmail; // Optional: Override account email
+        private String email; // Target email for notifications
+        private boolean webhookEnabled;
         private String webhookUrl;
-        private String slackChannelId;
     }
 
     // Filter settings (if still needed, though resourceId is now primary)

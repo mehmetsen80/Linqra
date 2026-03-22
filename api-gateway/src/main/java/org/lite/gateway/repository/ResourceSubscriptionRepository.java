@@ -6,16 +6,18 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface ResourceSubscriptionRepository extends ReactiveMongoRepository<ResourceSubscription, String> {
-    Flux<ResourceSubscription> findByUserId(String userId);
+        Flux<ResourceSubscription> findByUserId(String userId);
 
-    Flux<ResourceSubscription> findByTeamId(String teamId);
+        Flux<ResourceSubscription> findByTeamId(String teamId);
 
-    Flux<ResourceSubscription> findByResourceCategoryAndResourceIdAndEnabledTrue(String resourceCategory,
-            String resourceId);
+        Flux<ResourceSubscription> findByResourceCategoryAndResourceIdAndEnabledTrue(String resourceCategory,
+                        String resourceId);
 
-    Mono<ResourceSubscription> findByUserIdAndResourceCategoryAndResourceId(String userId, String resourceCategory,
-            String resourceId);
+        Mono<ResourceSubscription> findByUserIdAndResourceCategoryAndResourceIdAndAppName(String userId,
+                        String resourceCategory,
+                        String resourceId, String appName);
 
-    Mono<ResourceSubscription> findByTeamIdAndResourceCategoryAndResourceId(String teamId, String resourceCategory,
-            String resourceId);
+        Mono<ResourceSubscription> findByTeamIdAndResourceCategoryAndResourceIdAndAppName(String teamId,
+                        String resourceCategory,
+                        String resourceId, String appName);
 }

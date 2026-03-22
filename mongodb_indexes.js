@@ -815,6 +815,20 @@ db.audit_logs.createIndex(
 );
 
 // ============================================================================
+// RESOURCE_METADATA COLLECTION
+// ============================================================================
+
+// 1. Resource Lookup Index (unique)
+db.resource_metadata.createIndex(
+  { "category": 1, "resourceId": 1 },
+  {
+    "name": "resource_lookup_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// ============================================================================
 // RESOURCE_SUBSCRIPTIONS COLLECTION
 // ============================================================================
 
@@ -1203,6 +1217,12 @@ db.resource_subscriptions.getIndexes().forEach(function (index) {
 
 print("\n=== RESOURCE_NOTIFICATIONS Indexes ===");
 db.resource_notifications.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== RESOURCE_METADATA Indexes ===");
+db.resource_metadata.getIndexes().forEach(function (index) {
   print("Index: " + index.name);
   printjson(index.key);
 });

@@ -41,6 +41,8 @@ public class ResourceNotificationController {
                 .severity(dto.getSeverity())
                 .summary(dto.getSummary())
                 .details(dto.getDetails())
+                .directEmail(dto.getDirectEmail())
+                .reportUrl(dto.getReportUrl())
                 .delta(dto.getDelta())
                 .build();
 

@@ -3,6 +3,7 @@ package org.lite.gateway.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.entity.ResourceSubscription;
+import org.lite.gateway.repository.ResourceMetadataRepository;
 import org.lite.gateway.repository.ResourceSubscriptionRepository;
 import org.lite.gateway.service.ResourceSubscriptionService;
 import org.springframework.stereotype.Service;
@@ -17,53 +18,73 @@ import java.time.LocalDateTime;
 public class ResourceSubscriptionServiceImpl implements ResourceSubscriptionService {
 
     private final ResourceSubscriptionRepository subscriptionRepository;
+    private final ResourceMetadataRepository resourceMetadataRepository;
 
     @Override
     public Mono<ResourceSubscription> subscribeUser(String userId, String resourceCategory, String resourceId,
-            ResourceSubscription.DeliveryConfig delivery) {
-        return subscriptionRepository.findByUserIdAndResourceCategoryAndResourceId(userId, resourceCategory, resourceId)
-                .flatMap(existing -> {
-                    existing.setDelivery(delivery);
-                    existing.setEnabled(true);
-                    existing.setUpdatedAt(LocalDateTime.now());
-                    return subscriptionRepository.save(existing);
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    ResourceSubscription sub = ResourceSubscription.builder()
-                            .userId(userId)
-                            .resourceCategory(resourceCategory)
-                            .resourceId(resourceId)
-                            .delivery(delivery)
-                            .enabled(true)
-                            .createdAt(LocalDateTime.now())
-                            .updatedAt(LocalDateTime.now())
-                            .build();
-                    return subscriptionRepository.save(sub);
-                }));
+            String appName, ResourceSubscription.DeliveryConfig delivery) {
+        return validateResource(resourceCategory, resourceId)
+                .then(subscriptionRepository
+                        .findByUserIdAndResourceCategoryAndResourceIdAndAppName(userId, resourceCategory, resourceId,
+                                appName)
+                        .flatMap(existing -> {
+                            existing.setDelivery(delivery);
+                            existing.setEnabled(true);
+                            existing.setUpdatedAt(LocalDateTime.now());
+                            return subscriptionRepository.save(existing);
+                        })
+                        .switchIfEmpty(Mono.defer(() -> {
+                            ResourceSubscription sub = ResourceSubscription.builder()
+                                    .userId(userId)
+                                    .resourceCategory(resourceCategory)
+                                    .resourceId(resourceId)
+                                    .appName(appName)
+                                    .delivery(delivery)
+                                    .enabled(true)
+                                    .createdAt(LocalDateTime.now())
+                                    .updatedAt(LocalDateTime.now())
+                                    .build();
+                            return subscriptionRepository.save(sub);
+                        })));
     }
 
     @Override
     public Mono<ResourceSubscription> subscribeTeam(String teamId, String resourceCategory, String resourceId,
-            ResourceSubscription.DeliveryConfig delivery) {
-        return subscriptionRepository.findByTeamIdAndResourceCategoryAndResourceId(teamId, resourceCategory, resourceId)
-                .flatMap(existing -> {
-                    existing.setDelivery(delivery);
-                    existing.setEnabled(true);
-                    existing.setUpdatedAt(LocalDateTime.now());
-                    return subscriptionRepository.save(existing);
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    ResourceSubscription sub = ResourceSubscription.builder()
-                            .teamId(teamId)
-                            .resourceCategory(resourceCategory)
-                            .resourceId(resourceId)
-                            .delivery(delivery)
-                            .enabled(true)
-                            .createdAt(LocalDateTime.now())
-                            .updatedAt(LocalDateTime.now())
-                            .build();
-                    return subscriptionRepository.save(sub);
-                }));
+            String appName, ResourceSubscription.DeliveryConfig delivery) {
+        return validateResource(resourceCategory, resourceId)
+                .then(subscriptionRepository
+                        .findByTeamIdAndResourceCategoryAndResourceIdAndAppName(teamId, resourceCategory, resourceId,
+                                appName)
+                        .flatMap(existing -> {
+                            existing.setDelivery(delivery);
+                            existing.setEnabled(true);
+                            existing.setUpdatedAt(LocalDateTime.now());
+                            return subscriptionRepository.save(existing);
+                        })
+                        .switchIfEmpty(Mono.defer(() -> {
+                            ResourceSubscription sub = ResourceSubscription.builder()
+                                    .teamId(teamId)
+                                    .resourceCategory(resourceCategory)
+                                    .resourceId(resourceId)
+                                    .appName(appName)
+                                    .delivery(delivery)
+                                    .enabled(true)
+                                    .createdAt(LocalDateTime.now())
+                                    .updatedAt(LocalDateTime.now())
+                                    .build();
+                            return subscriptionRepository.save(sub);
+                        })));
+    }
+
+    private Mono<Void> validateResource(String resourceCategory, String resourceId) {
+        return resourceMetadataRepository.existsByCategoryAndResourceId(resourceCategory, resourceId)
+                .flatMap(exists -> {
+                    if (!exists) {
+                        return Mono.error(new IllegalArgumentException(
+                                "Invalid resource category or ID: " + resourceCategory + "/" + resourceId));
+                    }
+                    return Mono.empty();
+                });
     }
 
     @Override

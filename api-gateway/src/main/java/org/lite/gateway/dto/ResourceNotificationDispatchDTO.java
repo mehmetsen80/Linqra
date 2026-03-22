@@ -18,5 +18,7 @@ public class ResourceNotificationDispatchDTO {
     private String severity;
     private String summary;
     private String details;
+    private String directEmail;
+    private String reportUrl;
     private Map<String, Object> delta;
 }

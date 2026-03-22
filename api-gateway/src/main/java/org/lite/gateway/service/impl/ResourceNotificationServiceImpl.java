@@ -8,9 +8,6 @@ import org.lite.gateway.repository.ResourceUpdateNotificationRepository;
 import org.lite.gateway.service.ResourceNotificationService;
 import org.lite.gateway.service.ResourceSubscriptionService;
 import org.lite.gateway.service.NotificationService;
-import org.lite.gateway.service.UserService;
-import org.springframework.messaging.MessageChannel;
-import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -26,16 +23,25 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
 
     private final ResourceSubscriptionService subscriptionService;
     private final ResourceUpdateNotificationRepository notificationRepository;
-    private final NotificationService systemNotificationService;
-    private final UserService userService;
+    private final NotificationService notificationService;
     private final WebClient.Builder webClientBuilder;
-
-    private final MessageChannel notificationMessageChannel;
 
     @Override
     public Mono<Void> dispatchNotification(ResourceUpdateNotification notification) {
         if (notification.getCreatedAt() == null) {
             notification.setCreatedAt(LocalDateTime.now());
+        }
+
+        // If directEmail is provided, bypass subscription lookup (mock/direct mode)
+        if (notification.getDirectEmail() != null && !notification.getDirectEmail().isBlank()) {
+            log.info("Direct/Mock notification dispatch for directEmail: {}", notification.getDirectEmail());
+            ResourceSubscription dummySub = ResourceSubscription.builder()
+                    .delivery(ResourceSubscription.DeliveryConfig.builder()
+                            .emailEnabled(true)
+                            .email(notification.getDirectEmail())
+                            .build())
+                    .build();
+            return deliverNotification(notification, dummySub);
         }
 
         // Fetch exact category + resource matches
@@ -45,6 +51,7 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
                     ResourceUpdateNotification personalUpdate = ResourceUpdateNotification.builder()
                             .resourceCategory(notification.getResourceCategory())
                             .resourceId(notification.getResourceId())
+                            .appName(sub.getAppName())
                             .subscriptionId(sub.getId())
                             .type(notification.getType())
                             .severity(notification.getSeverity())
@@ -67,63 +74,45 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
             return Mono.empty();
 
         Mono<Void> webHookMono = Mono.empty();
-        if (delivery.getWebhookUrl() != null && !delivery.getWebhookUrl().isBlank()) {
-            webHookMono = webClientBuilder.build()
-                    .post()
-                    .uri(delivery.getWebhookUrl())
-                    .bodyValue(notification)
-                    .retrieve()
-                    .bodyToMono(Void.class)
-                    .doOnError(e -> log.error("Webhook delivery failed for sub {}: {}", sub.getId(), e.getMessage()))
-                    .onErrorResume(e -> Mono.empty());
-        }
-
-        Mono<Void> wsMono = Mono.fromRunnable(() -> {
-            if (delivery.isPushEnabled()) {
-                notificationMessageChannel.send(MessageBuilder.withPayload(notification).build());
+        if (delivery.isWebhookEnabled()) {
+            String url = delivery.getWebhookUrl();
+            if ((url == null || url.isBlank()) && sub.getAppName() != null) {
+                // Auto-discovery logic: Assuming internal service name + /webhook
+                url = "http://" + sub.getAppName() + ":8080/webhook";
+                log.info("Auto-discovered webhook URL for {}: {}", sub.getAppName(), url);
             }
-        });
+
+            if (url != null && !url.isBlank()) {
+                webHookMono = webClientBuilder.build()
+                        .post()
+                        .uri(url)
+                        .bodyValue(notification)
+                        .retrieve()
+                        .bodyToMono(Void.class)
+                        .doOnError(e -> log.error("Webhook delivery failed for sub {}: {}", sub.getId(), e.getMessage()))
+                        .onErrorResume(e -> Mono.empty());
+            }
+        }
 
         Mono<Void> emailMono = Mono.empty();
         if (delivery.isEmailEnabled()) {
-            if (delivery.getOverrideEmail() != null && !delivery.getOverrideEmail().isBlank()) {
+            if (delivery.getEmail() != null && !delivery.getEmail().isBlank()) {
                 emailMono = Mono.fromRunnable(() -> {
-                    systemNotificationService.sendPremiumEmail(
-                            delivery.getOverrideEmail(),
+                    notificationService.sendEmail(
+                            delivery.getEmail(),
                             "Linqra Alert: " + notification.getSummary(),
                             notification.getSummary(),
                             "A resource you are monitoring has been updated.",
                             notification.getDetails(),
-                            notification.getDelta());
+                            notification.getDelta(),
+                            notification.getReportUrl());
                 }).subscribeOn(Schedulers.boundedElastic()).then();
-            } else if (sub.getUserId() != null) {
-                emailMono = userService.findById(sub.getUserId())
-                        .flatMap(user -> {
-                            if (user.getEmail() != null && !user.getEmail().isBlank()) {
-                                return Mono.fromRunnable(() -> {
-                                    systemNotificationService.sendPremiumEmail(
-                                            user.getEmail(),
-                                            "Linqra Alert: " + notification.getSummary(),
-                                            notification.getSummary(),
-                                            "A resource you are monitoring has been updated.",
-                                            notification.getDetails(),
-                                            notification.getDelta());
-                                }).subscribeOn(Schedulers.boundedElastic());
-                            }
-                            log.warn("Subscriber {} has no email configured", sub.getUserId());
-                            return Mono.empty();
-                        }).then();
             } else {
-                // Fallback for team or system-wide alerts
-                emailMono = Mono.fromRunnable(() -> {
-                    systemNotificationService.sendEmailAlert(
-                            "Linqra Alert: " + notification.getSummary(),
-                            notification.getDetails());
-                }).subscribeOn(Schedulers.boundedElastic()).then();
+                log.warn("Email delivery enabled for sub {} but no target email provided", sub.getId());
             }
         }
 
-        return Mono.when(webHookMono, wsMono, emailMono);
+        return Mono.when(webHookMono, emailMono);
     }
 
     @Override
@@ -132,7 +121,9 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
         return deliverNotification(notification, ResourceSubscription.builder()
                 .delivery(ResourceSubscription.DeliveryConfig.builder()
                         .webhookUrl("webhook".equalsIgnoreCase(deliveryChannel) ? target : null)
-                        .pushEnabled("websocket".equalsIgnoreCase(deliveryChannel))
+                        .webhookEnabled("webhook".equalsIgnoreCase(deliveryChannel))
+                        .emailEnabled("email".equalsIgnoreCase(deliveryChannel))
+                        .email("email".equalsIgnoreCase(deliveryChannel) ? target : null)
                         .build())
                 .build());
     }

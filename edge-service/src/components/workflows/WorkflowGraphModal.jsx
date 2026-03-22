@@ -84,7 +84,7 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                     id: `seq-${current.id}-${next.id}`,
                     path: `M ${startX} ${startY} L ${endX} ${endY}`,
                     type: 'sequential',
-                    label: current.type === 'decision' ? 'YES' : null,
+                    label: current.type === 'decision' ? 'ELSE' : null,
                     labelX: midX - 10,
                     labelY: midY - 10
                 });
@@ -124,6 +124,8 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                             path: `M ${startX} ${startY} L ${startX} ${controlY} L ${endX} ${controlY} L ${endX} ${endY}`,
                             type: 'jump',
                             condition: step.jump.condition,
+                            conditionDesc: step.jump.conditionDesc,
+                            label: 'IF',
                             labelX: midX,
                             labelY: controlY - 22
                         });
@@ -139,6 +141,8 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                         path: `M ${startX} ${startY} L ${startX} ${terminalY}`,
                         type: 'terminal',
                         condition: step.jump.condition,
+                        conditionDesc: step.jump.conditionDesc,
+                        label: 'IF',
                         labelX: startX,
                         labelY: terminalY + 45, // Moved further down to make room for STOP
                         terminalX: startX,
@@ -563,7 +567,7 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                                                 {line.label}
                                             </text>
                                         )}
-                                        {(line.type === 'jump' || line.type === 'terminal') && (
+                                        {(line.type === 'jump' || line.type === 'terminal') && line.label && (
                                             <text
                                                 x={line.labelX}
                                                 y={line.labelY}
@@ -573,21 +577,40 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                                                 textAnchor="middle"
                                                 style={{ textShadow: '1px 1px 2px white, -1px -1px 2px white', pointerEvents: 'none' }}
                                             >
-                                                NO
+                                                {line.label}
                                             </text>
                                         )}
-                                        {(line.type === 'jump' || line.type === 'terminal') && line.condition && (
-                                            <text
-                                                x={line.labelX}
-                                                y={line.type === 'terminal' ? line.labelY + 24 : line.labelY - 20}
-                                                fill="#6c757d"
-                                                fontSize="10"
-                                                fontFamily="monospace"
-                                                textAnchor="middle"
-                                                style={{ textShadow: '1px 1px 2px white, -1px -1px 2px white' }}
-                                            >
-                                                IF {line.condition}
-                                            </text>
+                                        {(line.type === 'jump' || line.type === 'terminal') && (line.condition || line.conditionDesc) && (
+                                            <g>
+                                                {line.conditionDesc && (
+                                                    <text
+                                                        x={line.labelX}
+                                                        y={line.type === 'terminal' ? line.labelY + 54 : line.labelY - 50}
+                                                        fill="#495057"
+                                                        fontSize="12"
+                                                        fontWeight="700"
+                                                        textAnchor="middle"
+                                                        style={{ textShadow: '1px 1px 2px white, -1px -1px 2px white' }}
+                                                    >
+                                                        {line.conditionDesc}
+                                                    </text>
+                                                )}
+                                                {line.condition && (
+                                                    <text
+                                                        x={line.labelX}
+                                                        y={line.type === 'terminal'
+                                                            ? (line.conditionDesc ? line.labelY + 28 : line.labelY + 22)
+                                                            : (line.conditionDesc ? line.labelY - 26 : line.labelY - 22)}
+                                                        fill="#6c757d"
+                                                        fontSize="10"
+                                                        fontFamily="monospace"
+                                                        textAnchor="middle"
+                                                        style={{ textShadow: '1px 1px 2px white, -1px -1px 2px white' }}
+                                                    >
+                                                        {line.condition}
+                                                    </text>
+                                                )}
+                                            </g>
                                         )}
                                     </g>
                                 ))}
@@ -730,13 +753,13 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
                                                 key={`dec-${step.step}`}
                                                 ref={(node) => setRef(`dec-${step.step}`, node)}
                                                 className="decision-diamond"
-                                                title={`Condition: ${step.jump.condition}`}
+                                                title={`Condition: ${step.jump.conditionDesc || step.jump.condition}`}
                                             >
                                                 <svg width="100" height="100" style={{ position: 'absolute', top: 0, left: 0, zIndex: 1, filter: 'drop-shadow(0 4px 6px rgba(253, 126, 20, 0.4))' }}>
                                                     <polygon points="50,0 100,50 50,100 0,50" fill="#fd7e14" />
                                                 </svg>
                                                 <div className="decision-condition">
-                                                    {step.jump.condition}
+                                                    {step.jump.conditionDesc || step.jump.condition}
                                                 </div>
                                             </div>
                                         )}

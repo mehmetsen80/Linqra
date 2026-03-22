@@ -63,8 +63,8 @@ public class NotificationService {
                 .then();
     }
 
-    public void sendPremiumEmail(String to, String subject, String title, String summary, String details,
-            java.util.Map<String, Object> delta) {
+    public void sendEmail(String to, String subject, String title, String summary, String details,
+            java.util.Map<String, Object> delta, String reportUrl) {
         if (!emailEnabled) {
             return;
         }
@@ -182,7 +182,7 @@ public class NotificationService {
                                     <div class="details-content">%s</div>
                                 </div>
                                 %s
-                                <a href="https://linqra.com" class="cta-button">View Full Report</a>
+                                <a href="%s" class="cta-button">View Full Report</a>
                                 <div class="footer">
                                     &copy; 2026 Linqra Inc. &bull; Sovereign Agent Platform
                                 </div>
@@ -190,12 +190,99 @@ public class NotificationService {
                         </body>
                         </html>
                         """,
-                title, summary, details,
+                title, formatMarkdownToHtml(summary), formatMarkdownToHtml(details),
                 (delta != null && !delta.isEmpty()) ? String.format(
-                        "<div class='details-box' style='border-left-color: #ff4081;'><div class='details-title'>Textual Delta</div><div class='details-content' style='font-family: monospace;'>%s</div></div>",
-                        delta.toString()) : "");
+                        "<div class='details-box' style='border-left-color: #ff4081;'><div class='details-title'>Detected Changes</div><div class='details-content'>%s</div></div>",
+                        formatDeltaToHtml(delta)) : "",
+                (reportUrl != null && !reportUrl.isEmpty()) ? reportUrl : "https://linqra.com");
 
         sendEmail(to, subject, htmlContent, true);
+    }
+
+    private String formatMarkdownToHtml(String text) {
+        if (text == null || text.isBlank())
+            return "";
+
+        // First handle bold **text** -> <b>text</b>
+        String processed = text.replaceAll("\\*\\*(.*?)\\*\\*", "<b>$1</b>");
+
+        // Iterate line by line to handle headers and lists
+        String[] lines = processed.split("\n");
+        StringBuilder sb = new StringBuilder();
+        boolean inList = false;
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) {
+                if (inList) {
+                    sb.append("</ul>");
+                    inList = false;
+                }
+                sb.append("<br/>");
+                continue;
+            }
+
+            if (line.startsWith("### ")) {
+                if (inList) {
+                    sb.append("</ul>");
+                    inList = false;
+                }
+                sb.append("<h3 style='color: #ffffff; margin-top: 20px; margin-bottom: 10px;'>")
+                        .append(line.substring(4)).append("</h3>");
+            } else if (line.startsWith("- ")) {
+                if (!inList) {
+                    sb.append("<ul style='padding-left: 20px; margin: 10px 0;'>");
+                    inList = true;
+                }
+                sb.append("<li style='margin-bottom: 5px;'>").append(line.substring(2)).append("</li>");
+            } else {
+                if (inList) {
+                    sb.append("</ul>");
+                    inList = false;
+                }
+                sb.append(line);
+                if (i < lines.length - 1) {
+                    sb.append("<br/>");
+                }
+            }
+        }
+
+        if (inList) {
+            sb.append("</ul>");
+        }
+
+        return sb.toString();
+    }
+
+    private String formatDeltaToHtml(java.util.Map<String, Object> delta) {
+        if (delta == null || delta.isEmpty())
+            return "";
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("<table style='width: 100%; border-collapse: collapse; font-size: 14px;'>");
+        for (java.util.Map.Entry<String, Object> entry : delta.entrySet()) {
+            sb.append("<tr style='border-bottom: 1px solid rgba(255, 255, 255, 0.05);'>");
+            sb.append("<td style='padding: 8px 0; color: #8b949e; width: 30%; vertical-align: top;'>")
+                    .append(entry.getKey()).append("</td>");
+            sb.append("<td style='padding: 8px 0; color: #c9d1d9; font-family: monospace;'>");
+
+            if (entry.getValue() instanceof java.util.Map) {
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> subMap = (java.util.Map<String, Object>) entry.getValue();
+                sb.append("<div style='background: rgba(255,255,255,0.02); padding: 5px; border-radius: 4px;'>");
+                for (java.util.Map.Entry<String, Object> subEntry : subMap.entrySet()) {
+                    sb.append("<div><span style='color: #6e7681;'>").append(subEntry.getKey()).append(":</span> ")
+                            .append(subEntry.getValue()).append("</div>");
+                }
+                sb.append("</div>");
+            } else {
+                sb.append(entry.getValue());
+            }
+
+            sb.append("</td></tr>");
+        }
+        sb.append("</table>");
+        return sb.toString();
     }
 
     public void sendEmail(String to, String subject, String message, boolean isHtml) {

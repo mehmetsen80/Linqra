@@ -25,14 +25,12 @@ public class ResourceSubscriptionController {
 
         @PostMapping("/subscribe/user")
         public Mono<ResponseEntity<ResourceSubscription>> subscribeUser(
-                        @RequestBody ResourceSubscriptionRequest request,
-                        ServerWebExchange exchange) {
+                        @RequestBody ResourceSubscriptionRequest request) {
 
-                return userContextService.getCurrentUsername(exchange)
-                                .flatMap(
-                                                username -> subscriptionService.subscribeUser(username,
-                                                                request.getResourceCategory(),
-                                                                request.getResourceId(), request.getDelivery()))
+                return subscriptionService.subscribeUser(request.getUserId(),
+                                request.getResourceCategory(),
+                                request.getResourceId(), request.getAppName(),
+                                request.getDelivery())
                                 .map(ResponseEntity::ok);
         }
 
@@ -44,7 +42,8 @@ public class ResourceSubscriptionController {
                 return teamContextService.getTeamFromContext(exchange)
                                 .flatMap(teamId -> subscriptionService.subscribeTeam(teamId,
                                                 request.getResourceCategory(),
-                                                request.getResourceId(), request.getDelivery()))
+                                                request.getResourceId(), request.getAppName(),
+                                                request.getDelivery()))
                                 .map(ResponseEntity::ok);
         }
 

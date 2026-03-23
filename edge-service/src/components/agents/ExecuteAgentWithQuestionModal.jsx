@@ -9,7 +9,7 @@ const ExecuteAgentWithQuestionModal = ({
   question,
   onQuestionChange,
   onExecute,
-  executing
+  executing = false
 }) => (
   <Modal
     show={show}
@@ -58,8 +58,5 @@ ExecuteAgentWithQuestionModal.propTypes = {
   executing: PropTypes.bool
 };
 
-ExecuteAgentWithQuestionModal.defaultProps = {
-  executing: false
-};
 
 export default ExecuteAgentWithQuestionModal;

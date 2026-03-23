@@ -34,6 +34,7 @@ import {
 import SearchIcon from '@mui/icons-material/Search';
 import './styles.css';
 import ExecuteAgentWithQuestionModal from '../../../components/agents/ExecuteAgentWithQuestionModal';
+import RichTextEditor from '../../../components/common/RichTextEditor';
 
 function ViewAgentTask() {
     const { taskId } = useParams();
@@ -990,41 +991,87 @@ function ViewAgentTask() {
                 <h4 className="task-title text-start mb-2">
                     {task?.name}
                 </h4>
-                <div className="task-meta text-muted small">
-                    <span className="me-4">
-                        <i className="fas fa-calendar-plus me-1"></i>
-                        Created: {formatDate(task?.createdAt)}
-                    </span>
-                    <span className="me-4">
-                        <i className="fas fa-user-plus me-1"></i>
-                        Created By: {task?.createdBy || 'Unknown'}
-                    </span>
-                    <span className="me-4">
-                        <i className="fas fa-calendar-check me-1"></i>
-                        Updated: {formatDate(task?.updatedAt)}
-                    </span>
-                    <span className="me-4">
-                        <i className="fas fa-user-edit me-1"></i>
-                        Updated By: {task?.updatedBy || 'Unknown'}
-                    </span>
-                    {task?.version && (
-                        <span>
-                            <i className="fas fa-code-branch me-1"></i>
-                            v{task.version}
-                        </span>
-                    )}
-                </div>
-                {task?.description && (
-                    <div className="task-description mt-3">
-                        <div className="description-label mb-1">
-                            <i className="fas fa-align-left me-1 text-muted"></i>
-                            <small className="text-muted fw-semibold">Description</small>
+                <Row className="mt-3">
+                    <Col lg={6} md={12}>
+                        {task?.description ? (
+                            <div className="task-description">
+                                <div className="description-label mb-1">
+                                    <i className="fas fa-align-left me-1 text-muted"></i>
+                                    <small className="text-muted fw-semibold">Description</small>
+                                </div>
+                                <div className="description-text mb-0 rich-text-display" dangerouslySetInnerHTML={{ __html: task.description || '' }} />
+                            </div>
+                        ) : (
+                            <div className="text-muted small italic">No description provided</div>
+                        )}
+                    </Col>
+                    <Col lg={6} md={12}>
+                        <div className="task-additional-info">
+                            <div className="description-label mb-2">
+                                <i className="fas fa-info-circle me-1 text-muted"></i>
+                                <small className="text-muted fw-semibold">Information</small>
+                            </div>
+                            <div className="info-grid-compact">
+                                <Row className="g-3">
+                                    <Col sm={6}>
+                                        <div className="compact-detail-box">
+                                            <div className="text-muted extra-small mb-1">
+                                                <i className="fas fa-calendar-plus me-1"></i> Created
+                                            </div>
+                                            <div className="small fw-medium">{formatDate(task?.createdAt)}</div>
+                                            <div className="text-muted extra-small mt-1">by {task?.createdBy || 'Unknown'}</div>
+                                        </div>
+                                    </Col>
+                                    <Col sm={6}>
+                                        <div className="compact-detail-box">
+                                            <div className="text-muted extra-small mb-1">
+                                                <i className="fas fa-calendar-check me-1"></i> Updated
+                                            </div>
+                                            <div className="small fw-medium">{formatDate(task?.updatedAt)}</div>
+                                            <div className="text-muted extra-small mt-1">by {task?.updatedBy || 'Unknown'}</div>
+                                        </div>
+                                    </Col>
+                                    <Col sm={6}>
+                                        <div className="compact-detail-box">
+                                            <div className="text-muted extra-small mb-1">
+                                                <i className="fas fa-id-badge me-1"></i> Agent ID
+                                            </div>
+                                            <div className="small fw-medium text-dark mono-break">{task?.agentId || 'N/A'}</div>
+                                        </div>
+                                    </Col>
+                                    <Col sm={6}>
+                                        <div className="compact-detail-box">
+                                            <div className="text-muted extra-small mb-1">
+                                                <i className="fas fa-fingerprint me-1"></i> Task ID
+                                            </div>
+                                            <div className="small fw-medium text-dark mono-break">{task?.id || 'N/A'}</div>
+                                        </div>
+                                    </Col>
+                                    <Col sm={6}>
+                                        <div className="compact-detail-box">
+                                            <div className="text-muted extra-small mb-1">
+                                                <i className="fas fa-toggle-on me-1"></i> Status
+                                            </div>
+                                            <Badge bg={task?.enabled ? "success" : "secondary"} className="status-badge">
+                                                {task?.enabled ? 'ENABLED' : 'DISABLED'}
+                                            </Badge>
+                                        </div>
+                                    </Col>
+                                    {task?.version && (
+                                        <Col sm={6}>
+                                            <div className="compact-detail-box">
+                                                <div className="text-muted extra-small mb-1">
+                                                    <i className="fas fa-code-branch me-1"></i> Json Version
+                                                </div>
+                                                <Badge bg="primary" className="version-badge">v{task.version}</Badge>
+                                            </div>
+                                        </Col>
+                                    )}
+                                </Row>
+                            </div>
                         </div>
-                        <p className="description-text mb-0">
-                            {task.description}
-                        </p>
-                    </div>
-                )}
+                    </Col>
+                </Row>
             </div>
 
             {/* Schedule Information Section */}
@@ -2410,13 +2457,10 @@ function ViewAgentTask() {
 
                         <Form.Group className="mb-3">
                             <Form.Label>Description</Form.Label>
-                            <Form.Control
-                                as="textarea"
-                                name="description"
-                                value={task?.description || ''}
-                                onChange={handleInputChange}
+                            <RichTextEditor
+                                content={task?.description || ''}
+                                onChange={(html) => setTask(prev => ({ ...prev, description: html }))}
                                 placeholder="Enter task description"
-                                rows={3}
                             />
                         </Form.Group>
 

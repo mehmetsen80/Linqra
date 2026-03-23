@@ -279,7 +279,6 @@ public class KnowledgeHubDocumentMetaDataServiceImpl implements KnowledgeHubDocu
                                         .then();
                             });
                 })
-                .defaultIfEmpty(null)
                 .then();
     }
 

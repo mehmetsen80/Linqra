@@ -3,6 +3,7 @@ package org.lite.gateway.controller;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.model.DashboardUpdate;
+import org.lite.gateway.model.TrendAnalysis;
 import org.lite.gateway.service.HealthCheckService;
 import org.lite.gateway.service.MetricsAggregator;
 import org.springframework.messaging.MessageDeliveryException;

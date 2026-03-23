@@ -203,11 +203,15 @@ public class KnowledgeHubCollectionController {
                         @RequestParam(required = false) String teamId,
                         @Valid @RequestBody AssignMilvusCollectionRequest request,
                         org.springframework.web.server.ServerWebExchange exchange) {
-                log.info("Assigning Milvus collection {} to Knowledge Hub collection {}",
-                                request.getMilvusCollectionName(), id);
+                log.info("Assigning Milvus collection {} to Knowledge Hub collection id={} request={}",
+                                request.getMilvusCollectionName(), id, request);
 
                 return resolveTeamId(exchange, teamId, "ADMIN")
                                 .flatMap(resolvedTeamId -> userContextService.getCurrentUsername(exchange)
+                                                .doOnNext(username -> log.info(
+                                                                "User {} is assigning Milvus collection {} for team {}",
+                                                                username, request.getMilvusCollectionName(),
+                                                                resolvedTeamId))
                                                 .flatMap(username -> collectionService.assignMilvusCollection(
                                                                 id,
                                                                 resolvedTeamId,
@@ -217,8 +221,12 @@ public class KnowledgeHubCollectionController {
                                                 .count()
                                                 .map(documentCount -> toResponse(collection, documentCount)))
                                 .map(ResponseEntity::ok)
+                                .doOnNext(response -> log.info("Successfully assigned Milvus collection id={} name={}",
+                                                id, request.getMilvusCollectionName()))
                                 .onErrorResume(error -> {
-                                        log.error("Error assigning Milvus collection", error);
+                                        log.error("Error assigning Milvus collection id={} name={}: {}",
+                                                        id, request.getMilvusCollectionName(), error.getMessage(),
+                                                        error);
                                         return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                                         .body(KnowledgeCollectionResponse.builder().build()));
                                 });

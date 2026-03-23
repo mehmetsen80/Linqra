@@ -33,13 +33,14 @@ public class MetricsAnalyzerController {
             @PathVariable String serviceId,
             @RequestParam String metric) {
         
-        return Mono.just(metricsAggregator.getMetricsHistory(serviceId))
-                .map(history -> history.getOrDefault(metric, Collections.emptyList()))
-                .map(points -> {
+        return metricsAggregator.getMetricsHistory(serviceId)
+                .map(history -> {
+                    List<?> points = history.getOrDefault(metric, Collections.emptyList());
                     if (points.isEmpty()) {
                         return ResponseEntity.notFound().build();
                     }
-                    MetricAnalysis analysis = metricsAnalyzer.analyzeMetric(points);
+                    @SuppressWarnings("unchecked")
+                    MetricAnalysis analysis = metricsAnalyzer.analyzeMetric((List<org.lite.gateway.model.MetricPoint>) points);
                     return ResponseEntity.ok(analysis);
                 });
     }
@@ -48,7 +49,7 @@ public class MetricsAnalyzerController {
     public Mono<ResponseEntity<Map<String, MetricAnalysis>>> getMetricsSummary(
             @PathVariable String serviceId) {
         
-        return Mono.just(metricsAggregator.getMetricsHistory(serviceId))
+        return metricsAggregator.getMetricsHistory(serviceId)
                 .map(history -> {
                     if (history.isEmpty()) {
                         return ResponseEntity.notFound().build();
@@ -68,17 +69,18 @@ public class MetricsAnalyzerController {
             @PathVariable String serviceId,
             @RequestParam String metric) {
         
-        return Mono.just(metricsAggregator.getMetricsHistory(serviceId))
-                .map(history -> history.getOrDefault(metric, Collections.emptyList()))
-                .map(points -> {
+        return metricsAggregator.getMetricsHistory(serviceId)
+                .map(history -> {
+                    List<?> points = history.getOrDefault(metric, Collections.emptyList());
                     if (points.isEmpty()) {
                         return ResponseEntity.notFound().build();
                     }
 
-                    MetricAnalysis analysis = metricsAnalyzer.analyzeMetric(points);
+                    @SuppressWarnings("unchecked")
+                    MetricAnalysis analysis = metricsAnalyzer.analyzeMetric((List<org.lite.gateway.model.MetricPoint>) points);
                     List<String> recommendations = analysis.getRecommendations();
                     
                     return ResponseEntity.ok(recommendations);
                 });
     }
-} 
+}

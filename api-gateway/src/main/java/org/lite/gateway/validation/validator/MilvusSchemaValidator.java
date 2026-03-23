@@ -20,20 +20,22 @@ public class MilvusSchemaValidator {
 
     public static final Set<String> REQUIRED_VECTOR_FIELDS = Set.of("embedding");
 
-    public static final Map<String, String> REQUIRED_FIELDS = Map.ofEntries(
+    public static final Map<String, String> MANDATORY_FIELDS = Map.ofEntries(
             Map.entry("id", "INT64"),
             Map.entry("embedding", "FLOAT_VECTOR"),
             Map.entry("text", "VARCHAR"),
+            Map.entry("documentId", "VARCHAR"),
+            Map.entry("teamId", "VARCHAR"),
+            Map.entry("createdAt", "INT64"));
+
+    public static final Map<String, String> OPTIONAL_FIELDS = Map.ofEntries(
             Map.entry("chunkId", "VARCHAR"),
             Map.entry("chunkIndex", "INT32"),
-            Map.entry("documentId", "VARCHAR"),
             Map.entry("collectionId", "VARCHAR"),
             Map.entry("fileName", "VARCHAR"),
             Map.entry("pageNumbers", "VARCHAR"),
             Map.entry("tokenCount", "INT32"),
             Map.entry("language", "VARCHAR"),
-            Map.entry("createdAt", "INT64"),
-            Map.entry("teamId", "VARCHAR"),
             Map.entry("title", "VARCHAR"),
             Map.entry("author", "VARCHAR"),
             Map.entry("subject", "VARCHAR"),
@@ -64,7 +66,8 @@ public class MilvusSchemaValidator {
         Integer detectedVectorDimension = null;
         String vectorFieldName = null;
 
-        for (Map.Entry<String, String> requiredField : REQUIRED_FIELDS.entrySet()) {
+        // Validate Mandatory Fields
+        for (Map.Entry<String, String> requiredField : MANDATORY_FIELDS.entrySet()) {
             String fieldName = requiredField.getKey();
             Map<String, Object> fieldInfo = fieldsByName.get(fieldName);
             if (fieldInfo == null) {
@@ -72,35 +75,26 @@ public class MilvusSchemaValidator {
                 continue;
             }
 
-            String actualTypeRaw = String.valueOf(fieldInfo.get("dataType"));
-            String normalizedType = normalizeType(actualTypeRaw);
-            if (!Objects.equals(normalizedType, requiredField.getValue())) {
-                issues.add("Field '" + fieldName + "' must be of type " + requiredField.getValue() + " but was "
-                        + actualTypeRaw);
-            }
+            validateFieldType(fieldName, fieldInfo, requiredField.getValue(), issues);
 
             if (REQUIRED_VECTOR_FIELDS.contains(fieldName)) {
                 vectorFieldName = fieldName;
-                Map<String, Object> typeParams = null;
-                Object paramsObj = fieldInfo.get("typeParams");
-                if (paramsObj instanceof Map<?, ?> map) {
-                    typeParams = map.entrySet().stream()
-                            .collect(Collectors.toMap(
-                                    entry -> String.valueOf(entry.getKey()),
-                                    entry -> String.valueOf(entry.getValue())));
-                }
+                detectedVectorDimension = validateVectorDimension(fieldName, fieldInfo, expectedDimension, issues);
+            }
+        }
 
-                if (typeParams == null || !typeParams.containsKey("dim")) {
-                    issues.add("Vector field '" + fieldName + "' is missing dimension configuration");
-                } else {
-                    try {
-                        detectedVectorDimension = Integer.parseInt(String.valueOf(typeParams.get("dim")));
-                        if (expectedDimension != null && !Objects.equals(detectedVectorDimension, expectedDimension)) {
-                            issues.add("Vector field '" + fieldName + "' has dimension " + detectedVectorDimension +
-                                    " but expected " + expectedDimension);
-                        }
-                    } catch (NumberFormatException ex) {
-                        issues.add("Invalid dimension value for field '" + fieldName + "'");
+        // Validate Optional Fields (only if present)
+        for (Map.Entry<String, String> optionalField : OPTIONAL_FIELDS.entrySet()) {
+            String fieldName = optionalField.getKey();
+            Map<String, Object> fieldInfo = fieldsByName.get(fieldName);
+            if (fieldInfo != null) {
+                validateFieldType(fieldName, fieldInfo, optionalField.getValue(), issues);
+
+                if (REQUIRED_VECTOR_FIELDS.contains(fieldName)) {
+                    vectorFieldName = fieldName;
+                    Integer dim = validateVectorDimension(fieldName, fieldInfo, expectedDimension, issues);
+                    if (detectedVectorDimension == null) {
+                        detectedVectorDimension = dim;
                     }
                 }
             }
@@ -112,6 +106,44 @@ public class MilvusSchemaValidator {
                 .vectorDimension(detectedVectorDimension)
                 .vectorFieldName(vectorFieldName)
                 .build();
+    }
+
+    private static void validateFieldType(String fieldName, Map<String, Object> fieldInfo, String expectedType,
+            List<String> issues) {
+        String actualTypeRaw = String.valueOf(fieldInfo.get("dataType"));
+        String normalizedType = normalizeType(actualTypeRaw);
+        if (!Objects.equals(normalizedType, expectedType)) {
+            issues.add("Field '" + fieldName + "' must be of type " + expectedType + " but was " + actualTypeRaw);
+        }
+    }
+
+    private static Integer validateVectorDimension(String fieldName, Map<String, Object> fieldInfo,
+            Integer expectedDimension, List<String> issues) {
+        Map<String, Object> typeParams = null;
+        Object paramsObj = fieldInfo.get("typeParams");
+        if (paramsObj instanceof Map<?, ?> map) {
+            typeParams = map.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            entry -> String.valueOf(entry.getKey()),
+                            entry -> String.valueOf(entry.getValue())));
+        }
+
+        if (typeParams == null || !typeParams.containsKey("dim")) {
+            issues.add("Vector field '" + fieldName + "' is missing dimension configuration");
+            return null;
+        } else {
+            try {
+                int detectedVectorDimension = Integer.parseInt(String.valueOf(typeParams.get("dim")));
+                if (expectedDimension != null && !Objects.equals(detectedVectorDimension, expectedDimension)) {
+                    issues.add("Vector field '" + fieldName + "' has dimension " + detectedVectorDimension +
+                            " but expected " + expectedDimension);
+                }
+                return detectedVectorDimension;
+            } catch (NumberFormatException ex) {
+                issues.add("Invalid dimension value for field '" + fieldName + "'");
+                return null;
+            }
+        }
     }
 
     private static String normalizeType(String type) {

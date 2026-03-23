@@ -17,6 +17,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.util.HashMap;
@@ -82,6 +83,7 @@ public class HealthCheckService {
 
     private Duration parseDuration(String uptimeStr) {
         try {
+            if (uptimeStr == null) return Duration.ZERO;
             // Format is "0d 0h 0m 46s"
             String[] parts = uptimeStr.split(" ");
             long days = Long.parseLong(parts[0].replace("d", ""));
@@ -100,7 +102,7 @@ public class HealthCheckService {
     }
 
     public boolean evaluateMetrics(Map<String, Double> metrics, HealthThresholds thresholds) {
-        if (metrics == null) {
+        if (metrics == null || thresholds == null) {
             return false;
         }
 
@@ -113,19 +115,19 @@ public class HealthCheckService {
                 (responseTime == null || responseTime <= thresholds.getResponseTimeThreshold());
     }
 
-    private ServiceHealthStatus createServiceStatus(String routeId, Map<String, Object> healthData) {
+    private Mono<ServiceHealthStatus> createServiceStatus(String routeId, Map<String, Object> healthData) {
         String serviceId = (String) healthData.get("serviceId");
 
         // Validate that the service IDs match
-        if (!routeId.equals(serviceId)) {
+        if (serviceId != null && !routeId.equals(serviceId)) {
             log.error("Service ID mismatch. Route ID: {}, Health Response Service ID: {}", routeId, serviceId);
-            throw new RuntimeException("Service ID mismatch in health check response");
+            return Mono.error(new RuntimeException("Service ID mismatch in health check response"));
         }
 
         boolean isUp = "UP".equals(healthData.get("status"));
 
         ServiceHealthStatus status = ServiceHealthStatus.builder()
-                .serviceId(serviceId)
+                .serviceId(routeId)
                 .healthy(isUp)
                 .status((String) healthData.get("status"))
                 .metrics(extractMetrics(healthData))
@@ -133,12 +135,13 @@ public class HealthCheckService {
                 .lastChecked(System.currentTimeMillis())
                 .build();
 
-        // Add new metrics to Redis
+        // Add new metrics to Redis - Non-blocking
         if (status.getMetrics() != null) {
-            metricsAggregator.addMetrics(routeId, status.getMetrics());
+            return metricsAggregator.addMetrics(routeId, status.getMetrics())
+                    .thenReturn(status);
         }
 
-        return status;
+        return Mono.just(status);
     }
 
     private Map<String, Double> extractMetrics(Map<String, Object> healthData) {
@@ -158,64 +161,63 @@ public class HealthCheckService {
         return metrics;
     }
 
-    public Map<String, TrendAnalysis> analyzeServiceTrends(String serviceId) {
-        return metricsAggregator.analyzeTrends(serviceId); // Use MetricsAggregator to get trends from Redis
+    public Mono<Map<String, TrendAnalysis>> analyzeServiceTrends(String serviceId) {
+        return metricsAggregator.analyzeTrends(serviceId);
     }
 
     @SuppressWarnings("unchecked")
     private Mono<ServiceHealthStatus> checkHealth(ApiRoute route) {
         String serviceId = route.getRouteIdentifier();
 
-        if (!isServiceRegistered(serviceId)) {
-            log.debug("Service {} is not registered with Eureka, skipping health check", serviceId);
-            return Mono.empty();
-        }
-
-        // REMOTE-DEV Specific: Skip health checks for remote services (non '-dev') to
-        // avoid noise
-        if (env.matchesProfiles("remote-dev") && !serviceId.toLowerCase().endsWith("-dev")) {
-            log.debug("Skipping health check for non-dev service {} in remote-dev profile", serviceId);
-            return Mono.empty();
-        }
-
-        String healthEndpoint = getHealthEndpoint(route);
-        long startTime = System.currentTimeMillis();
-
-        return createWebClient()
-                .get()
-                .uri(healthEndpoint)
-                .accept(MediaType.APPLICATION_JSON)
-                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                .retrieve()
-                .bodyToMono(String.class)
-                .map(responseBody -> {
-                    try {
-                        Map<String, Object> healthData = objectMapper.readValue(responseBody, Map.class);
-                        long responseTime = System.currentTimeMillis() - startTime;
-
-                        Map<String, Object> metrics = (Map<String, Object>) healthData.getOrDefault("metrics",
-                                new HashMap<>());
-                        healthData.put("metrics", metrics);
-                        metrics.put("responseTime", (double) responseTime);
-
-                        ServiceHealthStatus status = createServiceStatus(serviceId, healthData);
-                        processHealthStatus(route, status);
-
-                        return status;
-                    } catch (Exception e) {
-                        log.error("Failed to parse health check response for service {}: {}", serviceId,
-                                e.getMessage());
-                        throw new RuntimeException("Failed to parse health check response", e);
-                    }
-                })
-                .onErrorResume(e -> {
-                    if (env.matchesProfiles("remote-dev")) {
-                        // log.debug("Health check failed for service {}: {} (suppressed in
-                        // remote-dev)", serviceId, e.getMessage());
+        return isServiceRegistered(serviceId)
+                .flatMap(registered -> {
+                    if (!registered) {
+                        log.debug("Service {} is not registered with Eureka, skipping health check", serviceId);
                         return Mono.empty();
                     }
-                    log.error("Health check failed for service {}: {}", serviceId, e.getMessage());
-                    return handleHealthCheckError(serviceId, e);
+
+                    // REMOTE-DEV Specific: Skip health checks for remote services (non '-dev') to avoid noise
+                    if (env.matchesProfiles("remote-dev") && !serviceId.toLowerCase().endsWith("-dev")) {
+                        log.debug("Skipping health check for non-dev service {} in remote-dev profile", serviceId);
+                        return Mono.empty();
+                    }
+
+                    String healthEndpoint = getHealthEndpoint(route);
+                    long startTime = System.currentTimeMillis();
+
+                    return createWebClient()
+                            .get()
+                            .uri(healthEndpoint)
+                            .accept(MediaType.APPLICATION_JSON)
+                            .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            .flatMap(responseBody -> {
+                                try {
+                                    Map<String, Object> healthData = objectMapper.readValue(responseBody, Map.class);
+                                    long responseTime = System.currentTimeMillis() - startTime;
+
+                                    Map<String, Object> metrics = (Map<String, Object>) healthData.getOrDefault("metrics",
+                                            new HashMap<>());
+                                    healthData.put("metrics", metrics);
+                                    metrics.put("responseTime", (double) responseTime);
+
+                                    return createServiceStatus(serviceId, healthData)
+                                            .flatMap(status -> processHealthStatus(route, status)
+                                                    .thenReturn(status));
+                                } catch (Exception e) {
+                                    log.error("Failed to parse health check response for service {}: {}", serviceId,
+                                            e.getMessage());
+                                    return Mono.error(new RuntimeException("Failed to parse health check response", e));
+                                }
+                            })
+                            .onErrorResume(e -> {
+                                if (env.matchesProfiles("remote-dev")) {
+                                    return Mono.empty();
+                                }
+                                log.error("Health check failed for service {}: {}", serviceId, e.getMessage());
+                                return handleHealthCheckError(serviceId, e);
+                            });
                 });
     }
 
@@ -240,31 +242,30 @@ public class HealthCheckService {
         return webClientBuilder.build();
     }
 
-    private void processHealthStatus(ApiRoute route, ServiceHealthStatus status) {
+    private Mono<Void> processHealthStatus(ApiRoute route, ServiceHealthStatus status) {
         String serviceId = route.getRouteIdentifier();
 
-        // Analyze trends using Redis-stored metrics
-        Map<String, TrendAnalysis> trends = analyzeServiceTrends(serviceId);
+        return metricsAggregator.analyzeTrends(serviceId)
+                .flatMap(trends -> {
+                    Mono<Void> alertMono;
+                    if (!status.isHealthy() || !evaluateMetrics(status.getMetrics(), route.getHealthCheck().getThresholds())) {
+                        status.incrementConsecutiveFailures();
+                        alertMono = alertService.processHealthStatus(
+                                serviceId,
+                                false,
+                                status.getMetrics(),
+                                status.getConsecutiveFailures(),
+                                route.getHealthCheck().getAlertRules());
+                    } else {
+                        status.resetConsecutiveFailures();
+                        alertMono = alertService.resolveHealthAlerts(serviceId);
+                    }
 
-        // Check thresholds and trigger alerts
-        if (!status.isHealthy() || !evaluateMetrics(status.getMetrics(), route.getHealthCheck().getThresholds())) {
-            status.incrementConsecutiveFailures();
-            alertService.processHealthStatus(
-                    serviceId,
-                    false,
-                    status.getMetrics(),
-                    status.getConsecutiveFailures(),
-                    route.getHealthCheck().getAlertRules()).subscribe();
-        } else {
-            // Service is healthy, resolve any existing alerts
-            status.resetConsecutiveFailures();
-            alertService.resolveHealthAlerts(serviceId).subscribe();
-        }
+                    Mono<Void> trendMono = trends.isEmpty() ? Mono.empty()
+                            : metricsAggregator.storeTrendAnalysis(serviceId, trends);
 
-        // Store trends analysis in Redis if needed
-        if (!trends.isEmpty()) {
-            metricsAggregator.storeTrendAnalysis(serviceId, trends);
-        }
+                    return Mono.when(alertMono, trendMono);
+                });
     }
 
     private Mono<ServiceHealthStatus> handleHealthCheckError(String serviceId, Throwable error) {
@@ -275,9 +276,8 @@ public class HealthCheckService {
                 .build();
 
         // Store error status in Redis
-        metricsAggregator.addMetrics(serviceId, Map.of("error", 1.0));
-
-        return Mono.just(errorStatus);
+        return metricsAggregator.addMetrics(serviceId, Map.of("error", 1.0))
+                .thenReturn(errorStatus);
     }
 
     public Flux<ServiceHealthStatus> getAllServicesStatus() {
@@ -298,15 +298,17 @@ public class HealthCheckService {
                 protocol, hostname, serverPort, basePath, healthPath);
     }
 
-    // Add method to check if service is registered with Eureka
-    private boolean isServiceRegistered(String serviceId) {
-        try {
-            com.netflix.discovery.shared.Application application = eurekaClient.getApplication(serviceId);
-            return application != null && !application.getInstances().isEmpty();
-        } catch (Exception e) {
-            log.debug("Error checking service registration: {}", e.getMessage());
-            return false;
-        }
+    // Wrap blocking Eureka call to run on bounded elastic scheduler
+    private Mono<Boolean> isServiceRegistered(String serviceId) {
+        return Mono.fromCallable(() -> {
+            try {
+                com.netflix.discovery.shared.Application application = eurekaClient.getApplication(serviceId);
+                return application != null && !application.getInstances().isEmpty();
+            } catch (Exception e) {
+                log.debug("Error checking service registration for {}: {}", serviceId, e.getMessage());
+                return false;
+            }
+        }).subscribeOn(Schedulers.boundedElastic());
     }
 
     public Optional<ServiceDTO> getServiceHealth(String serviceId) {

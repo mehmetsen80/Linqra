@@ -16,7 +16,7 @@ import java.util.Map;
 @RequestMapping("/metrics/points")
 @Slf4j
 public class MetricsPointController {
-    
+
     private final MetricsAggregator metricsAggregator;
 
     public MetricsPointController(MetricsAggregator metricsAggregator) {
@@ -25,7 +25,7 @@ public class MetricsPointController {
 
     @GetMapping("/{serviceId}/current")
     public Mono<ResponseEntity<Map<String, Double>>> getCurrentMetrics(@PathVariable String serviceId) {
-        return Mono.just(metricsAggregator.getMetricsHistory(serviceId))
+        return metricsAggregator.getMetricsHistory(serviceId)
                 .map(history -> {
                     if (history.isEmpty()) {
                         return ResponseEntity.notFound().build();
@@ -34,7 +34,7 @@ public class MetricsPointController {
                     Map<String, Double> currentMetrics = new HashMap<>();
                     history.forEach((metric, points) -> {
                         if (!points.isEmpty()) {
-                            currentMetrics.put(metric, points.getLast().getValue());
+                            currentMetrics.put(metric, points.get(points.size() - 1).getValue());
                         }
                     });
 
@@ -46,8 +46,8 @@ public class MetricsPointController {
     public Mono<ResponseEntity<List<MetricPoint>>> getMetricHistory(
             @PathVariable String serviceId,
             @PathVariable String metric) {
-        
-        return Mono.just(metricsAggregator.getMetricsHistory(serviceId))
+
+        return metricsAggregator.getMetricsHistory(serviceId)
                 .map(history -> {
                     List<MetricPoint> points = history.getOrDefault(metric, Collections.emptyList());
                     if (points.isEmpty()) {
@@ -60,8 +60,8 @@ public class MetricsPointController {
     @GetMapping("/{serviceId}")
     public Mono<ResponseEntity<Map<String, List<MetricPoint>>>> getAllMetrics(
             @PathVariable String serviceId) {
-        
-        return Mono.just(metricsAggregator.getMetricsHistory(serviceId))
+
+        return metricsAggregator.getMetricsHistory(serviceId)
                 .map(history -> {
                     if (history.isEmpty()) {
                         return ResponseEntity.notFound().build();
@@ -69,4 +69,4 @@ public class MetricsPointController {
                     return ResponseEntity.ok(history);
                 });
     }
-} 
+}

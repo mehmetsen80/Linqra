@@ -3,7 +3,6 @@ package org.lite.gateway.controller;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.model.DashboardUpdate;
-import org.lite.gateway.model.TrendAnalysis;
 import org.lite.gateway.service.HealthCheckService;
 import org.lite.gateway.service.MetricsAggregator;
 import org.springframework.messaging.MessageDeliveryException;
@@ -43,34 +42,32 @@ public class HealthCheckServiceController {
         startCheckUpdates();
     }
 
-    // Send updates every 5 seconds
+    // Send updates every 10 seconds
     private void startCheckUpdates() {
         scheduler.scheduleAtFixedRate(this::sendHealthUpdate, 0, 10, TimeUnit.SECONDS);
     }
 
     private void sendHealthUpdate() {
         healthCheckService.getHealthCheckEnabledRoutes()
-                .flatMap(route -> healthCheckService.getServiceStatus(route.getRouteIdentifier())
-                        .map(status -> {
-                            log.debug("Service {} status: {}", route.getRouteIdentifier(), status.getStatus());
-                            return new DashboardUpdate(
-                                    route.getRouteIdentifier(),
-                                    status,
-                                    metricsAggregator.analyzeTrends(route.getRouteIdentifier()));
-                        })
-                        .onErrorResume(e -> {
-                            log.error("Error getting status for {}: {}", route.getRouteIdentifier(), e.getMessage());
-                            return Mono.empty();
-                        }))
-                .collectList()
-                .doOnNext(updates -> {
-                    if (updates.isEmpty()) {
-                        log.warn("No service updates available - all services might be down");
-                    } else {
-                        log.info("Collected updates for {} services", updates.size());
-                    }
+                .flatMap(route -> {
+                    String serviceId = route.getRouteIdentifier();
+                    return Mono.zip(
+                            healthCheckService.getServiceStatus(serviceId),
+                            metricsAggregator.analyzeTrends(serviceId)
+                    )
+                    .map(tuple -> {
+                        log.debug("Service {} status: {}", serviceId, tuple.getT1().getStatus());
+                        return new DashboardUpdate(serviceId, tuple.getT1(), tuple.getT2());
+                    })
+                    .onErrorResume(e -> {
+                        log.error("Error getting status for {}: {}", serviceId, e.getMessage());
+                        return Mono.empty();
+                    });
                 })
-                .subscribe(this::sendHealthUpdate);
+                .collectList()
+                .filter(updates -> !updates.isEmpty())
+                .doOnNext(updates -> log.info("Collected updates for {} services", updates.size()))
+                .subscribe(this::sendHealthUpdate, err -> log.error("Error in health update loop: {}", err.getMessage()));
     }
 
     private void sendHealthUpdate(List<DashboardUpdate> payload) {
@@ -124,16 +121,15 @@ public class HealthCheckServiceController {
 
     @GetMapping("/data/{serviceId}")
     public Mono<Map<String, Object>> getHealthData(@PathVariable String serviceId) {
-        Map<String, Double> metrics = metricsAggregator.getCurrentMetrics(serviceId);
+        return Mono.zip(
+                healthCheckService.isServiceHealthy(serviceId),
+                metricsAggregator.getCurrentMetrics(serviceId),
+                metricsAggregator.analyzeTrends(serviceId)
+        ).map(tuple -> {
+            boolean isHealthy = tuple.getT1();
+            Map<String, Double> metrics = tuple.getT2();
+            Map<String, TrendAnalysis> trends = tuple.getT3();
 
-        // Get service health status
-        Mono<Boolean> healthStatus = healthCheckService.isServiceHealthy(serviceId);
-
-        // Get trends analysis
-        Map<String, TrendAnalysis> trends = healthCheckService.analyzeServiceTrends(serviceId);
-
-        // Combine all data
-        return healthStatus.map(isHealthy -> {
             Map<String, Object> dashboardData = new HashMap<>();
             dashboardData.put("serviceId", serviceId);
             dashboardData.put("healthy", isHealthy);

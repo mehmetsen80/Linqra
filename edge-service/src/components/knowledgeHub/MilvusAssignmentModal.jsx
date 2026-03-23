@@ -113,10 +113,12 @@ function MilvusAssignmentModal({
     if (!selectedCollection) {
       return '';
     }
+    // Priority: Milvus properties -> Top-level Milvus fields -> KnowledgeHub collection current value
     return selectedCollection?.properties?.embeddingModel
       || selectedCollection?.embeddingModel
+      || collection?.embeddingModel
       || '';
-  }, [selectedCollection]);
+  }, [selectedCollection, collection]);
 
   const collectionProviderKey = useMemo(
     () => getProviderKey(collectionEmbeddingModelKey),
@@ -125,11 +127,23 @@ function MilvusAssignmentModal({
 
   const selectedProviderOption = useMemo(() => {
     if (!dimensionFilteredOptions.length) return null;
-    if (!collectionProviderKey) {
-      return dimensionFilteredOptions[0];
+    
+    // If we have a state-based model category, use it to find the provider
+    const currentProviderKey = getProviderKey(selectedModelCategory);
+    if (currentProviderKey) {
+      const found = dimensionFilteredOptions.find(option => option.provider === currentProviderKey);
+      if (found) return found;
     }
-    return dimensionFilteredOptions.find(option => option.provider === collectionProviderKey) || null;
-  }, [dimensionFilteredOptions, collectionProviderKey]);
+
+    // Fallback to collection-based provider
+    if (collectionProviderKey) {
+      const found = dimensionFilteredOptions.find(option => option.provider === collectionProviderKey);
+      if (found) return found;
+    }
+
+    // Default to first available
+    return dimensionFilteredOptions[0];
+  }, [dimensionFilteredOptions, collectionProviderKey, selectedModelCategory]);
 
   const availableModels = selectedProviderOption?.models || [];
 
@@ -140,9 +154,10 @@ function MilvusAssignmentModal({
 
   const providerLabel = useMemo(() => {
     if (!selectedCollection) return '';
-    if (!collectionProviderKey) return 'Unknown provider';
-    return PROVIDER_LABELS[collectionProviderKey] || collectionProviderKey;
-  }, [selectedCollection, collectionProviderKey]);
+    const currentProviderKey = getProviderKey(selectedModelCategory) || collectionProviderKey;
+    if (!currentProviderKey) return 'Unknown provider';
+    return PROVIDER_LABELS[currentProviderKey] || currentProviderKey;
+  }, [selectedCollection, selectedModelCategory, collectionProviderKey]);
 
   useEffect(() => {
     if (!show) return;
@@ -306,15 +321,38 @@ function MilvusAssignmentModal({
 
           <Form.Group className="mb-3">
             <Form.Label>Embedding Provider</Form.Label>
-            <Form.Control
-              type="text"
-              value={providerLabel || (selectedCollection ? 'Unknown provider' : 'Select a RAG collection first')}
-              readOnly
-              plaintext
-              className="ps-0"
-            />
+            {!collectionProviderKey && dimensionFilteredOptions.length > 0 ? (
+              <Form.Select
+                value={getProviderKey(selectedModelCategory)}
+                onChange={(e) => {
+                  const provider = dimensionFilteredOptions.find(p => p.provider === e.target.value);
+                  if (provider && provider.models.length > 0) {
+                    setSelectedModelCategory(provider.models[0].modelCategory || '');
+                    setEmbeddingModelName(provider.models[0].modelName || '');
+                    setLateChunkingEnabled(true);
+                  }
+                }}
+                disabled={loading}
+              >
+                {dimensionFilteredOptions.map(option => (
+                  <option key={option.provider} value={option.provider}>
+                    {option.label}
+                  </option>
+                ))}
+              </Form.Select>
+            ) : (
+              <Form.Control
+                type="text"
+                value={providerLabel || (selectedCollection ? 'Unknown provider' : 'Select a RAG collection first')}
+                readOnly
+                plaintext
+                className="ps-0"
+              />
+            )}
             <Form.Text muted>
-              Derived from the RAG collection&apos;s stored embedding model. To change providers, create a new RAG collection.
+              {collectionProviderKey 
+                ? "Derived from the RAG collection's stored embedding model."
+                : "Missing metadata. Please select the provider that was used for this collection."}
             </Form.Text>
           </Form.Group>
 

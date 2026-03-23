@@ -3,7 +3,7 @@ package org.lite.gateway.service.impl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.AssignMilvusCollectionRequest;
-import org.lite.gateway.dto.MilvusCollectionInfo;
+import org.lite.gateway.dto.MilvusCollectionVerificationResponse;
 import org.lite.gateway.entity.KnowledgeHubCollection;
 import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditEventType;
@@ -390,14 +390,18 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                         }
 
                                         return requireMilvusCollectionForTeam(request.getMilvusCollectionName(), teamId)
-                                                        .flatMap(collectionInfo -> {
-                                                                Integer milvusDimension = collectionInfo
+                                                        .flatMap(verification -> {
+                                                                Integer milvusDimension = verification
                                                                                 .getVectorDimension();
                                                                 Integer requestedDimension = request
                                                                                 .getEmbeddingDimension();
 
-                                                                String collectionType = collectionInfo
-                                                                                .getCollectionType();
+                                                                // Check collection type from properties
+                                                                String collectionType = verification
+                                                                                .getProperties() != null
+                                                                                                ? verification.getProperties()
+                                                                                                                .get("collectionType")
+                                                                                                : null;
                                                                 if (collectionType != null && !collectionType
                                                                                 .equalsIgnoreCase("KNOWLEDGE_HUB")) {
                                                                         return Mono.error(new RuntimeException(
@@ -430,12 +434,41 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                                                                                         + "'."));
                                                                 }
 
-                                                                return validateMilvusCollectionSchema(
-                                                                                request.getMilvusCollectionName(),
-                                                                                teamId,
-                                                                                effectiveDimension)
-                                                                                .then(Mono.just(Tuples.of(collection,
-                                                                                                effectiveDimension)));
+                                                                // Perform schema validation using the schema from
+                                                                // verification
+                                                                if (verification.getSchema() != null) {
+                                                                        List<Map<String, Object>> schemaFields = verification
+                                                                                        .getSchema().stream()
+                                                                                        .map(field -> {
+                                                                                                Map<String, Object> map = new HashMap<>();
+                                                                                                map.put("name", field
+                                                                                                                .getName());
+                                                                                                map.put("dataType",
+                                                                                                                field.getDataType());
+                                                                                                map.put("typeParams",
+                                                                                                                field.getTypeParams());
+                                                                                                return map;
+                                                                                        })
+                                                                                        .collect(Collectors.toList());
+
+                                                                        MilvusSchemaValidator.ValidationResult validationResult = MilvusSchemaValidator
+                                                                                        .validate(schemaFields,
+                                                                                                        effectiveDimension);
+
+                                                                        if (!validationResult.isValid()) {
+                                                                                String message = String.join("; ",
+                                                                                                validationResult.getIssues());
+                                                                                return Mono.error(new RuntimeException(
+                                                                                                "Milvus collection '"
+                                                                                                                + request
+                                                                                                                                .getMilvusCollectionName()
+                                                                                                                + "' schema validation failed: "
+                                                                                                                + message));
+                                                                        }
+                                                                }
+
+                                                                return Mono.just(Tuples.of(collection,
+                                                                                effectiveDimension));
                                                         });
                                 })
                                 .flatMap(tuple -> {
@@ -762,81 +795,11 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                 });
         }
 
-        private Mono<MilvusCollectionInfo> requireMilvusCollectionForTeam(String collectionName, String teamId) {
+        private Mono<MilvusCollectionVerificationResponse> requireMilvusCollectionForTeam(String collectionName,
+                        String teamId) {
                 return milvusStoreService.verifyCollection(collectionName, teamId)
-                                .map(verification -> MilvusCollectionInfo.builder()
-                                                .name(verification.getName())
-                                                .teamId(verification.getTeamId())
-                                                .vectorDimension(verification.getVectorDimension())
-                                                .vectorFieldName(verification.getVectorFieldName())
-                                                .rowCount(verification.getRowCount())
-                                                .description(verification.getDescription())
-                                                .properties(verification.getProperties())
-                                                .collectionType(verification.getProperties() != null
-                                                                ? verification.getProperties().get("collectionType")
-                                                                : null)
-                                                .build())
                                 .onErrorResume(e -> Mono.error(new RuntimeException(
                                                 "Milvus collection '" + collectionName + "' validation failed: "
                                                                 + e.getMessage())));
-        }
-
-        @SuppressWarnings("unchecked")
-        private Mono<Void> validateMilvusCollectionSchema(String collectionName, String teamId,
-                        Integer expectedDimension) {
-                return milvusStoreService.getCollectionDetails()
-                                .flatMap(details -> {
-                                        Object collectionsObj = details.get("collections");
-                                        if (!(collectionsObj instanceof List<?> collections)) {
-                                                return Mono.error(new RuntimeException(
-                                                                "Unable to read Milvus collection details"));
-                                        }
-
-                                        Optional<Map<String, Object>> maybeCollection = collections.stream()
-                                                        .filter(Map.class::isInstance)
-                                                        .map(map -> (Map<String, Object>) map)
-                                                        .filter(map -> collectionName.equals(map.get("name")))
-                                                        .findFirst();
-
-                                        if (maybeCollection.isEmpty()) {
-                                                return Mono.error(new RuntimeException(
-                                                                "Milvus collection '" + collectionName
-                                                                                + "' not found in collection details"));
-                                        }
-
-                                        Map<String, Object> collectionInfo = maybeCollection.get();
-                                        Object teamIdProperty = collectionInfo.get("teamId");
-                                        if (teamIdProperty != null && !Objects.equals(teamIdProperty, teamId)) {
-                                                return Mono.error(new RuntimeException(
-                                                                "Milvus collection '" + collectionName
-                                                                                + "' does not belong to team "
-                                                                                + teamId));
-                                        }
-
-                                        Object schemaObj = collectionInfo.get("schema");
-                                        if (!(schemaObj instanceof List<?> schemaList)) {
-                                                return Mono.error(new RuntimeException(
-                                                                "Unable to read schema for Milvus collection '"
-                                                                                + collectionName + "'"));
-                                        }
-
-                                        MilvusSchemaValidator.ValidationResult validationResult = MilvusSchemaValidator
-                                                        .validate(
-                                                                        schemaList.stream()
-                                                                                        .filter(Map.class::isInstance)
-                                                                                        .map(field -> (Map<String, Object>) field)
-                                                                                        .collect(Collectors.toList()),
-                                                                        expectedDimension);
-
-                                        if (!validationResult.isValid()) {
-                                                String message = String.join("; ", validationResult.getIssues());
-                                                return Mono.error(new RuntimeException(
-                                                                "Milvus collection '" + collectionName
-                                                                                + "' schema validation failed: "
-                                                                                + message));
-                                        }
-
-                                        return Mono.empty();
-                                });
         }
 }

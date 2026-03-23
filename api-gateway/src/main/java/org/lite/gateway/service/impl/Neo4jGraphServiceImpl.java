@@ -418,7 +418,8 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
 
                 Map<String, Long> entityCounts = new HashMap<>();
                 entityResult.forEachRemaining(record -> {
-                    String type = record.get("type").asString();
+                    var typeValue = record.get("type");
+                    String type = typeValue.isNull() ? "Unlabeled" : typeValue.asString();
                     long count = record.get("count").asLong();
                     entityCounts.put(type, count);
                 });
@@ -435,9 +436,14 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 stats.put("totalRelationships", relCounts.values().stream().mapToLong(Long::longValue).sum());
 
                 return stats;
-            } catch (Neo4jException e) {
+            } catch (Exception e) {
                 log.error("Error getting graph statistics for team {}: {}", teamId, e.getMessage());
-                throw new RuntimeException("Failed to get graph statistics", e);
+                Map<String, Object> emptyStats = new HashMap<>();
+                emptyStats.put("entityCounts", Collections.emptyMap());
+                emptyStats.put("relationshipCounts", Collections.emptyMap());
+                emptyStats.put("totalEntities", 0L);
+                emptyStats.put("totalRelationships", 0L);
+                return emptyStats;
             }
         }).subscribeOn(Schedulers.boundedElastic());
     }

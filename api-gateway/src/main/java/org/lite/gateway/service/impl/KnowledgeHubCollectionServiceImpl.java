@@ -358,37 +358,57 @@ public class KnowledgeHubCollectionServiceImpl implements KnowledgeHubCollection
                                 log.info("Assigned Milvus collection {} to KnowledgeHub collection {}",
                                         savedCollection.getMilvusCollectionName(), savedCollection.getId());
 
-                                // Build detailed audit context
-                                Map<String, Object> auditContext = new HashMap<>();
-                                auditContext.put("collectionName", savedCollection.getName());
-                                auditContext.put("oldMilvusCollectionName", oldMilvusCollectionName);
-                                auditContext.put("newMilvusCollectionName", request.getMilvusCollectionName());
-                                auditContext.put("oldEmbeddingModel", oldEmbeddingModel);
-                                auditContext.put("newEmbeddingModel", request.getEmbeddingModel());
-                                auditContext.put("oldEmbeddingModelName", oldEmbeddingModelName);
-                                auditContext.put("newEmbeddingModelName", request.getEmbeddingModelName());
-                                auditContext.put("oldEmbeddingDimension", oldEmbeddingDimension);
-                                auditContext.put("newEmbeddingDimension", effectiveDimension);
-                                auditContext.put("oldLateChunkingEnabled", oldLateChunkingEnabled);
-                                auditContext.put("newLateChunkingEnabled", request.isLateChunkingEnabled());
-                                auditContext.put("updatedBy", updatedBy);
-                                auditContext.put("updatedAt", savedCollection.getUpdatedAt().toString());
+                                // Synchronize metadata to Milvus collection properties
+                                Map<String, String> milvusMetadata = new HashMap<>();
+                                milvusMetadata.put("embeddingModel", request.getEmbeddingModel());
+                                milvusMetadata.put("embeddingModelName", request.getEmbeddingModelName());
+                                milvusMetadata.put("embeddingDimension", String.valueOf(effectiveDimension));
+                                milvusMetadata.put("collectionType", "KNOWLEDGE_HUB");
+                                milvusMetadata.put("teamId", teamId);
 
-                                String auditReason = String.format(
-                                        "Milvus collection '%s' assigned to Knowledge Hub collection '%s'",
-                                        request.getMilvusCollectionName(), savedCollection.getName());
+                                return milvusStoreService.updateCollectionMetadata(
+                                        request.getMilvusCollectionName(), 
+                                        teamId, 
+                                        milvusMetadata)
+                                        .onErrorResume(e -> {
+                                            log.warn("Failed to synchronize metadata to Milvus collection {}: {}", 
+                                                    request.getMilvusCollectionName(), e.getMessage());
+                                            return Mono.empty();
+                                        })
+                                        .then(Mono.defer(() -> {
+                                            // Build detailed audit context
+                                            Map<String, Object> auditContext = new HashMap<>();
+                                            auditContext.put("collectionName", savedCollection.getName());
+                                            auditContext.put("oldMilvusCollectionName", oldMilvusCollectionName);
+                                            auditContext.put("newMilvusCollectionName", request.getMilvusCollectionName());
+                                            auditContext.put("oldEmbeddingModel", oldEmbeddingModel);
+                                            auditContext.put("newEmbeddingModel", request.getEmbeddingModel());
+                                            auditContext.put("oldEmbeddingModelName", oldEmbeddingModelName);
+                                            auditContext.put("newEmbeddingModelName", request.getEmbeddingModelName());
+                                            auditContext.put("oldEmbeddingDimension", oldEmbeddingDimension);
+                                            auditContext.put("newEmbeddingDimension", effectiveDimension);
+                                            auditContext.put("oldLateChunkingEnabled", oldLateChunkingEnabled);
+                                            auditContext.put("newLateChunkingEnabled", request.isLateChunkingEnabled());
+                                            auditContext.put("updatedBy", updatedBy);
+                                            auditContext.put("updatedAt", savedCollection.getUpdatedAt().toString());
 
-                                // Log detailed audit event
-                                return auditLogHelper.logDetailedEvent(
-                                        AuditEventType.COLLECTION_UPDATED,
-                                        AuditActionType.UPDATE,
-                                        AuditResourceType.COLLECTION,
-                                        savedCollection.getId(),
-                                        auditReason,
-                                        auditContext,
-                                        null, // documentId
-                                        savedCollection.getId() // collectionId
-                                ).thenReturn(savedCollection);
+                                            String auditReason = String.format(
+                                                    "Milvus collection '%s' assigned to Knowledge Hub collection '%s'",
+                                                    request.getMilvusCollectionName(), savedCollection.getName());
+
+                                            // Log detailed audit event
+                                            return auditLogHelper.logDetailedEvent(
+                                                    AuditEventType.COLLECTION_UPDATED,
+                                                    AuditActionType.UPDATE,
+                                                    AuditResourceType.COLLECTION,
+                                                    savedCollection.getId(),
+                                                    auditReason,
+                                                    auditContext,
+                                                    null, // documentId
+                                                    savedCollection.getId() // collectionId
+                                            );
+                                        }))
+                                        .thenReturn(savedCollection);
                             });
                 });
     }

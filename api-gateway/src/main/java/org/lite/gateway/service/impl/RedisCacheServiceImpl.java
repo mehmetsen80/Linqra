@@ -154,6 +154,17 @@ public class RedisCacheServiceImpl implements CacheService {
     }
 
     @Override
+    public Mono<Long> removeHashKey(String key, String hashKey) {
+        log.debug("Redis RemoveHashKey: {} -> {}", key, hashKey);
+        return redisTemplate.opsForHash().remove(key, hashKey)
+                .timeout(Duration.ofMillis(500))
+                .onErrorResume(e -> {
+                    log.error("Redis RemoveHashKey Failed: {}", e.getMessage());
+                    return Mono.just(0L);
+                });
+    }
+
+    @Override
     public Mono<java.util.Map<String, String>> getHashEntries(String key) {
         log.debug("Redis GetHashEntries: {}", key);
         return redisTemplate.opsForHash().entries(key)

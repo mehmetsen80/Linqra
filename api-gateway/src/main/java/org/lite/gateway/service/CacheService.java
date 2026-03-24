@@ -32,6 +32,8 @@ public interface CacheService {
     Mono<String> getHash(String key, String hashKey);
 
     Mono<Boolean> putHash(String key, String hashKey, String value);
+    
+    Mono<Long> removeHashKey(String key, String hashKey);
 
     Mono<java.util.Map<String, String>> getHashEntries(String key);
 

@@ -99,6 +99,17 @@ public class InMemoryCacheServiceImpl implements CacheService {
     }
 
     @Override
+    public Mono<Long> removeHashKey(String key, String hashKey) {
+        return Mono.fromSupplier(() -> {
+            Map<String, String> map = hashCache.get(key);
+            if (map != null) {
+                return map.remove(hashKey) != null ? 1L : 0L;
+            }
+            return 0L;
+        });
+    }
+
+    @Override
     public Mono<Map<String, String>> getHashEntries(String key) {
         return Mono.fromSupplier(() -> {
             Map<String, String> map = hashCache.get(key);

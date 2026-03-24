@@ -69,9 +69,9 @@ public class MetricsAggregator {
                                     String updatedJson = objectMapper.writeValueAsString(points);
                                     return cacheService.putHash(redisKey, newMetric, updatedJson);
                                 } catch (JsonProcessingException e) {
-                                    log.error("Error storing new metrics for service {} metric {}: {}",
+                                    log.error("CORRUPTION DETECTED on Write: Error storing new metrics for service {} metric {}: {}. Deleting entire metrics key for this service to recover.",
                                             serviceId, newMetric, e.getMessage());
-                                    return Mono.empty();
+                                    return cacheService.delete(redisKey).then(Mono.empty());
                                 }
                             });
                 })
@@ -82,20 +82,26 @@ public class MetricsAggregator {
         String redisKey = METRICS_KEY_PREFIX + serviceId;
 
         return cacheService.getHashEntries(redisKey)
-                .map(entries -> {
-                    Map<String, TrendAnalysis> trends = new HashMap<>();
-                    entries.forEach((metric, jsonPoints) -> {
-                        try {
-                            List<MetricPoint> points = objectMapper.readValue(jsonPoints,
-                                    new TypeReference<List<MetricPoint>>() {
-                                    });
-                            trends.put(metric, calculateTrend(points));
-                        } catch (JsonProcessingException e) {
-                            log.error("Error analyzing trends for service {} metric {}: {}",
-                                    serviceId, metric, e.getMessage());
-                        }
-                    });
-                    return trends;
+                .flatMap(entries -> {
+                    if (entries == null || entries.isEmpty()) {
+                        return Mono.just(new HashMap<String, TrendAnalysis>());
+                    }
+                    return Flux.fromIterable(entries.entrySet())
+                            .flatMap(entry -> {
+                                String metric = entry.getKey();
+                                String jsonPoints = entry.getValue();
+                                try {
+                                    List<MetricPoint> points = objectMapper.readValue(jsonPoints,
+                                            new TypeReference<List<MetricPoint>>() {
+                                            });
+                                    return Mono.just(Map.entry(metric, calculateTrend(points)));
+                                } catch (JsonProcessingException e) {
+                                    log.error("CORRUPTION DETECTED on Read: Error analyzing trends for service {} metric {}: {}. Deleting entire metrics key for this service to recover.",
+                                            serviceId, metric, e.getMessage());
+                                    return cacheService.delete(redisKey).then(Mono.<Map.Entry<String, TrendAnalysis>>empty());
+                                }
+                            })
+                            .collectMap(Map.Entry::getKey, Map.Entry::getValue);
                 })
                 .defaultIfEmpty(new HashMap<>());
     }
@@ -115,20 +121,26 @@ public class MetricsAggregator {
         String redisKey = METRICS_KEY_PREFIX + serviceId;
 
         return cacheService.getHashEntries(redisKey)
-                .map(entries -> {
-                    Map<String, List<MetricPoint>> history = new HashMap<>();
-                    entries.forEach((metric, jsonPoints) -> {
-                        try {
-                            List<MetricPoint> points = objectMapper.readValue(jsonPoints,
-                                    new TypeReference<List<MetricPoint>>() {
-                                    });
-                            history.put(metric, points);
-                        } catch (JsonProcessingException e) {
-                            log.error("Error retrieving metrics history for service {} metric {}: {}",
-                                    serviceId, metric, e.getMessage());
-                        }
-                    });
-                    return history;
+                .flatMap(entries -> {
+                    if (entries == null || entries.isEmpty()) {
+                        return Mono.just(new HashMap<String, List<MetricPoint>>());
+                    }
+                    return Flux.fromIterable(entries.entrySet())
+                            .flatMap(entry -> {
+                                String metric = entry.getKey();
+                                String jsonPoints = entry.getValue();
+                                try {
+                                    List<MetricPoint> points = objectMapper.readValue(jsonPoints,
+                                            new TypeReference<List<MetricPoint>>() {
+                                            });
+                                    return Mono.just(Map.entry(metric, points));
+                                } catch (JsonProcessingException e) {
+                                    log.error("CORRUPTION DETECTED on Read: Error retrieving history for service {} metric {}: {}. Deleting entire metrics key for this service to recover.",
+                                            serviceId, metric, e.getMessage());
+                                    return cacheService.delete(redisKey).then(Mono.<Map.Entry<String, List<MetricPoint>>>empty());
+                                }
+                            })
+                            .collectMap(Map.Entry::getKey, Map.Entry::getValue);
                 })
                 .defaultIfEmpty(new HashMap<>());
     }

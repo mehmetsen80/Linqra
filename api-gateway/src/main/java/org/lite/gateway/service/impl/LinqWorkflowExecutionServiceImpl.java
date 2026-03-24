@@ -1046,14 +1046,27 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 return stringInput;
             }
 
-            // Check if the entire string is EXACTLY a single placeholder
+            // Check if the entire string is EXACTLY a single placeholder (possibly with a
+            // fallback)
             // If so, return the actual object instead of converting to string
             Pattern singlePlaceholderPattern = Pattern
-                    .compile("^\\{\\{(step\\d+\\.result(?:\\.[^}]+)?|params\\.[\\w.]+)\\}\\}$");
+                    .compile("^\\{\\{(step\\d+\\.result(?:\\.[^?]+)?|params\\.[^?]+?)(?:\\?\\?([^}]+?))?\\}\\}$");
             Matcher singleMatcher = singlePlaceholderPattern.matcher(stringInput);
             if (singleMatcher.matches()) {
                 String placeholderContent = singleMatcher.group(1);
+                String fallback = singleMatcher.group(2);
                 Object resolvedObject = extractObjectValue(placeholderContent, context);
+
+                // For fallback purposes, we treat null or empty string as "missing"
+                boolean isMissing = (resolvedObject == null) || (resolvedObject instanceof String s && s.isEmpty());
+
+                if (isMissing && fallback != null) {
+                    log.debug("🔍 Placeholder {{{}}} was missing, attempting to resolve fallback: {}",
+                            placeholderContent, fallback);
+                    // Recursively resolve the fallback
+                    return resolvePlaceholders("{{" + fallback + "}}", context, depth + 1);
+                }
+
                 if (resolvedObject != null) {
                     log.debug("🔍 Resolved single placeholder {{{}}} at depth {} as object type: {}",
                             placeholderContent, depth, resolvedObject.getClass().getSimpleName());
@@ -1176,14 +1189,16 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
 
             if (replacement.isEmpty() && fallback != null) {
-                replacement = fallback;
+                // Recursively resolve fallback - it might be another variable
+                log.debug("🔄 Resolving step fallback recursively: {}", fallback);
+                replacement = resolvePlaceholder("{{" + fallback + "}}", context);
             }
 
             result = result.replace(stepMatcher.group(0), replacement);
         }
 
         // Global params pattern - updated to handle fallbacks via ??
-        Pattern paramsPattern = Pattern.compile("\\{\\{params\\.([^?]+?)(?:\\?\\?([^}]+))?\\}\\}");
+        Pattern paramsPattern = Pattern.compile("\\{\\{params\\.([^?]+?)(?:\\?\\?([^}]+?))?\\}\\}");
         Matcher paramsMatcher = paramsPattern.matcher(result);
         while (paramsMatcher.find()) {
             String paramPath = paramsMatcher.group(1);
@@ -1195,7 +1210,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
 
             if (replacement.isEmpty() && fallback != null) {
-                replacement = fallback;
+                // Recursively resolve fallback
+                log.debug("🔄 Resolving params fallback recursively: {}", fallback);
+                replacement = resolvePlaceholder("{{" + fallback + "}}", context);
             }
 
             result = result.replace(paramsMatcher.group(0), replacement);

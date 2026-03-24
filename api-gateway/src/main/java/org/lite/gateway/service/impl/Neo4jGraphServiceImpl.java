@@ -85,22 +85,19 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
 
                 params.put("properties", cleanProperties);
 
-                Result result = session.run(cypher.toString(), params);
-                if (result.hasNext()) {
-                    // Use next() instead of single() to handle cases where multiple records might
-                    // exist
-                    // (e.g., duplicate nodes with same id but different labels)
-                    String id = result.next().get("id").asString();
-                    log.info("Upserted entity {}:{} for team {}", entityType, id, teamId);
-                    // If there are more records, log a warning (shouldn't happen with MERGE, but
-                    // defensive)
+                return session.executeWrite(tx -> {
+                    Result result = tx.run(cypher.toString(), params);
                     if (result.hasNext()) {
-                        log.warn("Multiple records returned for entity {}:{} in team {}. Using first result.",
-                                entityType, entityId, teamId);
+                        String id = result.next().get("id").asString();
+                        log.info("Upserted entity {}:{} for team {}", entityType, id, teamId);
+                        if (result.hasNext()) {
+                            log.warn("Multiple records returned for entity {}:{} in team {}. Using first result.",
+                                    entityType, entityId, teamId);
+                        }
+                        return id;
                     }
-                    return id;
-                }
-                return entityId;
+                    return entityId;
+                });
             } catch (Neo4jException e) {
                 log.error("Error upserting entity {}:{} for team {}: {}", entityType, entityId, teamId, e.getMessage());
                 throw new RuntimeException("Failed to upsert entity", e);
@@ -141,13 +138,15 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                 }
                 cypher.append("RETURN r");
 
-                Result result = session.run(cypher.toString(), params);
-                boolean success = result.hasNext();
-                if (success) {
-                    log.debug("Upserted relationship {} from {}:{} to {}:{} for team {}",
-                            relationshipType, fromEntityType, fromEntityId, toEntityType, toEntityId, teamId);
-                }
-                return success;
+                return session.executeWrite(tx -> {
+                    Result result = tx.run(cypher.toString(), params);
+                    boolean success = result.hasNext();
+                    if (success) {
+                        log.debug("Upserted relationship {} from {}:{} to {}:{} for team {}",
+                                relationshipType, fromEntityType, fromEntityId, toEntityType, toEntityId, teamId);
+                    }
+                    return success;
+                });
             } catch (Neo4jException e) {
                 log.error("Error upserting relationship {} from {}:{} to {}:{} for team {}: {}",
                         relationshipType, fromEntityType, fromEntityId, toEntityType, toEntityId, teamId,
@@ -190,22 +189,24 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
 
                 log.debug("Executing Cypher query for team {}: {}", teamId, cypher.toString());
 
-                Result result = session.run(cypher.toString(), params);
-                return result.stream()
-                        .map(record -> {
-                            var node = record.get("e").asNode();
-                            Map<String, Object> map = new HashMap<>();
-                            map.put("id", node.get("id").asString());
-                            map.put("type", entityType);
-                            node.asMap().forEach((key, value) -> {
-                                if (value != null) {
-                                    map.put(key, value);
-                                }
-                            });
-                            // Decrypt sensitive properties before returning
-                            return decryptSensitiveProperties(map, teamId);
-                        })
-                        .collect(Collectors.toList());
+                return session.executeRead(tx -> {
+                    Result result = tx.run(cypher.toString(), params);
+                    return result.stream()
+                            .map(record -> {
+                                var node = record.get("e").asNode();
+                                Map<String, Object> map = new HashMap<>();
+                                map.put("id", node.get("id").asString());
+                                map.put("type", entityType);
+                                node.asMap().forEach((key, value) -> {
+                                    if (value != null) {
+                                        map.put(key, value);
+                                    }
+                                });
+                                // Decrypt sensitive properties before returning
+                                return decryptSensitiveProperties(map, teamId);
+                            })
+                            .collect(Collectors.toList());
+                });
             } catch (Neo4jException e) {
                 log.error("Error finding entities {} for team {}: {}", entityType, teamId, e.getMessage());
                 throw new RuntimeException("Failed to find entities", e);
@@ -281,29 +282,31 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                     cypher.append("RETURN DISTINCT related, relationships(path) as rels ");
                     cypher.append("LIMIT 100");
 
-                    Result result = session.run(cypher.toString(), params);
-                    return result.stream()
-                            .map(record -> {
-                                var node = record.get("related").asNode();
-                                Map<String, Object> map = new HashMap<>();
-                                map.put("id", node.get("id").asString());
-                                map.put("type", node.labels().iterator().next());
-                                node.asMap().forEach((key, value) -> {
-                                    if (value != null) {
-                                        map.put(key, value);
+                    return session.executeRead(tx -> {
+                        Result result = tx.run(cypher.toString(), params);
+                        return result.stream()
+                                .map(record -> {
+                                    var node = record.get("related").asNode();
+                                    Map<String, Object> map = new HashMap<>();
+                                    map.put("id", node.get("id").asString());
+                                    map.put("type", node.labels().iterator().next());
+                                    node.asMap().forEach((key, value) -> {
+                                        if (value != null) {
+                                            map.put(key, value);
+                                        }
+                                    });
+
+                                    // Add relationship info from path
+                                    var rels = record.get("rels");
+                                    if (rels != null && !rels.isNull()) {
+                                        map.put("relationships", rels.asList());
                                     }
-                                });
 
-                                // Add relationship info from path
-                                var rels = record.get("rels");
-                                if (rels != null && !rels.isNull()) {
-                                    map.put("relationships", rels.asList());
-                                }
-
-                                // Decrypt sensitive properties before returning
-                                return decryptSensitiveProperties(map, teamId);
-                            })
-                            .collect(Collectors.toList());
+                                    // Decrypt sensitive properties before returning
+                                    return decryptSensitiveProperties(map, teamId);
+                                })
+                                .collect(Collectors.toList());
+                    });
                 }
             } catch (Neo4jException e) {
                 log.error("Error finding related entities for {}:{} for team {}: {}",
@@ -318,18 +321,20 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
     public Flux<Map<String, Object>> executeQuery(String cypherQuery, Map<String, Object> parameters) {
         return Mono.fromCallable(() -> {
             try (Session session = neo4jDriver.session()) {
-                Map<String, Object> params = parameters != null ? parameters : Collections.emptyMap();
-                Result result = session.run(cypherQuery, params);
-                return result.stream()
-                        .map(record -> {
-                            Map<String, Object> map = new HashMap<>();
-                            record.keys().forEach(key -> {
-                                var value = record.get(key);
-                                map.put(key, value.isNull() ? null : value.asObject());
-                            });
-                            return map;
-                        })
-                        .collect(Collectors.toList());
+                return session.executeWrite(tx -> {
+                    Map<String, Object> params = parameters != null ? parameters : Collections.emptyMap();
+                    Result result = tx.run(cypherQuery, params);
+                    return result.stream()
+                            .map(record -> {
+                                Map<String, Object> map = new HashMap<>();
+                                record.keys().forEach(key -> {
+                                    var value = record.get(key);
+                                    map.put(key, value.isNull() ? null : value.asObject());
+                                });
+                                return map;
+                            })
+                            .collect(Collectors.toList());
+                });
             } catch (Neo4jException e) {
                 log.error("Error executing Cypher query: {}", e.getMessage());
                 throw new RuntimeException("Failed to execute query", e);
@@ -350,13 +355,15 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                         "DETACH DELETE e " +
                         "RETURN count(e) as deleted";
 
-                Result result = session.run(cypher, params);
-                if (result.hasNext()) {
-                    long deleted = result.single().get("deleted").asLong();
-                    log.debug("Deleted entity {}:{} for team {}, count: {}", entityType, entityId, teamId, deleted);
-                    return deleted > 0;
-                }
-                return false;
+                return session.executeWrite(tx -> {
+                    Result result = tx.run(cypher, params);
+                    if (result.hasNext()) {
+                        long deleted = result.single().get("deleted").asLong();
+                        log.debug("Deleted entity {}:{} for team {}, count: {}", entityType, entityId, teamId, deleted);
+                        return deleted > 0;
+                    }
+                    return false;
+                });
             } catch (Neo4jException e) {
                 log.error("Error deleting entity {}:{} for team {}: {}", entityType, entityId, teamId, e.getMessage());
                 throw new RuntimeException("Failed to delete entity", e);
@@ -376,14 +383,16 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                         "DETACH DELETE e " +
                         "RETURN count(e) as deleted";
 
-                Result result = session.run(cypher, params);
-                if (result.hasNext()) {
-                    long deleted = result.single().get("deleted").asLong();
-                    log.info("Deleted {} entities of type {} for team {}", deleted, entityType, teamId);
-                    return deleted;
-                }
-                log.warn("No entities of type {} found for team {} to delete", entityType, teamId);
-                return 0L;
+                return session.executeWrite(tx -> {
+                    Result result = tx.run(cypher, params);
+                    if (result.hasNext()) {
+                        long deleted = result.single().get("deleted").asLong();
+                        log.info("Deleted {} entities of type {} for team {}", deleted, entityType, teamId);
+                        return deleted;
+                    }
+                    log.warn("No entities of type {} found for team {} to delete", entityType, teamId);
+                    return 0L;
+                });
             } catch (Neo4jException e) {
                 log.error("Error deleting all entities of type {} for team {}: {}", entityType, teamId, e.getMessage());
                 throw new RuntimeException("Failed to delete entities", e);
@@ -411,31 +420,33 @@ public class Neo4jGraphServiceImpl implements Neo4jGraphService {
                         "RETURN type(r) as type, count(r) as count " +
                         "ORDER BY count DESC";
 
-                Result entityResult = session.run(entityCountQuery, params);
-                Result relResult = session.run(relCountQuery, params);
+                return session.executeRead(tx -> {
+                    Result entityResult = tx.run(entityCountQuery, params);
+                    Result relResult = tx.run(relCountQuery, params);
 
-                Map<String, Object> stats = new HashMap<>();
+                    Map<String, Object> stats = new HashMap<>();
 
-                Map<String, Long> entityCounts = new HashMap<>();
-                entityResult.forEachRemaining(record -> {
-                    var typeValue = record.get("type");
-                    String type = typeValue.isNull() ? "Unlabeled" : typeValue.asString();
-                    long count = record.get("count").asLong();
-                    entityCounts.put(type, count);
+                    Map<String, Long> entityCounts = new HashMap<>();
+                    entityResult.forEachRemaining(record -> {
+                        var typeValue = record.get("type");
+                        String type = typeValue.isNull() ? "Unlabeled" : typeValue.asString();
+                        long count = record.get("count").asLong();
+                        entityCounts.put(type, count);
+                    });
+                    stats.put("entityCounts", entityCounts);
+                    stats.put("totalEntities", entityCounts.values().stream().mapToLong(Long::longValue).sum());
+
+                    Map<String, Long> relCounts = new HashMap<>();
+                    relResult.forEachRemaining(record -> {
+                        String type = record.get("type").asString();
+                        long count = record.get("count").asLong();
+                        relCounts.put(type, count);
+                    });
+                    stats.put("relationshipCounts", relCounts);
+                    stats.put("totalRelationships", relCounts.values().stream().mapToLong(Long::longValue).sum());
+
+                    return stats;
                 });
-                stats.put("entityCounts", entityCounts);
-                stats.put("totalEntities", entityCounts.values().stream().mapToLong(Long::longValue).sum());
-
-                Map<String, Long> relCounts = new HashMap<>();
-                relResult.forEachRemaining(record -> {
-                    String type = record.get("type").asString();
-                    long count = record.get("count").asLong();
-                    relCounts.put(type, count);
-                });
-                stats.put("relationshipCounts", relCounts);
-                stats.put("totalRelationships", relCounts.values().stream().mapToLong(Long::longValue).sum());
-
-                return stats;
             } catch (Exception e) {
                 log.error("Error getting graph statistics for team {}: {}", teamId, e.getMessage());
                 Map<String, Object> emptyStats = new HashMap<>();

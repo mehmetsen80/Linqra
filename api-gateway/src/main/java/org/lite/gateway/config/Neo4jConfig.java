@@ -60,22 +60,22 @@ public class Neo4jConfig {
                 throw new RuntimeException("Neo4j authentication credentials are required");
             }
 
-            org.neo4j.driver.Config config = org.neo4j.driver.Config.defaultConfig();
             String effectiveUri = neo4jUri;
+            org.neo4j.driver.Config.ConfigBuilder configBuilder = org.neo4j.driver.Config.builder()
+                    // Aura has 5m idle timeout; we cycle at 4m
+                    .withMaxConnectionLifetime(4, java.util.concurrent.TimeUnit.MINUTES)
+                    .withConnectionLivenessCheckTimeout(60, java.util.concurrent.TimeUnit.SECONDS);
 
             if (env.matchesProfiles("remote-dev")) {
                 log.warn("⚠️ REMOTE-DEV PROFILE ACTIVE: Bypassing Neo4j SSL Certificate Validation");
-                // Downgrade scheme to allow manual config (neo4j+s enforces settings that
-                // conflict with manual config)
                 if (effectiveUri.startsWith("neo4j+s://")) {
                     effectiveUri = effectiveUri.replace("neo4j+s://", "neo4j://");
                 }
-                config = org.neo4j.driver.Config.builder()
-                        .withEncryption()
-                        .withTrustStrategy(org.neo4j.driver.Config.TrustStrategy.trustAllCertificates())
-                        .build();
+                configBuilder.withEncryption()
+                        .withTrustStrategy(org.neo4j.driver.Config.TrustStrategy.trustAllCertificates());
             }
 
+            org.neo4j.driver.Config config = configBuilder.build();
             driverInstance = GraphDatabase.driver(effectiveUri, AuthTokens.basic(neo4jUsername, neo4jPassword), config);
             log.info("Using Neo4j authentication with username: {}", neo4jUsername);
 

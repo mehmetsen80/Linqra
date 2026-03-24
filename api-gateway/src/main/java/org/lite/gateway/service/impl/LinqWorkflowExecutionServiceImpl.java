@@ -1063,8 +1063,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 if (isMissing && fallback != null) {
                     log.debug("🔍 Placeholder {{{}}} was missing, attempting to resolve fallback: {}",
                             placeholderContent, fallback);
-                    // Recursively resolve the fallback
-                    return resolvePlaceholders("{{" + fallback + "}}", context, depth + 1);
+                    // Check if fallback is another variable or a literal
+                    if (fallback.contains("step") || fallback.contains("params.")) {
+                        return resolvePlaceholders("{{" + fallback + "}}", context, depth + 1);
+                    } else {
+                        // Return literal fallback (parse as boolean/number if possible)
+                        return parseLiteral(fallback);
+                    }
                 }
 
                 if (resolvedObject != null) {
@@ -1189,9 +1194,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
 
             if (replacement.isEmpty() && fallback != null) {
-                // Recursively resolve fallback - it might be another variable
-                log.debug("🔄 Resolving step fallback recursively: {}", fallback);
-                replacement = resolvePlaceholder("{{" + fallback + "}}", context);
+                // Recursively resolve fallback only if it looks like another variable
+                if (fallback.contains("step") || fallback.contains("params.")) {
+                    log.debug("🔄 Resolving step fallback recursively: {}", fallback);
+                    replacement = resolvePlaceholder("{{" + fallback + "}}", context);
+                } else {
+                    log.debug("🔄 Using literal fallback: {}", fallback);
+                    replacement = fallback;
+                }
             }
 
             result = result.replace(stepMatcher.group(0), replacement);
@@ -1210,9 +1220,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
 
             if (replacement.isEmpty() && fallback != null) {
-                // Recursively resolve fallback
-                log.debug("🔄 Resolving params fallback recursively: {}", fallback);
-                replacement = resolvePlaceholder("{{" + fallback + "}}", context);
+                // Recursively resolve fallback only if it looks like another variable
+                if (fallback.contains("step") || fallback.contains("params.")) {
+                    log.debug("🔄 Resolving params fallback recursively: {}", fallback);
+                    replacement = resolvePlaceholder("{{" + fallback + "}}", context);
+                } else {
+                    log.debug("🔄 Using literal fallback: {}", fallback);
+                    replacement = fallback;
+                }
             }
 
             result = result.replace(paramsMatcher.group(0), replacement);
@@ -1522,5 +1537,30 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             return "false";
         }
         return str;
+    }
+
+    private Object parseLiteral(String fallback) {
+        if (fallback == null)
+            return null;
+        String trimmed = fallback.trim();
+        if ("true".equalsIgnoreCase(trimmed))
+            return Boolean.TRUE;
+        if ("false".equalsIgnoreCase(trimmed))
+            return Boolean.FALSE;
+        if ("null".equalsIgnoreCase(trimmed))
+            return null;
+        if (trimmed.startsWith("\"") && trimmed.endsWith("\"") && trimmed.length() >= 2) {
+            return trimmed.substring(1, trimmed.length() - 1);
+        }
+        // Try to parse as double/long
+        try {
+            if (trimmed.contains(".")) {
+                return Double.parseDouble(trimmed);
+            } else {
+                return Long.parseLong(trimmed);
+            }
+        } catch (NumberFormatException e) {
+            return trimmed;
+        }
     }
 }

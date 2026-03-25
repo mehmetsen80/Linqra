@@ -12,7 +12,7 @@ import workflowService from '../../../services/workflowService';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import { Form, Card, Spinner, Badge, Modal, Row, Col, OverlayTrigger, Tooltip, Accordion } from 'react-bootstrap';
 import Button from '../../../components/common/Button';
-import { format } from 'date-fns';
+import { formatDate, convertCronDescriptionToLocal, convertUTCToLocal } from '../../../utils/dateUtils';
 import ConfirmationModal from '../../../components/common/ConfirmationModal';
 import ExecutionDetailsModal from '../../../components/workflows/ExecutionDetailsModal';
 import StepDescriptions from '../../../components/workflows/StepDescriptions';
@@ -86,25 +86,10 @@ function ViewAgentTask() {
     const [unscheduling, setUnscheduling] = useState(false);
 
     // Timezone conversion utilities
+    // User local timezone
     const getUserTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-    const convertUTCToLocal = (utcHour, utcMinute) => {
-        const utcDate = new Date();
-        utcDate.setUTCHours(utcHour, utcMinute, 0, 0);
-        return {
-            hour: utcDate.getHours(),
-            minute: utcDate.getMinutes()
-        };
-    };
-
-    const convertLocalToUTC = (localHour, localMinute) => {
-        const localDate = new Date();
-        localDate.setHours(localHour, localMinute, 0, 0);
-        return {
-            hour: localDate.getUTCHours(),
-            minute: localDate.getUTCMinutes()
-        };
-    };
+    // Removed local convertUTCToLocal in favor of dateUtils.js
 
     const [cronFields, setCronFields] = useState({
         seconds: '',
@@ -763,32 +748,7 @@ function ViewAgentTask() {
         });
     });
 
-    const formatDate = (date) => {
-        if (!date) return 'N/A';
-        try {
-            let dateObj;
-            if (Array.isArray(date)) {
-                // Handle array format [year, month, day, hour, minute, second?, nanosecond?]
-                // Since these are stored in UTC, we need to create a UTC date
-                const year = date[0];
-                const month = date[1] - 1; // JavaScript months are 0-based
-                const day = date[2];
-                const hour = date[3];
-                const minute = date[4];
-                const second = date[5] || 0;
-
-                // Create UTC date
-                dateObj = new Date(Date.UTC(year, month, day, hour, minute, second));
-            } else {
-                dateObj = new Date(date);
-            }
-            if (isNaN(dateObj.getTime())) return 'N/A';
-            return format(dateObj, 'MMM d, yyyy HH:mm');
-        } catch (err) {
-            console.error('Error formatting date:', err);
-            return 'N/A';
-        }
-    };
+    // Removed local formatDate in favor of dateUtils.js
 
     const highlightDifferences = (obj1, obj2, path = '') => {
         if (!obj1 || !obj2) return {};
@@ -1126,53 +1086,31 @@ function ViewAgentTask() {
                     ) : (
                         <div>
                             {task?.cronExpression && (
-                                <div className="mb-3">
-                                    <div className="mb-2">
-                                        <strong>{task.cronDescription || 'No description available'} (UTC)</strong>
+                                <div className="mb-3 text-center">
+                                    <div className="mb-3">
+                                        <small className="text-muted d-block mb-1">Cron Expression</small>
+                                        <code className="px-3 py-1 bg-light border rounded text-primary" style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>
+                                            {task.cronExpression}
+                                        </code>
                                     </div>
-                                    <div className="mb-2">
-                                        <small className="text-muted">
-                                            <i className="fas fa-map-marker-alt me-1"></i>
-                                            Local Time ({Intl.DateTimeFormat().resolvedOptions().timeZone}):
-                                            <strong className="ms-1">
-                                                {(() => {
-                                                    const parts = task.cronExpression.split(' ');
-                                                    if (parts.length >= 3) {
-                                                        const utcHour = parseInt(parts[2]) || 0;
-                                                        const utcMinute = parseInt(parts[1]) || 0;
-                                                        const localTime = convertUTCToLocal(utcHour, utcMinute);
-                                                        const localHour12 = localTime.hour === 0 ? 12 : localTime.hour > 12 ? localTime.hour - 12 : localTime.hour;
-                                                        const localAmPm = localTime.hour >= 12 ? 'PM' : 'AM';
-                                                        return `${localHour12}:${localTime.minute.toString().padStart(2, '0')} ${localAmPm}`;
-                                                    }
-                                                    return 'Invalid';
-                                                })()}
-                                            </strong>
-                                        </small>
-                                    </div>
-                                    <div className="d-flex gap-3 text-muted small">
-                                        <span>
+
+                                    <div className="mb-3">
+                                        <div className="text-muted small mb-1">
                                             <i className="fas fa-globe me-1"></i>
-                                            {(() => {
-                                                const parts = task.cronExpression.split(' ');
-                                                if (parts.length >= 3) {
-                                                    const utcHour = parseInt(parts[2]) || 0;
-                                                    const utcMinute = parseInt(parts[1]) || 0;
-                                                    return `${utcHour.toString().padStart(2, '0')}:${utcMinute.toString().padStart(2, '0')} UTC`;
-                                                }
-                                                return 'Invalid';
-                                            })()}
-                                        </span>
-                                        <span>
-                                            <code className="text-muted">{task.cronExpression}</code>
-                                        </span>
+                                            {task.cronDescription || 'No description available'} (UTC)
+                                        </div>
+                                        <div>
+                                            <strong>{convertCronDescriptionToLocal(task.cronDescription, task.cronExpression)}</strong>
+                                            <small className="text-muted ms-2">({Intl.DateTimeFormat().resolvedOptions().timeZone})</small>
+                                        </div>
                                     </div>
+
                                 </div>
                             )}
 
                             <Row className="mt-3">
                                 <Col md={6}>
-                                    <div className="p-3 border rounded">
+                                    <div className="p-3 border rounded h-100">
                                         <small className="text-muted d-block mb-2">
                                             <i className="fas fa-history me-1"></i>
                                             Last Run
@@ -1190,7 +1128,7 @@ function ViewAgentTask() {
                                     </div>
                                 </Col>
                                 <Col md={6}>
-                                    <div className="p-3 border rounded">
+                                    <div className="p-3 border rounded h-100">
                                         <small className="text-muted d-block mb-2">
                                             <i className="fas fa-clock me-1"></i>
                                             Next Run
@@ -1208,6 +1146,22 @@ function ViewAgentTask() {
                                     </div>
                                 </Col>
                             </Row>
+
+                            {canEditTask && (
+                                <Row className="mt-3 p-3">
+                                    <Col md={12} className="text-center">
+                                        <Button
+                                            variant="outline-primary"
+                                            size="sm"
+                                            onClick={() => setShowSchedulingModal(true)}
+                                            className="px-4"
+                                        >
+                                            <i className="fas fa-clock me-1"></i>
+                                            Configure Scheduling
+                                        </Button>
+                                    </Col>
+                                </Row>
+                            )}
                         </div>
                     )}
                 </Card.Body>
@@ -1464,7 +1418,11 @@ function ViewAgentTask() {
                                         </div>
                                     </div>
                                     <div className="detail-item">
-                                        <div className="detail-label">Cron Description</div>
+                                        <div className="detail-label">Cron Description (Local)</div>
+                                        <div className="detail-value">{convertCronDescriptionToLocal(task.cronDescription, task.cronExpression)}</div>
+                                    </div>
+                                    <div className="detail-item">
+                                        <div className="detail-label">Cron Description (UTC)</div>
                                         <div className="detail-value">{task.cronDescription || 'N/A'}</div>
                                     </div>
                                 </>

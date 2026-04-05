@@ -1,0 +1,52 @@
+.tools-page {
+    padding: 20px;
+}
+
+/* Breadcrumb styling */
+.tools-page .breadcrumb-item a {
+    color: var(--primary-color, #ed7534);
+    text-decoration: none;
+}
+
+.tools-page .breadcrumb-item a:hover {
+    color: var(--primary-dark, #d35f28);
+    text-decoration: underline;
+}
+
+.tools-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1a202c;
+    letter-spacing: -0.025em;
+}
+
+.tools-catalog-card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tools-catalog-card .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 15px;
+}
+
+.tools-catalog-card .card-header h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.registration-overlay {
+    margin-top: 2rem;
+    padding: 2rem;
+    background-color: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}

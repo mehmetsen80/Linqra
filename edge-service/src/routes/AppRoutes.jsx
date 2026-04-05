@@ -43,7 +43,6 @@ import ChatAssistant from '../pages/AIAssistants/ChatAssistant';
 import LlmUsage from '../pages/LlmUsage';
 import LlmModels from '../pages/LlmModels';
 import ExecutionMonitoring from '../pages/ExecutionMonitoring';
-import KnowledgeHub from '../pages/KnowledgeHub';
 import ViewCollection from '../pages/KnowledgeHub/ViewCollection';
 import ViewDocument from '../pages/KnowledgeHub/ViewCollection/ViewDocument';
 import ExportCollection from '../pages/KnowledgeHub/ExportCollection';
@@ -57,6 +56,11 @@ const SecurityIncidents = React.lazy(() => import('../pages/SecurityIncidents'))
 const FinanceSolution = React.lazy(() => import('../pages/Solutions/FinanceSolution'));
 const LegalSolution = React.lazy(() => import('../pages/Solutions/LegalSolution'));
 const HealthcareSolution = React.lazy(() => import('../pages/Solutions/HealthcareSolution'));
+
+const Tools = React.lazy(() => import('../pages/Tools'));
+const ViewTool = React.lazy(() => import('../pages/Tools/ViewTool'));
+const KnowledgeHub = React.lazy(() => import('../pages/KnowledgeHub'));
+const ToolLayout = React.lazy(() => import('../layouts/ToolLayout'));
 
 const About = React.lazy(() => import('../pages/About'));
 const Careers = React.lazy(() => import('../pages/Careers'));
@@ -109,6 +113,16 @@ const AppRoutes = () => {
       <Route path="/callback" element={<Callback />} />
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/terms-of-service" element={<TermsOfService />} />
+
+      {/* Public Tool Documentation Portal */}
+      <Route element={
+        <React.Suspense fallback={<LoadingSpinner />}>
+          <ToolLayout />
+        </React.Suspense>
+      }>
+        <Route path="/tools" element={<Tools />} />
+        <Route path="/tools/:toolId" element={<ViewTool />} />
+      </Route>
 
       {/* Linq Protocol Routes */}
       <Route path="/linq-protocol" element={<LinqProtocol />}>
@@ -168,9 +182,21 @@ const AppRoutes = () => {
         <Route path="/llm-usage" element={<LlmUsage />} />
         <Route path="/execution-monitoring" element={<ExecutionMonitoring />} />
         <Route path="/llm-models" element={<LlmModels />} />
-        <Route path="/knowledge-hub" element={<KnowledgeHub />} />
-        <Route path="/knowledge-hub/collection/:collectionId" element={<ViewCollection />} />
-        <Route path="/knowledge-hub/document/:documentId" element={<ViewDocument />} />
+        <Route path="/knowledge-hub" element={
+          <React.Suspense fallback={<LoadingSpinner />}>
+            <KnowledgeHub />
+          </React.Suspense>
+        } />
+        <Route path="/knowledge-hub/collection/:collectionId" element={
+          <React.Suspense fallback={<LoadingSpinner />}>
+            <ViewCollection />
+          </React.Suspense>
+        } />
+        <Route path="/knowledge-hub/document/:documentId" element={
+          <React.Suspense fallback={<LoadingSpinner />}>
+            <ViewDocument />
+          </React.Suspense>
+        } />
         <Route
           path="/knowledge-hub/export"
           element={

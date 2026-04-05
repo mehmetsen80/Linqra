@@ -1,6 +1,7 @@
 import React from 'react';
 import { Modal, Form, Row, Col } from 'react-bootstrap';
 import Button from '../common/Button';
+import RichTextEditor from '../common/RichTextEditor';
 
 const CreateAgentTaskModal = ({
   show,
@@ -33,13 +34,10 @@ const CreateAgentTaskModal = ({
           <Form.Label>
             Description <span className="text-danger">*</span>
           </Form.Label>
-          <Form.Control
-            as="textarea"
-            name="description"
-            value={newTask.description}
-            onChange={onChange}
+          <RichTextEditor
+            content={newTask.description || ''}
+            onChange={(html) => onChange({ target: { name: 'description', value: html } })}
             placeholder="Enter task description"
-            rows={3}
           />
         </Form.Group>
 

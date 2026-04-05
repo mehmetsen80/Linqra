@@ -3,6 +3,7 @@ import { Modal, Form } from 'react-bootstrap';
 import Select from 'react-select';
 import Button from '../common/Button';
 import { intentOptions, capabilityOptions, customSelectStyles } from './EditAgentModal';
+import RichTextEditor from '../common/RichTextEditor';
 
 const CreateAgentModal = ({
   show,
@@ -37,13 +38,10 @@ const CreateAgentModal = ({
 
         <Form.Group className="mb-3">
           <Form.Label>Description <span className="text-danger">*</span></Form.Label>
-          <Form.Control
-            as="textarea"
-            name="description"
-            value={newAgent.description}
-            onChange={onChange}
+          <RichTextEditor
+            content={newAgent.description || ''}
+            onChange={(html) => onChange({ target: { name: 'description', value: html } })}
             placeholder="Enter agent description"
-            rows={3}
           />
         </Form.Group>
 

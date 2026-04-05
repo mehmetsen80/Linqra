@@ -64,6 +64,9 @@ public class LinqRequest {
         // Chat conversation support
         private ChatConversation chat; // For AI Assistant chat conversations
 
+        private String summary; // Optional short label (2-4 words) for the execution
+        private String description; // Optional detailed explanation of the intent
+
         @Data
         @Builder
         @NoArgsConstructor

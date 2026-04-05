@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, Form } from 'react-bootstrap';
 import Select from 'react-select';
 import Button from '../common/Button';
+import RichTextEditor from '../common/RichTextEditor';
 
 export const intentOptions = [
   { value: 'MONGODB_READ', label: 'MongoDB Read' },
@@ -90,13 +91,10 @@ const EditAgentModal = ({
 
           <Form.Group className="mb-3">
             <Form.Label>Description <span className="text-danger">*</span></Form.Label>
-            <Form.Control
-              as="textarea"
-              name="description"
-              value={editedAgent.description || ''}
-              onChange={onChange}
+            <RichTextEditor
+              content={editedAgent.description || ''}
+              onChange={(html) => onChange({ target: { name: 'description', value: html } })}
               placeholder="Enter agent description"
-              rows={3}
             />
           </Form.Group>
 

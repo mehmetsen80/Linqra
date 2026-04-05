@@ -120,8 +120,8 @@ public class SecurityConfig implements BeanFactoryAware {
         return beanFactory.getBean(TeamContextService.class);
     }
 
-    // List of public endpoints (Ant-style patterns allowed)
-    private static final List<String> PUBLIC_ENDPOINTS = List.of(
+    // List of public endpoints where ALL methods (GET, POST, etc.) are permitted
+    private static final List<String> PUBLIC_ANY_METHOD = List.of(
             "/r/komunas-app/whatsapp/webhook",
             "/widget/**", // Public AI Assistant widget scripts (public API key based)
             "/api/auth/**", // Public Auth Endpoints (SSO Callback, Login, Register)
@@ -129,7 +129,16 @@ public class SecurityConfig implements BeanFactoryAware {
             "/linqra-knowledge-hub-dev/**", // MinIO Proxy (Secured by S3 Signature)
             "/backup-linqra-knowledge-hub-dev/**",
             "/linqra-audit-dev/**",
-            "/backup-linqra-audit-dev/**");
+            "/backup-linqra-audit-dev/**",
+            "/api/tools", // Public Tool Catalog base
+            "/api/tools/**", // All tool-related endpoints (Detail, Catalog, Search)
+            "/api/tools/*/execute" // Unified execution endpoint (Public/Private handled by controller)
+    );
+
+    // List of public endpoints where ONLY GET methods are permitted (e.g.
+    // documentation)
+    private static final List<String> PUBLIC_GET_ONLY = List.of(
+            "/api/internal-public/**");
 
     private static final Pattern SCOPE_KEY_PATTERN = Pattern.compile("^/([\\w-]+)/");
     private static final Pattern ROUTE_PATTERN = Pattern.compile("/r/([^/]+)/");
@@ -347,12 +356,21 @@ public class SecurityConfig implements BeanFactoryAware {
         // log.info("Checking authorization for path: {} with method: {}", path,
         // authorizationContext.getExchange().getRequest().getMethod());
 
-        // Allow public access to any endpoint in PUBLIC_ENDPOINTS
+        // Allow public access to any endpoint in PUBLIC_ANY_METHOD
         AntPathMatcher matcher = new AntPathMatcher();
-        boolean isPublic = PUBLIC_ENDPOINTS.stream().anyMatch(pattern -> matcher.match(pattern, path));
-        if (isPublic) {
-            log.info("Public access granted for endpoint: {}", path);
+        boolean isPublicAny = PUBLIC_ANY_METHOD.stream().anyMatch(pattern -> matcher.match(pattern, path));
+        if (isPublicAny) {
+            log.info("Public access (any method) granted for endpoint: {}", path);
             return Mono.just(new AuthorizationDecision(true));
+        }
+
+        // Allow public GET access for endpoints in PUBLIC_GET_ONLY
+        if (authorizationContext.getExchange().getRequest().getMethod() == org.springframework.http.HttpMethod.GET) {
+            boolean isPublicGet = PUBLIC_GET_ONLY.stream().anyMatch(pattern -> matcher.match(pattern, path));
+            if (isPublicGet) {
+                log.info("Public GET access granted for endpoint: {}", path);
+                return Mono.just(new AuthorizationDecision(true));
+            }
         }
 
         // 1st step
@@ -388,8 +406,8 @@ public class SecurityConfig implements BeanFactoryAware {
                             return Mono.just(new AuthorizationDecision(true));
                         }
 
-                        // For /r/ paths, check route permissions first
-                        if (path.startsWith("/r/") && !path.contains("/whatsapp/webhook")) {
+                        // For /r/ paths, check route permissions first (exempt /auth/ and webhook)
+                        if (path.startsWith("/r/") && !path.contains("/auth/") && !path.contains("/whatsapp/webhook")) {
                             // log.info("Checking route permissions for path: {}", path);
                             return checkRoutePermission(authenticationMono, path, authorizationContext.getExchange())
                                     .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path,
@@ -617,7 +635,7 @@ public class SecurityConfig implements BeanFactoryAware {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of(allowedOrigins.split(",")));
+        configuration.setAllowedOriginPatterns(List.of(allowedOrigins.split(",")));
         configuration.setAllowedMethods(List.of(allowedMethods.split(",")));
 
         // Add X-API-Key headers to allowed headers

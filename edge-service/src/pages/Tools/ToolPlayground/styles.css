@@ -1,0 +1,44 @@
+.tool-playground-section {
+    padding: 0 10px;
+}
+
+.terminal-body {
+    background-color: #0f172a !important;
+}
+
+.terminal-header {
+    background-color: #1e293b;
+    border-bottom: 1px solid #334155 !important;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.dot-red { background-color: #ef4444; }
+.dot-yellow { background-color: #f59e0b; }
+.dot-green { background-color: #10b981; }
+
+.terminal-content {
+    scrollbar-width: thin;
+    scrollbar-color: #475569 #0f172a;
+}
+
+.terminal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.terminal-content::-webkit-scrollbar-track {
+    background: #0f172a;
+}
+
+.terminal-content::-webkit-scrollbar-thumb {
+    background-color: #475569;
+    border-radius: 20px;
+}
+
+.tool-result-card {
+    min-height: 500px;
+}

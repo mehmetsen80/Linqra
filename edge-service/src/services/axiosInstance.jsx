@@ -90,6 +90,12 @@ axiosInstance.interceptors.response.use(
 
       try {
         const authData = JSON.parse(localStorage.getItem('authState') || '{}');
+        
+        // If the user was never authenticated, don't attempt refresh and don't redirect to login
+        if (!authData.token && !authData.isAuthenticated) {
+          return Promise.reject(error);
+        }
+
         if (!authData.refreshToken) {
           throw new Error('No refresh token available');
         }

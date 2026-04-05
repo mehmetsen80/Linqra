@@ -30,6 +30,16 @@ const WorkflowGraphModal = ({ show, onHide, workflowData, onSave, agentTask }) =
             setSteps(JSON.parse(JSON.stringify(workflowData.workflow)));
         } else if (show && workflowData?.query?.workflow) {
             setSteps(JSON.parse(JSON.stringify(workflowData.query.workflow)));
+        } else if (show && workflowData?.link) {
+            // Synthesize a single step for non-workflow tools
+            setSteps([{
+                step: 1,
+                target: workflowData.link.target || 'unknown',
+                action: workflowData.link.action || 'unknown',
+                intent: workflowData.query?.intent,
+                summary: workflowData.query?.summary,
+                description: workflowData.query?.description
+            }]);
         } else {
             setSteps([]);
         }

@@ -16,6 +16,7 @@ import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
 import org.lite.gateway.service.LinqWorkflowService;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
+import org.lite.gateway.service.ToolExecutionService;
 import org.springframework.beans.factory.annotation.Value;
 import org.lite.gateway.service.CacheService;
 import org.springframework.http.HttpStatus;
@@ -58,6 +59,9 @@ public class LinqServiceImpl implements LinqService {
         @NonNull
         private final ChatExecutionService chatExecutionService;
 
+        @NonNull
+        private final ToolExecutionService toolExecutionService;
+
         @Value("${server.host:localhost}")
         private String gatewayHost;
 
@@ -94,6 +98,12 @@ public class LinqServiceImpl implements LinqService {
                                                 // Track the execution
                                                 workflowExecutionService.trackExecution(request, response)
                                                                 .thenReturn(response));
+                                        }
+
+                                        // Handle tool requests
+                                        if ("tool".equals(request.getLink().getTarget())) {
+                                                log.info("Processing tool request: {}", request.getQuery().getIntent());
+                                                return toolExecutionService.executeTool(request, null);
                                         }
 
                                         // Existing logic for single requests
@@ -201,7 +211,8 @@ public class LinqServiceImpl implements LinqService {
 
                 // List of AI service targets that should bypass permission checks
                 Set<String> bypassTargets = Set.of("openai-chat", "ollama-chat", "huggingface-chat", "gemini-chat",
-                                "workflow", "openai-embed", "gemini-embed", "ollama-embed", "api-gateway", "assistant");
+                                "workflow", "openai-embed", "gemini-embed", "ollama-embed", "api-gateway", "assistant",
+                                "tool");
 
                 // If the target is in our bypass list, return immediately
                 if (bypassTargets.contains(routeIdentifier)) {

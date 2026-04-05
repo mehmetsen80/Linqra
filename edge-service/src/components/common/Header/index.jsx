@@ -87,42 +87,25 @@ const Header = () => {
         <Navbar.Toggle aria-controls="basic-navbar-nav" />
         <Navbar.Collapse id="basic-navbar-nav">
           <Nav className="me-auto">
-            {/* <Nav.Link as={NavLink} to="/">Home</Nav.Link>
-            <span className="nav-separator"> | </span> */}
-            <Nav.Link as={NavLink} to="/dashboard">Dashboard</Nav.Link>
-            <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/api-routes">Apps</Nav.Link>
-            {/* Workflows navigation removed - workflow functionality is now integrated into Agents
-                Users can create and execute workflows directly within the Agent interface,
-                eliminating the need for a separate workflows section */}
-            {/* <span className="nav-separator"> | </span> */}
-            {/* <Nav.Link as={NavLink} to="/workflows">Workflows</Nav.Link> */}
-            <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/agents">Agents</Nav.Link>
-            <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/ai-assistants">AI Assistants</Nav.Link>
-            <span className="nav-separator"> | </span>
-            {/* <Dropdown 
-              show={showLLMDropdown}
-              onMouseEnter={() => setShowLLMDropdown(true)}
-              onMouseLeave={() => setShowLLMDropdown(false)}
-            >
-              <Dropdown.Toggle variant="link" className="nav-link-dropdown">
-                LLMs
-              </Dropdown.Toggle>
-              <Dropdown.Menu>
-                <Dropdown.Item as={NavLink} to="/llm-usage">LLM Usage</Dropdown.Item>
-                <Dropdown.Item as={NavLink} to="/llm-models">LLM Models</Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown>
-            <span className="nav-separator"> | </span> */}
-            <Nav.Link as={NavLink} to="/execution-monitoring">Executions</Nav.Link>
-            <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/knowledge-hub">Knowledge Hub</Nav.Link>
-            <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/audits">Audits</Nav.Link>
-            {/* <span className="nav-separator"> | </span>
-            <Nav.Link as={NavLink} to="/rag">RAG</Nav.Link> */}
+            {user && (
+              <>
+                <Nav.Link as={NavLink} to="/dashboard">Dashboard</Nav.Link>
+                <span className="nav-separator"> | </span>
+                <Nav.Link as={NavLink} to="/api-routes">Apps</Nav.Link>
+                <span className="nav-separator"> | </span>
+                <Nav.Link as={NavLink} to="/agents">Agents</Nav.Link>
+                <span className="nav-separator"> | </span>
+                <Nav.Link as={NavLink} to="/ai-assistants">AI Assistants</Nav.Link>
+                <span className="nav-separator"> | </span>
+                <Nav.Link as={NavLink} to="/execution-monitoring">Executions</Nav.Link>
+                <span className="nav-separator"> | </span>
+                <Nav.Link as={NavLink} to="/knowledge-hub">Knowledge Hub</Nav.Link>
+                <span className="nav-separator"> | </span>
+                <Nav.Link as={NavLink} to="/audits">Audits</Nav.Link>
+                <span className="nav-separator"> | </span>
+              </>
+            )}
+            <Nav.Link as={NavLink} to="/tools">Tools</Nav.Link>
           </Nav>
           {user ? (
             <div className="d-flex align-items-center gap-3">

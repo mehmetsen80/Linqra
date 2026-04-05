@@ -1,11 +1,27 @@
 #!/bin/bash
 # generate-service-certs.sh
-
-# i.e.
+# 
+# DESCRIPTION:
+# This script automates the creation and synchronization of TLS/SSL certificates for Linqra microservices.
+# It ensures that each service has its own identity (keystore) and that all infrastructure components 
+# (Gateway, Eureka, Client) trust each other by updating centralized truststores.
+#
+# PROCESS FLOW:
+# 1. Validates the provided service name.
+# 2. Creates a Java Keystore (JKS) for the service in ../keys/ if it doesn't already exist.
+# 3. Exports the service's public certificate to a PEM file for use by other components.
+# 4. Synchronizes the new certificate into gateway, client, and eureka truststores.
+# 5. Ensures the Amazon Root CA is present in all truststores to support secure AWS S3 connectivity.
+#
+# USAGE:
 # cd scripts
+# sudo ./generate-service-certs.sh <service-name>
+#
+# EXAMPLES:
 # sudo ./generate-service-certs.sh komunas-app
 # sudo ./generate-service-certs.sh medastex-app
 # sudo ./generate-service-certs.sh mytrux-app
+# sudo ./generate-service-certs.sh polytechnic-app
 
 SERVICE_NAME=$1
 if [ -z "$SERVICE_NAME" ]; then

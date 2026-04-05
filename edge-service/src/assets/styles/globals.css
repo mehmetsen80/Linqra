@@ -162,6 +162,10 @@ h6, .h6 {
 }
 
 /* Toast Customization */
+.Toastify__toast-container {
+  z-index: 15000 !important;
+}
+
 .Toastify__toast-theme--colored.Toastify__toast--success {
   background-color: #2e7d32 !important;
 }

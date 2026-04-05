@@ -66,7 +66,9 @@ spring:
       discovery:
         locator:
           enabled: true # Enables service discovery with Eureka
-          lower-case-service-id: true  # This ensures service IDs are matched in lowercase
+      lower-case-service-id: true  # This ensures service IDs are matched in lowercase
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
       routes:
         ## Discover server route
         # so, our gateway port is 7777, we access the discovery server through http://localhost:7777/eureka/web
@@ -192,7 +194,7 @@ notifications:
     enabled: ${vault.slack.enabled}
 
 cors:
-  allowed-origins: http://localhost:3000,https://localhost:3000,https://localhost:8080,https://your-prod-domain.com
+  allowed-origins: "https://localhost:3000,http://localhost:3000,https://localhost:4000,http://localhost:4000,https://linqra.com,https://app.linqra.com"
   allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD
   allowed-headers: Origin,Content-Type,Accept,Authorization,X-Requested-With,X-User-Token
   max-age: 3600
@@ -236,7 +238,9 @@ vault:
   master:
     key: ${VAULT_MASTER_KEY}
 
+# Linqra Base URL for tool execution and notifications
 linqra:
+  base-url: https://localhost:7777
   storage:
     type: ${vault.storage.type:s3}
     endpoint: ${vault.storage.endpoint:}

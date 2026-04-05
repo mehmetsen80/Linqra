@@ -31,6 +31,7 @@ public enum AuditResourceType {
     AGENT,
     AGENT_TASK,
     AGENT_TASK_EXECUTION,
+    TOOL_EXECUTION,
     WORKFLOW,
     WORKFLOW_STEP,
     LLM_MODEL,

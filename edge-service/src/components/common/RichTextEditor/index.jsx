@@ -5,17 +5,23 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import TextAlign from '@tiptap/extension-text-align';
+import { Table } from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import { common, createLowlight } from 'lowlight';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { FontFamily } from '@tiptap/extension-font-family';
-import { 
-    FaBold, 
-    FaItalic, 
-    FaUnderline, 
+import {
+    FaBold,
+    FaItalic,
+    FaUnderline,
     FaStrikethrough,
     FaCode,
-    FaListUl, 
-    FaListOl, 
-    FaUndo, 
+    FaListUl,
+    FaListOl,
+    FaUndo,
     FaRedo,
     FaParagraph,
     FaHeading,
@@ -26,9 +32,14 @@ import {
     FaAlignCenter,
     FaAlignRight,
     FaAlignJustify,
-    FaFont
+    FaFont,
+    FaTable,
+    FaPlus,
+    FaTrash
 } from 'react-icons/fa';
 import { Button, ButtonGroup, Dropdown, DropdownButton } from 'react-bootstrap';
+
+const lowlight = createLowlight(common);
 
 const FontSize = Extension.create({
     name: 'fontSize',
@@ -161,7 +172,7 @@ const MenuBar = ({ editor }) => {
                     title={currentHeadingLevel() ? `H${currentHeadingLevel()}` : <FaHeading />}
                     id="heading-dropdown"
                 >
-                    <Dropdown.Item 
+                    <Dropdown.Item
                         active={editor.isActive('paragraph')}
                         onClick={() => editor.chain().focus().setParagraph().run()}
                     >
@@ -169,8 +180,8 @@ const MenuBar = ({ editor }) => {
                     </Dropdown.Item>
                     <Dropdown.Divider />
                     {[1, 2, 3, 4, 5, 6].map(level => (
-                        <Dropdown.Item 
-                            key={level} 
+                        <Dropdown.Item
+                            key={level}
                             active={editor.isActive('heading', { level })}
                             onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
                             className={level > 3 ? 'small text-muted' : ''}
@@ -192,7 +203,7 @@ const MenuBar = ({ editor }) => {
                     </Dropdown.Item>
                     <Dropdown.Divider />
                     {fonts.map(font => (
-                        <Dropdown.Item 
+                        <Dropdown.Item
                             key={font.value}
                             active={editor.getAttributes('textStyle').fontFamily === font.value}
                             onClick={() => editor.chain().focus().setFontFamily(font.value).run()}
@@ -215,7 +226,7 @@ const MenuBar = ({ editor }) => {
                     </Dropdown.Item>
                     <Dropdown.Divider />
                     {['8px', '10px', '12px', '14px', '16px', '18px', '20px', '24px', '30px', '36px'].map(size => (
-                        <Dropdown.Item 
+                        <Dropdown.Item
                             key={size}
                             active={editor.getAttributes('textStyle').fontSize === size}
                             onClick={() => editor.chain().focus().setFontSize(size).run()}
@@ -224,7 +235,7 @@ const MenuBar = ({ editor }) => {
                         </Dropdown.Item>
                     ))}
                 </DropdownButton>
-                
+
                 <Button
                     className="ms-1"
                     variant={editor.isActive('blockquote') ? 'primary' : 'outline-secondary'}
@@ -282,12 +293,46 @@ const MenuBar = ({ editor }) => {
                     <FaListOl />
                 </Button>
                 <Button
-                    variant="outline-secondary"
-                    onClick={() => editor.chain().focus().setHorizontalRule().run()}
-                    title="Horizontal Rule"
+                    variant={editor.isActive('codeBlock') ? 'primary' : 'outline-secondary'}
+                    onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+                    title="Code Block"
                 >
-                    <FaMinus />
+                    <FaCode />
                 </Button>
+            </ButtonGroup>
+
+            <ButtonGroup size="sm">
+                <DropdownButton
+                    size="sm"
+                    variant="outline-secondary"
+                    title={<FaTable />}
+                    id="table-dropdown"
+                >
+                    <Dropdown.Item onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
+                        Insert Table (3x3)
+                    </Dropdown.Item>
+                    <Dropdown.Divider />
+                    <Dropdown.Item
+                        disabled={!editor.isActive('table')}
+                        onClick={() => editor.chain().focus().addRowAfter().run()}
+                    >
+                        Add Row After
+                    </Dropdown.Item>
+                    <Dropdown.Item
+                        disabled={!editor.isActive('table')}
+                        onClick={() => editor.chain().focus().addColumnAfter().run()}
+                    >
+                        Add Column After
+                    </Dropdown.Item>
+                    <Dropdown.Divider />
+                    <Dropdown.Item
+                        disabled={!editor.isActive('table')}
+                        className="text-danger"
+                        onClick={() => editor.chain().focus().deleteTable().run()}
+                    >
+                        <FaTrash className="me-2" size={12} /> Delete Table
+                    </Dropdown.Item>
+                </DropdownButton>
             </ButtonGroup>
 
             <ButtonGroup size="sm">
@@ -323,6 +368,15 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Enter description...
             FontSize,
             TextAlign.configure({
                 types: ['heading', 'paragraph'],
+            }),
+            Table.configure({
+                resizable: true,
+            }),
+            TableRow,
+            TableHeader,
+            TableCell,
+            CodeBlockLowlight.configure({
+                lowlight,
             }),
         ],
         content: content,
@@ -408,6 +462,72 @@ const RichTextEditor = ({ content, onChange, placeholder = 'Enter description...
                     background-color: #fff3cd;
                     color: unset;
                 }
+                
+                /* Tiptap Table Styles */
+                .ProseMirror table {
+                    border-collapse: collapse;
+                    table-layout: fixed;
+                    width: 100%;
+                    margin: 1rem 0;
+                    overflow: hidden;
+                }
+                .ProseMirror td, .ProseMirror th {
+                    min-width: 1em;
+                    border: 2px solid #ced4da;
+                    padding: 8px 12px;
+                    vertical-align: top;
+                    box-sizing: border-box;
+                    position: relative;
+                }
+                .ProseMirror th {
+                    font-weight: bold;
+                    text-align: left;
+                    background-color: #f8f9fa;
+                }
+                .ProseMirror .selectedCell:after {
+                    z-index: 2;
+                    position: absolute;
+                    content: "";
+                    left: 0; right: 0; top: 0; bottom: 0;
+                    background: rgba(200, 200, 255, 0.4);
+                    pointer-events: none;
+                }
+                .ProseMirror .column-resize-handle {
+                    position: absolute;
+                    right: -2px;
+                    top: 0;
+                    bottom: -2px;
+                    width: 4px;
+                    background-color: #adf;
+                    pointer-events: none;
+                }
+
+                /* Tiptap Code Highlights */
+                .ProseMirror pre {
+                    background: #282c34;
+                    color: #abb2bf;
+                    font-family: 'Fira Code', 'Courier New', monospace;
+                    padding: 1rem;
+                    border-radius: 0.5rem;
+                    margin: 1rem 0;
+                }
+                .ProseMirror pre code {
+                    color: inherit;
+                    padding: 0;
+                    background: none;
+                    font-size: 0.875rem;
+                }
+                .hljs-comment, .hljs-quote { color: #5c6370; font-style: italic; }
+                .hljs-doctag, .hljs-keyword, .hljs-formula { color: #c678dd; }
+                .hljs-section, .hljs-name, .hljs-selector-tag, .hljs-deletion, .hljs-subst { color: #e06c75; }
+                .hljs-literal { color: #56b6c2; }
+                .hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta-string { color: #98c379; }
+                .hljs-built_in, .hljs-class .hljs-title { color: #e6c07b; }
+                .hljs-attr, .hljs-variable, .hljs-template-variable, .hljs-type, .hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo, .hljs-number { color: #d19a66; }
+                .hljs-symbol, .hljs-bullet, .hljs-link, .hljs-meta, .hljs-selector-id, .hljs-title { color: #61afef; }
+                .hljs-emphasis { font-style: italic; }
+                .hljs-strong { font-weight: bold; }
+                .hljs-link { text-decoration: underline; }
             `}</style>
         </div>
     );

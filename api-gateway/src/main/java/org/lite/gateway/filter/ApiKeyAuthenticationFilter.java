@@ -4,7 +4,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.dto.ApiKeyPair;
 import org.lite.gateway.service.ApiKeyService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.lang.NonNull;
@@ -29,6 +31,10 @@ import org.springframework.core.io.buffer.DataBuffer;
 public class ApiKeyAuthenticationFilter implements WebFilter {
     private final ApiKeyService apiKeyService;
     private final ObjectMapper objectMapper;
+
+    @Value("${linqra.base-url:https://linqra.com}")
+    private String baseUrl;
+
     private static final String API_KEY_HEADER = "x-api-key";
     private static final String API_KEY_NAME_HEADER = "x-api-key-name";
     private static final String AUTHORIZATION_HEADER = "Authorization";
@@ -37,18 +43,26 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
     private static final java.util.List<String> WEB_UI_ORIGINS = java.util.List.of(
             "https://localhost:3000",
             "http://localhost:3000",
+            "https://localhost:4000",
+            "http://localhost:4000",
             "https://linqra.com",
             "https://www.linqra.com",
             "https://app.linqra.com");
 
     @Override
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
+        // [REQUIRED FOR CORS] Skip API key for OPTIONS pre-flight requests
+        if (exchange.getRequest().getMethod() == HttpMethod.OPTIONS) {
+            return chain.filter(exchange);
+        }
         String path = exchange.getRequest().getPath().value();
 
-        // Skip API key for all non-linq, non-route, and non-agent-tasks paths
+        // Skip API key for all non-linq, non-route, non-agent-tasks and non-api-tools
+        // paths
         // Also skip for MinIO bucket paths (knowledge-hub, audit)
         if ((!path.startsWith("/linq") || path.contains("knowledge-hub") || path.contains("audit"))
                 && !path.startsWith("/api/agent-tasks/")
+                && !path.startsWith("/api/tools/")
                 && (path.contains("/whatsapp/webhook") || !path.startsWith("/r/"))) {
             return chain.filter(exchange);
         }
@@ -79,13 +93,22 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         log.info("My Exchange Request Headers: ");
         log.info(exchange.getRequest().getHeaders().toString());
 
+        // If no keys provided, check if it's a mandatory path
+        // Paths starting with /api/tools/ are NOT mandatory here because the controller
+        // handles visibility
         if (apiKey == null) {
+            if (path.startsWith("/api/tools/")) {
+                return chain.filter(exchange);
+            }
             log.warn("No API key provided for path: {}", path);
             return Mono.error(new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED, "API key is required"));
         }
 
         if (apiKeyName == null) {
+            if (path.startsWith("/api/tools/")) {
+                return chain.filter(exchange);
+            }
             log.warn("No API key name provided for path: {}", path);
             return Mono.error(new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED, "API key name is required"));
@@ -162,6 +185,9 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
     private boolean isFromWebUI(String origin, String referer) {
         // Check Origin header
         if (origin != null) {
+            if (origin.equalsIgnoreCase(baseUrl)) {
+                return true;
+            }
             for (String webOrigin : WEB_UI_ORIGINS) {
                 if (origin.equalsIgnoreCase(webOrigin)) {
                     return true;
@@ -171,6 +197,9 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
 
         // Check Referer header
         if (referer != null) {
+            if (referer.startsWith(baseUrl)) {
+                return true;
+            }
             for (String webOrigin : WEB_UI_ORIGINS) {
                 if (referer.startsWith(webOrigin)) {
                     return true;

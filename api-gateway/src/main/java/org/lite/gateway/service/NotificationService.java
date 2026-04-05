@@ -30,6 +30,9 @@ public class NotificationService {
     @Value("${notifications.slack.enabled:false}")
     private boolean slackEnabled;
 
+    @Value("${linqra.base-url:https://linqra.com}")
+    private String baseUrl;
+
     public NotificationService(JavaMailSender mailSender, WebClient.Builder webClientBuilder) {
         this.mailSender = mailSender;
         this.webClientBuilder = webClientBuilder;
@@ -194,7 +197,7 @@ public class NotificationService {
                 (delta != null && !delta.isEmpty()) ? String.format(
                         "<div class='details-box' style='border-left-color: #ff4081;'><div class='details-title'>Detected Changes</div><div class='details-content'>%s</div></div>",
                         formatDeltaToHtml(delta)) : "",
-                (reportUrl != null && !reportUrl.isEmpty()) ? reportUrl : "https://linqra.com");
+                (reportUrl != null && !reportUrl.isEmpty()) ? reportUrl : baseUrl);
 
         sendEmail(to, subject, htmlContent, true);
     }

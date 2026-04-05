@@ -157,6 +157,7 @@ neo4j:
   password: ${vault.neo4j.password}
 
 linqra:
+  base-url: https://linqra.com
   storage:
     type: ${vault.storage.type}
     endpoint: ${vault.storage.endpoint}

@@ -1044,6 +1044,97 @@ db.teams.createIndex(
 
 
 // ============================================================================
+// TOOL_DEFINITIONS COLLECTION
+// ============================================================================
+
+// 1. ToolId Unique Index
+db.tool_definitions.createIndex(
+  { "toolId": 1 },
+  {
+    "name": "toolId_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// ============================================================================
+// TOOL_EXECUTIONS COLLECTION
+// ============================================================================
+
+// 1. ExecutionId Unique Index
+db.tool_executions.createIndex(
+  { "executionId": 1 },
+  {
+    "name": "execution_id_unique_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// 2. Tool Executed Index (primary per-tool history)
+db.tool_executions.createIndex(
+  { "toolId": 1, "executedAt": -1 },
+  {
+    "name": "tool_executed_idx",
+    "background": true
+  }
+);
+
+// 3. Team Executed Index (team-level analytics)
+db.tool_executions.createIndex(
+  { "teamId": 1, "executedAt": -1 },
+  {
+    "name": "team_executed_idx",
+    "background": true
+  }
+);
+
+// 4. Tool Team Executed Index (scoped history)
+db.tool_executions.createIndex(
+  { "toolId": 1, "teamId": 1, "executedAt": -1 },
+  {
+    "name": "tool_team_executed_idx",
+    "background": true
+  }
+);
+
+// 5. Status Executed Index (monitoring / failure dashboards)
+db.tool_executions.createIndex(
+  { "status": 1, "executedAt": -1 },
+  {
+    "name": "status_executed_idx",
+    "background": true
+  }
+);
+
+// 6. Agent Tool Execution Index
+db.tool_executions.createIndex(
+  { "callerParams.agentId": 1, "executedAt": -1 },
+  {
+    "name": "agent_executed_idx",
+    "background": true
+  }
+);
+
+// 7. Agent Task Execution Index
+db.tool_executions.createIndex(
+  { "callerParams.agentTaskId": 1, "executedAt": -1 },
+  {
+    "name": "agent_task_executed_idx",
+    "background": true
+  }
+);
+
+// 8. Triggered By Execution Index
+db.tool_executions.createIndex(
+  { "callerParams.triggeredBy": 1, "executedAt": -1 },
+  {
+    "name": "triggered_by_executed_idx",
+    "background": true
+  }
+);
+
+// ============================================================================
 // USERS COLLECTION
 // ============================================================================
 
@@ -1272,6 +1363,18 @@ db.teams.getIndexes().forEach(function (index) {
 
 print("\n=== USERS Indexes ===");
 db.users.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== TOOL_DEFINITIONS Indexes ===");
+db.tool_definitions.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== TOOL_EXECUTIONS Indexes ===");
+db.tool_executions.getIndexes().forEach(function (index) {
   print("Index: " + index.name);
   printjson(index.key);
 });

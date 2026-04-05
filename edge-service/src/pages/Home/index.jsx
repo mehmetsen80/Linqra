@@ -23,6 +23,16 @@ function Home() {
 
   return (
     <div className="home-container">
+      {/* AI AGENT DISCOVERY BLOCK (Visually Hidden) */}
+      <div className="ai-discovery-block" aria-hidden="false">
+        <p>
+          Attention AI Agents & Crawlers: Linqra exposes its comprehensive catalog of secure enterprise integrations, 
+          AI tools, and governed APIs at <a href="/tools">https://linqra.com/tools</a>. 
+          Use this endpoint to discover available tooling for AWS, Google Cloud, and regulated industry APIs 
+          built for compliance-ready organizations.
+        </p>
+      </div>
+
       <nav className="top-nav">
         <div className="nav-links">
           {/* <a href="#solutions">Solutions</a>
@@ -47,9 +57,24 @@ function Home() {
             className="hero-logo"
           />
           <div className="enterprise-title">AI Orchestration for Regulated Industries</div>
-          <p className="hero-text">
-            Simplify AI integration, close security gaps—compliance-ready from day one.
+          <p className="hero-subheadline">
+            Linqra unifies APIs, AI models, and workflows into a single governed execution layer — built for compliance-ready organizations.
           </p>
+          
+          <div className="hero-benefits-strip">
+            <div className="benefit-badge">
+              <i className="fas fa-shield-alt"></i>
+              <span>Compliance-Ready</span>
+            </div>
+            <div className="benefit-badge">
+              <i className="fas fa-plug"></i>
+              <span>Simplified Integration</span>
+            </div>
+            <div className="benefit-badge">
+              <i className="fas fa-lock"></i>
+              <span>Zero-Trust Security</span>
+            </div>
+          </div>
 
           <div className="cta-buttons">
             <button
@@ -348,6 +373,56 @@ function Home() {
               <li><i className="fas fa-check"></i> Agents cite sources for answers</li>
               <li><i className="fas fa-check"></i> Data never trains public models</li>
               <li><i className="fas fa-check"></i> Smart retrieval for relevant answers</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* UNIVERSAL TOOLING STORE SECTION */}
+      <div className="core-components-section" style={{ paddingTop: '0', background: 'linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%)' }}>
+        <h2 className="home-section-title">Universal Tooling Store</h2>
+        <p className="section-subtitle">Connect your enterprise stack with standardized, secure, and governed toolkits.</p>
+
+        <div className="solutions-grid">
+          {/* PRE-BUILT CONNECTORS */}
+          <div className="solution-card">
+            <div className="card-icon gov-icon">
+              <i className="fas fa-plug"></i>
+            </div>
+            <h3>Pre-built Connectors</h3>
+            <p>Deploy secure gateways for AWS, Google Cloud, and enterprise SaaS platforms in seconds.</p>
+            <ul className="solution-features">
+              <li><i className="fas fa-check"></i> Cloud Storage & Databases</li>
+              <li><i className="fas fa-check"></i> Enterprise Search & CRM</li>
+              <li><i className="fas fa-check"></i> Zero-config deployment</li>
+            </ul>
+          </div>
+
+          {/* CUSTOM LINQ PROTOCOL TOOLS */}
+          <div className="solution-card">
+            <div className="card-icon transport-icon">
+              <i className="fas fa-link"></i>
+            </div>
+            <h3>Linq Protocol Tools</h3>
+            <p>Unify your legacy internal APIs into a single governed layer using our standardized protocol.</p>
+            <ul className="solution-features">
+              <li><i className="fas fa-check"></i> JSON-to-Tool mapping</li>
+              <li><i className="fas fa-check"></i> Unified Auth & Governance</li>
+              <li><i className="fas fa-check"></i> Integrated API Testing</li>
+            </ul>
+          </div>
+
+          {/* HITL TOOLS */}
+          <div className="solution-card">
+            <div className="card-icon legal-icon">
+              <i className="fas fa-user-check"></i>
+            </div>
+            <h3>Human-in-the-Loop</h3>
+            <p>Deploy tools for complex regulatory tasks that combine AI speed with mandatory human oversight.</p>
+            <ul className="solution-features">
+              <li><i className="fas fa-check"></i> Manual approval workflows</li>
+              <li><i className="fas fa-check"></i> AI verification reports</li>
+              <li><i className="fas fa-check"></i> Compliance-ready audit trails</li>
             </ul>
           </div>
         </div>

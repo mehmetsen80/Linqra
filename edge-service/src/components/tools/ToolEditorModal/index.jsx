@@ -6,6 +6,7 @@ import toolService from '../../../services/toolService';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import RichTextEditor from '../../common/RichTextEditor';
 import ConfirmationModal from '../../common/ConfirmationModal';
+import './styles.css';
 
 const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
     const [saving, setSaving] = useState(false);
@@ -22,6 +23,12 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
             .replace(/[^a-z0-9]+/g, '.') // Replace non-alpha with dots
             .replace(/^\.|\.$/g, '')     // Trim dots from ends
             .replace(/\.{2,}/g, '.');    // Collapse multiple dots
+    };
+
+    const validateSlug = (slug) => {
+        if (!slug) return 'Tool ID is required';
+        if (!SL_REGEX.test(slug)) return 'Invalid format (lowercase letters and dots only)';
+        return null;
     };
 
     const [form, setForm] = useState({
@@ -81,17 +88,22 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
-        if (name.startsWith('pricing.')) {
-            const field = name.split('.')[1];
-            setForm(prev => ({
-                ...prev,
-                pricing: { ...prev.pricing, [field]: value }
-            }));
-        } else if (name === 'toolId') {
-            const error = validateSlug(value);
-            setSlugError(error);
-            setManuallyEditedSlug(true);
-            setForm(prev => ({ ...prev, [name]: value }));
+        
+        // Handle deep nested paths like 'linq_config.link.target'
+        if (name.includes('.')) {
+            const parts = name.split('.');
+            setForm(prev => {
+                let current = { ...prev };
+                let pointer = current;
+                for (let i = 0; i < parts.length - 1; i++) {
+                    pointer[parts[i]] = { ...pointer[parts[i]] };
+                    pointer = pointer[parts[i]];
+                }
+                pointer[parts[parts.length - 1]] = value;
+                return current;
+            });
+            
+            // Handle name -> toolId suggestion
         } else if (name === 'name') {
             let updates = { [name]: value };
             if (!editMode && !manuallyEditedSlug) {
@@ -100,6 +112,11 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
                 setSlugError(validateSlug(suggestedSlug));
             }
             setForm(prev => ({ ...prev, ...updates }));
+        } else if (name === 'toolId') {
+            const error = validateSlug(value);
+            setSlugError(error);
+            setManuallyEditedSlug(true);
+            setForm(prev => ({ ...prev, [name]: value }));
         } else {
             setForm(prev => ({ ...prev, [name]: value }));
         }
@@ -138,8 +155,9 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
             }
         };
 
+        // CRITICAL BUG FIX: Use tool.toolId (original) for the update path, NOT form.toolId (new)
         const response = editMode
-            ? await toolService.updateTool(form.toolId, toolToSave)
+            ? await toolService.updateTool(tool.toolId, toolToSave)
             : await toolService.registerTool(toolToSave);
 
         if (response.success) {
@@ -154,13 +172,19 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
 
     return (
         <>
-            <Modal show={show} onHide={onHide} size="lg" centered backdrop="static">
-                <Form onSubmit={handleSubmit}>
-                    <Modal.Header closeButton>
-                        <Modal.Title>{editMode ? 'Edit Tool Configuration' : 'Register New Tool'}</Modal.Title>
-                    </Modal.Header>
-                    <Modal.Body>
-
+            <Modal 
+                show={show} 
+                onHide={onHide} 
+                size="lg" 
+                centered 
+                className="tool-editor-modal"
+            >
+            <Form onSubmit={handleSubmit}>
+                <Modal.Header closeButton>
+                    <Modal.Title>{editMode ? 'Edit Tool Details' : 'Register New Tool'}</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="tool-editor-body">
+                    <div className="tool-editor-section-header">General Information</div>
                         <Row>
                             <Col md={6}>
                                 <Form.Group className="mb-3">
@@ -188,7 +212,7 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
                                         disabled={editMode && isSlugLocked}
                                         onChange={handleInputChange}
                                         isInvalid={!!slugError}
-                                        className={`slug-input ${isSlugLocked && editMode ? 'locked' : 'unlocked'}`}
+                                        className={`slug-input font-monospace ${isSlugLocked && editMode ? 'locked' : 'unlocked'}`}
                                     />
                                     <Form.Control.Feedback type="invalid">
                                         {slugError}
@@ -214,7 +238,7 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
                             </Col>
                         </Row>
 
-                        <Form.Group className="mb-3">
+                        <Form.Group className="mb-4">
                             <Form.Label>Description</Form.Label>
                             <RichTextEditor
                                 content={form.description || ''}
@@ -223,8 +247,9 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
                             />
                         </Form.Group>
 
+                        <div className="tool-editor-section-header mt-4">Advanced Settings</div>
                         <Row>
-                            <Col md={6}>
+                            <Col md={4}>
                                 <Form.Group className="mb-3">
                                     <Form.Label>Category</Form.Label>
                                     <Form.Select name="category" value={form.category || 'Legal'} onChange={handleInputChange}>
@@ -235,7 +260,7 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
                                     </Form.Select>
                                 </Form.Group>
                             </Col>
-                            <Col md={6}>
+                            <Col md={4}>
                                 <Form.Group className="mb-3">
                                     <Form.Label>Execution Type</Form.Label>
                                     <Form.Select name="type" value={form.type || 'INTERNAL_SERVICE'} onChange={handleInputChange}>
@@ -245,21 +270,18 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
                                     </Form.Select>
                                 </Form.Group>
                             </Col>
-                        </Row>
-
-                        <Row>
-                            <Col md={12}>
+                            <Col md={4}>
                                 <Form.Group className="mb-3">
                                     <Form.Label>Visibility</Form.Label>
                                     <Form.Select name="visibility" value={form.visibility || 'PUBLIC'} onChange={handleInputChange}>
-                                        <option value="PUBLIC">Public (Available for everyone)</option>
-                                        <option value="PRIVATE">Private (Restricted access via API Key)</option>
+                                        <option value="PUBLIC">Public</option>
+                                        <option value="PRIVATE">Private</option>
                                     </Form.Select>
                                 </Form.Group>
                             </Col>
                         </Row>
 
-                        <Row>
+                        <Row className="mt-2">
                             <Col md={6}>
                                 <Form.Group className="mb-3">
                                     <Form.Label>Pricing Type</Form.Label>
@@ -286,13 +308,14 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
                             </Col>
                         </Row>
                     </Modal.Body>
-                    <Modal.Footer className="bg-light">
+                    <Modal.Footer className="bg-light p-3">
                         <Button variant="secondary" type="button" onClick={onHide}>Cancel</Button>
                         <Button
                             variant="primary"
                             type="submit"
                             loading={saving}
                             disabled={!!slugError}
+                            className="px-4"
                         >
                             {editMode ? 'Update Tool Details' : 'Register Tool'}
                         </Button>

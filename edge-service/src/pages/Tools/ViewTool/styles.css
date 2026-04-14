@@ -455,6 +455,43 @@
 }
 
 /* Editor Taskbar Endpoint Styling */
+.editor-taskbar {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    background: #f8fafc;
+    align-items: flex-start !important;
+    text-align: left !important;
+}
+
+.taskbar-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
+
+.taskbar-row.url-row {
+    padding: 0.75rem 1rem;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.taskbar-row.action-row {
+    padding: 0.5rem 1rem;
+    justify-content: space-between !important;
+    background: #f8fafc;
+}
+
+.test-console-container {
+    text-align: left !important;
+}
+
+.test-console-body {
+    text-align: left !important;
+}
+
 .tool-playground-badge {
     background: #fff7ed;
     border: 1px solid #fed7aa;
@@ -463,52 +500,40 @@
     padding: 0 1rem;
     display: flex;
     align-items: center;
+    justify-content: flex-start !important;
     gap: 0.8rem;
+    width: 100%;
+    max-width: 100%;
+    text-align: left !important;
 }
 
 .tool-playground-url {
     font-family: var(--bs-font-monospace);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: #9a3412;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 700px;
-    transition: max-width 0.3s ease;
-}
-
-.full-screen-playground .tool-playground-url {
-    max-width: calc(100vw - 400px);
+    flex-grow: 1;
 }
 
 .tool-playground-method {
-    font-size: 0.68rem;
+    font-size: 0.65rem;
     font-weight: 800;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     color: #fff;
-    background: #ea580c;
+    background: var(--primary-color, #ed7534);
     padding: 3px 8px;
     border-radius: 5px;
     line-height: 1;
     flex-shrink: 0;
 }
 
-.editor-utility-btn {
-    text-decoration: none !important;
-    font-size: 0.75rem !important;
-    font-weight: 700 !important;
-    color: #64748b !important;
-    transition: all 0.2s ease;
-}
-
-.editor-utility-btn:hover {
-    color: var(--primary-color, #ed7534) !important;
-}
-
 .tool-execute-btn {
     height: 38px !important;
     display: flex !important;
     align-items: center !important;
+    font-weight: 700 !important;
 }
 
 /* Hardcoded styles cleanup */

@@ -13,7 +13,11 @@ import org.springframework.web.server.ServerWebExchange;
 import org.lite.gateway.exception.InvalidAuthenticationException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -162,5 +166,56 @@ public class TeamContextService {
             log.warn("Failed to parse teams list from token for validation", e);
         }
         return false;
+    }
+
+    /**
+     * Get ALL authorized teams from context (surgical fix for multi-team
+     * authorization)
+     */
+    public Mono<List<String>> getAllAuthorizedTeams(ServerWebExchange exchange) {
+        String userToken = exchange.getRequest().getHeaders().getFirst("X-User-Token");
+
+        if (userToken != null && !userToken.isEmpty()) {
+            String token = userToken.startsWith("Bearer ") ? userToken.substring(7) : userToken;
+            boolean isKeycloakToken = userContextService.isKeycloakToken(token);
+            ReactiveJwtDecoder decoder = isKeycloakToken ? keycloakJwtDecoder : userJwtDecoder;
+
+            return decoder.decode(token)
+                    .map(this::extractAllTeamsFromJwt)
+                    .onErrorResume(e -> getAllTeamsFromSecurityContext());
+        }
+
+        return getAllTeamsFromSecurityContext();
+    }
+
+    private Mono<List<String>> getAllTeamsFromSecurityContext() {
+        return ReactiveSecurityContextHolder.getContext()
+                .map(SecurityContext::getAuthentication)
+                .map(Authentication::getPrincipal)
+                .flatMap(principal -> {
+                    if (principal instanceof Jwt jwt) {
+                        return Mono.just(extractAllTeamsFromJwt(jwt));
+                    } else if (principal instanceof String teamId) {
+                        return Mono.just(List.of(teamId));
+                    }
+                    return Mono.just(Collections.emptyList());
+                });
+    }
+
+    private List<String> extractAllTeamsFromJwt(Jwt jwt) {
+        List<String> teams = new ArrayList<>();
+        String primaryTeam = jwt.getClaimAsString("teamId");
+        if (primaryTeam != null)
+            teams.add(primaryTeam);
+
+        List<String> teamsArray = jwt.getClaimAsStringList("teams");
+        if (teamsArray != null) {
+            for (String t : teamsArray) {
+                String nt = t.startsWith("lm_") ? t.substring(3) : t;
+                if (!teams.contains(nt))
+                    teams.add(nt);
+            }
+        }
+        return teams;
     }
 }

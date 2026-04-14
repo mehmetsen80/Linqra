@@ -21,6 +21,8 @@ import reactor.core.publisher.Mono;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import org.springframework.core.io.buffer.DataBuffer;
@@ -56,6 +58,28 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return chain.filter(exchange);
         }
         String path = exchange.getRequest().getPath().value();
+
+        // [ADMIN EARLY BYPASS] If an administrator token is present, skip all API
+        // key/WebUI checks
+        // AND populate the SecurityContext so that subsequent DynamicPathAuthorization
+        // can see it
+        String authHeaderValue = exchange.getRequest().getHeaders().getFirst(AUTHORIZATION_HEADER);
+        if (authHeaderValue != null && authHeaderValue.startsWith("Bearer ")) {
+            JsonNode payload = decodeTokenPayload(authHeaderValue.substring(7));
+            if (isAdmin(payload)) {
+                log.info("Administrator identified via early bypass for path: {}", path);
+
+                // Create a synthetic authentication object with ROLE_GATEWAY_ADMIN
+                UsernamePasswordAuthenticationToken adminAuth = new UsernamePasswordAuthenticationToken(
+                        payload.path("sub").asText("admin"),
+                        null,
+                        List.of(new SimpleGrantedAuthority("ROLE_GATEWAY_ADMIN")));
+
+                // Set the security context and continue the chain
+                return chain.filter(exchange)
+                        .contextWrite(ReactiveSecurityContextHolder.withAuthentication(adminAuth));
+            }
+        }
 
         // Skip API key for all non-linq, non-route, non-agent-tasks and non-api-tools
         // paths
@@ -119,6 +143,8 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         // 1. If no Auth header -> Validate API Key only (API Key Mode)
         // 2. If Auth header exists -> Validate API Key AND Token (Hybrid Mode)
 
+        final boolean[] isAdminFlag = { false };
+
         return apiKeyService.validateApiKey(apiKey)
                 .flatMap(validApiKey -> {
                     // Validate API key name
@@ -139,7 +165,13 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
                         }
 
                         String token = authHeader.substring(7);
-                        if (!validateTeamInToken(validApiKey.getTeamId(), token)) {
+                        JsonNode payload = decodeTokenPayload(token);
+
+                        if (payload != null && isAdmin(payload)) {
+                            log.info("Administrator identified: bypassing team validation for API key for path: {}",
+                                    path);
+                            isAdminFlag[0] = true;
+                        } else if (!validateTeamInToken(validApiKey.getTeamId(), payload)) {
                             log.warn("Team ID {} not found in token teams array for path: {}",
                                     validApiKey.getTeamId(), path);
                             return Mono.error(new ResponseStatusException(
@@ -149,10 +181,16 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
 
                     // Construct Authentication object
                     // If pure API Key mode, we rely on the API Key's teamId as the principal source
+                    List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                    authorities.add(new SimpleGrantedAuthority("ROLE_API_ACCESS"));
+                    if (isAdminFlag[0]) {
+                        authorities.add(new SimpleGrantedAuthority("ROLE_GATEWAY_ADMIN"));
+                    }
+
                     return Mono.just(new UsernamePasswordAuthenticationToken(
                             validApiKey.getTeamId(), // Principal is Team ID
                             new ApiKeyPair(apiKey, apiKeyName),
-                            List.of(new SimpleGrantedAuthority("ROLE_API_ACCESS"))));
+                            authorities));
                 })
                 .flatMap(authentication -> {
                     // Stash the Team ID in attributes in case SecurityContext is overwritten by
@@ -210,16 +248,61 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         return false;
     }
 
-    private boolean validateTeamInToken(String teamId, String token) {
+    private JsonNode decodeTokenPayload(String token) {
         try {
             String[] chunks = token.split("\\.");
+            if (chunks.length < 2)
+                return null;
             String payload = new String(Base64.getDecoder().decode(chunks[1]));
-            JsonNode jsonNode = objectMapper.readTree(payload);
+            return objectMapper.readTree(payload);
+        } catch (Exception e) {
+            log.error("Error decoding token payload: {}", e.getMessage());
+            return null;
+        }
+    }
 
+    private boolean isAdmin(JsonNode jsonNode) {
+        if (jsonNode == null)
+            return false;
+
+        // Check realm roles
+        if (jsonNode.has("realm_access")) {
+            JsonNode roles = jsonNode.get("realm_access").get("roles");
+            if (roles != null && roles.isArray()) {
+                for (JsonNode role : roles) {
+                    if ("gateway_admin_realm".equals(role.asText())) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        // Check resource roles
+        if (jsonNode.has("resource_access")) {
+            JsonNode clientAccess = jsonNode.get("resource_access").get("linqra-gateway-client");
+            if (clientAccess != null && clientAccess.has("roles")) {
+                JsonNode roles = clientAccess.get("roles");
+                if (roles != null && roles.isArray()) {
+                    for (JsonNode role : roles) {
+                        if ("gateway_admin".equals(role.asText())) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean validateTeamInToken(String teamId, JsonNode jsonNode) {
+        if (jsonNode == null)
+            return false;
+        try {
             // First check if teamId claim exists and matches
             if (jsonNode.has("teamId")) {
-                String tokenTeamId = jsonNode.get("teamId").asText();
-                if (teamId.equals(tokenTeamId)) {
+                String tokenTeamIdValue = jsonNode.get("teamId").asText();
+                if (teamId.equals(tokenTeamIdValue)) {
                     return true;
                 }
             }
@@ -248,7 +331,7 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             }
             return false;
         } catch (Exception e) {
-            log.error("Error validating team in token: {}", e.getMessage());
+            log.error("Error validating team in token node: {}", e.getMessage());
             return false;
         }
     }

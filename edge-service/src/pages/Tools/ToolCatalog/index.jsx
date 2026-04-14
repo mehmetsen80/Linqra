@@ -74,14 +74,14 @@ const ToolCatalog = ({ teamId }) => {
             ) : (
                 <Row>
                     {tools.map(tool => (
-                        <Col key={tool.toolId} md={4} lg={3} className="mb-4">
+                        <Col key={tool.toolId} md={6} lg={4} className="mb-4">
                             <Card
                                 className="tool-card h-100 border-0 shadow-sm p-0"
                                 style={{ cursor: 'pointer' }}
                                 onClick={() => navigate(`/tools/${tool.toolId}`)}
                             >
                                 <Card.Header className="bg-transparent border-0 pt-4 px-4 pb-0 d-flex justify-content-between align-items-center">
-                                    <div className="tool-slug-tag m-0 text-truncate" style={{ maxWidth: '180px' }}>
+                                    <div className="tool-slug-tag m-0 text-truncate">
                                         <FiActivity className="me-1 text-primary-soft" size={10} />
                                         {tool.toolId}
                                     </div>

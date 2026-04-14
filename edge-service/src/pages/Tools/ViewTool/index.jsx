@@ -54,10 +54,11 @@ const ViewTool = () => {
 
     // API Instructions state
     const [showInstructionsModal, setShowInstructionsModal] = useState(false);
-    const [savingInstructions, setSavingInstructions] = useState(false);
+    const [isConsoleExpanded, setIsConsoleExpanded] = useState(false);
     const [testSubTab, setTestSubTab] = useState('request');
     const [snippetTab, setSnippetTab] = useState('json');
-    const [isConsoleExpanded, setIsConsoleExpanded] = useState(false);
+
+    const [savingInstructions, setSavingInstructions] = useState(false);
 
     const [showLinqConfigModal, setShowLinqConfigModal] = useState(false);
     const [savingProtocol, setSavingProtocol] = useState(false);
@@ -76,6 +77,21 @@ const ViewTool = () => {
     const [loadingWorkflow, setLoadingWorkflow] = useState(false);
     const [forceRefresh, setForceRefresh] = useState(false);
 
+    // ---------------------------------------------------------
+    // Performance & Stability Optimizations
+    // ---------------------------------------------------------
+
+    // Optimization: Memoize massive JSON strings to prevent re-stringifying on every render
+    const memoizedTestingResult = React.useMemo(() => {
+        if (!testingResult) return null;
+        try {
+            return JSON.stringify(testingResult, null, 2);
+        } catch (e) {
+            return "Error stringifying result";
+        }
+    }, [testingResult]);
+
+    // Handle body scroll locking for full-screen mode stability
     useEffect(() => {
         if (isConsoleExpanded) {
             document.body.classList.add('no-scroll');
@@ -520,24 +536,34 @@ func main() {
                             />
                         ) : (
                             <div className={`p-3 overflow-auto terminal-output test-console-input ${isConsoleExpanded ? 'expanded' : ''}`}>
-                                <SyntaxHighlighter
-                                    language={
-                                        ['openai', 'anthropic', 'mcp'].includes(snippetTab)
-                                            ? 'json'
-                                            : snippetTab === 'curl' ? 'bash' : snippetTab
-                                    }
-                                    style={dracula}
-                                    customStyle={{ margin: 0, padding: 0, fontSize: '0.8rem', background: 'transparent' }}
-                                >
-                                    {snippetTab === 'curl' ? generateCurl(agentParams) :
+                                {(() => {
+                                    const code = snippetTab === 'curl' ? generateCurl(agentParams) :
                                         snippetTab === 'python' ? generatePython(agentParams) :
                                             snippetTab === 'java' ? generateJava(agentParams) :
                                                 snippetTab === 'go' ? generateGo(agentParams) :
                                                     snippetTab === 'openai' ? generateOpenAI(tool) :
                                                         snippetTab === 'anthropic' ? generateAnthropic(tool) :
                                                             snippetTab === 'mcp' ? generateMCP(tool) :
-                                                                'Select a valid format'}
-                                </SyntaxHighlighter>
+                                                                'Select a valid format';
+
+                                    return code.length > 50000 ? (
+                                        <pre className="font-monospace small text-light m-0 p-0" style={{ fontSize: '0.8rem' }}>
+                                            {code}
+                                        </pre>
+                                    ) : (
+                                        <SyntaxHighlighter
+                                            language={
+                                                ['openai', 'anthropic', 'mcp'].includes(snippetTab)
+                                                    ? 'json'
+                                                    : snippetTab === 'curl' ? 'bash' : snippetTab
+                                            }
+                                            style={dracula}
+                                            customStyle={{ margin: 0, padding: 0, fontSize: '0.8rem', background: 'transparent' }}
+                                        >
+                                            {code}
+                                        </SyntaxHighlighter>
+                                    );
+                                })()}
                             </div>
                         )}
                     </div>
@@ -545,15 +571,21 @@ func main() {
                 <Tab eventKey="response" title="RESPONSE">
                     <div className={`p-3 overflow-auto terminal-output test-console-output-container ${isConsoleExpanded ? 'expanded' : ''}`}>
                         {testingResult ? (
-                            <SyntaxHighlighter
-                                language={testingResult.error ? "text" : "json"}
-                                style={dracula}
-                                customStyle={{ margin: 0, padding: 0, fontSize: '0.8rem', background: 'transparent' }}
-                            >
-                                {JSON.stringify(testingResult, null, 2)}
-                            </SyntaxHighlighter>
+                            memoizedTestingResult && memoizedTestingResult.length > 50000 ? (
+                                <pre className="font-monospace small text-light m-0 p-0" style={{ fontSize: '0.8rem' }}>
+                                    {memoizedTestingResult}
+                                </pre>
+                            ) : (
+                                <SyntaxHighlighter
+                                    language={testingResult.error ? "text" : "json"}
+                                    style={dracula}
+                                    customStyle={{ margin: 0, padding: 0, fontSize: '0.8rem', background: 'transparent' }}
+                                >
+                                    {memoizedTestingResult}
+                                </SyntaxHighlighter>
+                            )
                         ) : (
-                            <div className="text-muted italic small py-4 text-center">
+                            <div className="text-muted italic small py-4 text-start px-3">
                                 No result yet. Go to the request tab and execute.
                             </div>
                         )}
@@ -701,8 +733,9 @@ func main() {
                         className={`detail-card mb-4 p-0 border-0 shadow-sm ${isConsoleExpanded ? 'full-screen-playground shadow-lg' : (user ? 'config-card' : 'bg-light')}`}
                     >
                         <Card.Body className="p-0 d-flex flex-column h-100">
-                            <div className="editor-taskbar d-flex justify-content-between align-items-center px-0 py-2 bg-light border-bottom flex-shrink-0">
-                                <div className="d-flex align-items-center overflow-hidden me-3" style={{ minWidth: 0 }}>
+                            <div className="editor-taskbar border-bottom flex-shrink-0">
+                                {/* Row 1: URL Badge (Full Width) */}
+                                <div className="taskbar-row url-row">
                                     <div className="tool-playground-badge shadow-sm overflow-hidden">
                                         <FiGlobe className="text-primary flex-shrink-0" size={16} />
                                         <span className="tool-playground-method flex-shrink-0">POST</span>
@@ -721,26 +754,31 @@ func main() {
                                         </Button>
                                     </div>
                                 </div>
-                                <div className="d-flex align-items-center gap-3 flex-shrink-0">
-                                    <div className="border rounded-2 px-2 py-1 bg-white shadow-sm d-flex align-items-center me-2" style={{ cursor: 'pointer' }}>
-                                        <Form.Check
-                                            type="checkbox"
-                                            id="force-refresh-check"
-                                            label={<span className="ms-1 fw-bold text-dark" style={{ fontSize: '0.85rem' }}>Force Refresh</span>}
-                                            className="mb-0 d-flex align-items-center"
-                                            checked={forceRefresh}
-                                            onChange={(e) => setForceRefresh(e.target.checked)}
-                                            title="Bypass gateway cache and fetch latest definition from DB"
-                                        />
+
+                                {/* Row 2: Controls & Actions */}
+                                <div className="taskbar-row action-row">
+                                    <div className="d-flex align-items-center">
+                                        <div className="border rounded-2 px-2 py-1 bg-white shadow-sm d-flex align-items-center" style={{ cursor: 'pointer' }}>
+                                            <Form.Check
+                                                type="checkbox"
+                                                id="force-refresh-check"
+                                                label={<span className="ms-1 fw-bold text-dark" style={{ fontSize: '0.82rem' }}>Force Refresh</span>}
+                                                className="mb-0 d-flex align-items-center"
+                                                checked={forceRefresh}
+                                                onChange={(e) => setForceRefresh(e.target.checked)}
+                                                title="Bypass gateway cache and fetch latest definition"
+                                            />
+                                        </div>
+                                        <span className="text-muted small ms-3 opacity-75 font-monospace" style={{ fontSize: '0.7rem' }}>ENPOINT ID: {tool.toolId}</span>
                                     </div>
                                     <Button
                                         variant="primary"
                                         onClick={handleExecuteInlineTest}
                                         loading={executingTest}
-                                        className="ms-2 me-3 px-4 py-2 fw-bold shadow-sm tool-execute-btn"
+                                        className="px-4 py-2 tool-execute-btn"
                                     >
-                                        <FiPlay className="me-1" size={16} />
-                                        Execute
+                                        <FiPlay className="me-2" size={14} />
+                                        EXECUTE
                                     </Button>
                                 </div>
                             </div>
@@ -810,7 +848,7 @@ func main() {
                         <Card className="sidebar-card border-0 shadow-sm mb-4">
                             <Card.Body>
                                 <div className="position-relative mb-3">
-                                    <h5 className="mb-0 text-center">Agent Skills</h5>
+                                    <h5 className="mb-0 text-start">Agent Skills</h5>
                                     <button
                                         className="btn btn-link btn-sm p-0 text-muted position-absolute top-0 end-0"
                                         title="Copy skill JSON"
@@ -915,8 +953,16 @@ func main() {
                 tool={tool}
                 editMode={true}
                 onSuccess={(updatedTool) => {
+                    // Update state with new data
                     setTool(updatedTool);
-                    fetchToolDetails();
+                    
+                    // If the identity (slug) changed, we must move the browser to the new URL
+                    // to prevent a 404 when the page tries to refresh its data.
+                    if (updatedTool.toolId !== toolId) {
+                        navigate(`/tools/${updatedTool.toolId}`, { replace: true });
+                    } else {
+                        fetchToolDetails();
+                    }
                 }}
             />
         </Container>

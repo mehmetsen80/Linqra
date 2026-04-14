@@ -32,6 +32,7 @@ import org.springframework.security.oauth2.client.*;
 import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.security.web.server.authorization.AuthorizationContext;
@@ -40,6 +41,8 @@ import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
+import org.springframework.security.web.server.util.matcher.PathPatternParserServerWebExchangeMatcher;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
@@ -163,7 +166,23 @@ public class SecurityConfig implements BeanFactoryAware {
     }
 
     @Bean
-    public SecurityWebFilterChain jwtSecurityFilterChain(ServerHttpSecurity serverHttpSecurity,
+    @Order(Ordered.HIGHEST_PRECEDENCE)
+    public SecurityWebFilterChain proxiedSecurityFilterChain(ServerHttpSecurity serverHttpSecurity) {
+        serverHttpSecurity
+                .securityMatcher(new PathPatternParserServerWebExchangeMatcher("/r/**"))
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .addFilterBefore(apiKeyAuthenticationFilter,
+                        SecurityWebFiltersOrder.AUTHENTICATION)
+                .authorizeExchange(exchange -> exchange
+                        .pathMatchers(org.springframework.http.HttpMethod.OPTIONS).permitAll()
+                        .anyExchange()
+                        .access(this::dynamicPathAuthorization));
+        return serverHttpSecurity.build();
+    }
+
+    @Bean
+    public SecurityWebFilterChain internalSecurityFilterChain(ServerHttpSecurity serverHttpSecurity,
             AuthorizedClientServiceReactiveOAuth2AuthorizedClientManager authorizedClientManager,
             ReactiveJwtDecoder keycloakJwtDecoder) {
         serverHttpSecurity
@@ -173,7 +192,6 @@ public class SecurityConfig implements BeanFactoryAware {
                         .principalExtractor(principal -> {
                             // Extract the CN from the certificate (adjust this logic as needed)
                             String dn = principal.getSubjectX500Principal().getName();
-                            // log.info("dn: {}", dn);
                             String cn = dn.split(",")[0].replace("CN=", "");
                             return cn; // Return the Common Name (CN) as the principal
                         }))
@@ -245,9 +263,11 @@ public class SecurityConfig implements BeanFactoryAware {
 
                             ServerHttpRequest request = exchange.getRequest().mutate()
                                     .headers(headers -> {
-                                        headers.set("Authorization", "Bearer " + gatewayToken);
-                                        headers.set("Accept", "application/json");
-                                        headers.set("Content-Type", "application/json");
+                                        // Only swap Authorization if NOT a routed path
+                                        if (!path.startsWith("/r/")) {
+                                            headers.set("Authorization", "Bearer " + gatewayToken);
+                                        }
+                                        // Removed forced Accept and Content-Type to preserve original browser headers (e.g. multipart/form-data)
                                         if (userToken != null) {
                                             String token = userToken.startsWith("Bearer ") ? userToken.substring(7)
                                                     : userToken;
@@ -419,12 +439,14 @@ public class SecurityConfig implements BeanFactoryAware {
                                                     path);
                                             return Mono.just(new AuthorizationDecision(false));
                                         }
-                                        // Check if identified by API Key filter
+                                        // Check if identified by API Key filter or Administrator bypass
                                         return authenticationMono.flatMap(auth -> {
-                                            boolean isApiKeyAuth = auth.getAuthorities().stream()
-                                                    .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
+                                            boolean isAuthorizedByRole = auth.getAuthorities().stream()
+                                                    .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS") ||
+                                                                   a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
 
-                                            if (isApiKeyAuth) {
+                                            if (isAuthorizedByRole) {
+                                                log.info("Access granted: Authorized via role (API/ADMIN) for path: {}", path);
                                                 return Mono.just(new AuthorizationDecision(true));
                                             }
                                             return continueWithJwtChecks(Mono.just(auth), path, scope);
@@ -440,10 +462,12 @@ public class SecurityConfig implements BeanFactoryAware {
 
                         // For non-route paths, continue with normal JWT checks
                         return authenticationMono.flatMap(auth -> {
-                            boolean isApiKeyAuth = auth.getAuthorities().stream()
-                                    .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS"));
+                            boolean isAuthorizedByRole = auth.getAuthorities().stream()
+                                    .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS") ||
+                                                   a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
 
-                            if (isApiKeyAuth) {
+                            if (isAuthorizedByRole) {
+                                log.info("Access granted: Authorized via role (API/ADMIN) for path: {}", path);
                                 return Mono.just(new AuthorizationDecision(true));
                             }
                             return continueWithJwtChecks(Mono.just(auth), path, scope);
@@ -554,84 +578,78 @@ public class SecurityConfig implements BeanFactoryAware {
         }
 
         String routeIdentifier = routeMatcher.group(1);
-        // log.info("Route identifier found: {}", routeIdentifier);
 
-        // Prioritize the API Key Attribute or Authentication Principal over header
-        // lookup
-        return authenticationMono
-                .flatMap(auth -> {
-                    // Check if we stashed the teamId in attributes (happens when Bearer token
-                    // overwrites context)
-                    String apiKeyTeamId = exchange.getAttribute("API_KEY_TEAM_ID");
-                    if (apiKeyTeamId != null) {
-                        return Mono.just(apiKeyTeamId);
-                    }
+        return authenticationMono.flatMap(auth -> {
+            // Check for ROLE_GATEWAY_ADMIN authority (covers both JWT and Hybrid/API-Key tokens)
+            boolean hasAdminRole = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
 
-                    if (auth.getPrincipal() instanceof String teamId) {
-                        return Mono.just(teamId);
-                    }
-                    return getTeamContextService().getTeamFromContext(exchange);
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    // Check attribute even if authenticationMono is empty/default
-                    String apiKeyTeamId = exchange.getAttribute("API_KEY_TEAM_ID");
-                    if (apiKeyTeamId != null) {
-                        return Mono.just(apiKeyTeamId);
-                    }
-                    return getTeamContextService().getTeamFromContext(exchange);
-                }))
-                .doOnNext(teamId -> log.info("Checking team {} permission for route: {}", teamId, routeIdentifier))
-                .flatMap(teamId -> {
-                    String permissionCacheKey = String.format("permission:%s:%s", teamId, routeIdentifier);
-                    // log.info("Checking Redis cache for key: {}", permissionCacheKey);
+            if (hasAdminRole) {
+                log.info("Administrator authority detected: bypassing route permission check for path: {}", path);
+                return Mono.just(true);
+            }
 
-                    return cacheService.get(permissionCacheKey)
-                            .map(cachedPermission -> {
-                                boolean hasPermission = Boolean.parseBoolean(cachedPermission);
-                                // log.info("Using cached permission for team {} route {}: {}", teamId,
-                                // routeIdentifier, hasPermission);
-                                return hasPermission;
-                            })
-                            .switchIfEmpty(
-                                    apiRouteRepository.findByRouteIdentifier(routeIdentifier)
-                                            .doOnNext(apiRoute -> log.info("Found API route: {} with ID: {}",
-                                                    routeIdentifier, apiRoute.getId()))
-                                            .flatMap(apiRoute -> teamRouteRepository
-                                                    .findByTeamIdAndRouteId(teamId, apiRoute.getId())
-                                                    .doOnNext(teamRoute -> log.info(
-                                                            "Found team route for team {} and route {}: {}", teamId,
-                                                            apiRoute.getId(), teamRoute.getPermissions()))
-                                                    .map(teamRoute -> {
-                                                        boolean hasUsePermission = teamRoute.getPermissions()
-                                                                .contains(RoutePermission.USE);
-                                                        // log.info("Team {} has USE permission for route {}: {}",
-                                                        // teamId, routeIdentifier, hasUsePermission);
+            if (auth instanceof JwtAuthenticationToken jwtAuth) {
+                if (isAdmin(jwtAuth.getToken())) {
+                    log.info("Administrator identified via JWT: bypassing route permission check for path: {}", path);
+                    return Mono.just(true);
+                }
+            }
 
-                                                        // Cache the result
-                                                        cacheService.set(permissionCacheKey,
-                                                                String.valueOf(hasUsePermission),
-                                                                Duration.ofMinutes(5))
-                                                                .subscribe();
-                                                        // log.info("Cached permission result for team {} route {}: {}",
-                                                        // teamId, routeIdentifier, hasUsePermission);
+            return apiRouteRepository.findByRouteIdentifier(routeIdentifier)
+                    .flatMap(route -> {
+                        String apiKeyTeamId = (String) exchange.getAttribute("API_KEY_TEAM_ID");
+                        Mono<List<String>> teamsMono = (apiKeyTeamId != null)
+                                ? Mono.just(List.of(apiKeyTeamId))
+                                : getTeamContextService().getAllAuthorizedTeams(exchange);
 
-                                                        return hasUsePermission;
-                                                    }))
-                                            .switchIfEmpty(Mono.defer(() -> {
-                                                log.warn("No API route found for identifier: {}", routeIdentifier);
-                                                return Mono.just(false);
-                                            })));
-                })
-                .switchIfEmpty(Mono.defer(() -> {
-                    log.warn("No team context found for path: {}", path);
-                    return Mono.just(false);
-                }))
-                .onErrorResume(error -> {
-                    log.error("Error checking route permissions for path {}: {}", path, error.getMessage(), error);
+                        return teamsMono
+                                .flatMapMany(Flux::fromIterable)
+                                .flatMap(tid -> {
+                                    String cacheKey = String.format("permission:%s:%s", tid, routeIdentifier);
+                                    return cacheService.get(cacheKey)
+                                            .map(Boolean::parseBoolean)
+                                            .switchIfEmpty(
+                                                    teamRouteRepository.findByTeamIdAndRouteId(tid, route.getId())
+                                                            .map(tr -> tr.getPermissions().contains(
+                                                                    org.lite.gateway.entity.RoutePermission.USE))
+                                                            .doOnNext(has -> cacheService
+                                                                    .set(cacheKey, String.valueOf(has),
+                                                                            java.time.Duration.ofMinutes(5))
+                                                                    .subscribe())
+                                                            .defaultIfEmpty(false));
+                                })
+                                .any(hasAccess -> hasAccess)
+                                .defaultIfEmpty(false);
+                    })
+                    .switchIfEmpty(Mono.just(false));
+        })
+                .onErrorResume(e -> {
+                    log.error("Error checking route permissions for path {}: {}", path, e.getMessage());
                     return Mono.just(false);
                 });
     }
 
+    private boolean isAdmin(Jwt jwt) {
+        // Realm Roles
+        Map<String, Object> realmAccess = jwt.getClaimAsMap("realm_access");
+        if (realmAccess != null && realmAccess.get("roles") instanceof List<?> roles) {
+            if (roles.contains("gateway_admin_realm"))
+                return true;
+        }
+
+        // Client Roles
+        Map<String, Object> resourceAccess = jwt.getClaimAsMap("resource_access");
+        if (resourceAccess != null && resourceAccess.get(clientId) instanceof Map<?, ?> clientAccess) {
+            if (clientAccess.get("roles") instanceof List<?> roles) {
+                if (roles.contains("gateway_admin"))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

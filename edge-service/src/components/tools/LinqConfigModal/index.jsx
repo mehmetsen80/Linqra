@@ -159,13 +159,14 @@ const LinqConfigModal = ({
                 });
             }
 
+            // Even if no parameters are found, we allow generating a valid empty schema
             if (Object.keys(schema.properties).length === 0) {
-                showErrorToast("No parameters or placeholders found in Protocol JSON");
-                return;
+                showSuccessToast("No parameters found. Generated empty schema boilerplate.");
+            } else {
+                showSuccessToast("Schema generated! Please customize descriptions for the LLM.");
             }
-
+            
             handleJsonChange('inputSchema', JSON.stringify(schema, null, 2));
-            showSuccessToast("Schema generated! Please customize the descriptions for the LLM.");
         } catch (err) {
             showErrorToast("Cannot generate: Protocol must be valid JSON");
         }

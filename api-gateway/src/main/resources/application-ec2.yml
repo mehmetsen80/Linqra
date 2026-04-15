@@ -64,8 +64,6 @@ spring:
         wiretap: true
       httpclient:
         wiretap: true
-        ssl:
-          use-insecure-trust-manager: true
       discovery:
         locator:
           enabled: true # Enables service discovery with Eureka

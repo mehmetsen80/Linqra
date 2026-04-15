@@ -128,6 +128,7 @@ public class SecurityConfig implements BeanFactoryAware {
             "/r/komunas-app/whatsapp/webhook",
             "/widget/**", // Public AI Assistant widget scripts (public API key based)
             "/api/auth/**", // Public Auth Endpoints (SSO Callback, Login, Register)
+            "/r/*/auth/**", // Public Auth for routed apps
             "/api/internal/**", // Secured by X-Change-Log-Token
             "/linqra-knowledge-hub-dev/**", // MinIO Proxy (Secured by S3 Signature)
             "/backup-linqra-knowledge-hub-dev/**",

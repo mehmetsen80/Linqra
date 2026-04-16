@@ -1,6 +1,7 @@
 package org.lite.gateway.service;
 
 import jakarta.mail.internet.MimeMessage;
+import org.lite.gateway.dto.EmailRequestDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -175,7 +176,7 @@ public class NotificationService {
                         <body>
                             <div class="container">
                                 <div class="header">
-                                    <span class="logo">LINQRA</span>
+                                    <span class="logo">Linqra</span>
                                 </div>
                                 <div class="badge">AGENT ALERT</div>
                                 <div class="title">%s</div>
@@ -286,6 +287,40 @@ public class NotificationService {
         }
         sb.append("</table>");
         return sb.toString();
+    }
+
+    public void sendEmail(EmailRequestDTO request) {
+        if (!emailEnabled || mailSender == null) {
+            log.debug("Email notifications are disabled");
+            return;
+        }
+
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+
+            String from = (request.getFrom() != null && !request.getFrom().isEmpty())
+                    ? request.getFrom()
+                    : fromEmail;
+
+            helper.setFrom(from);
+            helper.setTo(request.getTo());
+            helper.setSubject(request.getSubject());
+            helper.setText(request.getBody(), request.isHtml());
+
+            if (request.getCc() != null && !request.getCc().isEmpty()) {
+                helper.setCc(request.getCc().toArray(new String[0]));
+            }
+            if (request.getBcc() != null && !request.getBcc().isEmpty()) {
+                helper.setBcc(request.getBcc().toArray(new String[0]));
+            }
+
+            mailSender.send(mimeMessage);
+            log.info("Email sent successfully to: {}", request.getTo());
+        } catch (Exception e) {
+            log.error("Failed to send email to {}: {}", request.getTo(), e.getMessage());
+            throw new RuntimeException("Failed to send email", e);
+        }
     }
 
     public void sendEmail(String to, String subject, String message, boolean isHtml) {

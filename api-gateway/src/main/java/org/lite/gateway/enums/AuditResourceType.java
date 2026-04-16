@@ -44,6 +44,7 @@ public enum AuditResourceType {
     
     // System & Configuration
     VAULT,
+    NOTIFICATION,
     SYSTEM,
     CONFIGURATION
 }

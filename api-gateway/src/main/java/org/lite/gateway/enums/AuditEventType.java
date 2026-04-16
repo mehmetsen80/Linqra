@@ -104,6 +104,9 @@ public enum AuditEventType {
     CHAT_EXECUTION_COMPLETED,
     CHAT_EXECUTION_FAILED,
 
+    // Notification Events
+    NOTIFICATION_SENT,
+    
     // System Events
     ARCHIVAL_STARTED,
     ARCHIVAL_COMPLETED,

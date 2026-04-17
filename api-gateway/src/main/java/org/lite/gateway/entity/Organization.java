@@ -23,6 +23,9 @@ public class Organization {
     
     @Indexed(unique = true)
     private String name;
+
+    @Indexed(unique = true)
+    private String shortName;
     
     private String description;
 

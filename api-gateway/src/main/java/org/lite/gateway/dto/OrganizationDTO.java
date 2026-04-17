@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 public class OrganizationDTO {
     private String id;
     private String name;
+    private String shortName;
     private String description;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

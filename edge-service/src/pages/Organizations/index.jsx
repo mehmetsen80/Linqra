@@ -182,6 +182,7 @@ function Organizations() {
               <thead>
                 <tr>
                   <th>Name</th>
+                  <th>Short Name</th>
                   <th>Description</th>
                   <th>Edit</th>
                   <th>Delete</th>
@@ -191,6 +192,7 @@ function Organizations() {
                 {organizations.map(org => (
                   <tr key={org.id}>
                     <td>{org.name}</td>
+                    <td><span className="badge bg-light text-dark">{org.shortName}</span></td>
                     <td>{org.description}</td>
                     <td>
                       <Button

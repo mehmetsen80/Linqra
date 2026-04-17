@@ -5,6 +5,7 @@ import './CreateOrganizationModal.css';
 function CreateOrganizationModal({ show, onHide, onSubmit, loading }) {
   const [formData, setFormData] = useState({
     name: '',
+    shortName: '',
     description: ''
   });
   const [error, setError] = useState('');
@@ -14,6 +15,7 @@ function CreateOrganizationModal({ show, onHide, onSubmit, loading }) {
     if (show) {
       setFormData({
         name: '',
+        shortName: '',
         description: ''
       });
       setError('');
@@ -25,7 +27,7 @@ function CreateOrganizationModal({ show, onHide, onSubmit, loading }) {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: name === 'shortName' ? value.toUpperCase() : value
     }));
   };
 
@@ -50,6 +52,7 @@ function CreateOrganizationModal({ show, onHide, onSubmit, loading }) {
       await onSubmit({
         ...formData,
         name: trimmedName,
+        shortName: formData.shortName.trim().toUpperCase(),
         description: formData.description?.trim() || ''
       });
       onHide();
@@ -84,6 +87,26 @@ function CreateOrganizationModal({ show, onHide, onSubmit, loading }) {
             />
             <Form.Control.Feedback type="invalid">
               Please enter an organization name (3-50 characters)
+            </Form.Control.Feedback>
+          </Form.Group>
+          <Form.Group className="mb-3">
+            <Form.Label>Short Name</Form.Label>
+            <Form.Control
+              type="text"
+              name="shortName"
+              value={formData.shortName}
+              onChange={handleChange}
+              placeholder="Enter short name (e.g. UOM)"
+              style={{ textTransform: 'uppercase' }}
+              required
+              pattern="^[A-Za-z]+$"
+              maxLength={20}
+            />
+            <Form.Text className="text-muted small">
+              Only letters are allowed. No spaces or numbers (max 20 characters).
+            </Form.Text>
+            <Form.Control.Feedback type="invalid">
+              Please enter a valid short name (alpha only, max 20 characters)
             </Form.Control.Feedback>
           </Form.Group>
           <Form.Group className="mb-3">

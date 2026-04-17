@@ -43,6 +43,9 @@ public class OrganizationServiceImpl implements OrganizationService {
     @Override
     public Mono<OrganizationDTO> createOrganization(Organization organization) {
         organization.setName(organization.getName().trim());
+        if (organization.getShortName() != null) {
+            organization.setShortName(organization.getShortName().trim().toUpperCase());
+        }
         
         Mono<OrganizationDTO> createOrgMono = organizationRepository.save(organization)
             .flatMap(this::convertToDTO)
@@ -65,6 +68,9 @@ public class OrganizationServiceImpl implements OrganizationService {
         Mono<OrganizationDTO> updateOrgMono = organizationRepository.findById(id)
             .flatMap(existingOrg -> {
                 existingOrg.setName(organization.getName());
+                if (organization.getShortName() != null) {
+                    existingOrg.setShortName(organization.getShortName().trim().toUpperCase());
+                }
                 existingOrg.setDescription(organization.getDescription());
                 return organizationRepository.save(existingOrg);
             })
@@ -127,6 +133,7 @@ public class OrganizationServiceImpl implements OrganizationService {
             .map(teams -> OrganizationDTO.builder()
                 .id(organization.getId())
                 .name(organization.getName())
+                .shortName(organization.getShortName())
                 .description(organization.getDescription())
                 .createdAt(organization.getCreatedAt())
                 .updatedAt(organization.getUpdatedAt())

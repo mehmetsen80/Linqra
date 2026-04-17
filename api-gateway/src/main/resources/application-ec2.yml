@@ -7,6 +7,12 @@ spring:
     web-application-type: reactive
   session:
     store-type: none
+  codec:
+    max-in-memory-size: 100MB
+  http:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
   security:
     oauth2:
       client:
@@ -69,7 +75,7 @@ spring:
           enabled: true # Enables service discovery with Eureka
           lower-case-service-id: true  # This ensures service IDs are matched in lowercase
       default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+        - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_UNIQUE
       routes:
         ## Discover server route
         # so, our gateway port is 7777, we access the discovery server through http://localhost:7777/eureka/web

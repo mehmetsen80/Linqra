@@ -126,6 +126,7 @@ public class SecurityConfig implements BeanFactoryAware {
     // List of public endpoints where ALL methods (GET, POST, etc.) are permitted
     private static final List<String> PUBLIC_ANY_METHOD = List.of(
             "/r/komunas-app/whatsapp/webhook",
+            "/r/*/*-ws/**", // Universal WebSocket pattern for all routed apps
             "/widget/**", // Public AI Assistant widget scripts (public API key based)
             "/api/auth/**", // Public Auth Endpoints (SSO Callback, Login, Register)
             "/r/*/auth/**", // Public Auth for routed apps
@@ -239,6 +240,7 @@ public class SecurityConfig implements BeanFactoryAware {
             // ADDED: /r/ to skip this filter for routed internal requests (preserves User
             // Token)
             if (path.startsWith("/actuator") ||
+                    path.contains("-ws") ||
                     path.startsWith("/favicon")) {
                 return chain.filter(exchange);
             }
@@ -268,7 +270,8 @@ public class SecurityConfig implements BeanFactoryAware {
                                         if (!path.startsWith("/r/")) {
                                             headers.set("Authorization", "Bearer " + gatewayToken);
                                         }
-                                        // Removed forced Accept and Content-Type to preserve original browser headers (e.g. multipart/form-data)
+                                        // Removed forced Accept and Content-Type to preserve original browser headers
+                                        // (e.g. multipart/form-data)
                                         if (userToken != null) {
                                             String token = userToken.startsWith("Bearer ") ? userToken.substring(7)
                                                     : userToken;
@@ -444,10 +447,11 @@ public class SecurityConfig implements BeanFactoryAware {
                                         return authenticationMono.flatMap(auth -> {
                                             boolean isAuthorizedByRole = auth.getAuthorities().stream()
                                                     .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS") ||
-                                                                   a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
+                                                            a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
 
                                             if (isAuthorizedByRole) {
-                                                log.info("Access granted: Authorized via role (API/ADMIN) for path: {}", path);
+                                                log.info("Access granted: Authorized via role (API/ADMIN) for path: {}",
+                                                        path);
                                                 return Mono.just(new AuthorizationDecision(true));
                                             }
                                             return continueWithJwtChecks(Mono.just(auth), path, scope);
@@ -465,7 +469,7 @@ public class SecurityConfig implements BeanFactoryAware {
                         return authenticationMono.flatMap(auth -> {
                             boolean isAuthorizedByRole = auth.getAuthorities().stream()
                                     .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS") ||
-                                                   a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
+                                            a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
 
                             if (isAuthorizedByRole) {
                                 log.info("Access granted: Authorized via role (API/ADMIN) for path: {}", path);
@@ -581,7 +585,8 @@ public class SecurityConfig implements BeanFactoryAware {
         String routeIdentifier = routeMatcher.group(1);
 
         return authenticationMono.flatMap(auth -> {
-            // Check for ROLE_GATEWAY_ADMIN authority (covers both JWT and Hybrid/API-Key tokens)
+            // Check for ROLE_GATEWAY_ADMIN authority (covers both JWT and Hybrid/API-Key
+            // tokens)
             boolean hasAdminRole = auth.getAuthorities().stream()
                     .anyMatch(a -> a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
 
@@ -650,7 +655,6 @@ public class SecurityConfig implements BeanFactoryAware {
         return false;
     }
 
-    
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

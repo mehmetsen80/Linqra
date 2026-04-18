@@ -87,7 +87,12 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         if ((!path.startsWith("/linq") || path.contains("knowledge-hub") || path.contains("audit"))
                 && !path.startsWith("/api/agent-tasks/")
                 && !path.startsWith("/api/tools/")
-                && (path.contains("/whatsapp/webhook") || path.contains("/auth/") || path.contains("-ws") || !path.startsWith("/r/"))) {
+                && (path.contains("/whatsapp/webhook") 
+                    || path.contains("/auth/") 
+                    || path.contains("-ws") 
+                    || path.contains("/api/advising/") 
+                    || path.contains("/api/intel/") 
+                    || !path.startsWith("/r/"))) {
             return chain.filter(exchange);
         }
 

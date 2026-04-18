@@ -44,6 +44,10 @@
     line-height: 1.6;
 }
 
+.description-content p:last-child {
+    margin-bottom: 0;
+}
+
 /* Card styling */
 .view-agent-page .card {
     border: 1px solid #dee2e6;

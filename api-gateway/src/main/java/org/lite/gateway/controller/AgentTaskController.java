@@ -5,6 +5,7 @@ import org.lite.gateway.entity.AgentExecution;
 import org.lite.gateway.enums.AgentTaskType;
 import org.lite.gateway.service.AgentExecutionService;
 import org.lite.gateway.service.AgentTaskService;
+import org.lite.gateway.service.AgentService;
 import org.lite.gateway.service.AgentAuthContextService;
 import org.lite.gateway.service.AgentTaskVersionService;
 import org.lite.gateway.service.UserContextService;
@@ -33,6 +34,7 @@ public class AgentTaskController {
 
     private final AgentExecutionService agentExecutionService;
     private final AgentTaskService agentTaskService;
+    private final AgentService agentService;
     private final AgentAuthContextService agentAuthContextService;
     private final AgentTaskVersionService agentTaskVersionService;
     private final UserContextService userContextService;
@@ -256,11 +258,13 @@ public class AgentTaskController {
 
         Map<String, Object> overrides = null;
         if (payload != null && !payload.isEmpty()) {
-            Map<String, Object> sanitized = new HashMap<>();
+            Map<String, Object> sanitized = new HashMap<>(payload);
             Object questionValue = payload.get("question");
             if (questionValue instanceof String) {
                 String trimmed = ((String) questionValue).trim();
-                if (!trimmed.isEmpty()) {
+                if (trimmed.isEmpty()) {
+                    sanitized.remove("question");
+                } else {
                     sanitized.put("question", trimmed);
                 }
             } else if (questionValue != null) {
@@ -273,9 +277,34 @@ public class AgentTaskController {
         final Map<String, Object> overridesFinal = overrides;
 
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
+                .onErrorResume(error -> {
+                    String msg = error.getMessage();
+                    if (msg.contains("No authentication found") || msg.contains("No valid user token found")) {
+                        log.info(
+                                "No authentication found for task {} execution. Fetching metadata for guest execution...",
+                                taskId);
+
+                        // Fetch task then fetch its agent to get teamId
+                        return agentTaskService.getTaskById(taskId)
+                                .flatMap(task -> {
+                                    // AgentTask doesn't have teamId, so we get it from the Agent
+                                    return agentService.getAgentById(task.getAgentId())
+                                            .map(agent -> new AgentAuthContextService.AgentAuthContext(
+                                                    task.getAgentId(),
+                                                    taskId,
+                                                    agent.getTeamId(),
+                                                    "guest-user",
+                                                    false))
+                                            .switchIfEmpty(
+                                                    Mono.error(new RuntimeException("Agent not found for task")));
+                                })
+                                .switchIfEmpty(Mono.error(new RuntimeException("Task not found: " + taskId)));
+                    }
+                    return Mono.error(error);
+                })
                 .flatMap(authContext -> agentExecutionService.startTaskExecution(
                         authContext.getAgentId(),
-                        authContext.getTaskId(),
+                        taskId,
                         authContext.getTeamId(),
                         authContext.getUsername(),
                         overridesFinal)
@@ -339,6 +368,51 @@ public class AgentTaskController {
                 })
                 .doOnSuccess(response -> log.info("Execution {} cancelled successfully", executionId))
                 .doOnError(error -> log.error("Failed to cancel execution {}: {}", executionId, error.getMessage()));
+    }
+
+    @GetMapping("/executions/{executionId}")
+    public Mono<ResponseEntity<Object>> getExecutionStatus(
+            @PathVariable String executionId,
+            ServerWebExchange exchange) {
+
+        log.info("Checking status for execution {}", executionId);
+
+        return agentExecutionService.getExecutionById(executionId)
+                .flatMap(execution -> {
+                    // Check authorization for the team
+                    return agentAuthContextService.checkTeamAuthorization(execution.getTeamId(), exchange)
+                            .map(authContext -> {
+                                Map<String, Object> statusMap = new HashMap<>();
+                                statusMap.put("executionId", execution.getExecutionId());
+                                statusMap.put("status", execution.getStatus());
+                                statusMap.put("result", execution.getResult());
+                                statusMap.put("outputData", execution.getOutputData());
+                                statusMap.put("startedAt", execution.getStartedAt());
+                                statusMap.put("completedAt", execution.getCompletedAt());
+                                statusMap.put("durationMs", execution.getExecutionDurationMs());
+                                statusMap.put("errorMessage", execution.getErrorMessage());
+
+                                // Extract final result if available in outputData
+                                if (execution.getOutputData() != null) {
+                                    Map<String, Object> output = execution.getOutputData();
+                                    if (output.containsKey("finalResult")) {
+                                        statusMap.put("finalResult", output.get("finalResult"));
+                                    } else if (output.get("result") instanceof Map) {
+                                        Map<String, Object> resultBody = (Map<String, Object>) output.get("result");
+                                        if (resultBody.containsKey("finalResult")) {
+                                            statusMap.put("finalResult", resultBody.get("finalResult"));
+                                        }
+                                    }
+                                }
+
+                                return ResponseEntity.ok((Object) statusMap);
+                            });
+                })
+                .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()))
+                .onErrorResume(error -> {
+                    log.error("Failed to get execution status: {}", error.getMessage());
+                    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+                });
     }
 
     @GetMapping("/executions/recent")

@@ -137,7 +137,10 @@ public class SecurityConfig implements BeanFactoryAware {
             "/backup-linqra-audit-dev/**",
             "/api/tools", // Public Tool Catalog base
             "/api/tools/**", // All tool-related endpoints (Detail, Catalog, Search)
-            "/api/tools/*/execute" // Unified execution endpoint (Public/Private handled by controller)
+            "/api/tools/*/execute", // Unified execution endpoint (Public/Private handled by controller)
+            "/api/agent-tasks/**", // Agent Task Management & Execution
+            "/r/**/api/advising/**", // Public Advising Diagnostic for all routed apps
+            "/r/**/api/intel/**" // Public Semantic Knowledge
     );
 
     // List of public endpoints where ONLY GET methods are permitted (e.g.

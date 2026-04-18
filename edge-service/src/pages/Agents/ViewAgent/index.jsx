@@ -393,7 +393,14 @@ function ViewAgent() {
                                 <Col md={12} className="mb-3">
                                     <div className="info-section">
                                         <label>Description</label>
-                                        <p className="info-value">{agent.description || 'No description provided'}</p>
+                                        {agent.description ? (
+                                            <div 
+                                                className="info-value description-content" 
+                                                dangerouslySetInnerHTML={{ __html: agent.description }} 
+                                            />
+                                        ) : (
+                                            <p className="info-value text-muted">No description provided</p>
+                                        )}
                                     </div>
                                 </Col>
                                 <Col md={6} className="mb-3">

@@ -30,6 +30,7 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,8 +44,8 @@ public class WebSocketConfig {
             .multicast()
             .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> executionMessagesSink = Sinks.many()
-            .multicast()
-            .onBackpressureBuffer(1024, false);
+            .replay()
+            .limit(10);
     private final Sinks.Many<String> chatMessagesSink = Sinks.many()
             .multicast()
             .onBackpressureBuffer(1024, false);
@@ -55,8 +56,8 @@ public class WebSocketConfig {
             .multicast()
             .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> agentNotificationSink = Sinks.many()
-            .multicast()
-            .onBackpressureBuffer(1024, false);
+            .replay()
+            .limit(5);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -339,60 +340,71 @@ public class WebSocketConfig {
 
     @Bean
     public WebSocketHandler stompWebSocketHandler() {
-        return session -> {
-            String sessionId = session.getId();
-            sessions.put(sessionId, session);
-            log.info("WebSocket session connected: {}", sessionId);
+        return new WebSocketHandler() {
+            @Override
+            public List<String> getSubProtocols() {
+                return List.of("v10.stomp", "v11.stomp", "v12.stomp");
+            }
 
-            // Handle outbound messages - merge health, execution, chat, graph extraction,
-            // and export updates
-            Flux<WebSocketMessage> outbound = Flux.merge(
-                    messagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/health")),
-                    executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution")),
-                    chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat")),
-                    graphExtractionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/graph-extraction")),
-                    collectionExportMessageSink.asFlux().map(msg -> createStompFrame(msg, "/topic/collection-export")),
-                    agentNotificationSink.asFlux().map(msg -> createStompFrame(msg, "/topic/notifications")))
-                    .onBackpressureBuffer(256)
-                    .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
-                            .maxBackoff(Duration.ofSeconds(1))
-                            .doBeforeRetry(signal -> log.warn("Retrying message delivery for session {}, attempt {}",
-                                    sessionId, signal.totalRetries() + 1)))
-                    .doOnNext(message -> log.debug("Processing outbound message for session {}: {}",
-                            sessionId, message))
-                    .map(message -> {
-                        log.debug("Created STOMP frame for session {}: {}", sessionId, message);
-                        return session.textMessage(message);
-                    })
-                    .doOnSubscribe(sub -> log.info("Session {} subscribed to message stream", sessionId))
-                    .doOnCancel(() -> log.info("Session {} message stream cancelled", sessionId))
-                    .onErrorContinue((error, obj) -> {
-                        log.error("Error in message processing for session {}: {}",
-                                sessionId, error.getMessage());
-                    })
-                    .doOnError(error -> log.error("Error in outbound stream for session {}: {}",
-                            sessionId, error.getMessage()));
+            @Override
+            public Mono<Void> handle(WebSocketSession session) {
+                String sessionId = session.getId();
+                sessions.put(sessionId, session);
+                log.info("WebSocket session connected: {}", sessionId);
 
-            // Handle inbound messages
-            Flux<WebSocketMessage> inbound = session.receive()
-                    .doOnNext(msg -> log.debug("Received message from session {}: {}",
-                            sessionId, msg.getPayloadAsText()))
-                    .map(msg -> handleInboundMessage(session, msg))
-                    .doOnError(error -> log.error("Error in inbound stream for session {}: {}",
-                            sessionId, error.getMessage()));
+                // Handle outbound messages - merge health, execution, chat, graph extraction,
+                // and export updates
+                Flux<WebSocketMessage> outbound = Flux.merge(
+                        messagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/health")),
+                        executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution")),
+                        chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat")),
+                        graphExtractionMessagesSink.asFlux()
+                                .map(msg -> createStompFrame(msg, "/topic/graph-extraction")),
+                        collectionExportMessageSink.asFlux()
+                                .map(msg -> createStompFrame(msg, "/topic/collection-export")),
+                        agentNotificationSink.asFlux().map(msg -> createStompFrame(msg, "/topic/notifications")))
+                        .onBackpressureBuffer(256)
+                        .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
+                                .maxBackoff(Duration.ofSeconds(1))
+                                .doBeforeRetry(
+                                        signal -> log.warn("Retrying message delivery for session {}, attempt {}",
+                                                sessionId, signal.totalRetries() + 1)))
+                        .doOnNext(message -> log.debug("Processing outbound message for session {}: {}",
+                                sessionId, message))
+                        .map(message -> {
+                            log.debug("Created STOMP frame for session {}: {}", sessionId, message);
+                            return session.textMessage(message);
+                        })
+                        .doOnSubscribe(sub -> log.info("Session {} subscribed to message stream", sessionId))
+                        .doOnCancel(() -> log.info("Session {} message stream cancelled", sessionId))
+                        .onErrorContinue((error, obj) -> {
+                            log.error("Error in message processing for session {}: {}",
+                                    sessionId, error.getMessage());
+                        })
+                        .doOnError(error -> log.error("Error in outbound stream for session {}: {}",
+                                sessionId, error.getMessage()));
 
-            // Clean up on session close
-            session.closeStatus()
-                    .subscribe(status -> {
-                        log.info("WebSocket session {} closed with status: {}", sessionId, status);
-                        sessions.remove(sessionId);
-                    });
+                // Handle inbound messages
+                Flux<WebSocketMessage> inbound = session.receive()
+                        .doOnNext(msg -> log.debug("Received message from session {}: {}",
+                                sessionId, msg.getPayloadAsText()))
+                        .map(msg -> handleInboundMessage(session, msg))
+                        .doOnError(error -> log.error("Error in inbound stream for session {}: {}",
+                                sessionId, error.getMessage()));
 
-            return session.send(Flux.merge(inbound, outbound))
-                    .doOnError(error -> {
-                        log.error("Error in session {}: {}", sessionId, error.getMessage());
-                        sessions.remove(sessionId);
-                    });
+                // Clean up on session close
+                session.closeStatus()
+                        .subscribe(status -> {
+                            log.info("WebSocket session {} closed with status: {}", sessionId, status);
+                            sessions.remove(sessionId);
+                        });
+
+                return session.send(Flux.merge(inbound, outbound))
+                        .doOnError(error -> {
+                            log.error("Error in session {}: {}", sessionId, error.getMessage());
+                            sessions.remove(sessionId);
+                        });
+            }
         };
     }
 

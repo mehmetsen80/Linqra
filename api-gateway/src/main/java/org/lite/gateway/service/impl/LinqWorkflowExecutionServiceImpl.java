@@ -2,6 +2,7 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.LinqWorkflowExecution;
@@ -50,6 +51,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private final LlmCostService llmCostService;
     private final ExecutionMonitoringService executionMonitoringService;
     private final AuditLogHelper auditLogHelper;
+    private final ObjectMapper objectMapper;
 
     @Override
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {
@@ -58,6 +60,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         Map<Integer, Object> stepResults = new ConcurrentHashMap<>();
         List<LinqResponse.WorkflowStepMetadata> stepMetadata = Collections.synchronizedList(new ArrayList<>());
         Map<String, Object> globalParams = request.getQuery().getParams();
+        log.info("🚀 Starting workflow execution with global params: {}", globalParams);
         WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
 
         // Extract teamId from params (must be present from controller/executor)
@@ -115,7 +118,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
             for (LinqRequest.Query.WorkflowStep step : steps) {
                 workflowMono = workflowMono.flatMap(response -> {
-                    log.debug("📍 Processing Step {}. Stopped status: {}", step.getStep(), context.isStopped());
+                    log.info("📍 Processing Step {} ({} - {}). Intent: {}. Params: {}",
+                            step.getStep(), step.getTarget(), step.getAction(), step.getIntent(), step.getParams());
+
                     if (context.isStopped()) {
                         log.info("✋ Stopping execution before Step {} because workflow is stopped.", step.getStep());
                         return Mono.just(response);
@@ -169,7 +174,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     Instant start = Instant.now();
 
                     // Send step progress update
-                    return sendStepProgressUpdate(request, step, steps.size())
+                    return sendStepProgressUpdate(request, step, steps.size(), stepResults)
                             .then(Mono.defer(() -> {
 
                                 // Check if step should be executed asynchronously
@@ -229,9 +234,20 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                 stepRequest.setLink(stepLink);
 
                                 LinqRequest.Query stepQuery = new LinqRequest.Query();
-                                stepQuery.setIntent(resolvePlaceholder(step.getIntent(), context));
+                                log.info("🔍 Resolving step placeholders - Intent: {}, Params: {}, Payload: {}",
+                                        step.getIntent(), step.getParams(), step.getPayload());
+
+                                String resolvedIntent = resolvePlaceholder(step.getIntent(), context);
+                                if (resolvedIntent == null || resolvedIntent.isEmpty()) {
+                                    resolvedIntent = step.getAction();
+                                }
+                                stepQuery.setIntent(resolvedIntent);
+
                                 stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), context));
                                 stepQuery.setPayload(resolvePlaceholders(step.getPayload(), context));
+
+                                log.info("✅ Resolved step placeholders - Intent: {}, Params: {}",
+                                        stepQuery.getIntent(), stepQuery.getParams());
                                 stepQuery.setLlmConfig(step.getLlmConfig());
 
                                 // Merge global params (e.g., teamId, userId) so downstream services see them
@@ -1105,15 +1121,24 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     private Object extractObjectValue(String placeholderContent, WorkflowExecutionContext context) {
-        // Handle step result placeholders
-        Pattern stepPattern = Pattern.compile("^step(\\d+)\\.result(?:\\.([^}]+))?$");
+        // Handle step result placeholders - support steps.stepX.output, stepX.result,
+        // etc.
+        Pattern stepPattern = Pattern.compile("^(?:steps\\.)?step(\\d+)\\.(?:result|output)(?:\\.([^}]+))?$");
         Matcher stepMatcher = stepPattern.matcher(placeholderContent);
         if (stepMatcher.matches()) {
             int stepNum = Integer.parseInt(stepMatcher.group(1));
             String path = stepMatcher.group(2);
             Object stepResult = context.getStepResults().get(stepNum);
             if (stepResult != null) {
-                return path != null ? extractObjectFromPath(stepResult, path) : stepResult;
+                // If path is "output" or "result" and not found directly, try smart extraction
+                if (path == null) {
+                    return stepResult;
+                }
+                Object val = extractObjectFromPath(stepResult, path);
+                if (val == null && ("output".equals(path) || "result".equals(path))) {
+                    return smartExtractContent(stepResult);
+                }
+                return val;
             }
         }
 
@@ -1160,7 +1185,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             } else {
                 // Regular property access
                 if (current instanceof Map<?, ?> map) {
-                    current = map.get(part);
+                    Object next = map.get(part);
+                    // If part is "output" or "result" and not found directly, try smart extraction
+                    if (next == null && ("output".equals(part) || "result".equals(part))) {
+                        next = trySmartExtractContent(map);
+                    }
+                    current = next;
                 } else if (current instanceof List<?> list && part.matches("\\d+")) {
                     int index = Integer.parseInt(part);
                     if (index >= 0 && index < list.size()) {
@@ -1177,10 +1207,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     private String resolvePlaceholder(String value, WorkflowExecutionContext context) {
+        if (value == null) {
+            return null;
+        }
         String result = value;
         // Step result pattern - updated to handle fallbacks via ?? symbol
-        // Regex explanation: {{stepX.result(.path)?(??fallback)?}}
-        Pattern stepPattern = Pattern.compile("\\{\\{step(\\d+)\\.result(?:\\.([^?]+?))?(?:\\?\\?([^}]+))?\\}\\}");
+        // Regex explanation: {{ (steps.)?stepX.(result|output)(.path)?(??fallback)? }}
+        Pattern stepPattern = Pattern
+                .compile("\\{\\{(?:steps\\.)?step(\\d+)\\.(?:result|output)(?:\\.([^?]+?))?(?:\\?\\?([^}]+))?\\}\\}");
         Matcher stepMatcher = stepPattern.matcher(value);
         while (stepMatcher.find()) {
             int stepNum = Integer.parseInt(stepMatcher.group(1));
@@ -1190,7 +1224,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
             String replacement = "";
             if (stepResult != null) {
-                replacement = path != null ? extractValue(stepResult, path) : String.valueOf(stepResult);
+                Object val = path != null ? extractObjectFromPath(stepResult, path) : smartExtractContent(stepResult);
+                replacement = val != null ? String.valueOf(val) : "";
             }
 
             if (replacement.isEmpty() && fallback != null) {
@@ -1237,31 +1272,104 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
     private String extractValue(Object obj, String path) {
         Object result = extractObjectFromPath(obj, path);
-        return result != null ? String.valueOf(result) : "";
+        if (result == null)
+            return "";
+        if (result instanceof String || result instanceof Number || result instanceof Boolean) {
+            return String.valueOf(result);
+        }
+        try {
+            return objectMapper.writeValueAsString(result);
+        } catch (Exception e) {
+            log.warn("Failed to stringify object for placeholder {}: {}", path, e.getMessage());
+            return String.valueOf(result);
+        }
     }
 
-    private String extractFinalResult(Object result) {
+    private Object smartExtractContent(Object result) {
         if (result instanceof Map<?, ?> resultMap) {
-            Object choices = resultMap.get("choices");
-            if (choices instanceof List<?> choiceList && !choiceList.isEmpty()) {
-                Object firstChoice = choiceList.getFirst();
+            return trySmartExtractContent(resultMap);
+        }
+        return result;
+    }
+
+    private Object trySmartExtractContent(Map<?, ?> map) {
+        // OpenAI Chat format
+        if (map.containsKey("choices")) {
+            Object choices = map.get("choices");
+            if (choices instanceof List<?> list && !list.isEmpty()) {
+                Object firstChoice = list.get(0);
                 if (firstChoice instanceof Map<?, ?> choiceMap) {
                     Object message = choiceMap.get("message");
                     if (message instanceof Map<?, ?> messageMap) {
-                        Object content = messageMap.get("content");
-                        return content != null ? content.toString() : "";
+                        return messageMap.get("content");
                     }
                 }
             }
         }
-        return result != null ? result.toString() : "";
+        // Anthropic Claude format
+        if (map.containsKey("content")) {
+            Object content = map.get("content");
+            if (content instanceof List<?> list && !list.isEmpty()) {
+                Object first = list.get(0);
+                if (first instanceof Map<?, ?> firstMap && "text".equals(firstMap.get("type"))) {
+                    return firstMap.get("text");
+                }
+            }
+        }
+        // Gemini format
+        if (map.containsKey("candidates")) {
+            Object candidates = map.get("candidates");
+            if (candidates instanceof List<?> list && !list.isEmpty()) {
+                Object first = list.get(0);
+                if (first instanceof Map<?, ?> firstMap) {
+                    Object content = firstMap.get("content");
+                    if (content instanceof Map<?, ?> contentMap) {
+                        Object parts = contentMap.get("parts");
+                        if (parts instanceof List<?> partsList && !partsList.isEmpty()) {
+                            Object firstPart = partsList.get(0);
+                            if (firstPart instanceof Map<?, ?> partMap) {
+                                return partMap.get("text");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Fallback to "text" or "result" or "response" fields
+        if (map.containsKey("text"))
+            return map.get("text");
+        if (map.containsKey("result"))
+            return map.get("result");
+        if (map.containsKey("response"))
+            return map.get("response");
+
+        // Generic fallback: if it's a map but no common provider keys found, return the
+        // map itself.
+        // The extractFinalResult method will handle stringifying it (JSON).
+        return map;
+    }
+
+    private String extractFinalResult(Object result) {
+        Object content = smartExtractContent(result);
+        if (content == null)
+            return (result != null ? result.toString() : "");
+        if (content instanceof String)
+            return (String) content;
+        if (content instanceof Map) {
+            try {
+                return objectMapper.writeValueAsString(content);
+            } catch (Exception e) {
+                return content.toString();
+            }
+        }
+        return content.toString();
     }
 
     /**
      * Send step progress update for execution monitoring
      */
     private Mono<Void> sendStepProgressUpdate(LinqRequest request, LinqRequest.Query.WorkflowStep step,
-            int totalSteps) {
+            int totalSteps, Map<Integer, Object> stepResults) {
         return Mono.defer(() -> {
             try {
                 // Extract execution context from request
@@ -1306,6 +1414,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
                 log.info("📊 About to build ExecutionProgressUpdate with durationMs: {}", durationMs);
 
+                // Extract final result if this is the last step or we have a final result
+                String finalResult = null;
+                if (step.getStep() == totalSteps && stepResults != null) {
+                    Object lastResult = stepResults.get(step.getStep());
+                    finalResult = extractFinalResult(lastResult);
+                }
+
                 ExecutionProgressUpdate update = ExecutionProgressUpdate.builder()
                         .executionId(executionId)
                         .agentId(agentId)
@@ -1322,9 +1437,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         .startedAt(startedAt)
                         .lastUpdatedAt(now)
                         .executionDurationMs(durationMs)
+                        .finalResult(finalResult)
+                        .stepResults(convertStepResults(stepResults))
                         .build();
 
-                log.info("📊 Built ExecutionProgressUpdate - executionDurationMs: {}", update.getExecutionDurationMs());
+                log.info("📊 Built ExecutionProgressUpdate - finalResult: {}, executionDurationMs: {}",
+                        finalResult != null ? "present" : "null", update.getExecutionDurationMs());
                 log.info(
                         "📊 Built ExecutionProgressUpdate - all fields: executionId={}, agentId={}, status={}, currentStep={}, totalSteps={}, startedAt={}, lastUpdatedAt={}, executionDurationMs={}",
                         update.getExecutionId(), update.getAgentId(), update.getStatus(), update.getCurrentStep(),
@@ -1562,5 +1680,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         } catch (NumberFormatException e) {
             return trimmed;
         }
+    }
+
+    private Map<String, Object> convertStepResults(Map<Integer, Object> results) {
+        if (results == null)
+            return null;
+        Map<String, Object> converted = new HashMap<>();
+        results.forEach((k, v) -> converted.put(String.valueOf(k), v));
+        return converted;
     }
 }

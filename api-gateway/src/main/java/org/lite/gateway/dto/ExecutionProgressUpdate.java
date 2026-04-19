@@ -59,6 +59,9 @@ public class ExecutionProgressUpdate {
     private String errorMessage;
     private String errorDetails;
     
+    // Result information
+    private String finalResult;
+    
     // Step results
     private Map<String, Object> stepResults;
     

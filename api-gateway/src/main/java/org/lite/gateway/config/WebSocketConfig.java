@@ -29,6 +29,7 @@ import reactor.core.publisher.Sinks;
 import reactor.util.retry.Retry;
 
 import java.time.Duration;
+import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,9 @@ public class WebSocketConfig {
             .replay()
             .limit(5);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final Map<String, Map<String, String>> sessionSubscriptions = new ConcurrentHashMap<>(); // sessionId ->
+                                                                                                     // (destination ->
+                                                                                                     // subId)
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired(required = false)
@@ -352,17 +356,31 @@ public class WebSocketConfig {
                 sessions.put(sessionId, session);
                 log.info("WebSocket session connected: {}", sessionId);
 
-                // Handle outbound messages - merge health, execution, chat, graph extraction,
-                // and export updates
+                // Handle outbound messages - Filtered by session subscriptions
                 Flux<WebSocketMessage> outbound = Flux.merge(
-                        messagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/health")),
-                        executionMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/execution")),
-                        chatMessagesSink.asFlux().map(msg -> createStompFrame(msg, "/topic/chat")),
+                        messagesSink.asFlux().map(msg -> new AbstractMap.SimpleEntry<>("/topic/health", msg)),
+                        executionMessagesSink.asFlux()
+                                .map(msg -> new AbstractMap.SimpleEntry<>("/topic/execution", msg)),
+                        chatMessagesSink.asFlux().map(msg -> new AbstractMap.SimpleEntry<>("/topic/chat", msg)),
                         graphExtractionMessagesSink.asFlux()
-                                .map(msg -> createStompFrame(msg, "/topic/graph-extraction")),
+                                .map(msg -> new AbstractMap.SimpleEntry<>("/topic/graph-extraction", msg)),
                         collectionExportMessageSink.asFlux()
-                                .map(msg -> createStompFrame(msg, "/topic/collection-export")),
-                        agentNotificationSink.asFlux().map(msg -> createStompFrame(msg, "/topic/notifications")))
+                                .map(msg -> new AbstractMap.SimpleEntry<>("/topic/collection-export", msg)),
+                        agentNotificationSink.asFlux()
+                                .map(msg -> new AbstractMap.SimpleEntry<>("/topic/notifications", msg)))
+                        .onBackpressureBuffer(256)
+                        .filter(entry -> {
+                            Map<String, String> subs = sessionSubscriptions.get(sessionId);
+                            return subs != null && subs.containsKey(entry.getKey());
+                        })
+                        .map(entry -> {
+                            String destination = entry.getKey();
+                            String message = entry.getValue();
+                            String subId = sessionSubscriptions.get(sessionId).get(destination);
+                            String frame = createStompFrame(message, destination, subId);
+                            log.debug("Created STOMP frame for session {} [sub: {}]: {}", sessionId, subId, frame);
+                            return session.textMessage(frame);
+                        })
                         .onBackpressureBuffer(256)
                         .retryWhen(Retry.backoff(3, Duration.ofMillis(100))
                                 .maxBackoff(Duration.ofSeconds(1))
@@ -371,10 +389,6 @@ public class WebSocketConfig {
                                                 sessionId, signal.totalRetries() + 1)))
                         .doOnNext(message -> log.debug("Processing outbound message for session {}: {}",
                                 sessionId, message))
-                        .map(message -> {
-                            log.debug("Created STOMP frame for session {}: {}", sessionId, message);
-                            return session.textMessage(message);
-                        })
                         .doOnSubscribe(sub -> log.info("Session {} subscribed to message stream", sessionId))
                         .doOnCancel(() -> log.info("Session {} message stream cancelled", sessionId))
                         .onErrorContinue((error, obj) -> {
@@ -397,6 +411,7 @@ public class WebSocketConfig {
                         .subscribe(status -> {
                             log.info("WebSocket session {} closed with status: {}", sessionId, status);
                             sessions.remove(sessionId);
+                            sessionSubscriptions.remove(sessionId);
                         });
 
                 return session.send(Flux.merge(inbound, outbound))
@@ -408,19 +423,21 @@ public class WebSocketConfig {
         };
     }
 
-    private String createStompFrame(String message, String destination) {
-        log.debug("Creating STOMP frame for message: {} to destination: {}", message, destination);
+    private String createStompFrame(String message, String destination, String subscriptionId) {
+        log.debug("Creating STOMP frame for message: {} to destination: {} with sub: {}", message, destination,
+                subscriptionId);
         return String.format(
                 """
                         MESSAGE
                         destination:%s
                         content-type:application/json
-                        subscription:sub-0
+                        subscription:%s
                         message-id:%s
 
                         %s
                         \u0000""",
                 destination,
+                subscriptionId != null ? subscriptionId : "sub-0",
                 UUID.randomUUID().toString(),
                 message);
     }
@@ -441,12 +458,22 @@ public class WebSocketConfig {
                                 \u0000""");
             } else if (payload.startsWith("SUBSCRIBE")) {
                 log.debug("Handling SUBSCRIBE frame for session: {}", session.getId());
-                return session.textMessage(
-                        """
-                                RECEIPT
-                                receipt-id:sub-0
+                // Extract destination and id
+                String destination = extractHeader(payload, "destination");
+                String subId = extractHeader(payload, "id");
+                if (destination != null && subId != null) {
+                    sessionSubscriptions.computeIfAbsent(session.getId(), k -> new ConcurrentHashMap<>())
+                            .put(destination, subId);
+                    log.info("Session {} subscribed to {} with id {}", session.getId(), destination, subId);
+                }
 
-                                \u0000""");
+                return session.textMessage(
+                        String.format(
+                                """
+                                        RECEIPT
+                                        receipt-id:%s
+
+                                        \u0000""", subId != null ? subId : "sub-0"));
             } else if (payload.startsWith("SEND")) {
                 // Handle SEND command for document processing
                 log.debug("Handling SEND frame for session: {}", session.getId());
@@ -480,6 +507,16 @@ public class WebSocketConfig {
                             "message:" + e.getMessage() + "\n\n" +
                             "\u0000");
         }
+    }
+
+    private String extractHeader(String payload, String headerName) {
+        String[] lines = payload.split("\n");
+        for (String line : lines) {
+            if (line.trim().startsWith(headerName + ":")) {
+                return line.substring(line.indexOf(':') + 1).trim();
+            }
+        }
+        return null;
     }
 
     private void handleSendCommand(WebSocketSession session, String payload) {

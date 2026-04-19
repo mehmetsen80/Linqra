@@ -140,7 +140,8 @@ public class SecurityConfig implements BeanFactoryAware {
             "/api/tools/**", // All tool-related endpoints (Detail, Catalog, Search)
             "/api/tools/*/execute", // Unified execution endpoint (Public/Private handled by controller)
             "/api/agent-tasks/**", // Agent Task Management & Execution
-            "/ws-linqra/**", // Native Gateway WebSocket
+            "/ws-linqra", // Native Gateway WebSocket base
+            "/ws-linqra/**", // Native Gateway WebSocket subpaths
             "/r/**/api/advising/**", // Public Advising Diagnostic for all routed apps
             "/r/**/api/intel/**" // Public Semantic Knowledge
     );
@@ -178,6 +179,7 @@ public class SecurityConfig implements BeanFactoryAware {
         serverHttpSecurity
                 .securityMatcher(new OrServerWebExchangeMatcher(
                         new PathPatternParserServerWebExchangeMatcher("/r/**"),
+                        new PathPatternParserServerWebExchangeMatcher("/ws-linqra"),
                         new PathPatternParserServerWebExchangeMatcher("/ws-linqra/**")))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)

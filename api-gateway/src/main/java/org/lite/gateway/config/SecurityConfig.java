@@ -41,6 +41,7 @@ import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
+import org.springframework.security.web.server.util.matcher.OrServerWebExchangeMatcher;
 import org.springframework.security.web.server.util.matcher.PathPatternParserServerWebExchangeMatcher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -139,6 +140,7 @@ public class SecurityConfig implements BeanFactoryAware {
             "/api/tools/**", // All tool-related endpoints (Detail, Catalog, Search)
             "/api/tools/*/execute", // Unified execution endpoint (Public/Private handled by controller)
             "/api/agent-tasks/**", // Agent Task Management & Execution
+            "/ws-linqra/**", // Native Gateway WebSocket
             "/r/**/api/advising/**", // Public Advising Diagnostic for all routed apps
             "/r/**/api/intel/**" // Public Semantic Knowledge
     );
@@ -174,7 +176,9 @@ public class SecurityConfig implements BeanFactoryAware {
     @Order(Ordered.HIGHEST_PRECEDENCE)
     public SecurityWebFilterChain proxiedSecurityFilterChain(ServerHttpSecurity serverHttpSecurity) {
         serverHttpSecurity
-                .securityMatcher(new PathPatternParserServerWebExchangeMatcher("/r/**"))
+                .securityMatcher(new OrServerWebExchangeMatcher(
+                        new PathPatternParserServerWebExchangeMatcher("/r/**"),
+                        new PathPatternParserServerWebExchangeMatcher("/ws-linqra/**")))
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(ServerHttpSecurity.CsrfSpec::disable)
                 .addFilterBefore(apiKeyAuthenticationFilter,

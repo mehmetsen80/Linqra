@@ -20,6 +20,8 @@ import reactor.core.publisher.Mono;
 import lombok.RequiredArgsConstructor;
 
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -264,6 +266,8 @@ public abstract class AgentTaskExecutor {
                             .totalSteps(totalSteps)
                             .executionDurationMs(execution.getExecutionDurationMs())
                             .lastUpdatedAt(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC))
+                            .finalResult(extractFinalResultFromResponse(workflow.getResponse()))
+                            .stepResults(extractStepResults(workflow.getResponse()))
                             .build();
 
                     return executionMonitoringService.sendExecutionCompleted(update);
@@ -272,6 +276,110 @@ public abstract class AgentTaskExecutor {
                     log.error("Failed to send completion update: {}", e.getMessage());
                     return Mono.empty();
                 });
+    }
+
+    protected String extractFinalResultFromResponse(LinqResponse response) {
+        if (response == null || response.getResult() == null)
+            return null;
+
+        Object resultObj = response.getResult();
+        if (resultObj instanceof LinqResponse.WorkflowResult wr) {
+            return wr.getFinalResult();
+        } else if (resultObj instanceof Map<?, ?> map) {
+            Object finalResult = map.get("finalResult");
+            if (finalResult != null)
+                return String.valueOf(finalResult);
+
+            // If no explicit finalResult, try to extract from the last step
+            Object steps = map.get("steps");
+            if (steps instanceof List<?> stepList && !stepList.isEmpty()) {
+                Object lastStep = stepList.get(stepList.size() - 1);
+                if (lastStep instanceof Map<?, ?> lastStepMap) {
+                    Object stepResult = lastStepMap.get("result");
+                    return extractFinalResultFromObject(stepResult);
+                }
+            }
+        }
+        return extractFinalResultFromObject(resultObj);
+    }
+
+    protected String extractFinalResultFromObject(Object result) {
+        Object content = smartExtractContent(result);
+        if (content == null)
+            return (result != null ? result.toString() : "");
+        if (content instanceof String)
+            return (String) content;
+        if (content instanceof Map) {
+            try {
+                return objectMapper.writeValueAsString(content);
+            } catch (Exception e) {
+                return content.toString();
+            }
+        }
+        return content.toString();
+    }
+
+    protected Object smartExtractContent(Object result) {
+        if (result instanceof Map<?, ?> resultMap) {
+            return trySmartExtractContent(resultMap);
+        }
+        return result;
+    }
+
+    protected Object trySmartExtractContent(Map<?, ?> map) {
+        // OpenAI Chat format
+        if (map.containsKey("choices")) {
+            Object choices = map.get("choices");
+            if (choices instanceof List<?> list && !list.isEmpty()) {
+                Object firstChoice = list.get(0);
+                if (firstChoice instanceof Map<?, ?> choiceMap) {
+                    Object message = choiceMap.get("message");
+                    if (message instanceof Map<?, ?> messageMap) {
+                        return messageMap.get("content");
+                    }
+                }
+            }
+        }
+        // Anthropic Claude format
+        if (map.containsKey("content")) {
+            Object content = map.get("content");
+            if (content instanceof List<?> list && !list.isEmpty()) {
+                Object first = list.get(0);
+                if (first instanceof Map<?, ?> firstMap && "text".equals(firstMap.get("type"))) {
+                    return firstMap.get("text");
+                }
+            }
+        }
+        // Gemini format
+        if (map.containsKey("candidates")) {
+            Object candidates = map.get("candidates");
+            if (candidates instanceof List<?> list && !list.isEmpty()) {
+                Object first = list.get(0);
+                if (first instanceof Map<?, ?> firstMap) {
+                    Object content = firstMap.get("content");
+                    if (content instanceof Map<?, ?> contentMap) {
+                        Object parts = contentMap.get("parts");
+                        if (parts instanceof List<?> partsList && !partsList.isEmpty()) {
+                            Object firstPart = partsList.get(0);
+                            if (firstPart instanceof Map<?, ?> partMap) {
+                                return partMap.get("text");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // Fallback to "text" or "result" or "response" fields
+        if (map.containsKey("text"))
+            return map.get("text");
+        if (map.containsKey("result"))
+            return map.get("result");
+        if (map.containsKey("response"))
+            return map.get("response");
+ 
+        // Generic fallback: if it's a map but no common provider keys found, return the map itself.
+        // The extractFinalResultFromObject method will handle stringifying it (JSON).
+        return map;
     }
 
     protected Mono<Void> sendFailedUpdate(AgentExecution execution, String errorMessage, String workflowExecutionId) {
@@ -309,4 +417,30 @@ public abstract class AgentTaskExecutor {
         });
     }
 
+    private Map<String, Object> extractStepResults(LinqResponse response) {
+        if (response == null || response.getResult() == null)
+            return null;
+        if (response.getResult() instanceof LinqResponse.WorkflowResult wr) {
+            Map<String, Object> results = new HashMap<>();
+            if (wr.getSteps() != null) {
+                for (LinqResponse.WorkflowStep step : wr.getSteps()) {
+                    results.put(String.valueOf(step.getStep()), step.getResult());
+                }
+            }
+            return results;
+        } else if (response.getResult() instanceof Map<?, ?> map) {
+            // Handle case where it was deserialized as a Map
+            Object steps = map.get("steps");
+            if (steps instanceof List<?> stepList) {
+                Map<String, Object> results = new HashMap<>();
+                for (Object s : stepList) {
+                    if (s instanceof Map<?, ?> smap) {
+                        results.put(String.valueOf(smap.get("step")), smap.get("result"));
+                    }
+                }
+                return results;
+            }
+        }
+        return null;
+    }
 }

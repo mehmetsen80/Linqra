@@ -86,7 +86,9 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                                                 "Workflow {} already in FAILED status, marking AgentExecution as FAILED",
                                                 workflowExecutionId);
                                         return updateExecutionStatus(execution, ExecutionStatus.FAILED,
-                                                "Workflow execution failed", workflowExecutionId);
+                                                "Workflow execution failed", workflowExecutionId)
+                                                .then(sendFailedUpdate(execution, "Workflow execution failed",
+                                                        workflowExecutionId));
                                     }
 
                                     // Otherwise, set to RUNNING and monitor
@@ -109,14 +111,17 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
                             log.error("Embedded workflow execution timed out after {} minutes for task: {}",
                                     timeout.toMinutes(), task.getName());
                             execution.markAsTimeout();
-                            return agentExecutionRepository.save(execution).then(Mono.error(error));
+                            return agentExecutionRepository.save(execution)
+                                    .then(sendFailedUpdate(execution, "Workflow timed out", null))
+                                    .then(Mono.error(error));
                         } else {
                             log.error("Failed to trigger embedded workflow for task: {} after {} retries",
                                     task.getName(), task.getMaxRetries(), error);
                             return updateExecutionStatus(execution, ExecutionStatus.FAILED,
                                     "Embedded workflow trigger failed after " + task.getMaxRetries() + " retries: "
                                             + error.getMessage(),
-                                    null);
+                                    null)
+                                    .then(sendFailedUpdate(execution, "Trigger failed: " + error.getMessage(), null));
                         }
                     });
 

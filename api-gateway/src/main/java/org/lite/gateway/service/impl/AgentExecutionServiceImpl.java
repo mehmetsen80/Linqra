@@ -336,11 +336,17 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                           // if update
                                                                                                           // sending
                                                                                                           // fails
-                                                                                .then(executeWorkflow(savedExecution,
-                                                                                                task, agent))
+                                                                                .then(Mono.fromRunnable(() -> {
+                                                                                        executeWorkflow(savedExecution, task, agent)
+                                                                                                        .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                                                                                                        .subscribe(
+                                                                                                                        null,
+                                                                                                                        error -> log.error("Background workflow execution failed: {}", error.getMessage())
+                                                                                                        );
+                                                                                }))
                                                                                 .then(Mono.defer(() -> {
                                                                                         log.info(
-                                                                                                        "Task execution workflow triggered, now logging audit event for execution: {}",
+                                                                                                        "Task execution workflow triggered asynchronously, now logging audit event for execution: {}",
                                                                                                         executionId);
 
                                                                                         // Build audit context

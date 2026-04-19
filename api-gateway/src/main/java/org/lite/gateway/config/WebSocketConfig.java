@@ -30,6 +30,8 @@ import reactor.util.retry.Retry;
 
 import java.time.Duration;
 import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,6 +65,7 @@ public class WebSocketConfig {
     private final Map<String, Map<String, String>> sessionSubscriptions = new ConcurrentHashMap<>(); // sessionId ->
                                                                                                      // (destination ->
                                                                                                      // subId)
+    private final List<String> recentExecutionMessages = Collections.synchronizedList(new ArrayList<>());
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired(required = false)
@@ -126,14 +129,20 @@ public class WebSocketConfig {
             @Override
             protected boolean sendInternal(@NonNull Message<?> message, long timeout) {
                 try {
-                    // Check if there are any active sessions
+                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
+
+                    // Also keep track of recent messages for manual replay
+                    recentExecutionMessages.add(jsonPayload);
+                    if (recentExecutionMessages.size() > 20) {
+                        recentExecutionMessages.removeFirst();
+                    }
+
                     log.info("📊 WebSocket sessions count: {}", sessions.size());
                     if (sessions.isEmpty()) {
                         log.info("📊 No active WebSocket sessions, skipping execution message emission");
                         return true;
                     }
 
-                    String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
                     log.info("📊 WebSocket sending JSON payload: {}", jsonPayload);
                     Sinks.EmitResult result;
                     int attempts = 0;
@@ -357,9 +366,11 @@ public class WebSocketConfig {
                 log.info("WebSocket session connected: {}", sessionId);
 
                 // Handle outbound messages - Filtered by session subscriptions
+                // Note: Replay sinks are handled manually upon SUBSCRIBE to avoid race
+                // conditions
                 Flux<WebSocketMessage> outbound = Flux.merge(
                         messagesSink.asFlux().map(msg -> new AbstractMap.SimpleEntry<>("/topic/health", msg)),
-                        executionMessagesSink.asFlux()
+                        executionMessagesSink.asFlux().skip(Duration.ofMillis(500))
                                 .map(msg -> new AbstractMap.SimpleEntry<>("/topic/execution", msg)),
                         chatMessagesSink.asFlux().map(msg -> new AbstractMap.SimpleEntry<>("/topic/chat", msg)),
                         graphExtractionMessagesSink.asFlux()
@@ -445,6 +456,10 @@ public class WebSocketConfig {
     private WebSocketMessage handleInboundMessage(WebSocketSession session, WebSocketMessage msg) {
         try {
             String payload = msg.getPayloadAsText();
+            if (payload.trim().isEmpty()) {
+                log.trace("Received heartbeat from session: {}", session.getId());
+                return null; // Ignore heartbeats
+            }
             log.debug("Processing STOMP message: {}", payload);
 
             if (payload.startsWith("CONNECT")) {
@@ -465,6 +480,19 @@ public class WebSocketConfig {
                     sessionSubscriptions.computeIfAbsent(session.getId(), k -> new ConcurrentHashMap<>())
                             .put(destination, subId);
                     log.info("Session {} subscribed to {} with id {}", session.getId(), destination, subId);
+
+                    // If it's the execution topic, manually replay recent messages
+                    if ("/topic/execution".equals(destination)) {
+                        log.info("Replaying {} recent execution messages for session {}",
+                                recentExecutionMessages.size(), session.getId());
+                        synchronized (recentExecutionMessages) {
+                            List<String> messagesToReplay = new ArrayList<>(recentExecutionMessages);
+                            session.send(Flux.fromIterable(messagesToReplay)
+                                    .map(replayMsg -> session
+                                            .textMessage(createStompFrame(replayMsg, destination, subId))))
+                                    .subscribe();
+                        }
+                    }
                 }
 
                 return session.textMessage(
@@ -486,12 +514,17 @@ public class WebSocketConfig {
                                 \u0000""");
             } else if (payload.startsWith("DISCONNECT")) {
                 sessions.remove(session.getId());
+                sessionSubscriptions.remove(session.getId());
                 return session.textMessage(
                         """
                                 RECEIPT
                                 receipt-id:disconnect-0
 
                                 \u0000""");
+            }
+
+            if (payload.trim().isEmpty()) {
+                return null;
             }
 
             return session.textMessage(

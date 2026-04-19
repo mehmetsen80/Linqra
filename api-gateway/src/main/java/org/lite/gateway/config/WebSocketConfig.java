@@ -47,8 +47,8 @@ public class WebSocketConfig {
             .multicast()
             .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> executionMessagesSink = Sinks.many()
-            .replay()
-            .limit(10);
+            .multicast()
+            .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> chatMessagesSink = Sinks.many()
             .multicast()
             .onBackpressureBuffer(1024, false);
@@ -59,8 +59,8 @@ public class WebSocketConfig {
             .multicast()
             .onBackpressureBuffer(1024, false);
     private final Sinks.Many<String> agentNotificationSink = Sinks.many()
-            .replay()
-            .limit(5);
+            .multicast()
+            .onBackpressureBuffer(1024, false);
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, Map<String, String>> sessionSubscriptions = new ConcurrentHashMap<>(); // sessionId ->
                                                                                                      // (destination ->
@@ -370,7 +370,7 @@ public class WebSocketConfig {
                 // conditions
                 Flux<WebSocketMessage> outbound = Flux.merge(
                         messagesSink.asFlux().map(msg -> new AbstractMap.SimpleEntry<>("/topic/health", msg)),
-                        executionMessagesSink.asFlux().skip(Duration.ofMillis(500))
+                        executionMessagesSink.asFlux()
                                 .map(msg -> new AbstractMap.SimpleEntry<>("/topic/execution", msg)),
                         chatMessagesSink.asFlux().map(msg -> new AbstractMap.SimpleEntry<>("/topic/chat", msg)),
                         graphExtractionMessagesSink.asFlux()
@@ -413,7 +413,10 @@ public class WebSocketConfig {
                 Flux<WebSocketMessage> inbound = session.receive()
                         .doOnNext(msg -> log.debug("Received message from session {}: {}",
                                 sessionId, msg.getPayloadAsText()))
-                        .map(msg -> handleInboundMessage(session, msg))
+                        .flatMap(msg -> {
+                            WebSocketMessage response = handleInboundMessage(session, msg);
+                            return response != null ? Mono.just(response) : Mono.empty();
+                        })
                         .doOnError(error -> log.error("Error in inbound stream for session {}: {}",
                                 sessionId, error.getMessage()));
 

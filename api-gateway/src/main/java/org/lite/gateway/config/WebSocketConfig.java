@@ -1,6 +1,8 @@
 package org.lite.gateway.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 
 import org.lite.gateway.service.KnowledgeHubDocumentEmbeddingService;
@@ -12,6 +14,7 @@ import org.lite.gateway.service.ChatExecutionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.ReactiveStringRedisTemplate;
 import org.springframework.lang.NonNull;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
@@ -83,6 +86,11 @@ public class WebSocketConfig {
     @Autowired(required = false)
     private ChatExecutionService chatExecutionService;
 
+    @Autowired
+    private ReactiveStringRedisTemplate redisTemplate;
+
+    private static final String EXECUTION_CHANNEL = "ws:execution:messages";
+
     @Bean("healthMessageChannel")
     public MessageChannel messageChannel(ObjectMapper objectMapper) {
         return new AbstractMessageChannel() {
@@ -137,9 +145,13 @@ public class WebSocketConfig {
                         recentExecutionMessages.removeFirst();
                     }
 
+                    // Always publish to Redis for cluster-wide synchronization
+                    redisTemplate.convertAndSend(EXECUTION_CHANNEL, jsonPayload)
+                            .subscribe(count -> log.debug("Published execution message to {} pods via Redis", count));
+
                     log.info("📊 WebSocket sessions count: {}", sessions.size());
                     if (sessions.isEmpty()) {
-                        log.info("📊 No active WebSocket sessions, skipping execution message emission");
+                        log.debug("📊 No local active WebSocket sessions, message still broadcasted via Redis");
                         return true;
                     }
 
@@ -435,6 +447,16 @@ public class WebSocketConfig {
                         });
             }
         };
+    }
+
+    @PostConstruct
+    public void subscribeToRedisChannels() {
+        redisTemplate.listenToChannel(EXECUTION_CHANNEL)
+                .map(message -> message.getMessage())
+                .subscribe(jsonPayload -> {
+                    log.debug("Received execution message from Redis: {}", jsonPayload);
+                    executionMessagesSink.tryEmitNext(jsonPayload);
+                });
     }
 
     private String createStompFrame(String message, String destination, String subscriptionId) {

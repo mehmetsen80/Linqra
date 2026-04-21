@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -181,7 +182,18 @@ public class TeamContextService {
             ReactiveJwtDecoder decoder = isKeycloakToken ? keycloakJwtDecoder : userJwtDecoder;
 
             return decoder.decode(token)
-                    .map(this::extractAllTeamsFromJwt)
+                    .map(jwt -> {
+                        List<String> teams = extractAllTeamsFromJwt(jwt);
+                        if (isSuperAdmin(jwt)) {
+                            log.info("👑 Super Admin detected in token, granting ALL_TEAMS_BYPASS");
+                            if (!teams.contains("ALL_TEAMS_BYPASS")) {
+                                List<String> mutableTeams = new ArrayList<>(teams);
+                                mutableTeams.add("ALL_TEAMS_BYPASS");
+                                return mutableTeams;
+                            }
+                        }
+                        return teams;
+                    })
                     .onErrorResume(e -> getAllTeamsFromSecurityContext());
         }
 
@@ -191,15 +203,118 @@ public class TeamContextService {
     private Mono<List<String>> getAllTeamsFromSecurityContext() {
         return ReactiveSecurityContextHolder.getContext()
                 .map(SecurityContext::getAuthentication)
-                .map(Authentication::getPrincipal)
-                .flatMap(principal -> {
-                    if (principal instanceof Jwt jwt) {
-                        return Mono.just(extractAllTeamsFromJwt(jwt));
-                    } else if (principal instanceof String teamId) {
-                        return Mono.just(List.of(teamId));
+                .flatMap(auth -> {
+                    if (auth == null || auth.getPrincipal() == null) {
+                        return Mono.just(Collections.<String>emptyList());
                     }
-                    return Mono.just(Collections.emptyList());
+
+                    // Check for admin role in authorities first (for API key bypass cases)
+                    boolean hasAdminRole = auth.getAuthorities().stream()
+                            .anyMatch(a -> a.getAuthority().equals("ROLE_GATEWAY_ADMIN") || 
+                                          a.getAuthority().equals("ROLE_ADMIN") ||
+                                          a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+
+                    Object principal = auth.getPrincipal();
+                    if (principal instanceof Jwt jwt) {
+                        List<String> teams = extractAllTeamsFromJwt(jwt);
+                        if (hasAdminRole || isSuperAdmin(jwt)) {
+                            if (!teams.contains("ALL_TEAMS_BYPASS")) {
+                                List<String> mutableTeams = new ArrayList<>(teams);
+                                mutableTeams.add("ALL_TEAMS_BYPASS");
+                                return Mono.just(mutableTeams);
+                            }
+                        }
+                        return Mono.just(teams);
+                    } else if (principal instanceof String principalStr) {
+                        if (hasAdminRole) {
+                            log.info("🔓 Admin role detected via principal string, granting ALL_TEAMS_BYPASS");
+                            return Mono.just(List.of(principalStr, "ALL_TEAMS_BYPASS"));
+                        }
+                        return Mono.just(List.of(principalStr));
+                    }
+                    
+                    if (hasAdminRole) {
+                        return Mono.just(List.of("ALL_TEAMS_BYPASS"));
+                    }
+                    
+                    return Mono.just(Collections.<String>emptyList());
                 });
+    }
+
+    public boolean isSuperAdmin(Jwt jwt) {
+        List<String> roles = new ArrayList<>();
+        
+        log.info("🛡️ Checking roles in token for user: {}", jwt.getSubject());
+        // Log all claims for one-time diagnostic if needed (be careful with sensitive data)
+        // log.debug("Token Claims: {}", jwt.getClaims());
+
+        try {
+            // 1. Check realm_access.roles (Keycloak format)
+            if (jwt.hasClaim("realm_access")) {
+                Object realmAccess = jwt.getClaim("realm_access");
+                if (realmAccess instanceof Map<?, ?> map) {
+                    Object rolesObj = map.get("roles");
+                    if (rolesObj instanceof List<?> list) {
+                        list.forEach(r -> roles.add(r.toString()));
+                    }
+                }
+            }
+
+            // 2. Check resource_access (Keycloak client-specific)
+            if (jwt.hasClaim("resource_access")) {
+                Object resourceAccess = jwt.getClaim("resource_access");
+                if (resourceAccess instanceof Map<?, ?> map) {
+                    map.forEach((client, access) -> {
+                        if (access instanceof Map<?, ?> accessMap) {
+                            Object clientRoles = accessMap.get("roles");
+                            if (clientRoles instanceof List<?> list) {
+                                list.forEach(r -> roles.add(r.toString()));
+                            }
+                        }
+                    });
+                }
+            }
+
+            // 3. Check roles or authorities claim (Spring/OIDC standard)
+            if (jwt.hasClaim("roles")) {
+                List<String> directRoles = jwt.getClaimAsStringList("roles");
+                if (directRoles != null) roles.addAll(directRoles);
+            }
+            if (jwt.hasClaim("authorities")) {
+                List<String> authorities = jwt.getClaimAsStringList("authorities");
+                if (authorities != null) roles.addAll(authorities);
+            }
+            // 4. Check groups claim (Keycloak/Standard)
+            if (jwt.hasClaim("groups")) {
+                List<String> groups = jwt.getClaimAsStringList("groups");
+                if (groups != null) roles.addAll(groups);
+            }
+        } catch (Exception e) {
+            log.error("❌ Error extracting roles from token: {}", e.getMessage());
+        }
+
+        log.info("🔑 Found roles in token: {}", roles);
+        if (roles.isEmpty()) {
+            log.warn("⚠️ No roles found. Available claims: {}", jwt.getClaims().keySet());
+        }
+
+        boolean isAdmin = roles.stream().anyMatch(r -> 
+            r.equalsIgnoreCase("SUPER_ADMIN") || 
+            r.equalsIgnoreCase("ADMIN") || 
+            r.equalsIgnoreCase("ROLE_SUPER_ADMIN") ||
+            r.equalsIgnoreCase("ROLE_ADMIN") ||
+            r.equalsIgnoreCase("gateway_admin") ||
+            r.equalsIgnoreCase("gateway_admin_realm") ||
+            r.equalsIgnoreCase("linqra_admin")
+        );
+
+        if (isAdmin) {
+            log.info("✅ User confirmed as ADMIN/SUPER_ADMIN");
+        } else {
+            log.warn("⚠️ User does NOT have administrative roles. Access will be team-restricted.");
+        }
+
+        return isAdmin;
     }
 
     private List<String> extractAllTeamsFromJwt(Jwt jwt) {

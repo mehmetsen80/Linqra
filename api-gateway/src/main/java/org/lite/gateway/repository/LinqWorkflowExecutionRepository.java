@@ -12,10 +12,33 @@ import java.time.LocalDateTime;
 @Repository
 public interface LinqWorkflowExecutionRepository extends ReactiveMongoRepository<LinqWorkflowExecution, String> {
     Flux<LinqWorkflowExecution> findByWorkflowId(String workflowId, Sort sort);
+
     Flux<LinqWorkflowExecution> findByTeamId(String teamId, Sort sort);
+
+    Flux<LinqWorkflowExecution> findByTeamIdIn(java.util.Collection<String> teamIds, Sort sort);
+
     Mono<LinqWorkflowExecution> findByIdAndTeamId(String id, String teamId);
+
     Flux<LinqWorkflowExecution> findByWorkflowIdAndTeamId(String workflowId, String teamId, Sort sort);
+
     Mono<LinqWorkflowExecution> findByAgentExecutionId(String agentExecutionId);
+
     Flux<LinqWorkflowExecution> findByAgentTaskId(String agentTaskId, Sort sort);
+
+    Flux<LinqWorkflowExecution> findByTeamIdAndAgentTaskId(String teamId, String agentTaskId, Sort sort);
+
+    Flux<LinqWorkflowExecution> findByTeamIdInAndAgentTaskId(java.util.Collection<String> teamIds, String agentTaskId,
+            Sort sort);
+
     Flux<LinqWorkflowExecution> findByTeamIdAndExecutedAtBetween(String teamId, LocalDateTime from, LocalDateTime to);
+
+    Mono<Long> countByTeamId(String teamId);
+
+    Mono<Long> countByTeamIdIn(java.util.Collection<String> teamIds);
+
+    Mono<Long> countByTeamIdAndAgentTaskId(String teamId, String agentTaskId);
+
+    Mono<Long> countByTeamIdInAndAgentTaskId(java.util.Collection<String> teamIds, String agentTaskId);
+
+    Mono<Long> countByAgentTaskId(String agentTaskId);
 }

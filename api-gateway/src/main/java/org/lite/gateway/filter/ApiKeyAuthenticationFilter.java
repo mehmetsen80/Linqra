@@ -58,6 +58,7 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return chain.filter(exchange);
         }
         String path = exchange.getRequest().getPath().value();
+        log.info("ApiKey Filter checking path: {}", path);
 
         // [ADMIN EARLY BYPASS] If an administrator token is present, skip all API
         // key/WebUI checks
@@ -91,7 +92,9 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
                     || path.contains("/auth/") 
                     || path.contains("-ws") 
                     || path.contains("/api/advising/") 
+                    || path.contains("/api/datasets/") 
                     || path.contains("/api/intel/") 
+                    || path.contains("/api/academic/") 
                     || !path.startsWith("/r/"))) {
             return chain.filter(exchange);
         }

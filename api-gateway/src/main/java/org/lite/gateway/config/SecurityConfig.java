@@ -143,7 +143,9 @@ public class SecurityConfig implements BeanFactoryAware {
             "/ws-linqra", // Native Gateway WebSocket base
             "/ws-linqra/**", // Native Gateway WebSocket subpaths
             "/r/**/api/advising/**", // Public Advising Diagnostic for all routed apps
-            "/r/**/api/intel/**" // Public Semantic Knowledge
+            "/r/**/api/intel/**", // Public Semantic Knowledge
+            "/r/**/api/academic/**", // Public Academic Intelligence (AAS/BAS Mappings)
+            "/r/**/api/datasets/**" // Public Dataset Analytics for Workforce Insights
     );
 
     // List of public endpoints where ONLY GET methods are permitted (e.g.

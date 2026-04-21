@@ -990,9 +990,90 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     @Override
-    public Flux<LinqWorkflowExecution> getTeamExecutions(String teamId) {
-        return executionRepository.findByTeamId(teamId, Sort.by(Sort.Direction.DESC, "executedAt"))
-                .doOnError(error -> log.error("Error fetching team executions: {}", error.getMessage()));
+    public Flux<LinqWorkflowExecution> getTeamExecutions(String teamId, String agentTaskId, int limit) {
+        log.info("🔍 Fetching executions for team: {} (agentTaskId: {})", teamId, agentTaskId);
+        if ("ALL_TEAMS_BYPASS".equals(teamId)) {
+            return executionRepository.findByAgentTaskId(agentTaskId, Sort.by(Sort.Direction.DESC, "executedAt"))
+                    .take(limit);
+        }
+        return executionRepository.findByTeamIdAndAgentTaskId(teamId, agentTaskId,
+                Sort.by(Sort.Direction.DESC, "executedAt"))
+                .take(limit);
+    }
+
+    @Override
+    public Flux<LinqWorkflowExecution> getTeamExecutions(Collection<String> teamIds, String agentTaskId,
+            int limit) {
+        log.info("🔍 Fetching executions for multiple teams: {} (agentTaskId: {})", teamIds, agentTaskId);
+
+        boolean isAdmin = teamIds != null && teamIds.contains("ALL_TEAMS_BYPASS");
+
+        Flux<LinqWorkflowExecution> flux;
+        if (isAdmin) {
+            log.info("🔓 Admin bypass active for execution retrieval");
+            if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
+                flux = executionRepository.findAll(Sort.by(Sort.Direction.DESC, "executedAt"));
+            } else {
+                flux = executionRepository.findByAgentTaskId(agentTaskId, Sort.by(Sort.Direction.DESC, "executedAt"));
+            }
+            return flux.take(limit);
+        }
+        if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
+            flux = executionRepository.findByTeamIdIn(teamIds, Sort.by(Sort.Direction.DESC, "executedAt"));
+        } else {
+            flux = executionRepository.findByTeamIdInAndAgentTaskId(teamIds, agentTaskId,
+                    Sort.by(Sort.Direction.DESC, "executedAt"));
+        }
+
+        return flux.take(limit)
+                .collectList()
+                .flatMapMany(list -> {
+                    if (list.isEmpty()) {
+                        log.warn(
+                                "⚠️ No executions found for teams {} and agentTaskId {}. Checking if data exists globally...",
+                                teamIds, agentTaskId);
+                        if (!isAdmin && agentTaskId != null) {
+                            return executionRepository.countByAgentTaskId(agentTaskId)
+                                    .flatMapMany(count -> {
+                                        if (count > 0) {
+                                            log.error("🛑 DATA EXISTS (count: {}) but is HIDDEN by team filters for user teams: {}", count, teamIds);
+                                        } else {
+                                            log.error("❌ DATA DOES NOT EXIST in database for agentTaskId: {}", agentTaskId);
+                                        }
+                                        return Flux.empty();
+                                    });
+                        }
+                    }
+                    return Flux.fromIterable(list);
+                });
+    }
+
+    @Override
+    public Mono<Long> getTeamExecutionsCount(String teamId, String agentTaskId) {
+        if ("ALL_TEAMS_BYPASS".equals(teamId)) {
+            if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
+                return executionRepository.count();
+            }
+            return executionRepository.countByAgentTaskId(agentTaskId);
+        }
+        return executionRepository.countByTeamIdAndAgentTaskId(teamId, agentTaskId);
+    }
+
+    @Override
+    public Mono<Long> getTeamExecutionsCount(java.util.Collection<String> teamIds, String agentTaskId) {
+        boolean isAdmin = teamIds != null && teamIds.contains("ALL_TEAMS_BYPASS");
+        
+        if (isAdmin) {
+            if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
+                return executionRepository.count();
+            }
+            return executionRepository.countByAgentTaskId(agentTaskId);
+        }
+
+        if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
+            return executionRepository.countByTeamIdIn(teamIds);
+        }
+        return executionRepository.countByTeamIdInAndAgentTaskId(teamIds, agentTaskId);
     }
 
     @Override

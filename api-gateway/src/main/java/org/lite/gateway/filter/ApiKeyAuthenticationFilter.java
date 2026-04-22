@@ -82,20 +82,8 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             }
         }
 
-        // Skip API key for all non-linq, non-route, non-agent-tasks and non-api-tools
-        // paths
-        // Also skip for MinIO bucket paths (knowledge-hub, audit)
-        if ((!path.startsWith("/linq") || path.contains("knowledge-hub") || path.contains("audit"))
-                && !path.startsWith("/api/agent-tasks/")
-                && !path.startsWith("/api/tools/")
-                && (path.contains("/whatsapp/webhook") 
-                    || path.contains("/auth/") 
-                    || path.contains("-ws") 
-                    || path.contains("/api/advising/") 
-                    || path.contains("/api/datasets/") 
-                    || path.contains("/api/intel/") 
-                    || path.contains("/api/academic/") 
-                    || !path.startsWith("/r/"))) {
+        // [PUBLIC PATH BYPASS] Skip API key for public endpoints
+        if (isPublicPath(path)) {
             return chain.filter(exchange);
         }
 
@@ -342,5 +330,30 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             log.error("Error validating team in token node: {}", e.getMessage());
             return false;
         }
+    }
+
+    private boolean isPublicPath(String path) {
+        // Core public paths
+        if (path.contains("/whatsapp/webhook") || path.contains("/auth/") || path.contains("-ws")) {
+            return true;
+        }
+
+        // Public Intelligence/Advising paths
+        if (path.contains("/api/advising/") || path.contains("/api/datasets/") || 
+            path.contains("/api/intel/") || path.contains("/api/academic/")) {
+            return true;
+        }
+
+        // Non-routed paths (native gateway endpoints that are not /linq)
+        if (!path.startsWith("/r/") && !path.startsWith("/linq")) {
+            return true;
+        }
+
+        // Health checks
+        if (path.endsWith("/health") || path.endsWith("/health/")) {
+            return true;
+        }
+
+        return false;
     }
 }

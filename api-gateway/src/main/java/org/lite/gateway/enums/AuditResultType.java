@@ -5,5 +5,6 @@ public enum AuditResultType {
     FAILED,
     DENIED,
     PARTIAL_SUCCESS,
-    SKIPPED
+    SKIPPED,
+    CANCELLED
 }

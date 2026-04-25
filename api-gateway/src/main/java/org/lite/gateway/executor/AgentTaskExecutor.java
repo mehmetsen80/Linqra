@@ -158,14 +158,19 @@ public abstract class AgentTaskExecutor {
      * Monitor workflow completion and update AgentExecution status accordingly
      */
     protected Mono<Void> monitorWorkflowCompletion(String workflowExecutionId, AgentExecution execution) {
-        log.info("Starting to monitor workflow completion for execution: {} (workflow: {})",
-                execution.getExecutionId(), workflowExecutionId);
+        return agentExecutionRepository.findByExecutionId(execution.getExecutionId())
+                .flatMap(currentExecution -> {
+                    if (currentExecution.getStatus() == ExecutionStatus.CANCELLED) {
+                        log.info("🚫 Execution {} was cancelled externally. Stopping monitoring loop.",
+                                execution.getExecutionId());
+                        return Mono.empty();
+                    }
 
-        return workflowExecutionService.getExecution(workflowExecutionId)
-                .flatMap(workflowExecution -> {
-                    org.lite.gateway.model.ExecutionStatus status = workflowExecution.getStatus();
-                    log.info("Workflow {} status: {} for AgentExecution: {}", workflowExecutionId, status,
-                            execution.getExecutionId());
+                    return workflowExecutionService.getExecution(workflowExecutionId)
+                            .flatMap(workflowExecution -> {
+                                org.lite.gateway.model.ExecutionStatus status = workflowExecution.getStatus();
+                                log.info("Workflow {} status: {} for AgentExecution: {}", workflowExecutionId, status,
+                                        execution.getExecutionId());
 
                     if (org.lite.gateway.model.ExecutionStatus.SUCCESS.equals(status)) {
                         log.info(
@@ -209,6 +214,12 @@ public abstract class AgentTaskExecutor {
                         return updateExecutionStatus(execution, ExecutionStatus.COMPLETED,
                                 "Agent task completed successfully", workflowExecutionId)
                                 .then(sendCompletionUpdate(execution, workflowExecutionId));
+                    } else if (org.lite.gateway.model.ExecutionStatus.CANCELLED.equals(status)) {
+                        log.info("🚫 Workflow {} was CANCELLED, marking AgentExecution {} as CANCELLED",
+                                workflowExecutionId, execution.getExecutionId());
+                        return updateExecutionStatus(execution, ExecutionStatus.CANCELLED,
+                                "Workflow execution cancelled", workflowExecutionId)
+                                .then(sendCancelledUpdate(execution, "Workflow execution cancelled", workflowExecutionId));
                     } else if (org.lite.gateway.model.ExecutionStatus.FAILED.equals(status)) {
                         log.error("Workflow {} failed, marking AgentExecution {} as FAILED", workflowExecutionId,
                                 execution.getExecutionId());
@@ -231,15 +242,16 @@ public abstract class AgentTaskExecutor {
                         log.error("Unknown workflow status: {} for workflow: {}. Status type: {}. Marking as FAILED.",
                                 status, workflowExecutionId, status != null ? status.getClass().getName() : "null");
                         // If we can't determine status, mark as failed for safety
-                        return updateExecutionStatus(execution, ExecutionStatus.FAILED,
-                                "Workflow monitoring failed: unknown status " + status, workflowExecutionId);
-                    }
-                })
-                .onErrorResume(error -> {
-                    log.error("Error monitoring workflow completion for {}: {}", workflowExecutionId,
-                            error.getMessage());
-                    return updateExecutionStatus(execution, ExecutionStatus.FAILED,
-                            "Error monitoring workflow: " + error.getMessage(), workflowExecutionId);
+                                return updateExecutionStatus(execution, ExecutionStatus.FAILED,
+                                        "Workflow monitoring failed: unknown status " + status, workflowExecutionId);
+                            }
+                        })
+                        .onErrorResume(error -> {
+                            log.error("Error monitoring workflow completion for {}: {}", workflowExecutionId,
+                                    error.getMessage());
+                            return updateExecutionStatus(execution, ExecutionStatus.FAILED,
+                                    "Error monitoring workflow: " + error.getMessage(), workflowExecutionId);
+                        });
                 });
     }
 
@@ -380,6 +392,41 @@ public abstract class AgentTaskExecutor {
         // Generic fallback: if it's a map but no common provider keys found, return the map itself.
         // The extractFinalResultFromObject method will handle stringifying it (JSON).
         return map;
+    }
+
+    protected Mono<Void> sendCancelledUpdate(AgentExecution execution, String message, String workflowExecutionId) {
+        if (executionMonitoringService == null)
+            return Mono.empty();
+
+        Mono<Integer> totalStepsMono = Mono.just(0);
+        if (workflowExecutionId != null) {
+            totalStepsMono = workflowExecutionService.getExecution(workflowExecutionId)
+                    .map(workflow -> {
+                        if (workflow.getRequest() != null && workflow.getRequest().getQuery() != null
+                                && workflow.getRequest().getQuery().getWorkflow() != null) {
+                            return workflow.getRequest().getQuery().getWorkflow().size();
+                        }
+                        return 0;
+                    })
+                    .onErrorReturn(0);
+        }
+
+        return totalStepsMono.flatMap(totalSteps -> {
+            ExecutionProgressUpdate update = ExecutionProgressUpdate.builder()
+                    .executionId(execution.getExecutionId())
+                    .agentId(execution.getAgentId())
+                    .agentName(execution.getAgentName())
+                    .taskId(execution.getTaskId())
+                    .taskName(execution.getTaskName())
+                    .status("CANCELLED")
+                    .currentStep(0)
+                    .totalSteps(totalSteps)
+                    .executionDurationMs(execution.getExecutionDurationMs())
+                    .lastUpdatedAt(java.time.LocalDateTime.now(java.time.ZoneOffset.UTC))
+                    .build();
+
+            return executionMonitoringService.sendExecutionFailed(update, message);
+        });
     }
 
     protected Mono<Void> sendFailedUpdate(AgentExecution execution, String errorMessage, String workflowExecutionId) {

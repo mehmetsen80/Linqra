@@ -156,24 +156,7 @@ public class WebSocketConfig {
                     }
 
                     log.info("📊 WebSocket sending JSON payload: {}", jsonPayload);
-                    Sinks.EmitResult result;
-                    int attempts = 0;
-                    do {
-                        result = executionMessagesSink.tryEmitNext(jsonPayload);
-                        if (result.isFailure()) {
-                            attempts++;
-                            log.warn("Attempt {} failed to emit execution message. Reason: {}. Retrying...",
-                                    attempts, result.name());
-                            Thread.sleep(100); // Small delay before retry
-                        }
-                    } while (result.isFailure() && attempts < 3);
-
-                    if (result.isFailure()) {
-                        log.error("Failed to emit execution message after {} attempts. Reason: {}. Payload: {}",
-                                attempts, result.name(), jsonPayload);
-                        return false;
-                    }
-                    log.debug("Successfully emitted execution message after {} attempts", attempts + 1);
+                    log.debug("Successfully published execution message to Redis and local sinks via loopback");
                     return true;
                 } catch (Exception e) {
                     log.error("Error converting execution message to JSON", e);

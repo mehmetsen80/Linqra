@@ -77,6 +77,7 @@ public class S3LifecycleConfigurationServiceImpl {
                                         .builder()
                                         .bucket(storageProperties.getBucketName())
                                         .lifecycleConfiguration(lifecycleConfig)
+                                        .checksumAlgorithm(ChecksumAlgorithm.SHA256)
                                         .build();
 
                         // Execute asynchronously but log result

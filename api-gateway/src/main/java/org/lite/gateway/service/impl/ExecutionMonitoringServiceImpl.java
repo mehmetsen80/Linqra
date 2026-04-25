@@ -54,6 +54,19 @@ public class ExecutionMonitoringServiceImpl implements ExecutionMonitoringServic
     public Mono<Void> sendMemoryUpdate(ExecutionProgressUpdate update) {
         return sendUpdate(update.withMemoryUsage(ExecutionProgressUpdate.MemoryUsage.fromCurrentMemory()));
     }
+
+    @Override
+    public Mono<Void> sendResultChunk(ExecutionProgressUpdate update, String chunk) {
+        update.setChunk(chunk);
+        return sendUpdate(update.withStatus("STREAMING"));
+    }
+
+    @Override
+    public Mono<Void> sendResultChunkWithAccumulated(ExecutionProgressUpdate update, String chunk, String accumulated) {
+        update.setChunk(chunk);
+        update.setAccumulated(accumulated);
+        return sendUpdate(update.withStatus("STREAMING"));
+    }
     
     private Mono<Void> sendUpdate(ExecutionProgressUpdate update) {
         log.info("📊 sendUpdate method called with executionId: {}", update.getExecutionId());

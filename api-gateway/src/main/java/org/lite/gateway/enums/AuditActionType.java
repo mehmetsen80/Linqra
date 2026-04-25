@@ -8,6 +8,7 @@ public enum AuditActionType {
     CREATE,
     UPDATE,
     DELETE,
-    EXPORT
+    EXPORT,
+    CANCEL
 }
 

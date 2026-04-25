@@ -36,6 +36,16 @@ public interface LinqLlmModelService {
     Mono<LinqResponse> executeLlmRequest(LinqRequest request, LinqLlmModel llmModel);
 
     /**
+     * Stream an LLM request using the specified LinqLlmModel configuration
+     * 
+     * @param request  The LinqRequest containing the query, payload, and LLM
+     *                 configuration
+     * @param llmModel The LinqLlmModel configuration to use for the request
+     * @return Flux of String chunks from the LLM response
+     */
+    Flux<String> streamLlmRequest(LinqRequest request, LinqLlmModel llmModel);
+
+    /**
      * Find a LinqLlmModel configuration by ID
      * 
      * @param id The ID of the LinqLlmModel to find

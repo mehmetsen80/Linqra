@@ -53,6 +53,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private final AuditLogHelper auditLogHelper;
     private final ObjectMapper objectMapper;
 
+    // Registry for active agent executions to allow cancellation
+    private final Map<String, WorkflowExecutionContext> activeContexts = new ConcurrentHashMap<>();
+
     @Override
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {
         LocalDateTime startTime = LocalDateTime.now();
@@ -62,6 +65,15 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         Map<String, Object> globalParams = request.getQuery().getParams();
         log.info("🚀 Starting workflow execution with global params: {}", globalParams);
         WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
+
+        // Register for cancellation if agentExecutionId is present
+        String agentExecutionId = null;
+        if (globalParams != null && globalParams.containsKey("agentExecutionId")) {
+            agentExecutionId = String.valueOf(globalParams.get("agentExecutionId"));
+            activeContexts.put(agentExecutionId, context);
+            log.info("📋 Registered workflow context for agentExecutionId: {}", agentExecutionId);
+        }
+        final String finalAgentExecutionId = agentExecutionId;
 
         // Extract teamId from params (must be present from controller/executor)
         String teamId;
@@ -324,8 +336,77 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                         })
                                         .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for step {}",
                                                 step.getStep()))
-                                        .flatMap(llmModel -> linqLlmModelService.executeLlmRequest(stepRequest,
-                                                llmModel))
+                                        .flatMap(llmModel -> {
+                                            // Check if we should stream this step
+                                            // 1. Explicitly requested via 'stream' flag
+                                            // 2. Default: Last step if it's an LLM target and 'stream' is not
+                                            // explicitly false
+                                            boolean isLlmTarget = llmModel != null &&
+                                                    (llmModel.getModelCategory().equals("openai-chat") ||
+                                                            llmModel.getModelCategory().equals("azure-openai-chat") ||
+                                                            llmModel.getModelCategory().equals("gemini-chat") ||
+                                                            llmModel.getModelCategory().equals("claude-chat") ||
+                                                            llmModel.getModelCategory().equals("cohere-chat") ||
+                                                            llmModel.getModelCategory().equals("ollama-chat"));
+
+                                            boolean shouldStream = Boolean.TRUE.equals(step.getStream()) ||
+                                                    (step.getStream() == null && step.getStep() == steps.size()
+                                                            && isLlmTarget);
+
+                                            if (shouldStream) {
+                                                log.info("🌊 Streaming LLM step {} (target: {})...", step.getStep(),
+                                                        step.getTarget());
+                                                StringBuilder fullContent = new StringBuilder();
+                                                ExecutionProgressUpdate streamUpdate = buildProgressUpdate(request,
+                                                        step,
+                                                        steps.size(), stepResults);
+
+                                                return linqLlmModelService.streamLlmRequest(stepRequest, llmModel)
+                                                        .concatMap(chunk -> {
+                                                            if (context.isStopped()) {
+                                                                log.warn(
+                                                                        "🛑 Workflow execution cancelled during LLM streaming (agentExecutionId: {})",
+                                                                        finalAgentExecutionId);
+                                                                return Mono.error(new RuntimeException(
+                                                                        "Workflow execution cancelled"));
+                                                            }
+
+                                                            String currentFull = fullContent.toString();
+                                                            String delta;
+
+                                                            // Delta detection: if chunk starts with previous content,
+                                                            // it's cumulative
+                                                            if (!currentFull.isEmpty()
+                                                                    && chunk.startsWith(currentFull)) {
+                                                                delta = chunk.substring(currentFull.length());
+                                                                fullContent.setLength(0);
+                                                                fullContent.append(chunk);
+                                                            } else {
+                                                                // It's a true delta or the start of the stream
+                                                                delta = chunk;
+                                                                fullContent.append(chunk);
+                                                            }
+
+                                                            if (delta.isEmpty()) {
+                                                                return Mono.empty();
+                                                            }
+
+                                                            return executionMonitoringService
+                                                                    .sendResultChunkWithAccumulated(streamUpdate, delta,
+                                                                            fullContent.toString())
+                                                                    .then(Mono.just(delta));
+                                                        })
+                                                        .collectList()
+                                                        .map(chunks -> {
+                                                            String finalStr = fullContent.toString();
+                                                            LinqResponse resp = new LinqResponse();
+                                                            resp.setResult(finalStr);
+                                                            return resp;
+                                                        });
+                                            }
+
+                                            return linqLlmModelService.executeLlmRequest(stepRequest, llmModel);
+                                        })
                                         .doOnNext(stepResponse -> log.info(
                                                 "✅ LLM request executed successfully for step {}", step.getStep()))
                                         .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
@@ -501,6 +582,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                 .thenReturn(response);
                     })
                     .doFinally(signalType -> {
+                        if (finalAgentExecutionId != null) {
+                            activeContexts.remove(finalAgentExecutionId);
+                            log.info("📋 Unregistered workflow context for agentExecutionId: {} (Signal: {})",
+                                    finalAgentExecutionId, signalType);
+                        }
+
                         // Clean up memory-intensive data structures after workflow completion
                         // Note: stepResults and globalParams are copied to response, so they can be
                         // safely cleared
@@ -518,6 +605,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         // Log workflow execution failure
                         long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
 
+                        boolean isCancellation = error.getMessage() != null
+                                && error.getMessage().toLowerCase().contains("cancelled");
+
                         Map<String, Object> errorContext = new HashMap<>();
                         errorContext.put("workflowId", workflowId);
                         errorContext.put("teamId", finalTeamId);
@@ -532,16 +622,18 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         }
 
                         Mono<Void> failureAuditLog = auditLogHelper.logDetailedEvent(
-                                AuditEventType.WORKFLOW_EXECUTION_FAILED,
+                                isCancellation ? AuditEventType.WORKFLOW_EXECUTION_CANCELLED
+                                        : AuditEventType.WORKFLOW_EXECUTION_FAILED,
                                 AuditActionType.READ,
                                 AuditResourceType.WORKFLOW,
                                 workflowId,
-                                String.format("Workflow execution failed after %d ms: %s", durationMs,
-                                        error.getMessage()),
+                                isCancellation ? String.format("Workflow execution cancelled after %d ms", durationMs)
+                                        : String.format("Workflow execution failed after %d ms: %s", durationMs,
+                                                error.getMessage()),
                                 errorContext,
                                 null,
                                 null,
-                                AuditResultType.FAILED)
+                                isCancellation ? AuditResultType.CANCELLED : AuditResultType.FAILED)
                                 .doOnError(auditError -> log.error(
                                         "Failed to log audit event (workflow execution failed): {}",
                                         auditError.getMessage(), auditError))
@@ -552,7 +644,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                             LinqResponse errorResponse = new LinqResponse();
                             LinqResponse.Metadata metadata = new LinqResponse.Metadata();
                             metadata.setSource("workflow");
-                            metadata.setStatus("error");
+                            metadata.setStatus(isCancellation ? "cancelled" : "error");
                             // Try to use teamId from params on error path as well
                             String fallbackTeamId = null;
                             if (request.getQuery() != null && request.getQuery().getParams() != null) {
@@ -615,9 +707,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
      */
     private Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response,
             Map<String, Object> agentContext) {
-        ExecutionStatus finalStatus = "success".equals(response.getMetadata().getStatus())
-                ? ExecutionStatus.SUCCESS
-                : ExecutionStatus.FAILED;
+        ExecutionStatus finalStatus;
+        if ("success".equals(response.getMetadata().getStatus())) {
+            finalStatus = ExecutionStatus.SUCCESS;
+        } else if ("cancelled".equals(response.getMetadata().getStatus())) {
+            finalStatus = ExecutionStatus.CANCELLED;
+        } else {
+            finalStatus = ExecutionStatus.FAILED;
+        }
 
         long computedDuration = 0L;
         if (response.getMetadata() != null && response.getMetadata().getWorkflowMetadata() != null) {
@@ -971,7 +1068,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             execution.setAgentName((String) agentContext.get("agentName"));
             execution.setAgentTaskId((String) agentContext.get("agentTaskId"));
             execution.setAgentTaskName((String) agentContext.get("agentTaskName"));
-            execution.setAgentExecutionId((String) agentContext.get("agentExecutionId"));
+            String agentExecutionId = (String) agentContext.get("agentExecutionId");
+            execution.setAgentExecutionId(agentExecutionId);
+
+            // Inject into request params so executeWorkflow can pick it up for registration
+            if (agentExecutionId != null) {
+                request.getQuery().getParams().put("agentExecutionId", agentExecutionId);
+            }
         }
 
         log.info("📝 Initializing workflow execution record");
@@ -1036,9 +1139,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                             return executionRepository.countByAgentTaskId(agentTaskId)
                                     .flatMapMany(count -> {
                                         if (count > 0) {
-                                            log.error("🛑 DATA EXISTS (count: {}) but is HIDDEN by team filters for user teams: {}", count, teamIds);
+                                            log.error(
+                                                    "🛑 DATA EXISTS (count: {}) but is HIDDEN by team filters for user teams: {}",
+                                                    count, teamIds);
                                         } else {
-                                            log.error("❌ DATA DOES NOT EXIST in database for agentTaskId: {}", agentTaskId);
+                                            log.error("❌ DATA DOES NOT EXIST in database for agentTaskId: {}",
+                                                    agentTaskId);
                                         }
                                         return Flux.empty();
                                     });
@@ -1062,7 +1168,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     @Override
     public Mono<Long> getTeamExecutionsCount(java.util.Collection<String> teamIds, String agentTaskId) {
         boolean isAdmin = teamIds != null && teamIds.contains("ALL_TEAMS_BYPASS");
-        
+
         if (isAdmin) {
             if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
                 return executionRepository.count();
@@ -1447,100 +1553,65 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     /**
+     * Build execution progress update DTO
+     */
+    private ExecutionProgressUpdate buildProgressUpdate(LinqRequest request, LinqRequest.Query.WorkflowStep step,
+            int totalSteps, Map<Integer, Object> stepResults) {
+        // Extract execution context from request
+        String executionId = extractExecutionId(request);
+        String agentId = extractAgentId(request);
+        String agentName = extractAgentName(request);
+        String taskId = extractTaskId(request);
+        String taskName = extractTaskName(request);
+        String teamId = extractTeamId(request);
+
+        // Get the actual execution start time and calculate duration
+        java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        java.time.LocalDateTime startedAt = now;
+        long durationMs = 0;
+
+        // Extract final result if this is the last step or we have a final result
+        String finalResult = null;
+        if (step != null && step.getStep() == totalSteps && stepResults != null) {
+            Object lastResult = stepResults.get(step.getStep());
+            finalResult = extractFinalResult(lastResult);
+        }
+
+        return ExecutionProgressUpdate.builder()
+                .executionId(executionId)
+                .agentId(agentId)
+                .agentName(agentName)
+                .taskId(taskId)
+                .taskName(taskName)
+                .teamId(teamId)
+                .status("RUNNING")
+                .currentStep(step != null ? step.getStep() : 0)
+                .totalSteps(totalSteps)
+                .currentStepName(step != null ? generateStepName(step) : "Processing...")
+                .currentStepTarget(step != null ? step.getTarget() : null)
+                .currentStepAction(step != null ? step.getAction() : null)
+                .startedAt(startedAt)
+                .lastUpdatedAt(now)
+                .executionDurationMs(durationMs)
+                .finalResult(finalResult)
+                .stepResults(convertStepResults(stepResults))
+                .build();
+    }
+
+    /**
      * Send step progress update for execution monitoring
      */
     private Mono<Void> sendStepProgressUpdate(LinqRequest request, LinqRequest.Query.WorkflowStep step,
             int totalSteps, Map<Integer, Object> stepResults) {
         return Mono.defer(() -> {
             try {
-                // Extract execution context from request
-                String executionId = extractExecutionId(request);
-                String agentId = extractAgentId(request);
-                String agentName = extractAgentName(request);
-                String taskId = extractTaskId(request);
-                String taskName = extractTaskName(request);
-                String teamId = extractTeamId(request);
+                ExecutionProgressUpdate update = buildProgressUpdate(request, step, totalSteps, stepResults);
 
-                log.info(
-                        "🔍 Execution monitoring context - executionId: {}, agentId: {}, agentName: {}, taskId: {}, taskName: {}, teamId: {}",
-                        executionId, agentId, agentName, taskId, taskName, teamId);
-
-                if (executionId == null) {
-                    // Not an agent execution, skip monitoring
-                    log.info("⏭️ Skipping execution monitoring - no executionId found");
+                if (update.getExecutionId() == null) {
                     return Mono.empty();
                 }
 
-                // Get the actual execution start time and calculate duration
-                java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
-                java.time.LocalDateTime startedAt = now; // Default to now if we can't get the actual start time
-                long durationMs = 0;
-
-                // Try to get the actual execution start time from the AgentExecution
-                if (executionId != null) {
-                    try {
-                        // Skip fetching AgentExecution to avoid blocking in reactive context
-                        // Use current time as approximation
-                        log.info(
-                                "📊 Skipping AgentExecution fetch to avoid blocking in reactive context for executionId: {}",
-                                executionId);
-                        startedAt = now;
-                        durationMs = 0; // No duration calculation to avoid blocking
-                    } catch (Exception e) {
-                        log.warn("Failed to fetch AgentExecution for duration calculation: {}", e.getMessage());
-                        startedAt = now;
-                        durationMs = 0; // No duration if we can't fetch execution
-                    }
-                }
-
-                log.info("📊 About to build ExecutionProgressUpdate with durationMs: {}", durationMs);
-
-                // Extract final result if this is the last step or we have a final result
-                String finalResult = null;
-                if (step.getStep() == totalSteps && stepResults != null) {
-                    Object lastResult = stepResults.get(step.getStep());
-                    finalResult = extractFinalResult(lastResult);
-                }
-
-                ExecutionProgressUpdate update = ExecutionProgressUpdate.builder()
-                        .executionId(executionId)
-                        .agentId(agentId)
-                        .agentName(agentName)
-                        .taskId(taskId)
-                        .taskName(taskName)
-                        .teamId(teamId)
-                        .status("RUNNING")
-                        .currentStep(step.getStep())
-                        .totalSteps(totalSteps)
-                        .currentStepName(generateStepName(step))
-                        .currentStepTarget(step.getTarget())
-                        .currentStepAction(step.getAction())
-                        .startedAt(startedAt)
-                        .lastUpdatedAt(now)
-                        .executionDurationMs(durationMs)
-                        .finalResult(finalResult)
-                        .stepResults(convertStepResults(stepResults))
-                        .build();
-
-                log.info("📊 Built ExecutionProgressUpdate - finalResult: {}, executionDurationMs: {}",
-                        finalResult != null ? "present" : "null", update.getExecutionDurationMs());
-                log.info(
-                        "📊 Built ExecutionProgressUpdate - all fields: executionId={}, agentId={}, status={}, currentStep={}, totalSteps={}, startedAt={}, lastUpdatedAt={}, executionDurationMs={}",
-                        update.getExecutionId(), update.getAgentId(), update.getStatus(), update.getCurrentStep(),
-                        update.getTotalSteps(),
-                        update.getStartedAt(), update.getLastUpdatedAt(), update.getExecutionDurationMs());
-
-                log.info("📊 Sending ExecutionProgressUpdate with durationMs: {} for execution: {}", durationMs,
-                        executionId);
-
-                return executionMonitoringService.sendStepProgress(update)
-                        .doOnSubscribe(subscription -> log.info("📊 Subscribed to sendStepProgress for execution: {}",
-                                executionId))
-                        .doOnSuccess(result -> log.info("📊 sendStepProgress completed successfully for execution: {}",
-                                executionId))
-                        .doOnError(error -> log.error("📊 sendStepProgress failed for execution: {} with error: {}",
-                                executionId, error.getMessage()))
-                        .doOnCancel(() -> log.warn("📊 sendStepProgress cancelled for execution: {}", executionId));
+                return executionMonitoringService.sendStepProgress(update);
             } catch (Exception e) {
                 log.warn("Failed to send step progress update: {}", e.getMessage());
                 return Mono.empty();
@@ -1769,5 +1840,22 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         Map<String, Object> converted = new HashMap<>();
         results.forEach((k, v) -> converted.put(String.valueOf(k), v));
         return converted;
+    }
+
+    @Override
+    public Mono<Boolean> stopAgentExecution(String agentExecutionId) {
+        if (agentExecutionId == null) {
+            return Mono.just(false);
+        }
+
+        WorkflowExecutionContext context = activeContexts.get(agentExecutionId);
+        if (context != null) {
+            log.info("🛑 Signalling stop for agentExecutionId: {}", agentExecutionId);
+            context.setStopped(true);
+            return Mono.just(true);
+        }
+
+        log.debug("ℹ️ No active workflow context found for agentExecutionId: {}", agentExecutionId);
+        return Mono.just(false);
     }
 }

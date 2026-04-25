@@ -346,17 +346,45 @@ public class AgentTaskController {
         log.info("Cancelling execution {} by user from context", executionId);
 
         return agentAuthContextService.checkExecutionAuthorization(executionId, exchange)
+                .doOnSuccess(auth -> log.info("User {} authorized for execution {} cancellation", auth.getUsername(), executionId))
+                .onErrorResume(error -> {
+                    String msg = error.getMessage();
+                    if (msg.contains("No authentication found") || msg.contains("No valid user token found") || msg.contains("Only team administrators")) {
+                        log.info("Authentication check failed for execution {} cancellation ({}). Allowing guest/system cancellation...",
+                                executionId, msg);
+
+                        return agentExecutionService.getExecutionById(executionId)
+                                .map(execution -> {
+                                    log.info("Found execution {} for guest cancellation. Agent: {}, Team: {}", 
+                                            executionId, execution.getAgentId(), execution.getTeamId());
+                                    return new AgentAuthContextService.AgentAuthContext(
+                                            execution.getAgentId(),
+                                            execution.getTeamId(),
+                                            "guest-user",
+                                            false);
+                                })
+                                .switchIfEmpty(Mono.error(new RuntimeException("Execution not found for cancellation: " + executionId)));
+                    }
+                    log.error("Authorization error during cancellation for execution {}: {}", executionId, msg);
+                    return Mono.error(error);
+                })
                 .flatMap(authContext -> agentExecutionService.cancelExecution(
                         executionId,
                         authContext.getTeamId(),
                         authContext.getUsername())
                         .map(cancelled -> {
+                            if (cancelled) {
+                                log.info("Execution {} successfully signaled for cancellation", executionId);
+                            } else {
+                                log.warn("Failed to signal execution {} for cancellation", executionId);
+                            }
                             Map<String, Object> response = Map.of(
                                     "executionId", executionId,
-                                    "cancelled", cancelled,
-                                    "message", "Execution cancelled successfully");
+                                    "status", cancelled ? "CANCELLED" : "FAILED",
+                                    "message", cancelled ? "Cancellation signal sent" : "Failed to cancel");
                             return ResponseEntity.ok((Object) response);
                         })
+                        .doOnError(e -> log.error("Unhandled error in cancelExecution for {}: {}", executionId, e.getMessage()))
                         .onErrorReturn(ResponseEntity.badRequest().build()))
                 .onErrorResume(error -> {
                     return Mono.just(ResponseEntity

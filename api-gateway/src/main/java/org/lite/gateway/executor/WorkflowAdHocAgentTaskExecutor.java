@@ -135,15 +135,34 @@ public class WorkflowAdHocAgentTaskExecutor extends AgentTaskExecutor {
                                                                                                         .map(LinqWorkflowExecution::getId)
                                                                                                         .doOnNext(saved::setWorkflowExecutionId)
                                                                                                         .thenReturn(response))
-                                                                                        .flatMap(response -> {
-                                                                                                saved.markAsCompleted();
-                                                                                                return agentExecutionRepository
-                                                                                                                .save(saved)
-                                                                                                                .then(sendCompletionUpdate(
-                                                                                                                                saved,
-                                                                                                                                saved.getWorkflowExecutionId()))
-                                                                                                                .thenReturn((Object) response);
-                                                                                        })
+                                                                                        .flatMap(response -> agentExecutionRepository
+                                                                                                        .findByExecutionId(
+                                                                                                                        saved.getExecutionId())
+                                                                                                        .flatMap(current -> {
+                                                                                                                if (current.getStatus() == org.lite.gateway.enums.ExecutionStatus.CANCELLED) {
+                                                                                                                        log.info("🚫 Execution {} was already cancelled. Skipping completion mark.",
+                                                                                                                                        saved.getExecutionId());
+                                                                                                                        return Mono.just(
+                                                                                                                                        (Object) response);
+                                                                                                                }
+                                                                                                                current.markAsCompleted();
+                                                                                                                return agentExecutionRepository
+                                                                                                                                .save(current)
+                                                                                                                                .then(sendCompletionUpdate(
+                                                                                                                                                current,
+                                                                                                                                                current.getWorkflowExecutionId()))
+                                                                                                                                .thenReturn((Object) response);
+                                                                                                        })
+                                                                                                        .switchIfEmpty(Mono
+                                                                                                                        .defer(() -> {
+                                                                                                                                saved.markAsCompleted();
+                                                                                                                                return agentExecutionRepository
+                                                                                                                                                .save(saved)
+                                                                                                                                                .then(sendCompletionUpdate(
+                                                                                                                                                                saved,
+                                                                                                                                                                saved.getWorkflowExecutionId()))
+                                                                                                                                                .thenReturn((Object) response);
+                                                                                                                        })))
                                                                                         .onErrorResume(TimeoutException.class,
                                                                                                         tex -> {
                                                                                                                 log.error("Ad-hoc execution timed out for task {}: {}",
@@ -160,24 +179,54 @@ public class WorkflowAdHocAgentTaskExecutor extends AgentTaskExecutor {
                                                                                                                                                 tex));
                                                                                                         })
                                                                                         .onErrorResume(err -> {
-                                                                                                log.error("Ad-hoc execution failed for task {}: {}",
-                                                                                                                agentTask.getName(),
-                                                                                                                err.getMessage());
-                                                                                                saved.markAsFailed(err
-                                                                                                                .getMessage() != null
-                                                                                                                                ? err.getMessage()
-                                                                                                                                : "Execution failed",
-                                                                                                                "WORKFLOW_EXECUTION_FAILED");
                                                                                                 return agentExecutionRepository
-                                                                                                                .save(saved)
-                                                                                                                .then(sendFailedUpdate(
-                                                                                                                                saved,
-                                                                                                                                saved.getErrorMessage(),
-                                                                                                                                saved.getWorkflowExecutionId()))
-                                                                                                                .then(Mono.error(
-                                                                                                                                new RuntimeException(
-                                                                                                                                                "Workflow execution failed: "
-                                                                                                                                                                + saved.getErrorMessage())));
+                                                                                                                .findByExecutionId(
+                                                                                                                                saved.getExecutionId())
+                                                                                                                .flatMap(current -> {
+                                                                                                                        if (current.getStatus() == org.lite.gateway.enums.ExecutionStatus.CANCELLED) {
+                                                                                                                                log.info("🚫 Execution {} was cancelled. Not marking as failed.",
+                                                                                                                                                saved.getExecutionId());
+                                                                                                                                return Mono.error(
+                                                                                                                                                new RuntimeException(
+                                                                                                                                                                "Execution cancelled"));
+                                                                                                                        }
+                                                                                                                        log.error("Ad-hoc execution failed for task {}: {}",
+                                                                                                                                        agentTask.getName(),
+                                                                                                                                        err.getMessage());
+                                                                                                                        current.markAsFailed(
+                                                                                                                                        err.getMessage() != null
+                                                                                                                                                        ? err.getMessage()
+                                                                                                                                                        : "Execution failed",
+                                                                                                                                        "WORKFLOW_EXECUTION_FAILED");
+                                                                                                                        return agentExecutionRepository
+                                                                                                                                        .save(current)
+                                                                                                                                        .then(sendFailedUpdate(
+                                                                                                                                                        current,
+                                                                                                                                                        current.getErrorMessage(),
+                                                                                                                                                        current.getWorkflowExecutionId()))
+                                                                                                                                        .then(Mono.error(
+                                                                                                                                                        new RuntimeException(
+                                                                                                                                                                        "Workflow execution failed: "
+                                                                                                                                                                                        + current.getErrorMessage())));
+                                                                                                                })
+                                                                                                                .switchIfEmpty(Mono
+                                                                                                                                .defer(() -> {
+                                                                                                                                        saved.markAsFailed(
+                                                                                                                                                        err.getMessage() != null
+                                                                                                                                                                        ? err.getMessage()
+                                                                                                                                                                        : "Execution failed",
+                                                                                                                                                        "WORKFLOW_EXECUTION_FAILED");
+                                                                                                                                        return agentExecutionRepository
+                                                                                                                                                        .save(saved)
+                                                                                                                                                        .then(sendFailedUpdate(
+                                                                                                                                                                        saved,
+                                                                                                                                                                        saved.getErrorMessage(),
+                                                                                                                                                                        saved.getWorkflowExecutionId()))
+                                                                                                                                                        .then(Mono.error(
+                                                                                                                                                                        new RuntimeException(
+                                                                                                                                                                                        "Workflow execution failed: "
+                                                                                                                                                                                                        + saved.getErrorMessage())));
+                                                                                                                                }));
                                                                                         }));
                                                 }));
         }

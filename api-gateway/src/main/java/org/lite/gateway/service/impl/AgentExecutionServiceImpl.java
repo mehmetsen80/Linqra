@@ -12,6 +12,7 @@ import org.lite.gateway.repository.AgentRepository;
 import org.lite.gateway.repository.AgentTaskRepository;
 import org.lite.gateway.repository.AgentExecutionRepository;
 import org.lite.gateway.service.AgentExecutionService;
+import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.ExecutionMonitoringService;
 import org.lite.gateway.service.ExecutionQueueService;
 import org.lite.gateway.dto.ExecutionProgressUpdate;
@@ -50,6 +51,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         private final WorkflowAdHocAgentTaskExecutor workflowAdhocExecutor;
         private final ExecutionMonitoringService executionMonitoringService;
         private final ExecutionQueueService executionQueueService;
+        private final LinqWorkflowExecutionService workflowExecutionService;
         private final AuditLogHelper auditLogHelper;
 
         // ==================== EXECUTION MANAGEMENT ====================
@@ -303,23 +305,8 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                 agent.getName(), taskId,
                                                                                                 task.getName(),
                                                                                                 teamId, executedBy)
-                                                                                .then(Mono.delay(java.time.Duration
-                                                                                                .ofSeconds(2))) // Wait
-                                                                                                                // 2
-                                                                                                                // seconds
-                                                                                                                // to
-                                                                                                                // show
-                                                                                                                // queue
                                                                                 .then(executionQueueService
                                                                                                 .markAsStarting(executionId))
-                                                                                .then(Mono.delay(java.time.Duration
-                                                                                                .ofSeconds(1))) // Wait
-                                                                                                                // 1
-                                                                                                                // more
-                                                                                                                // second
-                                                                                                                // for
-                                                                                                                // starting
-                                                                                                                // animation
                                                                                 .then(executionQueueService
                                                                                                 .markAsStartedAndRemove(
                                                                                                                 executionId))
@@ -655,21 +642,37 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         public Mono<Boolean> cancelExecution(String executionId, String teamId, String cancelledBy) {
                 log.info("Cancelling execution {} for team {} by {}", executionId, teamId, cancelledBy);
 
-                return agentExecutionRepository.findByExecutionId(executionId)
+                Mono<AgentExecution> executionMono = workflowExecutionService.stopAgentExecution(executionId)
+                                .flatMap(stopped -> agentExecutionRepository.findByExecutionId(executionId))
                                 .filter(execution -> teamId.equals(execution.getTeamId()))
-                                .switchIfEmpty(Mono.error(new RuntimeException("Execution not found or access denied")))
-                                .flatMap(execution -> {
-                                        execution.setStatus(ExecutionStatus.CANCELLED);
-                                        execution.setResult(ExecutionResult.FAILURE);
-                                        execution.setErrorMessage("Execution cancelled by: " + cancelledBy);
-                                        execution.setCompletedAt(LocalDateTime.now());
+                                .switchIfEmpty(Mono.<AgentExecution>error(
+                                                new RuntimeException("Execution not found or access denied")));
 
-                                        return agentExecutionRepository.save(execution)
-                                                        .thenReturn(true);
-                                })
-                                .doOnSuccess(
-                                                cancelled -> log.info("Execution {} cancelled successfully by {}",
-                                                                executionId, cancelledBy))
+                return executionMono.flatMap(execution -> {
+                        execution.setStatus(ExecutionStatus.CANCELLED);
+                        execution.setResult(ExecutionResult.FAILURE);
+                        execution.setErrorMessage("Execution cancelled by: " + cancelledBy);
+                        execution.setCompletedAt(LocalDateTime.now());
+
+                        return agentExecutionRepository.save(execution)
+                                        .flatMap(saved -> {
+                                                Map<String, Object> auditContext = new HashMap<>();
+                                                auditContext.put("teamId", teamId);
+                                                auditContext.put("cancelledBy",
+                                                                cancelledBy != null ? cancelledBy : "unknown");
+
+                                                return auditLogHelper.logDetailedEvent(
+                                                                AuditEventType.AGENT_TASK_EXECUTION_CANCELLED,
+                                                                AuditActionType.CANCEL,
+                                                                AuditResourceType.AGENT_TASK,
+                                                                saved.getExecutionId(),
+                                                                "Execution cancelled by: " + cancelledBy,
+                                                                auditContext)
+                                                                .then(Mono.just(true));
+                                        });
+                })
+                                .doOnSuccess(cancelled -> log.info("Execution {} cancelled successfully by {}",
+                                                executionId, cancelledBy))
                                 .doOnError(error -> log.error("Failed to cancel execution {}: {}", executionId,
                                                 error.getMessage()));
         }

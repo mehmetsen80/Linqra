@@ -348,6 +348,149 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
     }
 
     @Override
+    public Flux<String> streamLlmRequest(LinqRequest request, LinqLlmModel llmModel) {
+        AtomicReference<String> url = new AtomicReference<>(buildLlmUrl(llmModel, request));
+        String method = llmModel.getMethod();
+
+        // Build payload and ensure stream=true
+        Object payload = buildLlmPayload(request, llmModel);
+        if (payload instanceof Map) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payloadMap = (Map<String, Object>) payload;
+            payloadMap.put("stream", true);
+        }
+
+        log.info("🌊 Streaming LLM request - modelCategory: {}, modelName: {}, URL: {}",
+                llmModel.getModelCategory(), llmModel.getModelName(), url.get());
+
+        return Mono.just(llmModel.getApiKey())
+                .flatMapMany(apiKey -> {
+                    Map<String, String> headers = new HashMap<>(llmModel.getHeaders());
+                    String authType = llmModel.getAuthType() != null ? llmModel.getAuthType() : "none";
+
+                    switch (authType) {
+                        case "bearer":
+                            headers.put("Authorization", "Bearer " + apiKey);
+                            break;
+                        case "api_key":
+                            headers.put("x-api-key", apiKey);
+                            break;
+                        case "api_key_query":
+                            url.set(url.get() + (url.get().contains("?") ? "&" : "?") + "key=" + apiKey);
+                            break;
+                    }
+
+                    return streamInvokeLlmService(method, url.get(), payload, headers, llmModel.getModelCategory());
+                });
+    }
+
+    private Flux<String> streamInvokeLlmService(String method, String url, Object payload,
+            Map<String, String> headers, String modelCategory) {
+        return Flux.defer(() -> {
+            try {
+                WebClient webClient = webClientBuilder.build();
+                WebClient.RequestHeadersSpec<?> requestSpec = switch (method) {
+                    case "GET" -> webClient.get().uri(url);
+                    case "POST" -> webClient.post().uri(url).bodyValue(payload);
+                    default -> throw new IllegalArgumentException("Method not supported for streaming: " + method);
+                };
+
+                for (Map.Entry<String, String> entry : headers.entrySet()) {
+                    if (!entry.getKey().equalsIgnoreCase("Content-Type")) {
+                        requestSpec = requestSpec.header(entry.getKey(), entry.getValue());
+                    }
+                }
+
+                return requestSpec
+                        .accept(org.springframework.http.MediaType.TEXT_EVENT_STREAM,
+                                org.springframework.http.MediaType.APPLICATION_NDJSON,
+                                org.springframework.http.MediaType.APPLICATION_JSON)
+                        .retrieve()
+                        .bodyToFlux(String.class)
+                        .map(chunk -> parseStreamChunk(chunk, modelCategory))
+                        .filter(org.springframework.util.StringUtils::hasText)
+                        .timeout(Duration.ofMinutes(2))
+                        .onErrorResume(e -> {
+                            log.error("❌ Error in LLM stream {}: {}", url, e.getMessage());
+                            return Flux.empty();
+                        });
+            } catch (Exception e) {
+                return Flux.error(e);
+            }
+        });
+    }
+
+    private String parseStreamChunk(String chunk, String modelCategory) {
+        if (chunk == null || chunk.trim().isEmpty() || chunk.equals("data: [DONE]")) {
+            return "";
+        }
+
+        try {
+            // Remove "data: " prefix for SSE formats
+            String json = chunk.trim();
+            if (json.startsWith("data: ")) {
+                json = json.substring(6);
+            }
+
+            if (json.isEmpty() || json.equals("[DONE]"))
+                return "";
+
+            com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+
+            switch (modelCategory) {
+                case "openai-chat":
+                case "azure-openai-chat":
+                    if (node.has("choices") && node.get("choices").isArray() && node.get("choices").size() > 0) {
+                        com.fasterxml.jackson.databind.JsonNode delta = node.get("choices").get(0).get("delta");
+                        if (delta != null && delta.has("content")) {
+                            return delta.get("content").asText();
+                        }
+                    }
+                    break;
+
+                case "ollama-chat":
+                    if (node.has("message")) {
+                        return node.get("message").get("content").asText();
+                    } else if (node.has("response")) {
+                        return node.get("response").asText();
+                    }
+                    break;
+
+                case "gemini-chat":
+                    if (node.has("candidates") && node.get("candidates").isArray() && node.get("candidates").size() > 0) {
+                        com.fasterxml.jackson.databind.JsonNode content = node.get("candidates").get(0).get("content");
+                        if (content != null && content.has("parts") && content.get("parts").isArray()) {
+                            return content.get("parts").get(0).get("text").asText();
+                        }
+                    }
+                    break;
+
+                case "claude-chat":
+                    if (node.has("type")) {
+                        String type = node.get("type").asText();
+                        if ("content_block_delta".equals(type) && node.has("delta")) {
+                            return node.get("delta").get("text").asText();
+                        }
+                    }
+                    break;
+
+                case "cohere-chat":
+                    if (node.has("type")) {
+                        String type = node.get("type").asText();
+                        if ("content-delta".equals(type) && node.has("delta") && node.get("delta").has("message")) {
+                            return node.get("delta").get("message").get("content").get("text").asText();
+                        }
+                    }
+                    break;
+            }
+        } catch (Exception e) {
+            log.trace("Failed to parse chunk: {}", chunk);
+        }
+
+        return "";
+    }
+
+    @Override
     public Mono<LinqResponse> executeLlmRequest(LinqRequest request, LinqLlmModel llmModel) {
         LocalDateTime startTime = LocalDateTime.now();
         String intent = request.getQuery().getIntent();

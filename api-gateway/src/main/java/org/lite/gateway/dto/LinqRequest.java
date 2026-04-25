@@ -98,6 +98,7 @@ public class LinqRequest {
             private LlmConfig llmConfig; // For AI tools
 
             private Boolean async; // Whether this step should be executed asynchronously
+            private Boolean stream; // Whether this step should be streamed (LLM only)
 
             private CacheConfig cacheConfig; // Cache configuration for this step
 

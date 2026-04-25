@@ -61,6 +61,8 @@ public class ExecutionProgressUpdate {
     
     // Result information
     private String finalResult;
+    private String chunk;
+    private String accumulated;
     
     // Step results
     private Map<String, Object> stepResults;

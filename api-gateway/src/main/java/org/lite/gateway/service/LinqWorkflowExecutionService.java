@@ -107,6 +107,14 @@ public interface LinqWorkflowExecutionService {
         Mono<LinqWorkflowExecution> getExecutionByAgentExecutionId(String agentExecutionId);
 
         /**
+         * Stop a running agent execution by its ID
+         * 
+         * @param agentExecutionId The agent execution ID to stop
+         * @return Mono<Boolean> indicating if the execution was found and stopped
+         */
+        Mono<Boolean> stopAgentExecution(String agentExecutionId);
+
+        /**
          * Delete a specific execution by ID for a specific team
          * 
          * @param executionId The execution ID

@@ -37,4 +37,14 @@ public interface ExecutionMonitoringService {
      * Send memory usage update
      */
     Mono<Void> sendMemoryUpdate(ExecutionProgressUpdate update);
+
+    /**
+     * Send result chunk update (for streaming)
+     */
+    Mono<Void> sendResultChunk(ExecutionProgressUpdate update, String chunk);
+
+    /**
+     * Send result chunk update with accumulated content (for streaming)
+     */
+    Mono<Void> sendResultChunkWithAccumulated(ExecutionProgressUpdate update, String chunk, String accumulated);
 }

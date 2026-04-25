@@ -111,7 +111,8 @@ public class ApiRouteLocatorImpl implements RouteLocator, ApplicationContextAwar
                             };
 
                             return chain.filter(exchange.mutate().request(decorator).build());
-                        });
+                        })
+                        .switchIfEmpty(chain.filter(exchange));
             }
             return chain.filter(exchange);
         }));

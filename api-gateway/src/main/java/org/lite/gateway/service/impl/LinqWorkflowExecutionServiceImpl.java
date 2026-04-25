@@ -339,36 +339,45 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                         .flatMap(llmModel -> {
                                             // Check if we should stream this step
                                             // 1. Explicitly requested via 'stream' flag
-                                            // 2. Default: Last step if it's an LLM target and 'stream' is not explicitly false
-                                            boolean isLlmTarget = llmModel != null && 
-                                                (llmModel.getModelCategory().equals("openai-chat") || 
-                                                 llmModel.getModelCategory().equals("azure-openai-chat") ||
-                                                 llmModel.getModelCategory().equals("gemini-chat") ||
-                                                 llmModel.getModelCategory().equals("claude-chat") ||
-                                                 llmModel.getModelCategory().equals("cohere-chat") ||
-                                                 llmModel.getModelCategory().equals("ollama-chat"));
-                                            
-                                            boolean shouldStream = Boolean.TRUE.equals(step.getStream()) || 
-                                                (step.getStream() == null && step.getStep() == steps.size() && isLlmTarget);
+                                            // 2. Default: Last step if it's an LLM target and 'stream' is not
+                                            // explicitly false
+                                            boolean isLlmTarget = llmModel != null &&
+                                                    (llmModel.getModelCategory().equals("openai-chat") ||
+                                                            llmModel.getModelCategory().equals("azure-openai-chat") ||
+                                                            llmModel.getModelCategory().equals("gemini-chat") ||
+                                                            llmModel.getModelCategory().equals("claude-chat") ||
+                                                            llmModel.getModelCategory().equals("cohere-chat") ||
+                                                            llmModel.getModelCategory().equals("ollama-chat"));
+
+                                            boolean shouldStream = Boolean.TRUE.equals(step.getStream()) ||
+                                                    (step.getStream() == null && step.getStep() == steps.size()
+                                                            && isLlmTarget);
 
                                             if (shouldStream) {
-                                                log.info("🌊 Streaming LLM step {} (target: {})...", step.getStep(), step.getTarget());
+                                                log.info("🌊 Streaming LLM step {} (target: {})...", step.getStep(),
+                                                        step.getTarget());
                                                 StringBuilder fullContent = new StringBuilder();
-                                                ExecutionProgressUpdate streamUpdate = buildProgressUpdate(request, step,
+                                                ExecutionProgressUpdate streamUpdate = buildProgressUpdate(request,
+                                                        step,
                                                         steps.size(), stepResults);
 
                                                 return linqLlmModelService.streamLlmRequest(stepRequest, llmModel)
                                                         .concatMap(chunk -> {
                                                             if (context.isStopped()) {
-                                                                log.warn("🛑 Workflow execution cancelled during LLM streaming (agentExecutionId: {})", finalAgentExecutionId);
-                                                                return Mono.error(new RuntimeException("Workflow execution cancelled"));
+                                                                log.warn(
+                                                                        "🛑 Workflow execution cancelled during LLM streaming (agentExecutionId: {})",
+                                                                        finalAgentExecutionId);
+                                                                return Mono.error(new RuntimeException(
+                                                                        "Workflow execution cancelled"));
                                                             }
-                                                            
+
                                                             String currentFull = fullContent.toString();
                                                             String delta;
-                                                            
-                                                            // Delta detection: if chunk starts with previous content, it's cumulative
-                                                            if (!currentFull.isEmpty() && chunk.startsWith(currentFull)) {
+
+                                                            // Delta detection: if chunk starts with previous content,
+                                                            // it's cumulative
+                                                            if (!currentFull.isEmpty()
+                                                                    && chunk.startsWith(currentFull)) {
                                                                 delta = chunk.substring(currentFull.length());
                                                                 fullContent.setLength(0);
                                                                 fullContent.append(chunk);
@@ -377,13 +386,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                                 delta = chunk;
                                                                 fullContent.append(chunk);
                                                             }
-                                                            
+
                                                             if (delta.isEmpty()) {
                                                                 return Mono.empty();
                                                             }
-                                                            
+
                                                             return executionMonitoringService
-                                                                    .sendResultChunkWithAccumulated(streamUpdate, delta, fullContent.toString())
+                                                                    .sendResultChunkWithAccumulated(streamUpdate, delta,
+                                                                            fullContent.toString())
                                                                     .then(Mono.just(delta));
                                                         })
                                                         .collectList()
@@ -574,10 +584,10 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     .doFinally(signalType -> {
                         if (finalAgentExecutionId != null) {
                             activeContexts.remove(finalAgentExecutionId);
-                            log.info("📋 Unregistered workflow context for agentExecutionId: {} (Signal: {})", 
-                                finalAgentExecutionId, signalType);
+                            log.info("📋 Unregistered workflow context for agentExecutionId: {} (Signal: {})",
+                                    finalAgentExecutionId, signalType);
                         }
-                        
+
                         // Clean up memory-intensive data structures after workflow completion
                         // Note: stepResults and globalParams are copied to response, so they can be
                         // safely cleared
@@ -595,6 +605,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         // Log workflow execution failure
                         long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
 
+                        boolean isCancellation = error.getMessage() != null
+                                && error.getMessage().toLowerCase().contains("cancelled");
+
                         Map<String, Object> errorContext = new HashMap<>();
                         errorContext.put("workflowId", workflowId);
                         errorContext.put("teamId", finalTeamId);
@@ -609,16 +622,18 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         }
 
                         Mono<Void> failureAuditLog = auditLogHelper.logDetailedEvent(
-                                AuditEventType.WORKFLOW_EXECUTION_FAILED,
+                                isCancellation ? AuditEventType.WORKFLOW_EXECUTION_CANCELLED
+                                        : AuditEventType.WORKFLOW_EXECUTION_FAILED,
                                 AuditActionType.READ,
                                 AuditResourceType.WORKFLOW,
                                 workflowId,
-                                String.format("Workflow execution failed after %d ms: %s", durationMs,
-                                        error.getMessage()),
+                                isCancellation ? String.format("Workflow execution cancelled after %d ms", durationMs)
+                                        : String.format("Workflow execution failed after %d ms: %s", durationMs,
+                                                error.getMessage()),
                                 errorContext,
                                 null,
                                 null,
-                                AuditResultType.FAILED)
+                                isCancellation ? AuditResultType.CANCELLED : AuditResultType.FAILED)
                                 .doOnError(auditError -> log.error(
                                         "Failed to log audit event (workflow execution failed): {}",
                                         auditError.getMessage(), auditError))
@@ -629,7 +644,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                             LinqResponse errorResponse = new LinqResponse();
                             LinqResponse.Metadata metadata = new LinqResponse.Metadata();
                             metadata.setSource("workflow");
-                            metadata.setStatus("error");
+                            metadata.setStatus(isCancellation ? "cancelled" : "error");
                             // Try to use teamId from params on error path as well
                             String fallbackTeamId = null;
                             if (request.getQuery() != null && request.getQuery().getParams() != null) {
@@ -692,9 +707,14 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
      */
     private Mono<LinqWorkflowExecution> trackExecution(LinqRequest request, LinqResponse response,
             Map<String, Object> agentContext) {
-        ExecutionStatus finalStatus = "success".equals(response.getMetadata().getStatus())
-                ? ExecutionStatus.SUCCESS
-                : ExecutionStatus.FAILED;
+        ExecutionStatus finalStatus;
+        if ("success".equals(response.getMetadata().getStatus())) {
+            finalStatus = ExecutionStatus.SUCCESS;
+        } else if ("cancelled".equals(response.getMetadata().getStatus())) {
+            finalStatus = ExecutionStatus.CANCELLED;
+        } else {
+            finalStatus = ExecutionStatus.FAILED;
+        }
 
         long computedDuration = 0L;
         if (response.getMetadata() != null && response.getMetadata().getWorkflowMetadata() != null) {
@@ -1048,7 +1068,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             execution.setAgentName((String) agentContext.get("agentName"));
             execution.setAgentTaskId((String) agentContext.get("agentTaskId"));
             execution.setAgentTaskName((String) agentContext.get("agentTaskName"));
-            execution.setAgentExecutionId((String) agentContext.get("agentExecutionId"));
+            String agentExecutionId = (String) agentContext.get("agentExecutionId");
+            execution.setAgentExecutionId(agentExecutionId);
+
+            // Inject into request params so executeWorkflow can pick it up for registration
+            if (agentExecutionId != null) {
+                request.getQuery().getParams().put("agentExecutionId", agentExecutionId);
+            }
         }
 
         log.info("📝 Initializing workflow execution record");
@@ -1113,9 +1139,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                             return executionRepository.countByAgentTaskId(agentTaskId)
                                     .flatMapMany(count -> {
                                         if (count > 0) {
-                                            log.error("🛑 DATA EXISTS (count: {}) but is HIDDEN by team filters for user teams: {}", count, teamIds);
+                                            log.error(
+                                                    "🛑 DATA EXISTS (count: {}) but is HIDDEN by team filters for user teams: {}",
+                                                    count, teamIds);
                                         } else {
-                                            log.error("❌ DATA DOES NOT EXIST in database for agentTaskId: {}", agentTaskId);
+                                            log.error("❌ DATA DOES NOT EXIST in database for agentTaskId: {}",
+                                                    agentTaskId);
                                         }
                                         return Flux.empty();
                                     });
@@ -1139,7 +1168,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     @Override
     public Mono<Long> getTeamExecutionsCount(java.util.Collection<String> teamIds, String agentTaskId) {
         boolean isAdmin = teamIds != null && teamIds.contains("ALL_TEAMS_BYPASS");
-        
+
         if (isAdmin) {
             if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
                 return executionRepository.count();
@@ -1812,6 +1841,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         results.forEach((k, v) -> converted.put(String.valueOf(k), v));
         return converted;
     }
+
     @Override
     public Mono<Boolean> stopAgentExecution(String agentExecutionId) {
         if (agentExecutionId == null) {

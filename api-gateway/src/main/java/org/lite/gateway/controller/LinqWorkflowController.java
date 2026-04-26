@@ -362,7 +362,7 @@ public class LinqWorkflowController {
     public Mono<ResponseEntity<Map<String, Object>>> getTeamExecutions(
             @RequestParam(required = false) String agentTaskId,
             @RequestParam(required = false) String institution,
-            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam(defaultValue = "1000") int limit,
             ServerWebExchange exchange) {
         log.info("🔍 Fetching latest {} executions for current user (agentTaskId: {}, inst: {})", 
                 limit, agentTaskId, institution);

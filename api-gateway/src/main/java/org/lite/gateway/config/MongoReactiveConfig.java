@@ -2,6 +2,16 @@ package org.lite.gateway.config;
 
 import com.mongodb.reactivestreams.client.MongoClient;
 import com.mongodb.reactivestreams.client.MongoClients;
+import org.lite.gateway.converter.ExecutionResultReadingConverter;
+import org.lite.gateway.converter.ExecutionStatusReadingConverter;
+import org.lite.gateway.converter.ExecutionTypeReadingConverter;
+import org.lite.gateway.converter.ModelExecutionStatusReadingConverter;
+import org.lite.gateway.converter.AgentTaskTypeReadingConverter;
+import org.lite.gateway.converter.ExecutionTriggerReadingConverter;
+import org.lite.gateway.converter.AuditEventTypeReadingConverter;
+import org.lite.gateway.converter.AgentIntentReadingConverter;
+import org.lite.gateway.converter.AgentCapabilityReadingConverter;
+import org.lite.gateway.converter.CaseInsensitiveEnumConverterFactory;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,6 +32,8 @@ import org.springframework.data.mongodb.repository.config.EnableReactiveMongoRep
 import org.springframework.lang.NonNull;
 import org.springframework.transaction.ReactiveTransactionManager;
 import org.springframework.transaction.reactive.TransactionalOperator;
+
+import java.util.Arrays;
 
 @Configuration
 @EnableReactiveMongoRepositories(basePackages = "org.lite.gateway.repository")
@@ -119,6 +131,23 @@ public class MongoReactiveConfig extends AbstractReactiveMongoConfiguration {
     @Bean
     public ReactiveTransactionManager transactionManager(ReactiveMongoDatabaseFactory factory) {
         return new ReactiveMongoTransactionManager(factory);
+    }
+
+    @Bean
+    @Override
+    public @NonNull MongoCustomConversions customConversions() {
+        return new MongoCustomConversions(Arrays.asList(
+            new ExecutionTypeReadingConverter(),
+            new ExecutionStatusReadingConverter(),
+            new ExecutionResultReadingConverter(),
+            new ModelExecutionStatusReadingConverter(),
+            new AgentTaskTypeReadingConverter(),
+            new ExecutionTriggerReadingConverter(),
+            new AuditEventTypeReadingConverter(),
+            new AgentIntentReadingConverter(),
+            new AgentCapabilityReadingConverter(),
+            new CaseInsensitiveEnumConverterFactory()
+        ));
     }
 
     @Bean

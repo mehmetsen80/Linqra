@@ -55,7 +55,7 @@ const agentTaskService = {
         }
     },
 
-    getRecentExecutions: async (limit = 100) => {
+    getRecentExecutions: async (limit = 1000) => {
         console.log('Fetching recent executions with limit:', limit);
         try {
             const response = await axiosInstance.get(`/api/agent-tasks/executions/recent?limit=${limit}`);

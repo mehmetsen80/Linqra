@@ -1,7 +1,7 @@
 import axiosInstance from './axiosInstance';
 
 const agentTaskMonitoringService = {
-    getTaskExecutionHistory: async (taskId, limit = 10) => {
+    getTaskExecutionHistory: async (taskId, limit = 1000) => {
         try {
             const response = await axiosInstance.get(`/api/agent-tasks/${taskId}/execution-history`, {
                 params: { limit }

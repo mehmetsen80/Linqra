@@ -40,7 +40,7 @@ const ExecutionMonitoring = () => {
             setLoadingRecentExecutions(true);
             console.log('Loading recent executions...');
 
-            const response = await agentTaskService.getRecentExecutions(100);
+            const response = await agentTaskService.getRecentExecutions(1000);
             if (response.success) {
                 console.log('Loaded recent executions:', response.data);
                 setRecentExecutions(response.data || []);
@@ -229,7 +229,7 @@ const ExecutionMonitoring = () => {
                         return existingList;
                     }
 
-                    return [updatedExec, ...existingList].slice(0, 100);
+                    return [updatedExec, ...existingList].slice(0, 1000);
                 });
 
                 setError(null);

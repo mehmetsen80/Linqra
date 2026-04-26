@@ -448,7 +448,7 @@ public class AgentTaskController {
 
     @GetMapping("/executions/recent")
     public Mono<ResponseEntity<List<AgentExecution>>> getRecentExecutions(
-            @RequestParam(defaultValue = "100") int limit,
+            @RequestParam(defaultValue = "1000") int limit,
             ServerWebExchange exchange) {
 
         return teamContextService.getTeamFromContext(exchange)

@@ -74,21 +74,22 @@ public interface LinqWorkflowExecutionService {
          * @param limit       Maximum number of executions to return
          * @return Flux of workflow executions
          */
-        Flux<LinqWorkflowExecution> getTeamExecutions(String teamId, String agentTaskId, int limit);
+        Flux<LinqWorkflowExecution> getTeamExecutions(String teamId, String agentTaskId, String institution, int limit);
 
-        Flux<LinqWorkflowExecution> getTeamExecutions(Collection<String> teamIds, String agentTaskId, int limit);
+        Flux<LinqWorkflowExecution> getTeamExecutions(Collection<String> teamIds, String agentTaskId, String institution, int limit);
 
         /**
          * Get the total count of executions for a specific team with optional agent
-         * task filter
+         * task and institution filter
          * 
          * @param teamId      The team ID
          * @param agentTaskId Optional agent task ID to filter by
+         * @param institution Optional institution to filter by
          * @return Mono of the total count
          */
-        Mono<Long> getTeamExecutionsCount(String teamId, String agentTaskId);
+        Mono<Long> getTeamExecutionsCount(String teamId, String agentTaskId, String institution);
 
-        Mono<Long> getTeamExecutionsCount(Collection<String> teamIds, String agentTaskId);
+        Mono<Long> getTeamExecutionsCount(Collection<String> teamIds, String agentTaskId, String institution);
 
         /**
          * Get a specific execution by ID

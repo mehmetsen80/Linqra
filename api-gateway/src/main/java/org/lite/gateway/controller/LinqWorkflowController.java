@@ -361,9 +361,11 @@ public class LinqWorkflowController {
     @GetMapping("/executions")
     public Mono<ResponseEntity<Map<String, Object>>> getTeamExecutions(
             @RequestParam(required = false) String agentTaskId,
+            @RequestParam(required = false) String institution,
             @RequestParam(defaultValue = "100") int limit,
             ServerWebExchange exchange) {
-        log.info("🔍 Fetching latest {} executions for current user (agentTaskId filter: {})", limit, agentTaskId);
+        log.info("🔍 Fetching latest {} executions for current user (agentTaskId: {}, inst: {})", 
+                limit, agentTaskId, institution);
 
         return teamContextService.getAllAuthorizedTeams(exchange)
                 .flatMap(teamIds -> {
@@ -371,29 +373,30 @@ public class LinqWorkflowController {
                         log.warn("⚠️ No authorized teams found for user. Fetching by single team context fallback.");
                         return teamContextService.getTeamFromContext(exchange)
                                 .flatMap(teamId -> Mono.zip(
-                                        workflowExecutionService.getTeamExecutions(teamId, agentTaskId, limit)
+                                        workflowExecutionService.getTeamExecutions(teamId, agentTaskId, institution, limit)
                                                 .collectList(),
-                                        workflowExecutionService.getTeamExecutionsCount(teamId, agentTaskId))
+                                        workflowExecutionService.getTeamExecutionsCount(teamId, agentTaskId, institution))
                                         .map(tuple -> buildExecutionResponse(tuple.getT1(), tuple.getT2(), limit,
-                                                agentTaskId)));
+                                                agentTaskId, institution)));
                     }
 
                     log.info("📊 Fetching executions for authorized teams: {}", teamIds);
                     return Mono.zip(
-                            workflowExecutionService.getTeamExecutions(teamIds, agentTaskId, limit).collectList(),
-                            workflowExecutionService.getTeamExecutionsCount(teamIds, agentTaskId))
-                            .map(tuple -> buildExecutionResponse(tuple.getT1(), tuple.getT2(), limit, agentTaskId));
+                            workflowExecutionService.getTeamExecutions(teamIds, agentTaskId, institution, limit).collectList(),
+                            workflowExecutionService.getTeamExecutionsCount(teamIds, agentTaskId, institution))
+                            .map(tuple -> buildExecutionResponse(tuple.getT1(), tuple.getT2(), limit, agentTaskId, institution));
                 })
                 .doOnError(error -> log.error("❌ Error fetching team executions: {}", error.getMessage()));
     }
 
     private ResponseEntity<Map<String, Object>> buildExecutionResponse(List<LinqWorkflowExecution> executions,
-            long total, int limit, String agentTaskId) {
+            long total, int limit, String agentTaskId, String institution) {
         Map<String, Object> response = new HashMap<>();
         response.put("executions", executions);
         response.put("total", total);
         response.put("limit", limit);
         response.put("agentTaskId", agentTaskId);
+        response.put("institution", institution);
         return ResponseEntity.ok(response);
     }
 

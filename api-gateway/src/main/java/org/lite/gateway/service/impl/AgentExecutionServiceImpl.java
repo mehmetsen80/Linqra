@@ -276,6 +276,8 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
 
                                         // Create execution record
                                         String executionId = UUID.randomUUID().toString();
+                                        log.info("💾 [AGENT_EXEC] Preparing execution {}. Input data keys: {}", 
+                                                executionId, overrides.keySet());
                                         AgentExecution execution = AgentExecution.builder()
                                                         .executionId(executionId)
                                                         .agentId(agentId)

@@ -110,8 +110,6 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         // For external API/SDK/Postman requests, API key is required
         String apiKey = exchange.getRequest().getHeaders().getFirst(API_KEY_HEADER);
         String apiKeyName = exchange.getRequest().getHeaders().getFirst(API_KEY_NAME_HEADER);
-        log.info("My Exchange Request Headers: ");
-        log.info(exchange.getRequest().getHeaders().toString());
 
         // If no keys provided, check if it's a mandatory path
         // Paths starting with /api/tools/ are NOT mandatory here because the controller

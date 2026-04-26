@@ -285,6 +285,7 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                                                             : "Success but no content")));
                                 } else {
                                     return response.bodyToMono(String.class)
+                                            .defaultIfEmpty("No error details provided by service")
                                             .flatMap(error -> Mono.error(new RuntimeException(
                                                     "Service returned " + response.statusCode() + ": " + error)));
                                 }

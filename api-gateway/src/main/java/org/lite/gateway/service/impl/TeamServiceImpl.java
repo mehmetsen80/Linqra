@@ -49,6 +49,7 @@ public class TeamServiceImpl implements TeamService {
                 return OrganizationDTO.builder()
                                 .id(org.getId())
                                 .name(org.getName())
+                                .shortName(org.getShortName())
                                 .description(org.getDescription())
                                 .createdAt(org.getCreatedAt())
                                 .updatedAt(org.getUpdatedAt())

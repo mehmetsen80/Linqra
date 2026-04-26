@@ -51,4 +51,10 @@ public class LinqWorkflowExecution {
     private String agentTaskName;           // Name of the specific agent task
     private String executionSource;         // "agent", "manual", "cron", "api", "scheduled"
     private String agentExecutionId;        // Reference to AgentExecution entity
+
+    // Transient fields for API enrichment
+    @org.springframework.data.annotation.Transient
+    private String institution;
+    @org.springframework.data.annotation.Transient
+    private String institutionShortName;
 }

@@ -275,6 +275,9 @@ public class AgentTaskController {
             }
         }
         final Map<String, Object> overridesFinal = overrides;
+        if (overridesFinal != null) {
+            log.info("🎯 [CONTROLLER] Execution overrides detected: {}", overridesFinal.keySet());
+        }
 
         return agentAuthContextService.checkTaskAuthorization(taskId, exchange)
                 .onErrorResume(error -> {

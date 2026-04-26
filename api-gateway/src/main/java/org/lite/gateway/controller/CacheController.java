@@ -18,54 +18,53 @@ import java.util.Map;
 @AllArgsConstructor
 public class CacheController {
 
-    private final CacheService cacheService;
-    private final TeamContextService teamContextService;
+        private final CacheService cacheService;
+        private final TeamContextService teamContextService;
 
-    private static final String KEY_PREFIX = "app_cache:";
+        private static final String KEY_PREFIX = "app_cache:";
 
-    @GetMapping("/{key}")
-    public Mono<Map<String, String>> get(
-            @PathVariable String key,
-            ServerWebExchange exchange) {
-        return teamContextService.getTeamFromContext(exchange)
-                .flatMap(teamId -> {
-                    String fullKey = KEY_PREFIX + teamId + ":" + key;
-                    return cacheService.get(fullKey)
-                            .map(value -> Map.of("key", key, "value", value))
-                            .switchIfEmpty(Mono.error(new org.springframework.web.server.ResponseStatusException(
-                                    org.springframework.http.HttpStatus.NOT_FOUND, "Key not found in cache")));
-                });
-    }
+        @GetMapping("/{key}")
+        public Mono<Map<String, String>> get(
+                        @PathVariable String key,
+                        ServerWebExchange exchange) {
+                return teamContextService.getTeamFromContext(exchange)
+                                .flatMap(teamId -> {
+                                        String fullKey = KEY_PREFIX + teamId + ":" + key;
+                                        return cacheService.get(fullKey)
+                                                        .map(value -> Map.of("key", key, "value", value))
+                                                        .switchIfEmpty(Mono.just(Map.of("key", key, "status", "miss")));
+                                });
+        }
 
-    @PostMapping
-    public Mono<Map<String, Object>> set(
-            @RequestBody CacheRequestDTO request,
-            ServerWebExchange exchange) {
-        return teamContextService.getTeamFromContext(exchange)
-                .flatMap(teamId -> {
-                    String fullKey = KEY_PREFIX + teamId + ":" + request.getKey();
-                    Duration ttl = request.getTtlSeconds() != null ? 
-                            Duration.ofSeconds(request.getTtlSeconds()) : 
-                            Duration.ofHours(24);
-                    
-                    return cacheService.set(fullKey, request.getValue(), ttl)
-                            .then(Mono.just(Map.of(
-                                    "status", "success",
-                                    "key", request.getKey(),
-                                    "ttlSeconds", ttl.getSeconds()
-                            )));
-                });
-    }
+        @PostMapping
+        public Mono<Map<String, Object>> set(
+                        @RequestBody CacheRequestDTO request,
+                        ServerWebExchange exchange) {
+                return teamContextService.getTeamFromContext(exchange)
+                                .flatMap(teamId -> {
+                                        String fullKey = KEY_PREFIX + teamId + ":" + request.getKey();
+                                        Duration ttl = request.getTtlSeconds() != null
+                                                        ? Duration.ofSeconds(request.getTtlSeconds())
+                                                        : Duration.ofHours(24);
 
-    @DeleteMapping("/{key}")
-    public Mono<Map<String, String>> delete(
-            @PathVariable String key,
-            ServerWebExchange exchange) {
-        return teamContextService.getTeamFromContext(exchange)
-                .flatMap(teamId -> {
-                    String fullKey = KEY_PREFIX + teamId + ":" + key;
-                    return cacheService.delete(fullKey)
-                            .map(deleted -> Map.of("key", key, "deleted", String.valueOf(deleted)));
-                });
-    }
+                                        return cacheService.set(fullKey, request.getValue(), ttl)
+                                                        .then(Mono.just(Map.of(
+                                                                        "status", "success",
+                                                                        "key", request.getKey(),
+                                                                        "ttlSeconds", ttl.getSeconds())));
+                                });
+        }
+
+        @DeleteMapping("/{key}")
+        public Mono<Map<String, String>> delete(
+                        @PathVariable String key,
+                        ServerWebExchange exchange) {
+                return teamContextService.getTeamFromContext(exchange)
+                                .flatMap(teamId -> {
+                                        String fullKey = KEY_PREFIX + teamId + ":" + key;
+                                        return cacheService.delete(fullKey)
+                                                        .map(deleted -> Map.of("key", key, "deleted",
+                                                                        String.valueOf(deleted)));
+                                });
+        }
 }

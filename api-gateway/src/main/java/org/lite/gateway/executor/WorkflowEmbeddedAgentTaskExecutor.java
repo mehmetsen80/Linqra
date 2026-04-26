@@ -235,6 +235,8 @@ public class WorkflowEmbeddedAgentTaskExecutor extends AgentTaskExecutor {
 
                                 // Add additional parameters from task/execution
                                 if (parameters != null && !parameters.isEmpty()) {
+                                        log.info("💉 Injecting {} parameters into workflow request: {}", 
+                                                parameters.size(), parameters.keySet());
                                         params.putAll(parameters);
                                 }
 

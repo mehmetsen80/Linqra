@@ -7,5 +7,10 @@ import reactor.core.publisher.Mono;
 
 public interface OrganizationRepository extends ReactiveMongoRepository<Organization, String> {
     Mono<Organization> findByName(String name);
+
+    Mono<Organization> findByShortName(String shortName);
+
     Flux<Organization> findByNameContainingIgnoreCase(String name);
-} 
+
+    Flux<Organization> findByShortNameContainingIgnoreCase(String shortName);
+}

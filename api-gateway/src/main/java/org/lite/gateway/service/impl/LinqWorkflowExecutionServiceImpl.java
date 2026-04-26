@@ -6,8 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.lite.gateway.dto.LinqRequest;
 import org.lite.gateway.dto.LinqResponse;
 import org.lite.gateway.entity.LinqWorkflowExecution;
+import org.lite.gateway.entity.AgentExecution;
 import org.lite.gateway.model.ExecutionStatus;
 import org.lite.gateway.repository.LinqWorkflowExecutionRepository;
+import org.lite.gateway.repository.OrganizationRepository;
+import org.lite.gateway.repository.AgentExecutionRepository;
+import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.repository.LinqLlmModelRepository;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.LinqLlmModelService;
@@ -23,6 +27,8 @@ import org.lite.gateway.enums.AuditActionType;
 import org.lite.gateway.enums.AuditResourceType;
 import org.lite.gateway.enums.AuditResultType;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,9 +47,12 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionService {
     private final LinqWorkflowExecutionRepository executionRepository;
+    private final AgentExecutionRepository agentExecutionRepository;
+    private final OrganizationRepository organizationRepository;
+    private final TeamRepository teamRepository;
+
     private final LinqLlmModelRepository linqLlmModelRepository;
     private final LinqLlmModelService linqLlmModelService;
     private final LinqMicroService linqMicroService;
@@ -52,6 +61,33 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private final ExecutionMonitoringService executionMonitoringService;
     private final AuditLogHelper auditLogHelper;
     private final ObjectMapper objectMapper;
+
+    public LinqWorkflowExecutionServiceImpl(
+            LinqWorkflowExecutionRepository executionRepository,
+            AgentExecutionRepository agentExecutionRepository,
+            OrganizationRepository organizationRepository,
+            TeamRepository teamRepository,
+            LinqLlmModelRepository linqLlmModelRepository,
+            LinqLlmModelService linqLlmModelService,
+            LinqMicroService linqMicroService,
+            QueuedWorkflowService queuedWorkflowService,
+            LlmCostService llmCostService,
+            ExecutionMonitoringService executionMonitoringService,
+            AuditLogHelper auditLogHelper,
+            ObjectMapper objectMapper) {
+        this.executionRepository = executionRepository;
+        this.agentExecutionRepository = agentExecutionRepository;
+        this.organizationRepository = organizationRepository;
+        this.teamRepository = teamRepository;
+        this.linqLlmModelRepository = linqLlmModelRepository;
+        this.linqLlmModelService = linqLlmModelService;
+        this.linqMicroService = linqMicroService;
+        this.queuedWorkflowService = queuedWorkflowService;
+        this.llmCostService = llmCostService;
+        this.executionMonitoringService = executionMonitoringService;
+        this.auditLogHelper = auditLogHelper;
+        this.objectMapper = objectMapper;
+    }
 
     // Registry for active agent executions to allow cancellation
     private final Map<String, WorkflowExecutionContext> activeContexts = new ConcurrentHashMap<>();
@@ -63,7 +99,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         Map<Integer, Object> stepResults = new ConcurrentHashMap<>();
         List<LinqResponse.WorkflowStepMetadata> stepMetadata = Collections.synchronizedList(new ArrayList<>());
         Map<String, Object> globalParams = request.getQuery().getParams();
-        log.info("🚀 Starting workflow execution with global params: {}", globalParams);
+        log.info("🚀 [EXECUTE] Workflow execution started. Request params: {}", globalParams);
         WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
 
         // Register for cancellation if agentExecutionId is present
@@ -589,13 +625,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                         }
 
                         // Clean up memory-intensive data structures after workflow completion
-                        // Note: stepResults and globalParams are copied to response, so they can be
-                        // safely cleared
-                        // stepMetadata is directly referenced in response, so we don't clear it
+                        // Note: stepResults is local to this execution and can be safely cleared.
+                        // CRITICAL: globalParams MUST NOT be cleared as it contains the institutional
+                        // tags
+                        // needed for the monitoring database queries.
                         stepResults.clear();
-                        if (globalParams != null) {
-                            globalParams.clear();
-                        }
+
                         // Force garbage collection hint for memory cleanup
                         log.info("🧹 Starting post-execution cleanup for workflow");
                         System.gc();
@@ -983,6 +1018,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             if (request.getQuery() != null && request.getQuery().getWorkflowId() != null) {
                 existing.setWorkflowId(request.getQuery().getWorkflowId());
             }
+            log.info("💾 [TRACK] Saving execution {}. Request params: {}", existing.getId(),
+                    request.getQuery() != null ? request.getQuery().getParams() : "NULL_QUERY");
             existing.setRequest(request);
             existing.setResponse(response);
             existing.setStatus(finalStatus);
@@ -1077,11 +1114,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
         }
 
-        log.info("📝 Initializing workflow execution record");
+        log.info("📝 [INIT] Initializing workflow execution record. Request params: {}",
+                request.getQuery() != null ? request.getQuery().getParams() : "NULL_QUERY");
         return executionRepository.save(execution)
                 .doOnSuccess(saved -> {
                     request.getQuery().getParams().put("_executionId", saved.getId());
-                    log.info("✅ Initialized workflow execution {} with status {}", saved.getId(), saved.getStatus());
+                    log.info("✅ [INIT] Initialized workflow execution {} with status {}", saved.getId(),
+                            saved.getStatus());
                 })
                 .doOnError(error -> log.error("❌ Error initializing workflow execution: {}", error.getMessage()));
     }
@@ -1093,35 +1132,176 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     @Override
-    public Flux<LinqWorkflowExecution> getTeamExecutions(String teamId, String agentTaskId, int limit) {
-        log.info("🔍 Fetching executions for team: {} (agentTaskId: {})", teamId, agentTaskId);
-        if ("ALL_TEAMS_BYPASS".equals(teamId)) {
-            return executionRepository.findByAgentTaskId(agentTaskId, Sort.by(Sort.Direction.DESC, "executedAt"))
-                    .take(limit);
-        }
-        return executionRepository.findByTeamIdAndAgentTaskId(teamId, agentTaskId,
-                Sort.by(Sort.Direction.DESC, "executedAt"))
-                .take(limit);
+    public Flux<LinqWorkflowExecution> getTeamExecutions(String teamId, String agentTaskId, String institution,
+            int limit) {
+        return getTeamExecutions(Collections.singletonList(teamId), agentTaskId, institution, limit);
     }
 
     @Override
     public Flux<LinqWorkflowExecution> getTeamExecutions(Collection<String> teamIds, String agentTaskId,
-            int limit) {
-        log.info("🔍 Fetching executions for multiple teams: {} (agentTaskId: {})", teamIds, agentTaskId);
+            String institution, int limit) {
+        log.info("🔍 Fetching executions: teams={}, task={}, inst={}", teamIds, agentTaskId, institution);
 
         boolean isAdmin = teamIds != null && teamIds.contains("ALL_TEAMS_BYPASS");
+        boolean hasInst = institution != null && !institution.trim().isEmpty();
+        boolean hasAgentTask = agentTaskId != null && !agentTaskId.trim().isEmpty();
+
+        final String finalInstitution = institution != null ? institution : "";
+
+        if (isAdmin && hasInst && hasAgentTask) {
+            return organizationRepository.findByShortName(finalInstitution)
+                    .switchIfEmpty(organizationRepository.findByName(finalInstitution))
+                    .flatMapMany(org -> {
+                        log.info("🏢 Resolved institution [{}] to organization: {}", finalInstitution, org.getName());
+
+                        return agentExecutionRepository.findByTaskIdAndInstitution(agentTaskId, finalInstitution)
+                                .map(ae -> ae.getExecutionId())
+                                .collectList()
+                                .flatMapMany(ids -> {
+                                    Flux<LinqWorkflowExecution> totalTaskFlux = executionRepository
+                                            .findByAgentTaskId(agentTaskId, Sort.by(Sort.Direction.DESC, "executedAt"));
+
+                                    return totalTaskFlux.collectList().flatMapMany(allExecs -> {
+                                        log.info(
+                                                "📊 Found {} total executions for task {}. Filtering by institution...",
+                                                allExecs.size(), agentTaskId);
+
+                                        List<LinqWorkflowExecution> filteredList = allExecs.stream()
+                                                .filter(exec -> {
+                                                    if (exec.getRequest() != null &&
+                                                            exec.getRequest().getQuery() != null &&
+                                                            exec.getRequest().getQuery().getParams() != null) {
+                                                        Object inst = exec.getRequest().getQuery().getParams()
+                                                                .get("institution");
+                                                        if (finalInstitution.equalsIgnoreCase(String.valueOf(inst))) {
+                                                            return true;
+                                                        }
+                                                    }
+
+                                                    // LEGACY RECOVERY: Include if missing tag but belongs to team/task
+                                                    boolean hasTag = exec.getRequest() != null &&
+                                                            exec.getRequest().getQuery() != null &&
+                                                            exec.getRequest().getQuery().getParams() != null &&
+                                                            exec.getRequest().getQuery().getParams()
+                                                                    .containsKey("institution");
+
+                                                    return !hasTag;
+                                                })
+                                                .collect(Collectors.toList());
+
+                                        Flux<LinqWorkflowExecution> directFlux = Flux.fromIterable(filteredList);
+
+                                        if (ids.isEmpty()) {
+                                            return directFlux;
+                                        }
+
+                                        Flux<LinqWorkflowExecution> joinFlux = executionRepository
+                                                .findByAgentExecutionIdIn(ids,
+                                                        Sort.by(Sort.Direction.DESC, "executedAt"));
+
+                                        return Flux.merge(joinFlux, directFlux)
+                                                .distinct(LinqWorkflowExecution::getId)
+                                                .flatMap(exec -> enrichExecution(exec, institution))
+                                                .sort((e1, e2) -> {
+                                                    LocalDateTime t1 = e1.getExecutedAt();
+                                                    LocalDateTime t2 = e2.getExecutedAt();
+                                                    if (t1 == null)
+                                                        return 1;
+                                                    if (t2 == null)
+                                                        return -1;
+                                                    return t2.compareTo(t1);
+                                                });
+                                    });
+                                });
+                    })
+                    .switchIfEmpty(Flux.defer(() -> {
+                        return agentExecutionRepository.findByTaskIdAndInstitution(agentTaskId, finalInstitution)
+                                .map(ae -> ae.getExecutionId())
+                                .collectList()
+                                .flatMapMany(ids -> {
+                                    Flux<LinqWorkflowExecution> directFlux = executionRepository
+                                            .findByAgentTaskId(agentTaskId, Sort.by(Sort.Direction.DESC, "executedAt"))
+                                            .filter(exec -> {
+                                                if (exec.getRequest() != null && exec.getRequest().getQuery() != null
+                                                        && exec.getRequest().getQuery().getParams() != null) {
+                                                    Object inst = exec.getRequest().getQuery().getParams()
+                                                            .get("institution");
+                                                    return finalInstitution.equalsIgnoreCase(String.valueOf(inst));
+                                                }
+                                                return false;
+                                            });
+
+                                    if (ids.isEmpty())
+                                        return directFlux;
+
+                                    Flux<LinqWorkflowExecution> joinFlux = executionRepository
+                                            .findByAgentExecutionIdIn(ids, Sort.by(Sort.Direction.DESC, "executedAt"));
+                                    return Flux.merge(joinFlux, directFlux)
+                                            .distinct(LinqWorkflowExecution::getId)
+                                            .flatMap(exec -> enrichExecution(exec, institution));
+                                });
+                    }))
+                    .take(limit);
+        }
+
+        if (hasInst && hasAgentTask) {
+            return agentExecutionRepository.findByTaskIdAndInstitution(agentTaskId, finalInstitution)
+                    .map(ae -> ae.getExecutionId())
+                    .collectList()
+                    .flatMapMany(ids -> {
+                        Flux<LinqWorkflowExecution> totalTeamTaskFlux = executionRepository
+                                .findByTeamIdInAndAgentTaskId(teamIds, agentTaskId,
+                                        Sort.by(Sort.Direction.DESC, "executedAt"));
+
+                        return totalTeamTaskFlux.collectList().flatMapMany(allExecs -> {
+                            List<LinqWorkflowExecution> filteredList = allExecs.stream()
+                                    .filter(exec -> {
+                                        if (exec.getRequest() != null && exec.getRequest().getQuery() != null
+                                                && exec.getRequest().getQuery().getParams() != null) {
+                                            Object inst = exec.getRequest().getQuery().getParams().get("institution");
+                                            if (finalInstitution.equalsIgnoreCase(String.valueOf(inst))) {
+                                                return true;
+                                            }
+                                        }
+
+                                        // LEGACY RECOVERY: Include if missing tag but belongs to team/task
+                                        boolean hasTag = exec.getRequest() != null &&
+                                                exec.getRequest().getQuery() != null &&
+                                                exec.getRequest().getQuery().getParams() != null &&
+                                                exec.getRequest().getQuery().getParams().containsKey("institution");
+
+                                        return !hasTag;
+                                    })
+                                    .collect(Collectors.toList());
+
+                            Flux<LinqWorkflowExecution> directFlux = Flux.fromIterable(filteredList);
+
+                            if (ids.isEmpty()) {
+                                return directFlux;
+                            }
+
+                            Flux<LinqWorkflowExecution> joinFlux = executionRepository.findByAgentExecutionIdIn(ids,
+                                    Sort.by(Sort.Direction.DESC, "executedAt"));
+
+                            return Flux.merge(joinFlux, directFlux)
+                                    .distinct(LinqWorkflowExecution::getId)
+                                    .flatMap(exec -> enrichExecution(exec, institution))
+                                    .sort((e1, e2) -> {
+                                        LocalDateTime t1 = e1.getExecutedAt();
+                                        LocalDateTime t2 = e2.getExecutedAt();
+                                        if (t1 == null)
+                                            return 1;
+                                        if (t2 == null)
+                                            return -1;
+                                        return t2.compareTo(t1);
+                                    });
+                        });
+                    })
+                    .take(limit);
+        }
 
         Flux<LinqWorkflowExecution> flux;
-        if (isAdmin) {
-            log.info("🔓 Admin bypass active for execution retrieval");
-            if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
-                flux = executionRepository.findAll(Sort.by(Sort.Direction.DESC, "executedAt"));
-            } else {
-                flux = executionRepository.findByAgentTaskId(agentTaskId, Sort.by(Sort.Direction.DESC, "executedAt"));
-            }
-            return flux.take(limit);
-        }
-        if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
+        if (!hasAgentTask) {
             flux = executionRepository.findByTeamIdIn(teamIds, Sort.by(Sort.Direction.DESC, "executedAt"));
         } else {
             flux = executionRepository.findByTeamIdInAndAgentTaskId(teamIds, agentTaskId,
@@ -1133,9 +1313,26 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 .flatMapMany(list -> {
                     if (list.isEmpty()) {
                         log.warn(
-                                "⚠️ No executions found for teams {} and agentTaskId {}. Checking if data exists globally...",
-                                teamIds, agentTaskId);
-                        if (!isAdmin && agentTaskId != null) {
+                                "⚠️ No executions found for teams {} and agentTaskId {} (Inst: {}). Checking if data exists globally...",
+                                teamIds, agentTaskId, institution);
+                        if (!isAdmin) {
+                            Mono<Long> countMono;
+                            if (hasInst) {
+                                if (hasAgentTask) {
+                                    countMono = executionRepository.countByAgentTaskIdAndRequestQueryParamsInstitution(
+                                            agentTaskId, institution);
+                                } else {
+                                    countMono = executionRepository.countByRequestQueryParamsInstitution(institution);
+                                }
+                            } else {
+                                if (hasAgentTask) {
+                                    countMono = executionRepository.countByAgentTaskId(agentTaskId);
+                                } else {
+                                    return Flux.empty();
+                                }
+                            }
+
+                            // Let's simplify the check to just "any data exists for this agent task/inst"
                             return executionRepository.countByAgentTaskId(agentTaskId)
                                     .flatMapMany(count -> {
                                         if (count > 0) {
@@ -1150,35 +1347,83 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                     });
                         }
                     }
-                    return Flux.fromIterable(list);
+                    return Flux.fromIterable(list)
+                            .flatMap(exec -> enrichExecution(exec, institution));
                 });
     }
 
-    @Override
-    public Mono<Long> getTeamExecutionsCount(String teamId, String agentTaskId) {
-        if ("ALL_TEAMS_BYPASS".equals(teamId)) {
-            if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
-                return executionRepository.count();
-            }
-            return executionRepository.countByAgentTaskId(agentTaskId);
+    private Mono<LinqWorkflowExecution> enrichExecution(LinqWorkflowExecution exec, String defaultShortName) {
+        // If already enriched, skip
+        if (exec.getInstitution() != null && exec.getInstitutionShortName() != null) {
+            return Mono.just(exec);
         }
-        return executionRepository.countByTeamIdAndAgentTaskId(teamId, agentTaskId);
+
+        String shortNameFromParams = null;
+        if (exec.getRequest() != null && exec.getRequest().getQuery() != null &&
+                exec.getRequest().getQuery().getParams() != null) {
+            Object inst = exec.getRequest().getQuery().getParams().get("institution");
+            if (inst != null) {
+                shortNameFromParams = String.valueOf(inst);
+            }
+        }
+
+        final String finalShortName = (shortNameFromParams != null) ? shortNameFromParams : defaultShortName;
+
+        if (finalShortName != null && !finalShortName.isEmpty()) {
+            return organizationRepository.findByShortName(finalShortName)
+                    .switchIfEmpty(organizationRepository.findByName(finalShortName))
+                    .map(org -> {
+                        exec.setInstitution(org.getName());
+                        exec.setInstitutionShortName(org.getShortName());
+                        return exec;
+                    })
+                    .defaultIfEmpty(exec);
+        }
+
+        // If still no institution, try to resolve via Team ID
+        if (exec.getTeamId() != null) {
+            return teamRepository.findById(exec.getTeamId())
+                    .flatMap(team -> {
+                        if (team.getOrganizationId() != null) {
+                            return organizationRepository.findById(team.getOrganizationId())
+                                    .map(org -> {
+                                        exec.setInstitution(org.getName());
+                                        exec.setInstitutionShortName(org.getShortName());
+                                        return exec;
+                                    });
+                        }
+                        return Mono.just(exec);
+                    })
+                    .defaultIfEmpty(exec);
+        }
+
+        return Mono.just(exec);
     }
 
     @Override
-    public Mono<Long> getTeamExecutionsCount(java.util.Collection<String> teamIds, String agentTaskId) {
-        boolean isAdmin = teamIds != null && teamIds.contains("ALL_TEAMS_BYPASS");
+    public Mono<Long> getTeamExecutionsCount(String teamId, String agentTaskId, String institution) {
+        return getTeamExecutionsCount(Collections.singletonList(teamId), agentTaskId, institution);
+    }
 
-        if (isAdmin) {
-            if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
-                return executionRepository.count();
-            }
-            return executionRepository.countByAgentTaskId(agentTaskId);
+    @Override
+    public Mono<Long> getTeamExecutionsCount(java.util.Collection<String> teamIds, String agentTaskId,
+            String institution) {
+        log.info("📊 Counting executions for multiple teams: {} (agentTaskId: {}, institution: {})", teamIds,
+                agentTaskId, institution);
+
+        boolean isAdmin = teamIds != null && teamIds.contains("ALL_TEAMS_BYPASS");
+        boolean hasInst = institution != null && !institution.trim().isEmpty();
+        boolean hasAgentTask = agentTaskId != null && !agentTaskId.trim().isEmpty();
+
+        if (hasInst) {
+            log.info("📊 Counting institutional executions: {} (agentTaskId: {})", institution, agentTaskId);
+            return getTeamExecutions(teamIds, agentTaskId, institution, 1000).count();
         }
 
-        if (agentTaskId == null || agentTaskId.trim().isEmpty()) {
+        if (!hasAgentTask) {
             return executionRepository.countByTeamIdIn(teamIds);
         }
+
         return executionRepository.countByTeamIdInAndAgentTaskId(teamIds, agentTaskId);
     }
 

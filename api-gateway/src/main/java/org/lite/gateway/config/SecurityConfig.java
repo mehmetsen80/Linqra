@@ -277,8 +277,8 @@ public class SecurityConfig implements BeanFactoryAware {
 
                             ServerHttpRequest request = exchange.getRequest().mutate()
                                     .headers(headers -> {
-                                        // Only swap Authorization if NOT a routed path
-                                        if (!path.startsWith("/r/")) {
+                                        // Only swap Authorization if NOT a routed path OR if no user token exists (internal call)
+                                        if (!path.startsWith("/r/") || userToken == null) {
                                             headers.set("Authorization", "Bearer " + gatewayToken);
                                         }
                                         // Removed forced Accept and Content-Type to preserve original browser headers

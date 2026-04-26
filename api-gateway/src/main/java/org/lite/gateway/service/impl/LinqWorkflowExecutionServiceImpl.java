@@ -451,6 +451,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                     step.getTarget());
                                             return linqMicroService.execute(stepRequest);
                                         }))
+                                        .switchIfEmpty(Mono.error(new ResponseStatusException(
+                                                HttpStatus.INTERNAL_SERVER_ERROR,
+                                                String.format("Workflow step %d failed: Service returned empty response", step.getStep()))))
                                         .flatMap(stepResponse -> {
                                             // Check if the result contains an error
                                             if (stepResponse.getResult() instanceof Map<?, ?> resultMap &&

@@ -52,9 +52,7 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.util.AntPathMatcher;
-import java.time.Duration;
 
-import org.lite.gateway.entity.RoutePermission;
 import org.lite.gateway.repository.ApiRouteRepository;
 import org.lite.gateway.repository.TeamRouteRepository;
 import org.lite.gateway.service.TeamContextService;
@@ -130,6 +128,8 @@ public class SecurityConfig implements BeanFactoryAware {
             "/r/*/*-ws/**", // Universal WebSocket pattern for all routed apps
             "/widget/**", // Public AI Assistant widget scripts (public API key based)
             "/api/auth/**", // Public Auth Endpoints (SSO Callback, Login, Register)
+            "/api/teams", // Public Team/Institution metadata for registration/home
+            "/api/teams/**",
             "/r/*/auth/**", // Public Auth for routed apps
             "/api/internal/**", // Secured by X-Change-Log-Token
             "/linqra-knowledge-hub-dev/**", // MinIO Proxy (Secured by S3 Signature)

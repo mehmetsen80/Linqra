@@ -47,6 +47,7 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             "http://localhost:3000",
             "https://localhost:4000",
             "http://localhost:4000",
+            "http://localhost:5001",
             "https://linqra.com",
             "https://www.linqra.com",
             "https://app.linqra.com");
@@ -337,8 +338,8 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         }
 
         // Public Intelligence/Advising paths
-        if (path.contains("/api/advising/") || path.contains("/api/datasets/") || 
-            path.contains("/api/intel/") || path.contains("/api/academic/")) {
+        if (path.contains("/api/advising/") || path.contains("/api/datasets/") ||
+                path.contains("/api/intel/") || path.contains("/api/academic/")) {
             return true;
         }
 

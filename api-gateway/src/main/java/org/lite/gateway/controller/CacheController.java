@@ -32,7 +32,10 @@ public class CacheController {
                                         String fullKey = KEY_PREFIX + teamId + ":" + key;
                                         return cacheService.get(fullKey)
                                                         .map(value -> Map.of("key", key, "value", value))
-                                                        .switchIfEmpty(Mono.just(Map.of("key", key, "status", "miss")));
+                                                        .switchIfEmpty(Mono.error(
+                                                                        new org.springframework.web.server.ResponseStatusException(
+                                                                                        org.springframework.http.HttpStatus.NOT_FOUND,
+                                                                                        "Key not found in cache")));
                                 });
         }
 

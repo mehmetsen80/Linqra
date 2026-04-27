@@ -1,7 +1,7 @@
 # ========================================================
 # Stage 1: Build React App
 # ========================================================
-FROM node:21.5.0-slim as builder
+FROM node:22-slim as builder
 
 # Set working directory for the build to match source layout
 WORKDIR /app

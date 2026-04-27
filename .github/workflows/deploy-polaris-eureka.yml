@@ -3,6 +3,9 @@ name: Deploy Eureka (Discovery Server) to Polaris
 on:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy-eureka:
     runs-on: ubuntu-latest

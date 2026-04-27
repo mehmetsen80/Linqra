@@ -200,7 +200,7 @@ notifications:
     enabled: ${vault.slack.enabled}
 
 cors:
-  allowed-origins: "https://localhost:3000,http://localhost:3000,https://localhost:4000,http://localhost:4000,https://linqra.com,https://app.linqra.com"
+  allowed-origins: "https://localhost:3000,http://localhost:3000,https://localhost:4000,http://localhost:4000,https://localhost:5001,http://localhost:5001,https://linqra.com,https://app.linqra.com"
   allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD
   allowed-headers: Origin,Content-Type,Accept,Authorization,X-Requested-With,X-User-Token
   max-age: 3600

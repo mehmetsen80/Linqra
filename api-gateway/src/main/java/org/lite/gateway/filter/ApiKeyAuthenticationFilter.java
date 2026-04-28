@@ -50,7 +50,8 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             "http://localhost:5001",
             "https://linqra.com",
             "https://www.linqra.com",
-            "https://app.linqra.com");
+            "https://app.linqra.com",
+            "https://advising.linqra.com");
 
     @Override
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
@@ -59,6 +60,13 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return chain.filter(exchange);
         }
         String path = exchange.getRequest().getPath().value();
+
+        // [HEALTH CHECK BYPASS] Skip API key for health endpoints IMMEDIATELY
+        // This ensures the LoadBalancer doesn't mark services as DOWN
+        if (path.endsWith("/health") || path.endsWith("/health/")) {
+            return chain.filter(exchange);
+        }
+
         log.info("ApiKey Filter checking path: {}", path);
 
         // [ADMIN EARLY BYPASS] If an administrator token is present, skip all API
@@ -88,17 +96,19 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return chain.filter(exchange);
         }
 
-        // Skip API key for health endpoints - these should be completely public
-        if (path.endsWith("/health") || path.endsWith("/health/")) {
-            return chain.filter(exchange);
-        }
-
         // Check if this is a Web UI request by validating Origin/Referer headers
         // Web UI (browsers) automatically send Origin/Referer, external APIs typically
         // don't
         String origin = exchange.getRequest().getHeaders().getFirst("origin");
         String referer = exchange.getRequest().getHeaders().getFirst("referer");
         String authHeader = exchange.getRequest().getHeaders().getFirst(AUTHORIZATION_HEADER);
+
+        // [INTERNAL SERVICE BYPASS] Trust internal calls from other backend services
+        String xServiceName = exchange.getRequest().getHeaders().getFirst("X-Service-Name");
+        if (xServiceName != null && !xServiceName.isEmpty()) {
+            log.info("Internal service-to-service request detected from: {}, bypassing API key check", xServiceName);
+            return chain.filter(exchange);
+        }
 
         // If request has Authorization token AND valid Origin/Referer, it's from Web UI
         if (authHeader != null && !authHeader.isEmpty() && isFromWebUI(origin, referer)) {
@@ -337,19 +347,23 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return true;
         }
 
-        // Public Intelligence/Advising paths
+        // Public Intelligence/Advising fragments
         if (path.contains("/api/advising/") || path.contains("/api/datasets/") ||
                 path.contains("/api/intel/") || path.contains("/api/academic/")) {
             return true;
         }
 
-        // Non-routed paths (native gateway endpoints that are not /linq)
-        if (!path.startsWith("/r/") && !path.startsWith("/linq")) {
+        // IMPORTANT: Allow all health checks (routed and native)
+        if (path.endsWith("/health") || path.endsWith("/health/")) {
             return true;
         }
 
-        // Health checks
-        if (path.endsWith("/health") || path.endsWith("/health/")) {
+        // If it's a routed path but matches the public advising/intel patterns above,
+        // it's already caught.
+        // For everything else NOT starting with /r/ (native gateway endpoints), we
+        // allow them by default
+        // to avoid 401s on core infrastructure.
+        if (!path.startsWith("/r/") && !path.startsWith("/linq")) {
             return true;
         }
 

@@ -132,7 +132,7 @@ server:
   host: ${vault.gateway.api.host}
   port: ${vault.gateway.api.port}
   http2:
-    enabled: false
+    enabled: true
   use-forwarded-headers: true
   ssl:
     enabled: true

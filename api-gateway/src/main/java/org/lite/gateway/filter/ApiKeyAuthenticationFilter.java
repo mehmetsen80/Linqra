@@ -64,11 +64,6 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         }
         String path = exchange.getRequest().getPath().value();
 
-        // [HEALTH CHECK BYPASS] Skip API key for health endpoints IMMEDIATELY
-        // This ensures the LoadBalancer doesn't mark services as DOWN
-        if (path.endsWith("/health") || path.endsWith("/health/")) {
-            return chain.filter(exchange);
-        }
 
         log.info("ApiKey Filter checking path: {}", path);
 
@@ -99,6 +94,11 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return chain.filter(exchange);
         }
 
+        // Skip API key for health endpoints - these should be completely public
+        if (path.endsWith("/health") || path.endsWith("/health/")) {
+            return chain.filter(exchange);
+        }
+
         // Check if this is a Web UI request by validating Origin/Referer headers
         // Web UI (browsers) automatically send Origin/Referer, external APIs typically
         // don't
@@ -106,12 +106,6 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         String referer = exchange.getRequest().getHeaders().getFirst("referer");
         String authHeader = exchange.getRequest().getHeaders().getFirst(AUTHORIZATION_HEADER);
 
-        // [INTERNAL SERVICE BYPASS] Trust internal calls from other backend services
-        String xServiceName = exchange.getRequest().getHeaders().getFirst("X-Service-Name");
-        if (xServiceName != null && !xServiceName.isEmpty()) {
-            log.info("Internal service-to-service request detected from: {}, bypassing API key check", xServiceName);
-            return chain.filter(exchange);
-        }
 
         // If request has Authorization token AND valid Origin/Referer, it's from Web UI
         if (authHeader != null && !authHeader.isEmpty() && isFromWebUI(origin, referer)) {
@@ -356,7 +350,7 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return true;
         }
 
-        // IMPORTANT: Allow all health checks (routed and native)
+        // Health checks
         if (path.endsWith("/health") || path.endsWith("/health/")) {
             return true;
         }

@@ -193,7 +193,7 @@ notifications:
     enabled: ${vault.slack.enabled}
 
 cors:
-  allowed-origins: "https://linqra.com,https://www.linqra.com,https://app.linqra.com,https://advising.linqra.com"
+  allowed-origins: "https://linqra.com,https://www.linqra.com,https://app.linqra.com,https://advising.linqra.com,https://komunas.com,https://www.komunas.com,https://komunas.linqra.com"
   allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD
   allowed-headers: Origin,Content-Type,Accept,Authorization,X-Requested-With,X-User-Token
   max-age: 3600

@@ -51,7 +51,10 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             "https://linqra.com",
             "https://www.linqra.com",
             "https://app.linqra.com",
-            "https://advising.linqra.com");
+            "https://advising.linqra.com",
+            "https://komunas.com",
+            "https://www.komunas.com",
+            "https://komunas.linqra.com");
 
     @Override
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {

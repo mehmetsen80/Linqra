@@ -31,21 +31,29 @@ public class HealthCheckServiceController {
     private final SimpMessagingTemplate simpMessagingTemplate;
     private final ScheduledExecutorService scheduler;
     private final AtomicBoolean hasSubscribers = new AtomicBoolean(true);
+    private final ProfileService profileService;
 
     public HealthCheckServiceController(
             SimpMessagingTemplate simpMessagingTemplate,
             HealthCheckService healthCheckService,
-            MetricsAggregator metricsAggregator) {
+            MetricsAggregator metricsAggregator,
+            ProfileService profileService) {
         this.simpMessagingTemplate = simpMessagingTemplate;
         this.healthCheckService = healthCheckService;
         this.metricsAggregator = metricsAggregator;
+        this.profileService = profileService;
         this.scheduler = Executors.newSingleThreadScheduledExecutor();
         startCheckUpdates();
     }
 
-    // Send updates every 10 seconds
+    // Send updates every 10 seconds - ONLY in Cloud/Prod profiles
     private void startCheckUpdates() {
-        scheduler.scheduleAtFixedRate(this::sendHealthUpdate, 0, 10, TimeUnit.SECONDS);
+        if (profileService.isCloud()) {
+            log.info("Starting health check update scheduler (Cloud Profile detected)");
+            scheduler.scheduleAtFixedRate(this::sendHealthUpdate, 5, 10, TimeUnit.SECONDS);
+        } else {
+            log.info("Health check update scheduler disabled in non-cloud profile");
+        }
     }
 
     private void sendHealthUpdate() {

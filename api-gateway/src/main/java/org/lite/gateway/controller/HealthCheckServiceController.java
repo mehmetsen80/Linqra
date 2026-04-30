@@ -6,6 +6,7 @@ import org.lite.gateway.model.DashboardUpdate;
 import org.lite.gateway.model.TrendAnalysis;
 import org.lite.gateway.service.HealthCheckService;
 import org.lite.gateway.service.MetricsAggregator;
+import org.lite.gateway.service.ProfileService;
 import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.simp.SimpMessagingTemplate;

@@ -54,7 +54,9 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             "https://advising.linqra.com",
             "https://komunas.com",
             "https://www.komunas.com",
-            "https://komunas.linqra.com");
+            "https://komunas.linqra.com",
+            "https://smartadvising.ai",
+            "https://www.smartadvising.ai");
 
     @Override
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
@@ -63,7 +65,6 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             return chain.filter(exchange);
         }
         String path = exchange.getRequest().getPath().value();
-
 
         log.info("ApiKey Filter checking path: {}", path);
 
@@ -105,7 +106,6 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         String origin = exchange.getRequest().getHeaders().getFirst("origin");
         String referer = exchange.getRequest().getHeaders().getFirst("referer");
         String authHeader = exchange.getRequest().getHeaders().getFirst(AUTHORIZATION_HEADER);
-
 
         // If request has Authorization token AND valid Origin/Referer, it's from Web UI
         if (authHeader != null && !authHeader.isEmpty() && isFromWebUI(origin, referer)) {

@@ -401,6 +401,16 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     }
                 }
 
+                // Log payload size for diagnostics
+                if (payload != null) {
+                    try {
+                        String payloadStr = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(payload);
+                        log.info("📊 [LLM-GATEWAY] Request Payload Size: {} chars (URL: {})", payloadStr.length(), url);
+                    } catch (Exception ex) {
+                        log.warn("Failed to log payload size: {}", ex.getMessage());
+                    }
+                }
+
                 return requestSpec
                         .accept(org.springframework.http.MediaType.TEXT_EVENT_STREAM,
                                 org.springframework.http.MediaType.APPLICATION_NDJSON,
@@ -411,8 +421,9 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         .filter(org.springframework.util.StringUtils::hasText)
                         .timeout(Duration.ofMinutes(2))
                         .onErrorResume(e -> {
-                            log.error("❌ Error in LLM stream {}: {}", url, e.getMessage());
-                            return Flux.empty();
+                            log.error("❌ [LLM-GATEWAY] Error in LLM stream {}: {}", url, e.getMessage());
+                            // Propagate error to workflow orchestration so it can be handled/logged correctly
+                            return Flux.error(e);
                         });
             } catch (Exception e) {
                 return Flux.error(e);

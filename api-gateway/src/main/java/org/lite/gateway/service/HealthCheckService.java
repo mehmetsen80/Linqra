@@ -20,6 +20,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -43,6 +44,7 @@ public class HealthCheckService {
     private final AlertService alertService;
     private final EurekaClient eurekaClient;
     private final org.springframework.core.env.Environment env;
+    private final ProfileService profileService;
     private final Map<String, ServiceDTO> serviceHealthCache = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
 
@@ -53,6 +55,7 @@ public class HealthCheckService {
             AlertService alertService,
             EurekaClient eurekaClient,
             org.springframework.core.env.Environment env,
+            ProfileService profileService,
             ObjectMapper objectMapper) {
         this.apiRouteRepository = apiRouteRepository;
         this.webClientBuilder = webClientBuilder;
@@ -60,6 +63,7 @@ public class HealthCheckService {
         this.alertService = alertService;
         this.eurekaClient = eurekaClient;
         this.env = env;
+        this.profileService = profileService;
         this.objectMapper = objectMapper;
     }
 
@@ -203,8 +207,12 @@ public class HealthCheckService {
                                     metrics.put("responseTime", (double) responseTime);
 
                                     return createServiceStatus(serviceId, healthData)
-                                            .flatMap(status -> processHealthStatus(route, status)
-                                                    .thenReturn(status));
+                                            .flatMap(status -> {
+                                                if (profileService.isCloud()) {
+                                                    return processHealthStatus(route, status).thenReturn(status);
+                                                }
+                                                return Mono.just(status);
+                                            });
                                 } catch (Exception e) {
                                     log.error("Failed to parse health check response for service {}: {}", serviceId,
                                             e.getMessage());
@@ -277,7 +285,14 @@ public class HealthCheckService {
 
         // Store error status in Redis
         return metricsAggregator.addMetrics(serviceId, Map.of("error", 1.0))
-                .thenReturn(errorStatus);
+                .flatMap(v -> {
+                    if (profileService.isCloud()) {
+                        return apiRouteRepository.findByRouteIdentifier(serviceId)
+                                .flatMap(route -> processHealthStatus(route, errorStatus))
+                                .thenReturn(errorStatus);
+                    }
+                    return Mono.just(errorStatus);
+                });
     }
 
     public Flux<ServiceHealthStatus> getAllServicesStatus() {

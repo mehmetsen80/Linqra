@@ -138,6 +138,14 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
     }
 
     @Override
+    public Flux<ResourceUpdateNotification> getNotificationsForUser(String userId) {
+        return subscriptionService.getSubscriptionsForUser(userId)
+                .map(ResourceSubscription::getId)
+                .collectList()
+                .flatMapMany(notificationRepository::findBySubscriptionIdInOrderByCreatedAtDesc);
+    }
+
+    @Override
     public Mono<Void> markAsRead(String notificationId) {
         return notificationRepository.findById(notificationId)
                 .flatMap(n -> {

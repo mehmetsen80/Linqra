@@ -17,5 +17,7 @@ public interface ResourceNotificationService {
 
     Flux<ResourceUpdateNotification> getNotificationsForSubscription(String subscriptionId);
 
+    Flux<ResourceUpdateNotification> getNotificationsForUser(String userId);
+
     Mono<Void> markAsRead(String notificationId);
 }

@@ -17,7 +17,6 @@ import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.Objects;
 
 @Service
 @Slf4j
@@ -64,20 +63,20 @@ public class NotificationServiceImpl implements NotificationService {
                 log.error("Failed to send welcome email to {}: {}", to, e.getMessage());
             }
         })
-        .subscribeOn(Schedulers.boundedElastic())
-        .then();
+                .subscribeOn(Schedulers.boundedElastic())
+                .then();
     }
 
     @Override
     public void sendEmail(String to, String subject, String title, String summary, String details,
-                   Map<String, Object> delta, String reportUrl) {
+            Map<String, Object> delta, String reportUrl) {
         if (!emailEnabled) {
             return;
         }
 
         try {
             String template = loadTemplate("templates/alert-email.html");
-            
+
             String changesHtml = (delta != null && !delta.isEmpty()) ? String.format(
                     "<div class='details-box' style='border-left-color: #ff4081;'><div class='details-title'>Detected Changes</div><div class='details-content'>%s</div></div>",
                     formatDeltaToHtml(delta)) : "";

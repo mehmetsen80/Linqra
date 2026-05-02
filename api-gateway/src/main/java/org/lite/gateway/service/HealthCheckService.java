@@ -3,13 +3,13 @@ package org.lite.gateway.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.netflix.discovery.EurekaClient;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.config.GatewayProperties;
 import org.lite.gateway.dto.ServiceDTO;
 import org.lite.gateway.entity.ApiRoute;
 import org.lite.gateway.entity.HealthThresholds;
 import org.lite.gateway.model.ServiceHealthStatus;
 import org.lite.gateway.model.TrendAnalysis;
 import org.lite.gateway.repository.ApiRouteRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -31,20 +31,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class HealthCheckService {
 
-    @Value("${server.port:7777}")
-    private int serverPort;
-    @Value("${server.ssl.enabled:false}")
-    private boolean sslEnabled;
-    @Value("${eureka.instance.hostname:localhost}")
-    private String hostname;
-
     private final ApiRouteRepository apiRouteRepository;
     private final WebClient.Builder webClientBuilder;
     private final MetricsAggregator metricsAggregator;
     private final AlertService alertService;
     private final EurekaClient eurekaClient;
-    private final org.springframework.core.env.Environment env;
     private final ProfileService profileService;
+    private final GatewayProperties gatewayProperties;
     private final Map<String, ServiceDTO> serviceHealthCache = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper;
 
@@ -54,16 +47,16 @@ public class HealthCheckService {
             MetricsAggregator metricsAggregator,
             AlertService alertService,
             EurekaClient eurekaClient,
-            org.springframework.core.env.Environment env,
             ProfileService profileService,
+            GatewayProperties gatewayProperties,
             ObjectMapper objectMapper) {
         this.apiRouteRepository = apiRouteRepository;
         this.webClientBuilder = webClientBuilder;
         this.metricsAggregator = metricsAggregator;
         this.alertService = alertService;
         this.eurekaClient = eurekaClient;
-        this.env = env;
         this.profileService = profileService;
+        this.gatewayProperties = gatewayProperties;
         this.objectMapper = objectMapper;
     }
 
@@ -87,7 +80,8 @@ public class HealthCheckService {
 
     private Duration parseDuration(String uptimeStr) {
         try {
-            if (uptimeStr == null) return Duration.ZERO;
+            if (uptimeStr == null)
+                return Duration.ZERO;
             // Format is "0d 0h 0m 46s"
             String[] parts = uptimeStr.split(" ");
             long days = Long.parseLong(parts[0].replace("d", ""));
@@ -180,8 +174,9 @@ public class HealthCheckService {
                         return Mono.empty();
                     }
 
-                    // REMOTE-DEV Specific: Skip health checks for remote services (non '-dev') to avoid noise
-                    if (env.matchesProfiles("remote-dev") && !serviceId.toLowerCase().endsWith("-dev")) {
+                    // REMOTE-DEV Specific: Skip health checks for remote services (non '-dev') to
+                    // avoid noise
+                    if (profileService.isRemoteDev() && !serviceId.toLowerCase().endsWith("-dev")) {
                         log.debug("Skipping health check for non-dev service {} in remote-dev profile", serviceId);
                         return Mono.empty();
                     }
@@ -201,7 +196,8 @@ public class HealthCheckService {
                                     Map<String, Object> healthData = objectMapper.readValue(responseBody, Map.class);
                                     long responseTime = System.currentTimeMillis() - startTime;
 
-                                    Map<String, Object> metrics = (Map<String, Object>) healthData.getOrDefault("metrics",
+                                    Map<String, Object> metrics = (Map<String, Object>) healthData.getOrDefault(
+                                            "metrics",
                                             new HashMap<>());
                                     healthData.put("metrics", metrics);
                                     metrics.put("responseTime", (double) responseTime);
@@ -220,7 +216,7 @@ public class HealthCheckService {
                                 }
                             })
                             .onErrorResume(e -> {
-                                if (env.matchesProfiles("remote-dev")) {
+                                if (profileService.isRemoteDev()) {
                                     return Mono.empty();
                                 }
                                 log.error("Health check failed for service {}: {}", serviceId, e.getMessage());
@@ -230,7 +226,7 @@ public class HealthCheckService {
     }
 
     private WebClient createWebClient() {
-        if (sslEnabled && env.matchesProfiles("remote-dev")) {
+        if (gatewayProperties.getSsl().isEnabled() && profileService.isRemoteDev()) {
             try {
                 io.netty.handler.ssl.SslContext sslContext = io.netty.handler.ssl.SslContextBuilder.forClient()
                         .trustManager(io.netty.handler.ssl.util.InsecureTrustManagerFactory.INSTANCE)
@@ -256,7 +252,8 @@ public class HealthCheckService {
         return metricsAggregator.analyzeTrends(serviceId)
                 .flatMap(trends -> {
                     Mono<Void> alertMono;
-                    if (!status.isHealthy() || !evaluateMetrics(status.getMetrics(), route.getHealthCheck().getThresholds())) {
+                    if (!status.isHealthy()
+                            || !evaluateMetrics(status.getMetrics(), route.getHealthCheck().getThresholds())) {
                         status.incrementConsecutiveFailures();
                         alertMono = alertService.processHealthStatus(
                                 serviceId,
@@ -306,11 +303,9 @@ public class HealthCheckService {
     }
 
     private String getHealthEndpoint(ApiRoute route) {
-        String protocol = sslEnabled ? "https" : "http";
         String basePath = route.getPath().replaceAll("/\\*\\*", "");
         String healthPath = route.getHealthCheck().getPath();
-        return String.format("%s://%s:%d%s%s",
-                protocol, hostname, serverPort, basePath, healthPath);
+        return gatewayProperties.getInternalBaseUrl() + basePath + healthPath;
     }
 
     // Wrap blocking Eureka call to run on bounded elastic scheduler

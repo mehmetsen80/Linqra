@@ -53,6 +53,11 @@ public class ResourceSubscriptionController {
                                 .flatMapMany(subscriptionService::getSubscriptionsForUser);
         }
 
+        @GetMapping("/all/{userId}")
+        public Flux<ResourceSubscription> getSubscriptionsByUserId(@PathVariable String userId) {
+                return subscriptionService.getSubscriptionsForUser(userId);
+        }
+
         @GetMapping("/team")
         public Flux<ResourceSubscription> getTeamSubscriptions(ServerWebExchange exchange) {
                 return teamContextService.getTeamFromContext(exchange)

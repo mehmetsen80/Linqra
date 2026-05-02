@@ -24,4 +24,11 @@ public class ProfileService {
     public boolean isDev() {
         return env.acceptsProfiles(Profiles.of("dev", "default", "remote-dev"));
     }
+
+    /**
+     * Checks if the current environment is remote-dev
+     */
+    public boolean isRemoteDev() {
+        return env.acceptsProfiles(Profiles.of("remote-dev"));
+    }
 }

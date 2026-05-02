@@ -23,6 +23,11 @@ public class ResourceNotificationController {
         return notificationService.getNotificationsForSubscription(subscriptionId);
     }
 
+    @GetMapping("/all/{userId}")
+    public Flux<ResourceUpdateNotification> getNotificationsForUser(@PathVariable String userId) {
+        return notificationService.getNotificationsForUser(userId);
+    }
+
     @PostMapping("/{notificationId}/read")
     public Mono<ResponseEntity<Void>> markAsRead(@PathVariable String notificationId) {
         return notificationService.markAsRead(notificationId)

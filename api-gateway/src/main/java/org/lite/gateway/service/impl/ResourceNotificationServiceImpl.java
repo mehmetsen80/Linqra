@@ -2,12 +2,13 @@ package org.lite.gateway.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.lite.gateway.config.GatewayProperties;
 import org.lite.gateway.entity.ResourceSubscription;
 import org.lite.gateway.entity.ResourceUpdateNotification;
 import org.lite.gateway.repository.ResourceUpdateNotificationRepository;
+import org.lite.gateway.service.NotificationService;
 import org.lite.gateway.service.ResourceNotificationService;
 import org.lite.gateway.service.ResourceSubscriptionService;
-import org.lite.gateway.service.NotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -25,6 +26,7 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
     private final ResourceUpdateNotificationRepository notificationRepository;
     private final NotificationService notificationService;
     private final WebClient.Builder webClientBuilder;
+    private final GatewayProperties gatewayProperties;
 
     @Override
     public Mono<Void> dispatchNotification(ResourceUpdateNotification notification) {
@@ -77,8 +79,9 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
         if (delivery.isWebhookEnabled()) {
             String url = delivery.getWebhookUrl();
             if ((url == null || url.isBlank()) && sub.getAppName() != null) {
-                // Auto-discovery logic: Assuming internal service name + /webhook
-                url = "http://" + sub.getAppName() + ":8080/webhook";
+                // Linqra Pattern: Always route through the gateway using the app's route
+                // identifier
+                url = gatewayProperties.getInternalBaseUrl() + "/r/" + sub.getAppName() + "/webhook";
                 log.info("Auto-discovered webhook URL for {}: {}", sub.getAppName(), url);
             }
 
@@ -89,7 +92,8 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
                         .bodyValue(notification)
                         .retrieve()
                         .bodyToMono(Void.class)
-                        .doOnError(e -> log.error("Webhook delivery failed for sub {}: {}", sub.getId(), e.getMessage()))
+                        .doOnError(
+                                e -> log.error("Webhook delivery failed for sub {}: {}", sub.getId(), e.getMessage()))
                         .onErrorResume(e -> Mono.empty());
             }
         }

@@ -35,6 +35,12 @@ public class NotificationServiceImpl implements NotificationService {
     @Value("${notifications.email.enabled:false}")
     private boolean emailEnabled;
 
+    @Value("${notifications.email.username}")
+    private String username;
+
+    @Value("${notifications.email.password}")
+    private String password;
+
     @Value("${notifications.email.from:system@linqra.com}")
     private String fromEmail;
 
@@ -102,41 +108,73 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void sendEmail(EmailRequestDTO request) {
-        if (!emailEnabled || mailSender == null) {
+        if (!emailEnabled) {
             log.debug("Email notifications are disabled");
             return;
         }
 
-        try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+        String fromField = (request.getFrom() != null && !request.getFrom().isEmpty())
+                ? request.getFrom()
+                : fromEmail;
 
-            String from = (request.getFrom() != null && !request.getFrom().isEmpty())
-                    ? request.getFrom()
-                    : fromEmail;
+        // Parse "Name <email@domain.com>" or just "email@domain.com"
+        String senderName = "Linqra";
+        String senderEmail = fromField;
 
-            helper.setFrom(from);
-            helper.setTo(request.getTo());
-            helper.setSubject(request.getSubject());
-            helper.setText(request.getBody(), request.isHtml());
-
-            // Add High-Fidelity headers to disable Mailjet tracking
-            mimeMessage.addHeader("X-Mailjet-TrackOpen", "0");
-            mimeMessage.addHeader("X-Mailjet-TrackClick", "0");
-
-            if (request.getCc() != null && !request.getCc().isEmpty()) {
-                helper.setCc(request.getCc().toArray(new String[0]));
-            }
-            if (request.getBcc() != null && !request.getBcc().isEmpty()) {
-                helper.setBcc(request.getBcc().toArray(new String[0]));
-            }
-
-            mailSender.send(mimeMessage);
-            log.info("Email sent successfully to: {}", request.getTo());
-        } catch (Exception e) {
-            log.error("Failed to send email to {}: {}", request.getTo(), e.getMessage());
-            throw new RuntimeException("Failed to send email", e);
+        if (fromField.contains("<") && fromField.contains(">")) {
+            senderName = fromField.substring(0, fromField.indexOf("<")).trim();
+            senderEmail = fromField.substring(fromField.indexOf("<") + 1, fromField.indexOf(">")).trim();
         }
+
+        // Use Mailjet REST API v3.1 for high-fidelity deliverability
+        String payload = String.format("""
+                {
+                    "Messages": [
+                        {
+                            "From": {
+                                "Email": "%s",
+                                "Name": "%s"
+                            },
+                            "To": [
+                                {
+                                    "Email": "%s"
+                                }
+                            ],
+                            "Subject": "%s",
+                            "HTMLPart": "%s",
+                            "CustomID": "%sDispatch",
+                            "TrackOpens": "none",
+                            "TrackClicks": "none"
+                        }
+                    ]
+                }""", 
+                senderEmail, 
+                senderName,
+                request.getTo(), 
+                request.getSubject(), 
+                escapeJson(request.getBody()),
+                senderName.replaceAll("\\s+", ""));
+
+        webClientBuilder.build()
+                .post()
+                .uri("https://api.mailjet.com/v3.1/send")
+                .header("Authorization", "Basic " + java.util.Base64.getEncoder().encodeToString((username + ":" + password).getBytes()))
+                .bodyValue(payload)
+                .retrieve()
+                .bodyToMono(String.class)
+                .doOnSuccess(response -> log.info("Email sent successfully via Mailjet API to: {}", request.getTo()))
+                .doOnError(e -> log.error("Failed to send email via Mailjet API to {}: {}", request.getTo(), e.getMessage()))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe();
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("\n", "\\n")
+                    .replace("\r", "\\r")
+                    .replace("\t", "\\t");
     }
 
     @Override

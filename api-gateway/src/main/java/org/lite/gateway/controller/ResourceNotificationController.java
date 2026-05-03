@@ -28,6 +28,11 @@ public class ResourceNotificationController {
         return notificationService.getNotificationsForUser(userId);
     }
 
+    @GetMapping("/count/unread/{userId}")
+    public Mono<Long> countUnread(@PathVariable String userId) {
+        return notificationService.countUnreadNotificationsForUser(userId);
+    }
+
     @PostMapping("/{notificationId}/read")
     public Mono<ResponseEntity<Void>> markAsRead(@PathVariable String notificationId) {
         return notificationService.markAsRead(notificationId)

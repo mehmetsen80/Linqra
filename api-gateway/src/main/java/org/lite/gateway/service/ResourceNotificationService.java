@@ -20,4 +20,6 @@ public interface ResourceNotificationService {
     Flux<ResourceUpdateNotification> getNotificationsForUser(String userId);
 
     Mono<Void> markAsRead(String notificationId);
+    
+    Mono<Long> countUnreadNotificationsForUser(String userId);
 }

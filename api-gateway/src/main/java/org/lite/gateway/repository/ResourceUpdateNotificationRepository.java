@@ -18,4 +18,6 @@ public interface ResourceUpdateNotificationRepository
             String resourceId);
 
     Flux<ResourceUpdateNotification> findBySubscriptionIdAndReadFalse(String subscriptionId);
+    
+    reactor.core.publisher.Mono<Long> countBySubscriptionIdInAndReadFalse(Collection<String> subscriptionIds);
 }

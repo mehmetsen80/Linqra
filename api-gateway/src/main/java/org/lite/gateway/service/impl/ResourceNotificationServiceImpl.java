@@ -153,4 +153,12 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
                     return notificationRepository.save(n);
                 }).then();
     }
+
+    @Override
+    public Mono<Long> countUnreadNotificationsForUser(String userId) {
+        return subscriptionService.getSubscriptionsForUser(userId)
+                .map(ResourceSubscription::getId)
+                .collectList()
+                .flatMap(notificationRepository::countBySubscriptionIdInAndReadFalse);
+    }
 }

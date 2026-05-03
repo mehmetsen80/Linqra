@@ -120,6 +120,10 @@ public class NotificationServiceImpl implements NotificationService {
             helper.setSubject(request.getSubject());
             helper.setText(request.getBody(), request.isHtml());
 
+            // Add High-Fidelity headers to disable Mailjet tracking
+            mimeMessage.addHeader("X-Mailjet-TrackOpen", "0");
+            mimeMessage.addHeader("X-Mailjet-TrackClick", "0");
+
             if (request.getCc() != null && !request.getCc().isEmpty()) {
                 helper.setCc(request.getCc().toArray(new String[0]));
             }
@@ -152,6 +156,10 @@ public class NotificationServiceImpl implements NotificationService {
             helper.setTo(to);
             helper.setSubject(subject);
             helper.setText(message, isHtml);
+
+            // Add High-Fidelity headers to disable Mailjet tracking
+            mimeMessage.addHeader("X-Mailjet-TrackOpen", "0");
+            mimeMessage.addHeader("X-Mailjet-TrackClick", "0");
 
             mailSender.send(mimeMessage);
             log.info("Email sent successfully to: {}", to);

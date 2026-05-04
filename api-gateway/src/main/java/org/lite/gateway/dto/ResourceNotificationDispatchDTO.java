@@ -12,7 +12,8 @@ import java.util.Map;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ResourceNotificationDispatchDTO {
-    private String resourceCategory;
+    private String domain;
+    private String category;
     private String resourceId;
     private String type;
     private String severity;

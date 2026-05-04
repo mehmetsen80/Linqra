@@ -41,11 +41,12 @@ public class ResourceNotificationController {
 
     @PostMapping("/dispatch")
     public Mono<ResponseEntity<Void>> dispatchNotification(@RequestBody ResourceNotificationDispatchDTO dto) {
-        log.info("Production dispatch requested for resource category {} and ID {}",
-                dto.getResourceCategory(), dto.getResourceId());
+        log.info("Production dispatch requested for resource domain {}/{} and ID {}",
+                dto.getDomain(), dto.getCategory(), dto.getResourceId());
 
         ResourceUpdateNotification notification = ResourceUpdateNotification.builder()
-                .resourceCategory(dto.getResourceCategory())
+                .domain(dto.getDomain())
+                .category(dto.getCategory())
                 .resourceId(dto.getResourceId())
                 .type(dto.getType())
                 .severity(dto.getSeverity())

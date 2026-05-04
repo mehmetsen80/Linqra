@@ -8,14 +8,14 @@ import java.util.Collection;
 
 public interface ResourceUpdateNotificationRepository
         extends ReactiveMongoRepository<ResourceUpdateNotification, String> {
-    Flux<ResourceUpdateNotification> findByResourceCategory(String resourceCategory);
+    Flux<ResourceUpdateNotification> findByDomain(String domain);
 
     Flux<ResourceUpdateNotification> findBySubscriptionIdOrderByCreatedAtDesc(String subscriptionId);
 
     Flux<ResourceUpdateNotification> findBySubscriptionIdInOrderByCreatedAtDesc(Collection<String> subscriptionIds);
 
-    Flux<ResourceUpdateNotification> findByResourceCategoryAndResourceIdOrderByCreatedAtDesc(String resourceCategory,
-            String resourceId);
+    Flux<ResourceUpdateNotification> findByDomainAndCategoryAndResourceIdOrderByCreatedAtDesc(String domain,
+            String category, String resourceId);
 
     Flux<ResourceUpdateNotification> findBySubscriptionIdAndReadFalse(String subscriptionId);
     

@@ -5,7 +5,7 @@ import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import reactor.core.publisher.Mono;
 
 public interface ResourceMetadataRepository extends ReactiveMongoRepository<ResourceMetadata, String> {
-    Mono<Boolean> existsByCategoryAndResourceId(String category, String resourceId);
+    Mono<Boolean> existsByDomainAndCategoryAndResourceId(String domain, String category, String resourceId);
 
-    Mono<ResourceMetadata> findByCategoryAndResourceId(String category, String resourceId);
+    Mono<ResourceMetadata> findByDomainAndCategoryAndResourceId(String domain, String category, String resourceId);
 }

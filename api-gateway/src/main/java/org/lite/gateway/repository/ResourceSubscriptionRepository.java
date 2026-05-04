@@ -10,14 +10,14 @@ public interface ResourceSubscriptionRepository extends ReactiveMongoRepository<
 
         Flux<ResourceSubscription> findByTeamId(String teamId);
 
-        Flux<ResourceSubscription> findByResourceCategoryAndResourceIdAndEnabledTrue(String resourceCategory,
+        Flux<ResourceSubscription> findByDomainAndCategoryAndResourceIdAndEnabledTrue(String domain, String category,
                         String resourceId);
 
-        Mono<ResourceSubscription> findByUserIdAndResourceCategoryAndResourceIdAndAppName(String userId,
-                        String resourceCategory,
+        Mono<ResourceSubscription> findByUserIdAndDomainAndCategoryAndResourceIdAndAppName(String userId,
+                        String domain, String category,
                         String resourceId, String appName);
 
-        Mono<ResourceSubscription> findByTeamIdAndResourceCategoryAndResourceIdAndAppName(String teamId,
-                        String resourceCategory,
+        Mono<ResourceSubscription> findByTeamIdAndDomainAndCategoryAndResourceIdAndAppName(String teamId,
+                        String domain, String category,
                         String resourceId, String appName);
 }

@@ -15,12 +15,13 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @Builder
 @Document(collection = "resource_metadata")
 @CompoundIndexes({
-        @CompoundIndex(name = "resource_lookup_idx", def = "{'category': 1, 'resourceId': 1}", unique = true)
+        @CompoundIndex(name = "resource_lookup_idx", def = "{'domain': 1, 'category': 1, 'resourceId': 1}", unique = true)
 })
 public class ResourceMetadata {
     @Id
     private String id;
-    private String category;
+    private String domain; // e.g., "uscis-sentinel"
+    private String category; // e.g., "forms", "news", "alerts"
     private String resourceId;
     private String displayName;
     private String description;

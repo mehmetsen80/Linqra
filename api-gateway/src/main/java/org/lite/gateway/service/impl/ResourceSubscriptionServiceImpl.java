@@ -21,11 +21,11 @@ public class ResourceSubscriptionServiceImpl implements ResourceSubscriptionServ
     private final ResourceMetadataRepository resourceMetadataRepository;
 
     @Override
-    public Mono<ResourceSubscription> subscribeUser(String userId, String resourceCategory, String resourceId,
+    public Mono<ResourceSubscription> subscribeUser(String userId, String domain, String category, String resourceId,
             String appName, ResourceSubscription.DeliveryConfig delivery) {
-        return validateResource(resourceCategory, resourceId)
+        return validateResource(domain, category, resourceId)
                 .then(subscriptionRepository
-                        .findByUserIdAndResourceCategoryAndResourceIdAndAppName(userId, resourceCategory, resourceId,
+                        .findByUserIdAndDomainAndCategoryAndResourceIdAndAppName(userId, domain, category, resourceId,
                                 appName)
                         .flatMap(existing -> {
                             existing.setDelivery(delivery);
@@ -36,7 +36,8 @@ public class ResourceSubscriptionServiceImpl implements ResourceSubscriptionServ
                         .switchIfEmpty(Mono.defer(() -> {
                             ResourceSubscription sub = ResourceSubscription.builder()
                                     .userId(userId)
-                                    .resourceCategory(resourceCategory)
+                                    .domain(domain)
+                                    .category(category)
                                     .resourceId(resourceId)
                                     .appName(appName)
                                     .delivery(delivery)
@@ -49,11 +50,11 @@ public class ResourceSubscriptionServiceImpl implements ResourceSubscriptionServ
     }
 
     @Override
-    public Mono<ResourceSubscription> subscribeTeam(String teamId, String resourceCategory, String resourceId,
+    public Mono<ResourceSubscription> subscribeTeam(String teamId, String domain, String category, String resourceId,
             String appName, ResourceSubscription.DeliveryConfig delivery) {
-        return validateResource(resourceCategory, resourceId)
+        return validateResource(domain, category, resourceId)
                 .then(subscriptionRepository
-                        .findByTeamIdAndResourceCategoryAndResourceIdAndAppName(teamId, resourceCategory, resourceId,
+                        .findByTeamIdAndDomainAndCategoryAndResourceIdAndAppName(teamId, domain, category, resourceId,
                                 appName)
                         .flatMap(existing -> {
                             existing.setDelivery(delivery);
@@ -64,7 +65,8 @@ public class ResourceSubscriptionServiceImpl implements ResourceSubscriptionServ
                         .switchIfEmpty(Mono.defer(() -> {
                             ResourceSubscription sub = ResourceSubscription.builder()
                                     .teamId(teamId)
-                                    .resourceCategory(resourceCategory)
+                                    .domain(domain)
+                                    .category(category)
                                     .resourceId(resourceId)
                                     .appName(appName)
                                     .delivery(delivery)
@@ -76,12 +78,12 @@ public class ResourceSubscriptionServiceImpl implements ResourceSubscriptionServ
                         })));
     }
 
-    private Mono<Void> validateResource(String resourceCategory, String resourceId) {
-        return resourceMetadataRepository.existsByCategoryAndResourceId(resourceCategory, resourceId)
+    private Mono<Void> validateResource(String domain, String category, String resourceId) {
+        return resourceMetadataRepository.existsByDomainAndCategoryAndResourceId(domain, category, resourceId)
                 .flatMap(exists -> {
                     if (!exists) {
                         return Mono.error(new IllegalArgumentException(
-                                "Invalid resource category or ID: " + resourceCategory + "/" + resourceId));
+                                "Invalid resource domain/category or ID: " + domain + "/" + category + "/" + resourceId));
                     }
                     return Mono.empty();
                 });
@@ -103,8 +105,8 @@ public class ResourceSubscriptionServiceImpl implements ResourceSubscriptionServ
     }
 
     @Override
-    public Flux<ResourceSubscription> getActiveSubscriptionsForResource(String resourceCategory, String resourceId) {
-        return subscriptionRepository.findByResourceCategoryAndResourceIdAndEnabledTrue(resourceCategory, resourceId);
+    public Flux<ResourceSubscription> getActiveSubscriptionsForResource(String domain, String category, String resourceId) {
+        return subscriptionRepository.findByDomainAndCategoryAndResourceIdAndEnabledTrue(domain, category, resourceId);
     }
 
     @Override

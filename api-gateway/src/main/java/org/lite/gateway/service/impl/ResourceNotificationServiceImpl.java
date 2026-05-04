@@ -46,12 +46,14 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
             return deliverNotification(notification, dummySub);
         }
 
-        // Fetch exact category + resource matches
+        // Fetch exact domain + category + resource matches
         return subscriptionService
-                .getActiveSubscriptionsForResource(notification.getResourceCategory(), notification.getResourceId())
+                .getActiveSubscriptionsForResource(notification.getDomain(), notification.getCategory(),
+                        notification.getResourceId())
                 .flatMap(sub -> {
                     ResourceUpdateNotification personalUpdate = ResourceUpdateNotification.builder()
-                            .resourceCategory(notification.getResourceCategory())
+                            .domain(notification.getDomain())
+                            .category(notification.getCategory())
                             .resourceId(notification.getResourceId())
                             .appName(sub.getAppName())
                             .subscriptionId(sub.getId())

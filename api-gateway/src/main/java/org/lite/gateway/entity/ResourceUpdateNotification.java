@@ -23,7 +23,7 @@ import java.util.Map;
 @Builder
 @CompoundIndexes({
         @CompoundIndex(name = "sub_created_idx", def = "{'subscriptionId': 1, 'createdAt': -1}"),
-        @CompoundIndex(name = "cat_res_idx", def = "{'resourceCategory': 1, 'resourceId': 1, 'createdAt': -1}")
+        @CompoundIndex(name = "cat_res_idx", def = "{'domain': 1, 'category': 1, 'resourceId': 1, 'createdAt': -1}")
 })
 public class ResourceUpdateNotification {
     @Id
@@ -32,7 +32,8 @@ public class ResourceUpdateNotification {
     @Indexed
     private String subscriptionId; // Link to the specific ResourceSubscription
 
-    private String resourceCategory; // e.g., "uscis-sentinel"
+    private String domain; // e.g., "uscis-sentinel"
+    private String category; // e.g., "forms", "news", "alerts"
     private String resourceId; // e.g., "I-485"
     private String appName; // e.g., "komunas-app"
 

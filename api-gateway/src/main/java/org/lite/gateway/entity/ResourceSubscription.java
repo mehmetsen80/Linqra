@@ -24,9 +24,9 @@ import java.util.Map;
 @AllArgsConstructor
 @Builder
 @CompoundIndexes({
-        @CompoundIndex(name = "user_resource_idx", def = "{'userId': 1, 'resourceCategory': 1, 'resourceId': 1, 'appName': 1}", unique = true),
-        @CompoundIndex(name = "team_resource_idx", def = "{'teamId': 1, 'resourceCategory': 1, 'resourceId': 1, 'appName': 1}"),
-        @CompoundIndex(name = "resource_enabled_idx", def = "{'resourceCategory': 1, 'resourceId': 1, 'enabled': 1}")
+        @CompoundIndex(name = "user_resource_idx", def = "{'userId': 1, 'domain': 1, 'category': 1, 'resourceId': 1, 'appName': 1}", unique = true),
+        @CompoundIndex(name = "team_resource_idx", def = "{'teamId': 1, 'domain': 1, 'category': 1, 'resourceId': 1, 'appName': 1}"),
+        @CompoundIndex(name = "resource_enabled_idx", def = "{'domain': 1, 'category': 1, 'resourceId': 1, 'enabled': 1}")
 })
 public class ResourceSubscription {
     @Id
@@ -35,7 +35,8 @@ public class ResourceSubscription {
     private String userId; // Optional: Personal subscription
     private String teamId; // Optional: Team-wide subscription
 
-    private String resourceCategory; // e.g., "uscis-sentinel"
+    private String domain; // e.g., "uscis-sentinel"
+    private String category; // e.g., "forms", "news", "alerts"
     private String resourceId; // Mandatory: e.g., "I-485"
     private String appName; // e.g., "komunas-app"
 

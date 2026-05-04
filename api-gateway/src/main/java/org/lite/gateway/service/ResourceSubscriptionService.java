@@ -5,11 +5,11 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface ResourceSubscriptionService {
-        Mono<ResourceSubscription> subscribeUser(String userId, String resourceCategory, String resourceId,
+        Mono<ResourceSubscription> subscribeUser(String userId, String domain, String category, String resourceId,
                         String appName,
                         ResourceSubscription.DeliveryConfig delivery);
 
-        Mono<ResourceSubscription> subscribeTeam(String teamId, String resourceCategory, String resourceId,
+        Mono<ResourceSubscription> subscribeTeam(String teamId, String domain, String category, String resourceId,
                         String appName,
                         ResourceSubscription.DeliveryConfig delivery);
 
@@ -19,7 +19,7 @@ public interface ResourceSubscriptionService {
 
         Flux<ResourceSubscription> getSubscriptionsForTeam(String teamId);
 
-        Flux<ResourceSubscription> getActiveSubscriptionsForResource(String resourceCategory, String resourceId);
+        Flux<ResourceSubscription> getActiveSubscriptionsForResource(String domain, String category, String resourceId);
 
         Mono<ResourceSubscription> updateSubscription(String subscriptionId,
                         ResourceSubscription.DeliveryConfig delivery,

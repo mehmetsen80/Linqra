@@ -28,7 +28,7 @@ public class ResourceSubscriptionController {
                         @RequestBody ResourceSubscriptionRequest request) {
 
                 return subscriptionService.subscribeUser(request.getUserId(),
-                                request.getResourceCategory(),
+                                request.getDomain(), request.getCategory(),
                                 request.getResourceId(), request.getAppName(),
                                 request.getDelivery())
                                 .map(ResponseEntity::ok);
@@ -41,7 +41,7 @@ public class ResourceSubscriptionController {
 
                 return teamContextService.getTeamFromContext(exchange)
                                 .flatMap(teamId -> subscriptionService.subscribeTeam(teamId,
-                                                request.getResourceCategory(),
+                                                request.getDomain(), request.getCategory(),
                                                 request.getResourceId(), request.getAppName(),
                                                 request.getDelivery()))
                                 .map(ResponseEntity::ok);

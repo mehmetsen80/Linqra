@@ -19,16 +19,16 @@ public class ResourceMetadataController {
 
     @PostMapping
     public Mono<ResponseEntity<ResourceMetadata>> upsertResource(@RequestBody ResourceMetadata metadata) {
-        return resourceMetadataRepository.findByCategoryAndResourceId(metadata.getCategory(), metadata.getResourceId())
+        return resourceMetadataRepository.findByDomainAndCategoryAndResourceId(metadata.getDomain(), metadata.getCategory(), metadata.getResourceId())
                 .flatMap(existing -> {
-                    log.info("Updating existing resource metadata: {}/{}", metadata.getCategory(),
+                    log.info("Updating existing resource metadata: {}/{}/{}", metadata.getDomain(), metadata.getCategory(),
                             metadata.getResourceId());
                     existing.setDisplayName(metadata.getDisplayName());
                     existing.setDescription(metadata.getDescription());
                     return resourceMetadataRepository.save(existing);
                 })
                 .switchIfEmpty(Mono.defer(() -> {
-                    log.info("Creating new resource metadata: {}/{}", metadata.getCategory(), metadata.getResourceId());
+                    log.info("Creating new resource metadata: {}/{}/{}", metadata.getDomain(), metadata.getCategory(), metadata.getResourceId());
                     return resourceMetadataRepository.save(metadata);
                 }))
                 .map(ResponseEntity::ok);
@@ -39,9 +39,9 @@ public class ResourceMetadataController {
         return resourceMetadataRepository.findAll();
     }
 
-    @DeleteMapping("/{category}/{resourceId}")
-    public Mono<ResponseEntity<Void>> deleteResource(@PathVariable String category, @PathVariable String resourceId) {
-        return resourceMetadataRepository.findByCategoryAndResourceId(category, resourceId)
+    @DeleteMapping("/{domain}/{category}/{resourceId}")
+    public Mono<ResponseEntity<Void>> deleteResource(@PathVariable String domain, @PathVariable String category, @PathVariable String resourceId) {
+        return resourceMetadataRepository.findByDomainAndCategoryAndResourceId(domain, category, resourceId)
                 .flatMap(resourceMetadataRepository::delete)
                 .then(Mono.just(ResponseEntity.noContent().build()));
     }

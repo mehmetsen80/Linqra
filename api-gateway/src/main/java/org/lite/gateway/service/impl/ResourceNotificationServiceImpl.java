@@ -74,12 +74,21 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
 
     private Mono<Void> deliverNotification(ResourceUpdateNotification notification, ResourceSubscription sub) {
         ResourceSubscription.DeliveryConfig delivery = sub.getDelivery();
-        if (delivery == null)
-            return Mono.empty();
+        if (delivery == null) {
+            delivery = ResourceSubscription.DeliveryConfig.builder()
+                    .emailEnabled(true)
+                    .email(sub.getUserId())
+                    .webhookEnabled(false)
+                    .build();
+        } else if (delivery.isEmailEnabled() && (delivery.getEmail() == null || delivery.getEmail().isBlank())) {
+            delivery.setEmail(sub.getUserId());
+        }
+
+        final ResourceSubscription.DeliveryConfig finalDelivery = delivery;
 
         Mono<Void> webHookMono = Mono.empty();
-        if (delivery.isWebhookEnabled()) {
-            String url = delivery.getWebhookUrl();
+        if (finalDelivery.isWebhookEnabled()) {
+            String url = finalDelivery.getWebhookUrl();
             if ((url == null || url.isBlank()) && sub.getAppName() != null) {
                 // Linqra Pattern: Always route through the gateway using the app's route
                 // identifier
@@ -101,11 +110,11 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
         }
 
         Mono<Void> emailMono = Mono.empty();
-        if (delivery.isEmailEnabled()) {
-            if (delivery.getEmail() != null && !delivery.getEmail().isBlank()) {
+        if (finalDelivery.isEmailEnabled()) {
+            if (finalDelivery.getEmail() != null && !finalDelivery.getEmail().isBlank()) {
                 emailMono = Mono.fromRunnable(() -> {
                     notificationService.sendEmail(
-                            delivery.getEmail(),
+                            finalDelivery.getEmail(),
                             "Linqra Alert: " + notification.getSummary(),
                             notification.getSummary(),
                             "A resource you are monitoring has been updated.",

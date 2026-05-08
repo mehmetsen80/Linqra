@@ -148,7 +148,7 @@ public class NotificationServiceImpl implements NotificationService {
 
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true);
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
 
             if (fromEmail != null && !fromEmail.isEmpty()) {
                 helper.setFrom(fromEmail);
@@ -226,7 +226,7 @@ public class NotificationServiceImpl implements NotificationService {
                     sb.append("</ul>");
                     inList = false;
                 }
-                sb.append("<h3 style='color: #ffffff; margin-top: 20px; margin-bottom: 10px;'>")
+                sb.append("<h3 style='color: #ffffff !important; margin-top: 20px; margin-bottom: 10px;'>")
                         .append(line.substring(4)).append("</h3>");
             } else if (line.startsWith("- ")) {
                 if (!inList) {
@@ -258,29 +258,91 @@ public class NotificationServiceImpl implements NotificationService {
             return "";
 
         StringBuilder sb = new StringBuilder();
-        sb.append("<table style='width: 100%; border-collapse: collapse; font-size: 14px;'>");
+        sb.append("<div style='font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;'>");
+        
         for (Map.Entry<String, Object> entry : delta.entrySet()) {
-            sb.append("<tr style='border-bottom: 1px solid rgba(255, 255, 255, 0.05);'>");
-            sb.append("<td style='padding: 8px 0; color: #8b949e; width: 30%; vertical-align: top;'>")
-                    .append(entry.getKey()).append("</td>");
-            sb.append("<td style='padding: 8px 0; color: #c9d1d9; font-family: monospace;'>");
+            // Only show keys that are not generic top-level wrappers if we have a single key
+            boolean showKey = delta.size() > 1 || !entry.getKey().equalsIgnoreCase("alerts");
+            
+            if (showKey) {
+                sb.append("<h3 style='margin-top: 24px; margin-bottom: 12px; color: #c9d1d9; font-size: 16px; text-transform: capitalize; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;'>")
+                  .append(entry.getKey()).append("</h3>");
+            }
 
             if (entry.getValue() instanceof Map) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> subMap = (Map<String, Object>) entry.getValue();
-                sb.append("<div style='background: rgba(255,255,255,0.02); padding: 5px; border-radius: 4px;'>");
+                sb.append("<div style='background: rgba(255,255,255,0.02); padding: 16px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);'>");
                 for (Map.Entry<String, Object> subEntry : subMap.entrySet()) {
-                    sb.append("<div><span style='color: #6e7681;'>").append(subEntry.getKey()).append(":</span> ")
-                            .append(subEntry.getValue()).append("</div>");
+                    sb.append("<div style='margin-bottom: 8px;'><strong style='color: #8b949e; text-transform: capitalize;'>")
+                      .append(subEntry.getKey()).append(":</strong> <span style='color: #c9d1d9;'>")
+                      .append(subEntry.getValue()).append("</span></div>");
+                }
+                sb.append("</div>");
+            } else if (entry.getValue() instanceof java.util.List) {
+                @SuppressWarnings("unchecked")
+                java.util.List<?> list = (java.util.List<?>) entry.getValue();
+                sb.append("<div>");
+                
+                for (Object item : list) {
+                    if (item instanceof Map) {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> subMap = (Map<String, Object>) item;
+                        sb.append("<div style='background: rgba(255,255,255,0.03); padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 20px;'>");
+                        
+                        // Extract common fields for better layout
+                        Object title = subMap.get("title");
+                        Object date = subMap.get("date");
+                        Object url = subMap.getOrDefault("url", subMap.get("link"));
+                        
+                        // Header row (Title + Date) using table for Gmail compatibility
+                        if (title != null) {
+                            sb.append("<table style='width: 100%; border-collapse: collapse; margin-bottom: 12px;'><tr>");
+                            sb.append("<td style='vertical-align: top;'><h4 style='margin: 0; color: #58a6ff; font-size: 16px; line-height: 1.4;'>").append(title).append("</h4></td>");
+                            if (date != null) {
+                                sb.append("<td style='vertical-align: top; text-align: right; white-space: nowrap; padding-left: 16px;'>")
+                                  .append("<span style='color: #8b949e; font-size: 12px; padding: 2px 8px; background: rgba(255,255,255,0.05); border-radius: 12px;'>")
+                                  .append(date).append("</span></td>");
+                            }
+                            sb.append("</tr></table>");
+                        }
+                        
+                        // Body (Summary and other fields)
+                        for (Map.Entry<String, Object> subEntry : subMap.entrySet()) {
+                            String k = subEntry.getKey().toLowerCase();
+                            if (k.equals("title") || k.equals("date") || k.equals("url") || k.equals("link")) continue;
+                            
+                            if (k.equals("summary") || k.equals("description")) {
+                                sb.append("<div style='color: #c9d1d9; font-size: 14px; line-height: 1.6; margin-bottom: 16px;'>")
+                                  .append(subEntry.getValue()).append("</div>");
+                            } else {
+                                sb.append("<div style='margin-bottom: 8px; font-size: 13px;'><strong style='color: #8b949e; text-transform: capitalize;'>")
+                                  .append(subEntry.getKey()).append(":</strong> <span style='color: #c9d1d9;'>")
+                                  .append(subEntry.getValue()).append("</span></div>");
+                            }
+                        }
+                        
+                        // Footer (URL Action)
+                        if (url != null) {
+                            sb.append("<div style='margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05);'>");
+                            sb.append("<a href='").append(url)
+                              .append("' style='display: inline-block; color: #ed7534; text-decoration: none; font-size: 13px; font-weight: 600;'>View Announcement &rarr;</a>");
+                            sb.append("</div>");
+                        }
+                        
+                        sb.append("</div>");
+                    } else {
+                        sb.append("<div style='background: rgba(255,255,255,0.02); padding: 12px; border-radius: 4px; color: #c9d1d9;'>")
+                          .append(item).append("</div>");
+                    }
                 }
                 sb.append("</div>");
             } else {
-                sb.append(entry.getValue());
+                sb.append("<div style='color: #c9d1d9; font-size: 14px; line-height: 1.6;'>")
+                  .append(entry.getValue()).append("</div>");
             }
-
-            sb.append("</td></tr>");
         }
-        sb.append("</table>");
+        sb.append("</div>");
         return sb.toString();
     }
 }

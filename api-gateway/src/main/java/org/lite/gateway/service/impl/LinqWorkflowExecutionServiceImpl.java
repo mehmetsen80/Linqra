@@ -1728,6 +1728,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     }
 
     private Object trySmartExtractContent(Map<?, ?> map) {
+        Object extracted = null;
         // OpenAI Chat format
         if (map.containsKey("choices")) {
             Object choices = map.get("choices");
@@ -1736,52 +1737,80 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 if (firstChoice instanceof Map<?, ?> choiceMap) {
                     Object message = choiceMap.get("message");
                     if (message instanceof Map<?, ?> messageMap) {
-                        return messageMap.get("content");
+                        extracted = messageMap.get("content");
                     }
                 }
             }
         }
         // Anthropic Claude format
-        if (map.containsKey("content")) {
+        else if (map.containsKey("content")) {
             Object content = map.get("content");
             if (content instanceof List<?> list && !list.isEmpty()) {
                 Object first = list.get(0);
                 if (first instanceof Map<?, ?> firstMap && "text".equals(firstMap.get("type"))) {
-                    return firstMap.get("text");
+                    extracted = firstMap.get("text");
                 }
             }
         }
         // Gemini format
-        if (map.containsKey("candidates")) {
+        else if (map.containsKey("candidates")) {
             Object candidates = map.get("candidates");
             if (candidates instanceof List<?> list && !list.isEmpty()) {
-                Object first = list.get(0);
-                if (first instanceof Map<?, ?> firstMap) {
-                    Object content = firstMap.get("content");
-                    if (content instanceof Map<?, ?> contentMap) {
+                Object firstCandidate = list.get(0);
+                if (firstCandidate instanceof Map<?, ?> candidateMap) {
+                    Object content = candidateMap.get("content");
+                    if (content instanceof Map<?, ?> contentMap && contentMap.containsKey("parts")) {
                         Object parts = contentMap.get("parts");
                         if (parts instanceof List<?> partsList && !partsList.isEmpty()) {
                             Object firstPart = partsList.get(0);
                             if (firstPart instanceof Map<?, ?> partMap) {
-                                return partMap.get("text");
+                                extracted = partMap.get("text");
                             }
                         }
                     }
                 }
             }
         }
-        // Fallback to "text" or "result" or "response" fields
-        if (map.containsKey("text"))
-            return map.get("text");
-        if (map.containsKey("result"))
-            return map.get("result");
-        if (map.containsKey("response"))
-            return map.get("response");
+        // Ollama format
+        else if (map.containsKey("message")) {
+            Object message = map.get("message");
+            if (message instanceof Map<?, ?> messageMap) {
+                extracted = messageMap.get("content");
+            }
+        } else if (map.containsKey("response")) {
+            extracted = map.get("response");
+        }
+        // Fallbacks
+        else if (map.containsKey("text")) {
+            extracted = map.get("text");
+        } else if (map.containsKey("result")) {
+            extracted = map.get("result");
+        }
 
-        // Generic fallback: if it's a map but no common provider keys found, return the
-        // map itself.
-        // The extractFinalResult method will handle stringifying it (JSON).
-        return map;
+        if (extracted instanceof String strContent) {
+            strContent = strContent.trim();
+            if (strContent.startsWith("```json")) {
+                strContent = strContent.substring(7);
+            } else if (strContent.startsWith("```")) {
+                strContent = strContent.substring(3);
+            }
+            if (strContent.endsWith("```")) {
+                strContent = strContent.substring(0, strContent.length() - 3);
+            }
+            strContent = strContent.trim();
+            
+            try {
+                com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(strContent);
+                if (node.isObject() || node.isArray()) {
+                    return objectMapper.convertValue(node, Object.class);
+                }
+            } catch (Exception e) {
+                // Not a valid JSON, just return string
+            }
+            return extracted;
+        }
+
+        return extracted != null ? extracted : map;
     }
 
     private String extractFinalResult(Object result) {

@@ -115,9 +115,10 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
                 emailMono = Mono.fromRunnable(() -> {
                     notificationService.sendEmail(
                             finalDelivery.getEmail(),
-                            "Linqra Alert: " + notification.getSummary(),
                             notification.getSummary(),
-                            "A resource you are monitoring has been updated.",
+                            notification.getSummary(),
+                            "A " + notification.getSeverity().toLowerCase() + "-severity " + notification.getCategory()
+                                    + " update has been detected. See the structured payload below for details.",
                             notification.getDetails(),
                             notification.getDelta(),
                             notification.getReportUrl());

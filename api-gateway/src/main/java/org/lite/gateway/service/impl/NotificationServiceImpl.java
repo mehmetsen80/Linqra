@@ -226,7 +226,7 @@ public class NotificationServiceImpl implements NotificationService {
                     sb.append("</ul>");
                     inList = false;
                 }
-                sb.append("<h3 style='color: #ffffff; margin-top: 20px; margin-bottom: 10px;'>")
+                sb.append("<h3 style='color: #ffffff !important; margin-top: 20px; margin-bottom: 10px;'>")
                         .append(line.substring(4)).append("</h3>");
             } else if (line.startsWith("- ")) {
                 if (!inList) {
@@ -282,28 +282,29 @@ public class NotificationServiceImpl implements NotificationService {
             } else if (entry.getValue() instanceof java.util.List) {
                 @SuppressWarnings("unchecked")
                 java.util.List<?> list = (java.util.List<?>) entry.getValue();
-                sb.append("<div style='display: flex; flex-direction: column; gap: 16px;'>");
+                sb.append("<div>");
                 
                 for (Object item : list) {
                     if (item instanceof Map) {
                         @SuppressWarnings("unchecked")
                         Map<String, Object> subMap = (Map<String, Object>) item;
-                        sb.append("<div style='background: rgba(255,255,255,0.03); padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);'>");
+                        sb.append("<div style='background: rgba(255,255,255,0.03); padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 20px;'>");
                         
                         // Extract common fields for better layout
                         Object title = subMap.get("title");
                         Object date = subMap.get("date");
                         Object url = subMap.getOrDefault("url", subMap.get("link"));
                         
-                        // Header row (Title + Date)
+                        // Header row (Title + Date) using table for Gmail compatibility
                         if (title != null) {
-                            sb.append("<div style='display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;'>");
-                            sb.append("<h4 style='margin: 0; color: #58a6ff; font-size: 16px; line-height: 1.4;'>").append(title).append("</h4>");
+                            sb.append("<table style='width: 100%; border-collapse: collapse; margin-bottom: 12px;'><tr>");
+                            sb.append("<td style='vertical-align: top;'><h4 style='margin: 0; color: #58a6ff; font-size: 16px; line-height: 1.4;'>").append(title).append("</h4></td>");
                             if (date != null) {
-                                sb.append("<span style='color: #8b949e; font-size: 12px; white-space: nowrap; margin-left: 16px; padding: 2px 8px; background: rgba(255,255,255,0.05); border-radius: 12px;'>")
-                                  .append(date).append("</span>");
+                                sb.append("<td style='vertical-align: top; text-align: right; white-space: nowrap; padding-left: 16px;'>")
+                                  .append("<span style='color: #8b949e; font-size: 12px; padding: 2px 8px; background: rgba(255,255,255,0.05); border-radius: 12px;'>")
+                                  .append(date).append("</span></td>");
                             }
-                            sb.append("</div>");
+                            sb.append("</tr></table>");
                         }
                         
                         // Body (Summary and other fields)

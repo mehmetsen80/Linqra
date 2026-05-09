@@ -117,8 +117,8 @@ public class ResourceNotificationServiceImpl implements ResourceNotificationServ
                             finalDelivery.getEmail(),
                             notification.getSummary(),
                             notification.getSummary(),
-                            "A " + notification.getSeverity().toLowerCase() + "-severity " + notification.getCategory()
-                                    + " update has been detected. See the structured payload below for details.",
+                            "A " + notification.getSeverity().toLowerCase() + "-severity update has been detected for " 
+                                    + notification.getCategory().replace("-", " ") + ". Review the agent's analysis and detected changes below:",
                             notification.getDetails(),
                             notification.getDelta(),
                             notification.getReportUrl());

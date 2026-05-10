@@ -77,6 +77,10 @@ public class NotificationServiceImpl implements NotificationService {
         try {
             String template = loadTemplate("templates/alert-email.html");
 
+            // Extract generic injected HTML if provided by the source application
+            String tablesHtml = (delta != null && delta.containsKey("injectedHtml")) ? 
+                    String.valueOf(delta.get("injectedHtml")) : "";
+
             String changesHtml = (delta != null && !delta.isEmpty()) ? String.format(
                     "<div class='details-box' style='border-left-color: #ff4081;'><div class='details-title'>Detected Changes</div><div class='details-content'>%s</div></div>",
                     formatDeltaToHtml(delta)) : "";
@@ -85,6 +89,7 @@ public class NotificationServiceImpl implements NotificationService {
                     .replace("[TITLE]", title)
                     .replace("[SUMMARY]", formatMarkdownToHtml(summary))
                     .replace("[DETAILS]", formatMarkdownToHtml(details))
+                    .replace("[TABLES]", tablesHtml)
                     .replace("[CHANGES]", changesHtml)
                     .replace("[REPORT_URL]", (reportUrl != null && !reportUrl.isEmpty()) ? reportUrl : baseUrl);
 
@@ -262,9 +267,15 @@ public class NotificationServiceImpl implements NotificationService {
                 "<div style='font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Helvetica, Arial, sans-serif;'>");
 
         for (Map.Entry<String, Object> entry : delta.entrySet()) {
+            String key = entry.getKey();
+            // Skip generic injected HTML that is handled separately in the template
+            if (key.equalsIgnoreCase("injectedHtml")) {
+                continue;
+            }
+
             // Only show keys that are not generic top-level wrappers if we have a single
             // key
-            boolean showKey = delta.size() > 1 || !entry.getKey().equalsIgnoreCase("alerts");
+            boolean showKey = delta.size() > 1 || !key.equalsIgnoreCase("alerts");
 
             if (showKey) {
                 sb.append(

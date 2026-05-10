@@ -48,6 +48,7 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             "https://localhost:4000",
             "http://localhost:4000",
             "http://localhost:5001",
+            "https://localhost:5001",
             "https://linqra.com",
             "https://www.linqra.com",
             "https://app.linqra.com",

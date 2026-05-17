@@ -76,6 +76,10 @@ public class AgentExecution {
     private String errorCode;               // Error code for programmatic handling
     private String errorStack;              // Full error stack trace for debugging
     
+    // Progress Tracking
+    private int currentStep;                // Current step being executed
+    private int totalSteps;                 // Total number of steps in the workflow
+    
     // Input/Output Data
     @Field("input_data")
     private Map<String, Object> inputData;  // Input data provided to the task

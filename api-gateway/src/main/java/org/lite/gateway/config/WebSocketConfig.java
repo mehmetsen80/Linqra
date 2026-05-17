@@ -68,7 +68,7 @@ public class WebSocketConfig {
     private final Map<String, Map<String, String>> sessionSubscriptions = new ConcurrentHashMap<>(); // sessionId ->
                                                                                                      // (destination ->
                                                                                                      // subId)
-    private final List<String> recentExecutionMessages = Collections.synchronizedList(new ArrayList<>());
+    private final Map<String, String> activeExecutionMessages = new ConcurrentHashMap<>();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Autowired(required = false)
@@ -139,10 +139,21 @@ public class WebSocketConfig {
                 try {
                     String jsonPayload = objectMapper.writeValueAsString(message.getPayload());
 
-                    // Also keep track of recent messages for manual replay
-                    recentExecutionMessages.add(jsonPayload);
-                    if (recentExecutionMessages.size() > 20) {
-                        recentExecutionMessages.removeFirst();
+                    // Track only active executions for replay on new subscriptions
+                    try {
+                        com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(jsonPayload);
+                        String executionId = node.path("executionId").asText();
+                        String status = node.path("status").asText();
+
+                        if (executionId != null && !executionId.isEmpty()) {
+                            if ("COMPLETED".equals(status) || "FAILED".equals(status) || "CANCELLED".equals(status)) {
+                                activeExecutionMessages.remove(executionId);
+                            } else {
+                                activeExecutionMessages.put(executionId, jsonPayload);
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to parse execution message for active tracking: {}", e.getMessage());
                     }
 
                     // Always publish to Redis for cluster-wide synchronization
@@ -489,17 +500,15 @@ public class WebSocketConfig {
                             .put(destination, subId);
                     log.info("Session {} subscribed to {} with id {}", session.getId(), destination, subId);
 
-                    // If it's the execution topic, manually replay recent messages
+                    // If it's the execution topic, manually replay active execution messages
                     if ("/topic/execution".equals(destination)) {
-                        log.info("Replaying {} recent execution messages for session {}",
-                                recentExecutionMessages.size(), session.getId());
-                        synchronized (recentExecutionMessages) {
-                            List<String> messagesToReplay = new ArrayList<>(recentExecutionMessages);
-                            session.send(Flux.fromIterable(messagesToReplay)
-                                    .map(replayMsg -> session
-                                            .textMessage(createStompFrame(replayMsg, destination, subId))))
-                                    .subscribe();
-                        }
+                        log.info("Replaying {} active execution messages for session {}",
+                                activeExecutionMessages.size(), session.getId());
+                        List<String> messagesToReplay = new ArrayList<>(activeExecutionMessages.values());
+                        session.send(Flux.fromIterable(messagesToReplay)
+                                .map(replayMsg -> session
+                                        .textMessage(createStompFrame(replayMsg, destination, subId))))
+                                .subscribe();
                     }
                 }
 

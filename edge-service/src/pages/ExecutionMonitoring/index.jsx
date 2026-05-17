@@ -40,10 +40,30 @@ const ExecutionMonitoring = () => {
             setLoadingRecentExecutions(true);
             console.log('Loading recent executions...');
 
-            const response = await agentTaskService.getRecentExecutions(1000);
+            const response = await agentTaskService.getRecentExecutions(50);
             if (response.success) {
                 console.log('Loaded recent executions:', response.data);
-                setRecentExecutions(response.data || []);
+                const data = response.data || [];
+                setRecentExecutions(data);
+
+                // Identify active/running executions and add them to the main monitoring Map
+                // this allows late joiners (websocket connected after start) to see the state
+                setExecutions(prevExecutions => {
+                    const newExecutions = new Map(prevExecutions);
+                    const now = new Date().toISOString();
+
+                    data.forEach(execution => {
+                        const isRunning = execution.status === 'RUNNING' || execution.status === 'STARTED';
+                        if (isRunning && !newExecutions.has(execution.executionId)) {
+                            console.log('Catching up with running execution:', execution.executionId);
+                            newExecutions.set(execution.executionId, {
+                                ...execution,
+                                lastUpdated: now
+                            });
+                        }
+                    });
+                    return newExecutions;
+                });
             } else {
                 console.error('Failed to load recent executions:', response.error);
                 setError('Failed to load recent executions: ' + response.error);
@@ -107,7 +127,7 @@ const ExecutionMonitoring = () => {
                     }
 
                     // Remove execution if timer expired or it's completed and old
-                    const isOld = now - new Date(execution.lastUpdated).getTime() > 30000; // 30 seconds
+                    const isOld = now - new Date(execution.lastUpdated).getTime() > 5000; // 5 seconds
                     if ((timer === 0) || (isCompleted && isOld)) {
                         console.log('Removing execution:', executionId, 'timer:', timer, 'completed:', isCompleted, 'old:', isOld);
                         newExecutions.delete(executionId);
@@ -170,17 +190,13 @@ const ExecutionMonitoring = () => {
                 const totalSteps = Number.isFinite(parsedTotalSteps) && parsedTotalSteps >= 0 ? parsedTotalSteps : 0;
                 const parsedCurrentStep = Number(data.currentStep ?? 0);
                 const currentStep = Number.isFinite(parsedCurrentStep) && parsedCurrentStep >= 0 ? parsedCurrentStep : 0;
-                const isFinalStep = totalSteps > 0 && currentStep >= totalSteps;
-                const derivedStatus = (data.status === 'RUNNING' && isFinalStep)
-                    ? 'COMPLETED'
-                    : data.status;
                 const normalizedPayload = {
                     ...data,
                     currentStep,
                     totalSteps,
-                    status: derivedStatus,
-                    finishedAt: data.finishedAt ?? (derivedStatus === 'COMPLETED' ? new Date().toISOString() : data.finishedAt),
-                    completedAt: data.completedAt ?? (derivedStatus === 'COMPLETED' ? new Date().toISOString() : data.completedAt)
+                    status: data.status,
+                    finishedAt: data.finishedAt ?? (data.status === 'COMPLETED' ? new Date().toISOString() : data.finishedAt),
+                    completedAt: data.completedAt ?? (data.status === 'COMPLETED' ? new Date().toISOString() : data.completedAt)
                 };
 
                 setExecutions(prevExecutions => {
@@ -498,8 +514,16 @@ const ExecutionMonitoring = () => {
                         // Only show executions that are still running or completed recently (within last 30 seconds)
                         const isRunning = execution.status === 'STARTED' || execution.status === 'RUNNING';
                         const isRecentlyCompleted = (execution.status === 'COMPLETED' || execution.status === 'FAILED' || execution.status === 'CANCELLED') &&
-                            new Date().getTime() - new Date(execution.lastUpdated).getTime() < 30000; // 30 seconds
+                            new Date().getTime() - new Date(execution.lastUpdated).getTime() < 5000; // 5 seconds
                         return isRunning || isRecentlyCompleted;
+                    })
+                    .sort((a, b) => {
+                        // Sort by startedAt DESC (newest first)
+                        const dateA = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+                        const dateB = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+                        if (dateB !== dateA) return dateB - dateA;
+                        // Fallback to lastUpdated
+                        return new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime();
                     })
                     .map((execution) => {
                         const timer = executionTimers.get(execution.executionId) || 0;
@@ -598,18 +622,53 @@ const ExecutionMonitoring = () => {
                                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                                                 {Array.from({ length: execution.totalSteps || 1 }, (_, index) => {
                                                     const stepNumber = index + 1;
-                                                    const isCurrentStep = stepNumber === execution.currentStep;
-                                                    const isCompleted = stepNumber < execution.currentStep;
+                                                    const stepResult = execution.stepResults?.[stepNumber];
+                                                    const isCurrentStep = stepNumber === execution.currentStep && execution.status === 'RUNNING';
+                                                    
+                                                    // Determine step status and color
+                                                    let stepStatus = 'default';
+                                                    let stepColor = 'default';
+                                                    let variant = 'outlined';
+
+                                                    if (isCurrentStep) {
+                                                        stepStatus = 'running';
+                                                        stepColor = 'primary';
+                                                        variant = 'filled';
+                                                    } else if (stepResult) {
+                                                        if (stepResult.status === 'skipped') {
+                                                            stepStatus = 'skipped';
+                                                            stepColor = 'default'; // Or a custom gray
+                                                            variant = 'outlined';
+                                                        } else if (stepResult.status === 'failed' || stepResult.status === 'error') {
+                                                            stepStatus = 'failed';
+                                                            stepColor = 'error';
+                                                            variant = 'filled';
+                                                        } else {
+                                                            stepStatus = 'success';
+                                                            stepColor = 'success';
+                                                            variant = 'filled';
+                                                        }
+                                                    } else if (execution.status === 'COMPLETED' && stepNumber <= execution.currentStep) {
+                                                        stepStatus = 'success';
+                                                        stepColor = 'success';
+                                                        variant = 'filled';
+                                                    }
 
                                                     return (
                                                         <Chip
                                                             key={stepNumber}
                                                             label={`Step ${stepNumber}`}
                                                             size="small"
-                                                            color={isCurrentStep ? 'primary' : isCompleted ? 'success' : 'default'}
-                                                            variant={isCurrentStep ? 'filled' : 'outlined'}
+                                                            color={stepColor}
+                                                            variant={variant}
                                                             onClick={() => handleStepClick(stepNumber, execution)}
-                                                            sx={{ cursor: 'pointer', '&:hover': { opacity: 0.8 } }}
+                                                            sx={{ 
+                                                                cursor: 'pointer', 
+                                                                '&:hover': { opacity: 0.8 },
+                                                                opacity: stepStatus === 'skipped' ? 0.6 : 1,
+                                                                borderStyle: stepStatus === 'skipped' ? 'dashed' : 'solid'
+                                                            }}
+                                                            title={stepStatus === 'skipped' ? 'Step skipped' : isCurrentStep ? 'Currently executing' : stepStatus === 'success' ? 'Step completed' : 'Pending'}
                                                         />
                                                     );
                                                 })}

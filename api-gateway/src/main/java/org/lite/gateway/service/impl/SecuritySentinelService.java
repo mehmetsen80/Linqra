@@ -96,6 +96,7 @@ public class SecuritySentinelService {
                     // Group by IP Address
                     Map<String, List<AuditLog>> logsByIp = logsInWindow.stream()
                             .filter(l -> l.getIpAddress() != null)
+                            .filter(l -> !isWhitelisted(l.getIpAddress())) // Skip whitelisted IPs
                             .collect(Collectors.groupingBy(AuditLog::getIpAddress));
 
                     logsByIp.forEach((ip, logs) -> {
@@ -114,6 +115,10 @@ public class SecuritySentinelService {
                 }, error -> log.error("Error in Brute Force monitor", error));
     }
 
+    private boolean isWhitelisted(String ip) {
+        return "127.0.0.1".equals(ip) || "0:0:0:0:0:0:0:1".equals(ip) || "::1".equals(ip);
+    }
+
     private boolean isReadOrDownload(AuditLog log) {
         String action = log.getAction();
         return "READ".equals(action) || "DOWNLOAD".equals(action) ||
@@ -121,7 +126,9 @@ public class SecuritySentinelService {
     }
 
     private boolean isLoginFailure(AuditLog log) {
-        return AuditEventType.LOGIN_FAILED.equals(log.getEventType()) ||
+        // Specifically check for login-related events that failed
+        return (AuditEventType.LOGIN_FAILED.equals(log.getEventType()) ||
+                AuditEventType.USER_LOGIN.equals(log.getEventType())) &&
                 "FAILED".equals(log.getResult());
     }
 

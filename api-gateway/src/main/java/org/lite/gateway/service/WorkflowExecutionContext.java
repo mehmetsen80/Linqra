@@ -12,6 +12,9 @@ public class WorkflowExecutionContext {
     @Getter
     private final Map<String, Object> globalParams;
 
+    @Getter
+    private final long startTime = System.currentTimeMillis();
+
     private final AtomicBoolean stopped = new AtomicBoolean(false);
     private final AtomicInteger jumpTarget = new AtomicInteger(-1);
 

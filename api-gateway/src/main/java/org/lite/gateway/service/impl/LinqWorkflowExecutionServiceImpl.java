@@ -13,6 +13,10 @@ import org.lite.gateway.repository.OrganizationRepository;
 import org.lite.gateway.repository.AgentExecutionRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.repository.LinqLlmModelRepository;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
@@ -61,6 +65,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private final ExecutionMonitoringService executionMonitoringService;
     private final AuditLogHelper auditLogHelper;
     private final ObjectMapper objectMapper;
+    private final ReactiveMongoTemplate mongoTemplate;
 
     public LinqWorkflowExecutionServiceImpl(
             LinqWorkflowExecutionRepository executionRepository,
@@ -74,7 +79,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             LlmCostService llmCostService,
             ExecutionMonitoringService executionMonitoringService,
             AuditLogHelper auditLogHelper,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ReactiveMongoTemplate mongoTemplate) {
         this.executionRepository = executionRepository;
         this.agentExecutionRepository = agentExecutionRepository;
         this.organizationRepository = organizationRepository;
@@ -87,6 +93,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         this.executionMonitoringService = executionMonitoringService;
         this.auditLogHelper = auditLogHelper;
         this.objectMapper = objectMapper;
+        this.mongoTemplate = mongoTemplate;
     }
 
     // Registry for active agent executions to allow cancellation
@@ -161,7 +168,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     .onErrorResume(auditError -> Mono.empty());
 
             // Chain start audit log, then execute workflow
-            return startAuditLog.then(Mono.<LinqResponse>defer(() -> {
+            return startAuditLog
+                    .then(sendExecutionStartedUpdate(request, steps != null ? steps.size() : 0, context))
+                    .then(Mono.<LinqResponse>defer(() -> {
                 // Execute steps synchronously or asynchronously based on configuration
                 Mono<LinqResponse> workflowMono = Mono.just(new LinqResponse());
                 if (steps == null) {
@@ -173,9 +182,35 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                 step.getStep(), step.getTarget(), step.getAction(), step.getIntent(), step.getParams());
 
                         if (context.isStopped()) {
-                            log.info("✋ Stopping execution before Step {} because workflow is stopped.",
-                                    step.getStep());
-                            return Mono.just(response);
+                            log.info("✋ Skipping Step {} because workflow is stopped.", step.getStep());
+
+                            // Add skipped metadata to response result steps
+                            LinqResponse.WorkflowStep skipResultStep = new LinqResponse.WorkflowStep();
+                            skipResultStep.setStep(step.getStep());
+                            skipResultStep.setStatus("skipped");
+                            skipResultStep.setTarget(step.getTarget());
+                            skipResultStep.setDescription(step.getDescription());
+                            skipResultStep.setResult(Map.of("message", "Workflow stopped by a previous jump/condition",
+                                    "status", "skipped"));
+
+                            if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
+                                if (workflowResult.getSteps() == null) {
+                                    workflowResult.setSteps(new ArrayList<>());
+                                }
+                                workflowResult.getSteps().add(skipResultStep);
+                            }
+
+                            // Add skipped metadata
+                            LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                            meta.setStep(step.getStep());
+                            meta.setStatus("skipped");
+                            meta.setDurationMs(0);
+                            meta.setTarget(step.getTarget());
+                            meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+                            stepMetadata.add(meta);
+
+                            return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                    .thenReturn(response);
                         }
 
                         // Evaluate condition if present
@@ -215,7 +250,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                             meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
                             stepMetadata.add(meta);
 
-                            return Mono.just(response);
+                            return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                    .thenReturn(response);
                         }
 
                         // Reset jump target if we just reached it
@@ -226,8 +262,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
                         Instant start = Instant.now();
 
-                        // Send step progress update
-                        return sendStepProgressUpdate(request, step, steps.size(), stepResults)
+                        // Send step progress update and persist to DB only at step START
+                        return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                .then(updatePersistentProgress(finalAgentExecutionId, step.getStep(), steps.size(), context))
                                 .then(Mono.defer(() -> {
 
                                     // Check if step should be executed asynchronously
@@ -286,7 +323,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                     meta.setAsync(true); // Set isAsync to true for async steps
                                                     stepMetadata.add(meta);
 
-                                                    return Mono.just(response);
+                                                    return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                                            .thenReturn(response);
                                                 }));
                                     }
 
@@ -415,7 +453,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                     StringBuilder fullContent = new StringBuilder();
                                                     ExecutionProgressUpdate streamUpdate = buildProgressUpdate(request,
                                                             step,
-                                                            steps.size(), stepResults);
+                                                            steps.size(), stepResults, context);
 
                                                     return linqLlmModelService.streamLlmRequest(stepRequest, llmModel)
                                                             .concatMap(chunk -> {
@@ -526,7 +564,9 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                 meta.setTarget(step.getTarget());
                                                 meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
                                                 stepMetadata.add(meta);
-                                                return Mono.just(response);
+                                                
+                                                return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                                        .thenReturn(response);
                                             })
                                             .onErrorResume(error -> {
                                                 long durationMs = Duration.between(start, Instant.now()).toMillis();
@@ -644,6 +684,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                             "Failed to log audit event (workflow execution completed): {}",
                                             auditError.getMessage(), auditError))
                                     .onErrorResume(auditError -> Mono.empty())
+                                    .then(sendExecutionCompletedUpdate(request, steps != null ? steps.size() : 0, context,
+                                            stepResults))
                                     .thenReturn(response);
                         })
                         .doFinally(signalType -> {
@@ -704,7 +746,17 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                             auditError.getMessage(), auditError))
                                     .onErrorResume(auditError -> Mono.empty());
 
-                            return failureAuditLog.then(Mono.defer(() -> {
+                            Mono<Void> monitorUpdate;
+                            if (isCancellation) {
+                                monitorUpdate = sendExecutionCancelledUpdate(request, steps != null ? steps.size() : 0,
+                                        context, "Workflow execution cancelled");
+                            } else {
+                                monitorUpdate = sendExecutionFailedUpdate(request, steps != null ? steps.size() : 0,
+                                        context, error.getMessage());
+                            }
+
+                            return failureAuditLog.then(monitorUpdate).onErrorResume(e -> Mono.empty())
+                                    .then(Mono.defer(() -> {
                                 // Create error response
                                 LinqResponse errorResponse = new LinqResponse();
                                 LinqResponse.Metadata metadata = new LinqResponse.Metadata();
@@ -1541,7 +1593,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             // fallback)
             // If so, return the actual object instead of converting to string
             Pattern singlePlaceholderPattern = Pattern
-                    .compile("^\\{\\{(step\\d+\\.result(?:\\.[^?]+)?|params\\.[^?]+?)(?:\\?\\?([^}]+?))?\\}\\}$");
+                    .compile(
+                            "^\\{\\{(step\\d+\\.result(?:\\.[^?]+)?|params\\.[^?]+?)(?:\\?\\?((?:[^{}]|\\{(?!\\{)|(?<!\\})\\}|\\{\\{.*?\\}\\})*))?\\}\\}$");
             Matcher singleMatcher = singlePlaceholderPattern.matcher(stringInput);
             if (singleMatcher.matches()) {
                 String placeholderContent = singleMatcher.group(1);
@@ -1554,8 +1607,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 if (isMissing && fallback != null) {
                     log.debug("🔍 Placeholder {{{}}} was missing, attempting to resolve fallback: {}",
                             placeholderContent, fallback);
-                    // Check if fallback is another variable or a literal
-                    if (fallback.contains("step") || fallback.contains("params.")) {
+
+                    // Check if fallback contains placeholders or is another variable
+                    if (fallback.contains("{{")) {
+                        // It's a template string, resolve the placeholders inside it
+                        return resolvePlaceholders(fallback, context, depth + 1);
+                    } else if (fallback.contains("step") || fallback.contains("params.")) {
+                        // It's a single variable reference, resolve it
                         return resolvePlaceholders("{{" + fallback + "}}", context, depth + 1);
                     } else {
                         // Return literal fallback (parse as boolean/number if possible)
@@ -1569,6 +1627,11 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     // Recursively resolve the object in case it's also a placeholder OR contains
                     // them
                     return resolvePlaceholders(resolvedObject, context, depth + 1);
+                }
+
+                // If it was a single placeholder and we got null, return null (to preserve nulls for non-string fields like Maps/Lists)
+                if (singleMatcher.group(2) == null) { // No fallback provided
+                    return null;
                 }
             }
             // Otherwise, resolve as string (for string interpolation cases)
@@ -1605,15 +1668,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             String path = stepMatcher.group(2);
             Object stepResult = context.getStepResults().get(stepNum);
             if (stepResult != null) {
-                // If path is "output" or "result" and not found directly, try smart extraction
+                // Always try smart extraction first to handle AI responses consistently
+                Object base = smartExtractContent(stepResult);
                 if (path == null) {
-                    return stepResult;
+                    return base;
                 }
-                Object val = extractObjectFromPath(stepResult, path);
-                if (val == null && ("output".equals(path) || "result".equals(path))) {
-                    return smartExtractContent(stepResult);
-                }
-                return val;
+                return extractObjectFromPath(base, path);
             }
         }
 
@@ -1662,8 +1722,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 if (current instanceof Map<?, ?> map) {
                     Object next = map.get(part);
                     // If part is "output" or "result" and not found directly, try smart extraction
-                    if (next == null && ("output".equals(part) || "result".equals(part))) {
-                        next = trySmartExtractContent(map);
+                    if (next == null) {
+                        Object smart = trySmartExtractContent(map);
+                        if (smart instanceof Map<?, ?> smartMap) {
+                            next = smartMap.get(part);
+                        } else if ("output".equals(part) || "result".equals(part)) {
+                            next = smart;
+                        }
                     }
                     current = next;
                 } else if (current instanceof List<?> list && part.matches("\\d+")) {
@@ -1688,8 +1753,10 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         String result = value;
         // Step result pattern - updated to handle fallbacks via ?? symbol
         // Regex explanation: {{ (steps.)?stepX.(result|output)(.path)?(??fallback)? }}
+        // Updated regex to support one level of nested {{}} in fallback
         Pattern stepPattern = Pattern
-                .compile("\\{\\{(?:steps\\.)?step(\\d+)\\.(?:result|output)(?:\\.([^?]+?))?(?:\\?\\?([^}]+))?\\}\\}");
+                .compile(
+                        "\\{\\{(?:steps\\.)?step(\\d+)\\.(?:result|output)(?:\\.([^?]+?))?(?:\\?\\?((?:[^{}]|\\{(?!\\{)|(?<!\\})\\}|\\{\\{.*?\\}\\})*))?\\}\\}");
         Matcher stepMatcher = stepPattern.matcher(value);
         while (stepMatcher.find()) {
             int stepNum = Integer.parseInt(stepMatcher.group(1));
@@ -1699,14 +1766,19 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
             String replacement = "";
             if (stepResult != null) {
-                Object val = path != null ? extractObjectFromPath(stepResult, path) : smartExtractContent(stepResult);
+                // Always try smart extraction first to handle AI responses consistently
+                Object base = smartExtractContent(stepResult);
+                Object val = path != null ? extractObjectFromPath(base, path) : base;
                 replacement = val != null ? String.valueOf(val) : "";
             }
 
             if (replacement.isEmpty() && fallback != null) {
-                // Recursively resolve fallback only if it looks like another variable
-                if (fallback.contains("step") || fallback.contains("params.")) {
-                    log.debug("🔄 Resolving step fallback recursively: {}", fallback);
+                // Recursively resolve fallback based on its type
+                if (fallback.contains("{{")) {
+                    log.debug("🔄 Resolving step fallback template: {}", fallback);
+                    replacement = resolvePlaceholder(fallback, context);
+                } else if (fallback.contains("step") || fallback.contains("params.")) {
+                    log.debug("🔄 Resolving step fallback variable: {}", fallback);
                     replacement = resolvePlaceholder("{{" + fallback + "}}", context);
                 } else {
                     log.debug("🔄 Using literal fallback: {}", fallback);
@@ -1718,7 +1790,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         }
 
         // Global params pattern - updated to handle fallbacks via ??
-        Pattern paramsPattern = Pattern.compile("\\{\\{params\\.([^?]+?)(?:\\?\\?([^}]+?))?\\}\\}");
+        Pattern paramsPattern = Pattern
+                .compile("\\{\\{params\\.([^?]+?)(?:\\?\\?((?:[^{}]|\\{(?!\\{)|(?<!\\})\\}|\\{\\{.*?\\}\\})*))?\\}\\}");
         Matcher paramsMatcher = paramsPattern.matcher(result);
         while (paramsMatcher.find()) {
             String paramPath = paramsMatcher.group(1);
@@ -1730,9 +1803,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
 
             if (replacement.isEmpty() && fallback != null) {
-                // Recursively resolve fallback only if it looks like another variable
-                if (fallback.contains("step") || fallback.contains("params.")) {
-                    log.debug("🔄 Resolving params fallback recursively: {}", fallback);
+                // Recursively resolve fallback based on its type
+                if (fallback.contains("{{")) {
+                    log.debug("🔄 Resolving params fallback template: {}", fallback);
+                    replacement = resolvePlaceholder(fallback, context);
+                } else if (fallback.contains("step") || fallback.contains("params.")) {
+                    log.debug("🔄 Resolving params fallback variable: {}", fallback);
                     replacement = resolvePlaceholder("{{" + fallback + "}}", context);
                 } else {
                     log.debug("🔄 Using literal fallback: {}", fallback);
@@ -1873,19 +1949,21 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
      * Build execution progress update DTO
      */
     private ExecutionProgressUpdate buildProgressUpdate(LinqRequest request, LinqRequest.Query.WorkflowStep step,
-            int totalSteps, Map<Integer, Object> stepResults) {
-        // Extract execution context from request
-        String executionId = extractExecutionId(request);
-        String agentId = extractAgentId(request);
-        String agentName = extractAgentName(request);
-        String taskId = extractTaskId(request);
-        String taskName = extractTaskName(request);
-        String teamId = extractTeamId(request);
+            int totalSteps, Map<Integer, Object> stepResults, WorkflowExecutionContext context) {
+        // Extract execution context from request/context
+        String executionId = extractExecutionId(request, context);
+        String agentId = extractAgentId(request, context);
+        String agentName = extractAgentName(request, context);
+        String taskId = extractTaskId(request, context);
+        String taskName = extractTaskName(request, context);
+        String teamId = extractTeamId(request, context);
 
         // Get the actual execution start time and calculate duration
+        long startMs = context != null ? context.getStartTime() : System.currentTimeMillis();
+        java.time.LocalDateTime startedAt = java.time.LocalDateTime
+                .ofInstant(java.time.Instant.ofEpochMilli(startMs), java.time.ZoneOffset.UTC);
         java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
-        java.time.LocalDateTime startedAt = now;
-        long durationMs = 0;
+        long durationMs = java.time.Duration.between(startedAt, now).toMillis();
 
         // Extract final result if this is the last step or we have a final result
         String finalResult = null;
@@ -1919,10 +1997,10 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
      * Send step progress update for execution monitoring
      */
     private Mono<Void> sendStepProgressUpdate(LinqRequest request, LinqRequest.Query.WorkflowStep step,
-            int totalSteps, Map<Integer, Object> stepResults) {
+            int totalSteps, Map<Integer, Object> stepResults, WorkflowExecutionContext context) {
         return Mono.defer(() -> {
             try {
-                ExecutionProgressUpdate update = buildProgressUpdate(request, step, totalSteps, stepResults);
+                ExecutionProgressUpdate update = buildProgressUpdate(request, step, totalSteps, stepResults, context);
 
                 if (update.getExecutionId() == null) {
                     return Mono.empty();
@@ -1936,52 +2014,198 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         });
     }
 
-    private String extractExecutionId(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private Mono<Void> updatePersistentProgress(String executionId, int currentStep, int totalSteps, WorkflowExecutionContext context) {
+        if (executionId == null) return Mono.empty();
+        
+        // Try to get the MongoDB internal ID (_id) for the most efficient primary key update
+        String mongoId = null;
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("_executionId");
+            if (id != null) mongoId = id.toString();
+        }
+
+        Query query;
+        if (mongoId != null) {
+            query = new Query(Criteria.where("_id").is(mongoId));
+        } else {
+            // Fallback to executionId index if _id is not available
+            query = new Query(Criteria.where("executionId").is(executionId));
+        }
+
+        Update update = new Update()
+                .set("currentStep", currentStep)
+                .set("totalSteps", totalSteps)
+                .set("updatedAt", LocalDateTime.now());
+                
+        return mongoTemplate.updateFirst(query, update, AgentExecution.class).then();
+    }
+
+    private Mono<Void> sendExecutionStartedUpdate(LinqRequest request, int totalSteps,
+            WorkflowExecutionContext context) {
+        return Mono.defer(() -> {
+            try {
+                ExecutionProgressUpdate update = buildProgressUpdate(request, null, totalSteps, null, context);
+                if (update.getExecutionId() == null) {
+                    return Mono.empty();
+                }
+                return executionMonitoringService.sendExecutionStarted(update)
+                        .then(updatePersistentProgress(update.getExecutionId(), 0, totalSteps, context));
+            } catch (Exception e) {
+                log.warn("Failed to send execution started update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+
+    private Mono<Void> sendExecutionCompletedUpdate(LinqRequest request, int totalSteps,
+            WorkflowExecutionContext context, Map<Integer, Object> stepResults) {
+        return Mono.defer(() -> {
+            try {
+                ExecutionProgressUpdate update = buildProgressUpdate(request, null, totalSteps, stepResults, context);
+                if (update.getExecutionId() == null) {
+                    return Mono.empty();
+                }
+                update.setStatus("COMPLETED");
+                
+                // Determine completion state
+                int lastStepExecuted = 0;
+                if (stepResults != null && !stepResults.isEmpty()) {
+                    lastStepExecuted = stepResults.keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
+                }
+
+                if (context.isStopped()) {
+                    update.setCurrentStep(lastStepExecuted);
+                    update.setCurrentStepName("Workflow completed via jump/condition");
+                } else {
+                    update.setCurrentStep(totalSteps);
+                    update.setCurrentStepName("Workflow completed successfully");
+                }
+
+                log.info("📊 Sending terminal COMPLETED update for execution {} (Step {}/{})", 
+                    update.getExecutionId(), update.getCurrentStep(), totalSteps);
+                
+                return executionMonitoringService.sendExecutionCompleted(update);
+            } catch (Exception e) {
+                log.warn("Failed to send execution completed update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+
+    private Mono<Void> sendExecutionFailedUpdate(LinqRequest request, int totalSteps, WorkflowExecutionContext context,
+            String error) {
+        return Mono.defer(() -> {
+            try {
+                ExecutionProgressUpdate update = buildProgressUpdate(request, null, totalSteps, null, context);
+                if (update.getExecutionId() == null) {
+                    return Mono.empty();
+                }
+                update.setStatus("FAILED");
+                update.setErrorMessage(error);
+                
+                // Track where it failed
+                if (context != null && context.getStepResults() != null) {
+                    int lastStep = context.getStepResults().keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
+                    update.setCurrentStep(lastStep);
+                }
+                
+                log.error("📊 Sending terminal FAILED update for execution {}: {}", update.getExecutionId(), error);
+                return executionMonitoringService.sendExecutionFailed(update, error);
+            } catch (Exception e) {
+                log.warn("Failed to send execution failed update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+
+    private Mono<Void> sendExecutionCancelledUpdate(LinqRequest request, int totalSteps,
+            WorkflowExecutionContext context, String reason) {
+        return Mono.defer(() -> {
+            try {
+                ExecutionProgressUpdate update = buildProgressUpdate(request, null, totalSteps, null, context);
+                if (update.getExecutionId() == null) {
+                    return Mono.empty();
+                }
+                update.setStatus("CANCELLED");
+                update.setErrorMessage(reason);
+                
+                log.info("📊 Sending terminal CANCELLED update for execution {}: {}", update.getExecutionId(), reason);
+                return executionMonitoringService.sendExecutionCancelled(update, reason);
+            } catch (Exception e) {
+                log.warn("Failed to send execution cancelled update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+
+    private String extractExecutionId(LinqRequest request, WorkflowExecutionContext context) {
+        // 1. Try context params (most reliable during execution)
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("agentExecutionId");
+            if (id != null) return id.toString();
+        }
+        // 2. Try request params
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object executionId = request.getQuery().getParams().get("agentExecutionId");
-            log.debug("🔍 Extracting executionId from params: {}", executionId);
             return executionId != null ? executionId.toString() : null;
         }
-        log.debug("🔍 No query or params found in request");
         return null;
     }
 
-    private String extractAgentId(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractAgentId(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("agentId");
+            if (id != null) return id.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object agentId = request.getQuery().getParams().get("agentId");
             return agentId != null ? agentId.toString() : null;
         }
         return null;
     }
 
-    private String extractAgentName(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractAgentName(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object name = context.getGlobalParams().get("agentName");
+            if (name != null) return name.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object agentName = request.getQuery().getParams().get("agentName");
-            log.debug("🔍 Extracting agentName from params: {}", agentName);
             return agentName != null ? agentName.toString() : null;
         }
-        log.debug("🔍 No query or params found in request for agentName");
         return null;
     }
 
-    private String extractTaskId(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractTaskId(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("agentTaskId");
+            if (id != null) return id.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object taskId = request.getQuery().getParams().get("agentTaskId");
             return taskId != null ? taskId.toString() : null;
         }
         return null;
     }
 
-    private String extractTaskName(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractTaskName(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object name = context.getGlobalParams().get("agentTaskName");
+            if (name != null) return name.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object taskName = request.getQuery().getParams().get("agentTaskName");
             return taskName != null ? taskName.toString() : null;
         }
         return null;
     }
 
-    private String extractTeamId(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractTeamId(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("teamId");
+            if (id != null) return id.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object teamId = request.getQuery().getParams().get("teamId");
             return teamId != null ? teamId.toString() : null;
         }
@@ -2130,6 +2354,16 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         if (fallback == null)
             return null;
         String trimmed = fallback.trim();
+
+        // Handle JSON literals (e.g. for Map/List fallbacks)
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                return objectMapper.readValue(trimmed, Object.class);
+            } catch (Exception e) {
+                // Not valid JSON, continue to other types
+            }
+        }
+
         if ("true".equalsIgnoreCase(trimmed))
             return Boolean.TRUE;
         if ("false".equalsIgnoreCase(trimmed))

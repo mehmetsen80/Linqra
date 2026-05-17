@@ -64,6 +64,7 @@ public class LinqResponse {
         private String executionId; // Unique identifier for this execution of the step
         private String description; // Optional description explaining what this step does
         private LinqRequest.Query.LlmConfig llmConfig; // LLM configuration for AI tools
+        private Object payload; // Request body for POST/PUT/PATCH (added for async support)
     }
 
     @Data

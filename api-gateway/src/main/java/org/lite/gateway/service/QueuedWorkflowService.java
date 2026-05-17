@@ -14,7 +14,7 @@ public interface QueuedWorkflowService {
      * @param teamId The team ID
      * @return Mono<Void> indicating completion of the queue operation
      */
-    Mono<Void> queueAsyncStep(String workflowId, int stepNumber, LinqResponse.WorkflowStep step, String teamId);
+    Mono<Void> queueAsyncStep(String workflowId, String executionId, int stepNumber, LinqResponse.WorkflowStep step, String teamId);
 
     /**
      * Get the status of a workflow step

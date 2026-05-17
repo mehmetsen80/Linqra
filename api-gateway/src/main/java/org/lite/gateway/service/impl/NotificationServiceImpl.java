@@ -286,15 +286,7 @@ public class NotificationServiceImpl implements NotificationService {
             if (entry.getValue() instanceof Map) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> subMap = (Map<String, Object>) entry.getValue();
-                sb.append(
-                        "<div style='background: rgba(255,255,255,0.02); padding: 16px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);'>");
-                for (Map.Entry<String, Object> subEntry : subMap.entrySet()) {
-                    sb.append(
-                            "<div style='margin-bottom: 8px;'><strong style='color: #8b949e; text-transform: capitalize;'>")
-                            .append(subEntry.getKey()).append(":</strong> <span style='color: #c9d1d9;'>")
-                            .append(subEntry.getValue()).append("</span></div>");
-                }
-                sb.append("</div>");
+                sb.append(renderMapToHtml(subMap, 0));
             } else if (entry.getValue() instanceof java.util.List) {
                 @SuppressWarnings("unchecked")
                 java.util.List<?> list = (java.util.List<?>) entry.getValue();
@@ -409,6 +401,40 @@ public class NotificationServiceImpl implements NotificationService {
                         .append(entry.getValue()).append("</div>");
             }
         }
+        sb.append("</div>");
+        return sb.toString();
+    }
+
+    private String renderMapToHtml(Map<String, Object> map, int depth) {
+        if (map == null || map.isEmpty()) return "";
+        
+        StringBuilder sb = new StringBuilder();
+        String background = depth == 0 ? "rgba(255,255,255,0.02)" : "transparent";
+        String padding = depth == 0 ? "16px" : "0";
+        String border = depth == 0 ? "1px solid rgba(255,255,255,0.05)" : "none";
+        String marginLeft = depth > 0 ? "12px" : "0";
+        String borderLeft = depth > 0 ? "2px solid rgba(255,255,255,0.05)" : "none";
+
+        sb.append(String.format("<div style='background: %s; padding: %s; border-radius: 6px; border: %s; margin-left: %s; border-left: %s;'>",
+                background, padding, border, marginLeft, borderLeft));
+
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            sb.append("<div style='margin-bottom: 12px; padding-bottom: 4px;'>");
+            sb.append("<strong style='color: #8b949e; text-transform: capitalize; font-size: 13px;'>")
+              .append(entry.getKey()).append(":</strong> ");
+
+            if (entry.getValue() instanceof Map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> innerMap = (Map<String, Object>) entry.getValue();
+                sb.append("<div style='margin-top: 6px;'>");
+                sb.append(renderMapToHtml(innerMap, depth + 1));
+                sb.append("</div>");
+            } else {
+                sb.append("<span style='color: #c9d1d9; font-size: 13px;'>").append(entry.getValue()).append("</span>");
+            }
+            sb.append("</div>");
+        }
+
         sb.append("</div>");
         return sb.toString();
     }

@@ -820,14 +820,13 @@ db.audit_logs.createIndex(
 
 // 1. Resource Lookup Index (unique)
 db.resource_metadata.createIndex(
-  { "category": 1, "resourceId": 1 },
+  { "domain": 1, "category": 1, "resourceId": 1 },
   {
     "name": "resource_lookup_idx",
     "unique": true,
     "background": true
   }
 );
-
 // ============================================================================
 // RESOURCE_SUBSCRIPTIONS COLLECTION
 // ============================================================================

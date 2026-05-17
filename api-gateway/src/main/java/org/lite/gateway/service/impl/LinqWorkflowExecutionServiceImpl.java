@@ -13,6 +13,10 @@ import org.lite.gateway.repository.OrganizationRepository;
 import org.lite.gateway.repository.AgentExecutionRepository;
 import org.lite.gateway.repository.TeamRepository;
 import org.lite.gateway.repository.LinqLlmModelRepository;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.lite.gateway.service.LinqWorkflowExecutionService;
 import org.lite.gateway.service.LinqLlmModelService;
 import org.lite.gateway.service.LinqMicroService;
@@ -61,6 +65,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
     private final ExecutionMonitoringService executionMonitoringService;
     private final AuditLogHelper auditLogHelper;
     private final ObjectMapper objectMapper;
+    private final ReactiveMongoTemplate mongoTemplate;
 
     public LinqWorkflowExecutionServiceImpl(
             LinqWorkflowExecutionRepository executionRepository,
@@ -74,7 +79,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             LlmCostService llmCostService,
             ExecutionMonitoringService executionMonitoringService,
             AuditLogHelper auditLogHelper,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ReactiveMongoTemplate mongoTemplate) {
         this.executionRepository = executionRepository;
         this.agentExecutionRepository = agentExecutionRepository;
         this.organizationRepository = organizationRepository;
@@ -87,6 +93,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         this.executionMonitoringService = executionMonitoringService;
         this.auditLogHelper = auditLogHelper;
         this.objectMapper = objectMapper;
+        this.mongoTemplate = mongoTemplate;
     }
 
     // Registry for active agent executions to allow cancellation
@@ -94,628 +101,701 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
     @Override
     public Mono<LinqResponse> executeWorkflow(LinqRequest request) {
-        LocalDateTime startTime = LocalDateTime.now();
-        List<LinqRequest.Query.WorkflowStep> steps = request.getQuery().getWorkflow();
-        Map<Integer, Object> stepResults = new ConcurrentHashMap<>();
-        List<LinqResponse.WorkflowStepMetadata> stepMetadata = Collections.synchronizedList(new ArrayList<>());
-        Map<String, Object> globalParams = request.getQuery().getParams();
-        log.info("🚀 [EXECUTE] Workflow execution started. Request params: {}", globalParams);
-        WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
+        return Mono.<LinqResponse>defer(() -> {
+            LocalDateTime startTime = LocalDateTime.now();
+            List<LinqRequest.Query.WorkflowStep> steps = request.getQuery().getWorkflow();
+            Map<Integer, Object> stepResults = new ConcurrentHashMap<>();
+            List<LinqResponse.WorkflowStepMetadata> stepMetadata = Collections.synchronizedList(new ArrayList<>());
+            Map<String, Object> globalParams = request.getQuery().getParams();
+            log.info("🚀 [EXECUTE] Workflow execution started. Request params: {}",
+                    globalParams != null ? globalParams : "NULL_PARAMS");
 
-        // Register for cancellation if agentExecutionId is present
-        String agentExecutionId = null;
-        if (globalParams != null && globalParams.containsKey("agentExecutionId")) {
-            agentExecutionId = String.valueOf(globalParams.get("agentExecutionId"));
-            activeContexts.put(agentExecutionId, context);
-            log.info("📋 Registered workflow context for agentExecutionId: {}", agentExecutionId);
-        }
-        final String finalAgentExecutionId = agentExecutionId;
+            WorkflowExecutionContext context = new WorkflowExecutionContext(stepResults, globalParams);
 
-        // Extract teamId from params (must be present from controller/executor)
-        String teamId;
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
-            Object val = request.getQuery().getParams().get("teamId");
-            if (val != null) {
-                teamId = String.valueOf(val);
+            // Register for cancellation if agentExecutionId is present
+            String agentExecutionId = null;
+            if (globalParams != null && globalParams.containsKey("agentExecutionId")) {
+                agentExecutionId = String.valueOf(globalParams.get("agentExecutionId"));
+                activeContexts.put(agentExecutionId, context);
+                log.info("📋 Registered workflow context for agentExecutionId: {}", agentExecutionId);
+            }
+            final String finalAgentExecutionId = agentExecutionId;
+
+            // Extract teamId from params (must be present from controller/executor)
+            String teamId;
+            if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                Object val = request.getQuery().getParams().get("teamId");
+                if (val != null) {
+                    teamId = String.valueOf(val);
+                } else {
+                    return Mono.<LinqResponse>error(new ResponseStatusException(
+                            HttpStatus.UNAUTHORIZED,
+                            "Team ID must be provided in params"));
+                }
             } else {
-                return Mono.error(new ResponseStatusException(
+                return Mono.<LinqResponse>error(new ResponseStatusException(
                         HttpStatus.UNAUTHORIZED,
                         "Team ID must be provided in params"));
             }
-        } else {
-            return Mono.error(new ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED,
-                    "Team ID must be provided in params"));
-        }
-        String finalTeamId = teamId; // Make effectively final for use in lambdas
+            String finalTeamId = teamId; // Make effectively final for use in lambdas
 
-        String workflowId = request.getQuery() != null && request.getQuery().getWorkflowId() != null
-                ? request.getQuery().getWorkflowId()
-                : "unknown";
-        String executedBy = request.getExecutedBy();
+            String workflowId = request.getQuery() != null && request.getQuery().getWorkflowId() != null
+                    ? request.getQuery().getWorkflowId()
+                    : "unknown";
+            String executedBy = request.getExecutedBy();
 
-        // Log workflow execution started
-        Map<String, Object> startContext = new HashMap<>();
-        startContext.put("workflowId", workflowId);
-        startContext.put("teamId", finalTeamId);
-        startContext.put("stepCount", steps != null ? steps.size() : 0);
-        startContext.put("startTimestamp", startTime.toString());
-        if (executedBy != null) {
-            startContext.put("executedBy", executedBy);
-        }
-
-        Mono<Void> startAuditLog = auditLogHelper.logDetailedEvent(
-                AuditEventType.WORKFLOW_EXECUTION_STARTED,
-                AuditActionType.READ,
-                AuditResourceType.WORKFLOW,
-                workflowId,
-                String.format("Workflow execution started with %d steps", steps != null ? steps.size() : 0),
-                startContext,
-                null,
-                null)
-                .doOnError(auditError -> log.error("Failed to log audit event (workflow execution started): {}",
-                        auditError.getMessage(), auditError))
-                .onErrorResume(auditError -> Mono.empty());
-
-        // Chain start audit log, then execute workflow
-        return startAuditLog.then(Mono.defer(() -> {
-            // Execute steps synchronously or asynchronously based on configuration
-            Mono<LinqResponse> workflowMono = Mono.just(new LinqResponse());
-            if (steps == null) {
-                return workflowMono;
+            // Log workflow execution started
+            Map<String, Object> startContext = new HashMap<>();
+            startContext.put("workflowId", workflowId);
+            startContext.put("teamId", finalTeamId);
+            startContext.put("stepCount", steps != null ? steps.size() : 0);
+            startContext.put("startTimestamp", startTime.toString());
+            if (executedBy != null) {
+                startContext.put("executedBy", executedBy);
             }
-            for (LinqRequest.Query.WorkflowStep step : steps) {
-                workflowMono = workflowMono.flatMap(response -> {
-                    log.info("📍 Processing Step {} ({} - {}). Intent: {}. Params: {}",
-                            step.getStep(), step.getTarget(), step.getAction(), step.getIntent(), step.getParams());
 
-                    if (context.isStopped()) {
-                        log.info("✋ Stopping execution before Step {} because workflow is stopped.", step.getStep());
-                        return Mono.just(response);
-                    }
+            Mono<Void> startAuditLog = auditLogHelper.logDetailedEvent(
+                    AuditEventType.WORKFLOW_EXECUTION_STARTED,
+                    AuditActionType.READ,
+                    AuditResourceType.WORKFLOW,
+                    workflowId,
+                    String.format("Workflow execution started with %d steps", steps != null ? steps.size() : 0),
+                    startContext,
+                    null,
+                    null)
+                    .doOnError(auditError -> log.error("Failed to log audit event (workflow execution started): {}",
+                            auditError.getMessage(), auditError))
+                    .onErrorResume(auditError -> Mono.empty());
 
-                    // Evaluate condition if present
-                    boolean conditionMet = evaluateCondition(step.getCondition(), context);
+            // Chain start audit log, then execute workflow
+            return startAuditLog
+                    .then(sendExecutionStartedUpdate(request, steps != null ? steps.size() : 0, context))
+                    .then(Mono.<LinqResponse>defer(() -> {
+                // Execute steps synchronously or asynchronously based on configuration
+                Mono<LinqResponse> workflowMono = Mono.just(new LinqResponse());
+                if (steps == null) {
+                    return workflowMono;
+                }
+                for (LinqRequest.Query.WorkflowStep step : steps) {
+                    workflowMono = workflowMono.flatMap(response -> {
+                        log.info("📍 Processing Step {} ({} - {}). Intent: {}. Params: {}",
+                                step.getStep(), step.getTarget(), step.getAction(), step.getIntent(), step.getParams());
 
-                    // Branch logic: Skip until jump target is reached
-                    boolean isJumpSkipping = context.getJumpTarget() > 0 && context.getJumpTarget() != step.getStep();
+                        if (context.isStopped()) {
+                            log.info("✋ Skipping Step {} because workflow is stopped.", step.getStep());
 
-                    if (!conditionMet || isJumpSkipping) {
-                        String skipReason = !conditionMet ? "Condition evaluated to false"
-                                : "Skipped due to jump to Step " + context.getJumpTarget();
-                        log.info("⏭️ Skipping workflow step {}: {}", step.getStep(), skipReason);
+                            // Add skipped metadata to response result steps
+                            LinqResponse.WorkflowStep skipResultStep = new LinqResponse.WorkflowStep();
+                            skipResultStep.setStep(step.getStep());
+                            skipResultStep.setStatus("skipped");
+                            skipResultStep.setTarget(step.getTarget());
+                            skipResultStep.setDescription(step.getDescription());
+                            skipResultStep.setResult(Map.of("message", "Workflow stopped by a previous jump/condition",
+                                    "status", "skipped"));
 
-                        // Add skipped metadata to response result steps
-                        LinqResponse.WorkflowStep skipResultStep = new LinqResponse.WorkflowStep();
-                        skipResultStep.setStep(step.getStep());
-                        skipResultStep.setStatus("skipped");
-                        skipResultStep.setTarget(step.getTarget());
-                        skipResultStep.setDescription(step.getDescription());
-                        skipResultStep.setResult(Map.of("message", skipReason,
-                                "condition", step.getCondition() != null ? step.getCondition() : "none"));
-
-                        if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
-                            if (workflowResult.getSteps() == null) {
-                                workflowResult.setSteps(new ArrayList<>());
+                            if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
+                                if (workflowResult.getSteps() == null) {
+                                    workflowResult.setSteps(new ArrayList<>());
+                                }
+                                workflowResult.getSteps().add(skipResultStep);
                             }
-                            workflowResult.getSteps().add(skipResultStep);
+
+                            // Add skipped metadata
+                            LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                            meta.setStep(step.getStep());
+                            meta.setStatus("skipped");
+                            meta.setDurationMs(0);
+                            meta.setTarget(step.getTarget());
+                            meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+                            stepMetadata.add(meta);
+
+                            return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                    .thenReturn(response);
                         }
 
-                        // Add skipped metadata
-                        LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
-                        meta.setStep(step.getStep());
-                        meta.setStatus("skipped");
-                        meta.setDurationMs(0);
-                        meta.setTarget(step.getTarget());
-                        meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
-                        stepMetadata.add(meta);
+                        // Evaluate condition if present
+                        boolean conditionMet = evaluateCondition(step.getCondition(), context);
 
-                        return Mono.just(response);
-                    }
+                        // Branch logic: Skip until jump target is reached
+                        boolean isJumpSkipping = context.getJumpTarget() > 0
+                                && context.getJumpTarget() != step.getStep();
 
-                    // Reset jump target if we just reached it
-                    if (context.getJumpTarget() == step.getStep()) {
-                        log.info("🎯 Reached jump target Step {}", step.getStep());
-                        context.setJumpTarget(-1);
-                    }
+                        if (!conditionMet || isJumpSkipping) {
+                            String skipReason = !conditionMet ? "Condition evaluated to false"
+                                    : "Skipped due to jump to Step " + context.getJumpTarget();
+                            log.info("⏭️ Skipping workflow step {}: {}", step.getStep(), skipReason);
 
-                    Instant start = Instant.now();
+                            // Add skipped metadata to response result steps
+                            LinqResponse.WorkflowStep skipResultStep = new LinqResponse.WorkflowStep();
+                            skipResultStep.setStep(step.getStep());
+                            skipResultStep.setStatus("skipped");
+                            skipResultStep.setTarget(step.getTarget());
+                            skipResultStep.setDescription(step.getDescription());
+                            skipResultStep.setResult(Map.of("message", skipReason,
+                                    "condition", step.getCondition() != null ? step.getCondition() : "none"));
 
-                    // Send step progress update
-                    return sendStepProgressUpdate(request, step, steps.size(), stepResults)
-                            .then(Mono.defer(() -> {
+                            if (response.getResult() instanceof LinqResponse.WorkflowResult workflowResult) {
+                                if (workflowResult.getSteps() == null) {
+                                    workflowResult.setSteps(new ArrayList<>());
+                                }
+                                workflowResult.getSteps().add(skipResultStep);
+                            }
 
-                                // Check if step should be executed asynchronously
-                                if (step.getAsync() != null && step.getAsync()) {
-                                    // Create a WorkflowStep for async execution
-                                    LinqResponse.WorkflowStep asyncStep = new LinqResponse.WorkflowStep();
-                                    asyncStep.setStep(step.getStep());
-                                    asyncStep.setTarget(step.getTarget());
-                                    asyncStep.setParams(step.getParams());
-                                    asyncStep.setAction(step.getAction());
-                                    asyncStep.setIntent(step.getIntent());
-                                    asyncStep.setAsync(true);
-                                    asyncStep.setLlmConfig(step.getLlmConfig()); // Preserve llmConfig for async
-                                                                                 // execution
+                            // Add skipped metadata
+                            LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                            meta.setStep(step.getStep());
+                            meta.setStatus("skipped");
+                            meta.setDurationMs(0);
+                            meta.setTarget(step.getTarget());
+                            meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+                            stepMetadata.add(meta);
 
-                                    // Queue the step for async execution
-                                    return queuedWorkflowService
-                                            .queueAsyncStep(request.getQuery().getWorkflowId(), step.getStep(),
-                                                    asyncStep, finalTeamId)
-                                            .doOnSuccess(v -> log.info(
-                                                    "Async step queued successfully for workflow {} step {}",
-                                                    request.getQuery().getWorkflowId(), step.getStep()))
-                                            .doOnError(e -> {
-                                                log.error("Failed to queue async step for workflow {} step {}: {}",
-                                                        request.getQuery().getWorkflowId(), step.getStep(),
-                                                        e.getMessage(), e);
-                                                // Create error metadata for failed queueing
+                            return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                    .thenReturn(response);
+                        }
+
+                        // Reset jump target if we just reached it
+                        if (context.getJumpTarget() == step.getStep()) {
+                            log.info("🎯 Reached jump target Step {}", step.getStep());
+                            context.setJumpTarget(-1);
+                        }
+
+                        Instant start = Instant.now();
+
+                        // Send step progress update and persist to DB only at step START
+                        return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                .then(updatePersistentProgress(finalAgentExecutionId, step.getStep(), steps.size(), context))
+                                .then(Mono.defer(() -> {
+
+                                    // Check if step should be executed asynchronously
+                                    if (step.getAsync() != null && step.getAsync()) {
+                                        // Create a WorkflowStep for async execution
+                                        LinqResponse.WorkflowStep asyncStep = new LinqResponse.WorkflowStep();
+                                        asyncStep.setStep(step.getStep());
+                                        asyncStep.setTarget(step.getTarget());
+                                        asyncStep.setParams(step.getParams());
+                                        asyncStep.setAction(step.getAction());
+                                        asyncStep.setIntent(step.getIntent());
+                                        asyncStep.setAsync(true);
+                                        asyncStep.setLlmConfig(step.getLlmConfig()); // Preserve llmConfig for async
+                                                                                     // execution
+                                        asyncStep.setPayload(resolvePlaceholders(step.getPayload(), context)); // Preserve
+                                                                                                               // resolved
+                                                                                                               // payload
+                                                                                                               // for
+                                                                                                               // async
+                                                                                                               // execution
+
+                                        // Queue the step for async execution
+                                        String mongoExecutionId = globalParams != null
+                                                ? (String) globalParams.get("_executionId")
+                                                : null;
+                                        return queuedWorkflowService
+                                                .queueAsyncStep(request.getQuery().getWorkflowId(), mongoExecutionId,
+                                                        step.getStep(),
+                                                        asyncStep, finalTeamId)
+                                                .doOnSuccess(v -> log.info(
+                                                        "Async step queued successfully for workflow {} (execution: {}) step {}",
+                                                        request.getQuery().getWorkflowId(), mongoExecutionId,
+                                                        step.getStep()))
+                                                .doOnError(e -> {
+                                                    log.error("Failed to queue async step for workflow {} step {}: {}",
+                                                            request.getQuery().getWorkflowId(), step.getStep(),
+                                                            e.getMessage(), e);
+                                                    // Create error metadata for failed queueing
+                                                    LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                                                    meta.setStep(step.getStep());
+                                                    meta.setStatus("error");
+                                                    meta.setDurationMs(0);
+                                                    meta.setTarget(step.getTarget());
+                                                    meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+                                                    meta.setAsync(true);
+                                                    stepMetadata.add(meta);
+                                                })
+                                                .then(Mono.defer(() -> {
+                                                    // Create metadata for async step
+                                                    LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                                                    meta.setStep(step.getStep());
+                                                    meta.setStatus("queued");
+                                                    meta.setDurationMs(0);
+                                                    meta.setTarget(step.getTarget());
+                                                    meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+                                                    meta.setAsync(true); // Set isAsync to true for async steps
+                                                    stepMetadata.add(meta);
+
+                                                    return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                                            .thenReturn(response);
+                                                }));
+                                    }
+
+                                    // Create a single-step LinqRequest
+                                    LinqRequest stepRequest = new LinqRequest();
+                                    LinqRequest.Link stepLink = new LinqRequest.Link();
+                                    stepLink.setTarget(step.getTarget());
+                                    stepLink.setAction(step.getAction());
+                                    stepRequest.setLink(stepLink);
+
+                                    LinqRequest.Query stepQuery = new LinqRequest.Query();
+                                    log.info("🔍 Resolving step placeholders - Intent: {}, Params: {}, Payload: {}",
+                                            step.getIntent(), step.getParams(), step.getPayload());
+
+                                    String resolvedIntent = resolvePlaceholder(step.getIntent(), context);
+                                    if (resolvedIntent == null || resolvedIntent.isEmpty()) {
+                                        resolvedIntent = step.getAction();
+                                    }
+                                    stepQuery.setIntent(resolvedIntent);
+
+                                    stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), context));
+                                    stepQuery.setPayload(resolvePlaceholders(step.getPayload(), context));
+
+                                    log.info("✅ Resolved step placeholders - Intent: {}, Params: {}",
+                                            stepQuery.getIntent(), stepQuery.getParams());
+                                    stepQuery.setLlmConfig(step.getLlmConfig());
+
+                                    // Merge global params (e.g., teamId, userId) so downstream services see them
+                                    Map<String, Object> mergedParams = new HashMap<>();
+                                    if (globalParams != null) {
+                                        mergedParams.putAll(globalParams);
+                                    }
+                                    if (stepQuery.getParams() != null) {
+                                        mergedParams.putAll(stepQuery.getParams());
+                                    }
+                                    stepQuery.setParams(mergedParams);
+
+                                    // Set the workflow steps in the query to enable caching
+                                    stepQuery.setWorkflow(steps);
+                                    stepRequest.setQuery(stepQuery);
+
+                                    // Copy the executedBy field to maintain user context
+                                    stepRequest.setExecutedBy(request.getExecutedBy());
+
+                                    // Execute the step
+                                    // Try to get modelName from llmConfig first, then fallback to target-only
+                                    // search
+                                    final String modelName = (step.getLlmConfig() != null
+                                            && step.getLlmConfig().getModel() != null)
+                                                    ? step.getLlmConfig().getModel()
+                                                    : null;
+
+                                    Mono<org.lite.gateway.entity.LinqLlmModel> llmModelMono;
+                                    if (modelName != null) {
+                                        log.info(
+                                                "🔍 Searching for LLM model configuration: modelCategory={}, modelName={}, teamId={}",
+                                                step.getTarget(), modelName, finalTeamId);
+                                        llmModelMono = linqLlmModelRepository
+                                                .findByModelCategoryAndModelNameAndTeamId(step.getTarget(), modelName,
+                                                        finalTeamId)
+                                                .doOnNext(llmModel -> log.info(
+                                                        "✅ Found LLM model configuration: modelCategory={}, modelName={}",
+                                                        llmModel.getModelCategory(), llmModel.getModelName()))
+                                                .doOnError(error -> log.error(
+                                                        "❌ Error finding LLM model for modelCategory {} with modelName {}: {}",
+                                                        step.getTarget(), modelName, error.getMessage()))
+                                                .switchIfEmpty(Mono.defer(() -> {
+                                                    log.warn(
+                                                            "⚠️ No LLM model found with modelName {}, falling back to target-only search",
+                                                            modelName);
+                                                    return linqLlmModelRepository
+                                                            .findByModelCategoryAndTeamId(step.getTarget(), finalTeamId)
+                                                            .next() // Take the first result
+                                                            .doOnNext(llmModel -> log.info(
+                                                                    "✅ Found LLM model configuration (fallback): modelCategory={}, modelName={}",
+                                                                    llmModel.getModelCategory(),
+                                                                    llmModel.getModelName()));
+                                                }));
+                                    } else {
+                                        log.info(
+                                                "🔍 Searching for LLM model configuration: modelCategory={}, teamId={}",
+                                                step.getTarget(), finalTeamId);
+                                        llmModelMono = linqLlmModelRepository
+                                                .findByModelCategoryAndTeamId(step.getTarget(), finalTeamId)
+                                                .next() // Take the first result
+                                                .doOnNext(llmModel -> log.info(
+                                                        "✅ Found LLM model configuration: modelCategory={}, modelName={}",
+                                                        llmModel.getModelCategory(), llmModel.getModelName()))
+                                                .doOnError(error -> log.error(
+                                                        "❌ Error finding LLM model for modelCategory {}: {}",
+                                                        step.getTarget(), error.getMessage()));
+                                    }
+
+                                    return llmModelMono
+                                            .doOnSuccess(llmModel -> {
+                                                if (llmModel == null) {
+                                                    log.warn(
+                                                            "⚠️ No LLM model configuration found for modelCategory: {}, will try microservice",
+                                                            step.getTarget());
+                                                }
+                                            })
+                                            .doOnNext(
+                                                    llmModel -> log.info("🚀 About to execute LLM request for step {}",
+                                                            step.getStep()))
+                                            .flatMap(llmModel -> {
+                                                // Check if we should stream this step
+                                                // 1. Explicitly requested via 'stream' flag
+                                                // 2. Default: Last step if it's an LLM target and 'stream' is not
+                                                // explicitly false
+                                                boolean isLlmTarget = llmModel != null &&
+                                                        (llmModel.getModelCategory().equals("openai-chat") ||
+                                                                llmModel.getModelCategory().equals("azure-openai-chat")
+                                                                ||
+                                                                llmModel.getModelCategory().equals("gemini-chat") ||
+                                                                llmModel.getModelCategory().equals("claude-chat") ||
+                                                                llmModel.getModelCategory().equals("cohere-chat") ||
+                                                                llmModel.getModelCategory().equals("ollama-chat"));
+
+                                                boolean shouldStream = Boolean.TRUE.equals(step.getStream()) ||
+                                                        (step.getStream() == null && step.getStep() == steps.size()
+                                                                && isLlmTarget);
+
+                                                if (shouldStream) {
+                                                    log.info("🌊 Streaming LLM step {} (target: {})...", step.getStep(),
+                                                            step.getTarget());
+                                                    StringBuilder fullContent = new StringBuilder();
+                                                    ExecutionProgressUpdate streamUpdate = buildProgressUpdate(request,
+                                                            step,
+                                                            steps.size(), stepResults, context);
+
+                                                    return linqLlmModelService.streamLlmRequest(stepRequest, llmModel)
+                                                            .concatMap(chunk -> {
+                                                                if (context.isStopped()) {
+                                                                    log.warn(
+                                                                            "🛑 Workflow execution cancelled during LLM streaming (agentExecutionId: {})",
+                                                                            finalAgentExecutionId);
+                                                                    return Mono.error(new RuntimeException(
+                                                                            "Workflow execution cancelled"));
+                                                                }
+
+                                                                String currentFull = fullContent.toString();
+                                                                String delta;
+
+                                                                // Delta detection: if chunk starts with previous
+                                                                // content,
+                                                                // it's cumulative
+                                                                if (!currentFull.isEmpty()
+                                                                        && chunk.startsWith(currentFull)) {
+                                                                    delta = chunk.substring(currentFull.length());
+                                                                    fullContent.setLength(0);
+                                                                    fullContent.append(chunk);
+                                                                } else {
+                                                                    // It's a true delta or the start of the stream
+                                                                    delta = chunk;
+                                                                    fullContent.append(chunk);
+                                                                }
+
+                                                                if (delta.isEmpty()) {
+                                                                    return Mono.empty();
+                                                                }
+
+                                                                return executionMonitoringService
+                                                                        .sendResultChunkWithAccumulated(streamUpdate,
+                                                                                delta,
+                                                                                fullContent.toString())
+                                                                        .then(Mono.just(delta));
+                                                            })
+                                                            .collectList()
+                                                            .map(chunks -> {
+                                                                String finalStr = fullContent.toString();
+                                                                LinqResponse resp = new LinqResponse();
+                                                                resp.setResult(finalStr);
+                                                                return resp;
+                                                            });
+                                                }
+
+                                                return linqLlmModelService.executeLlmRequest(stepRequest, llmModel);
+                                            })
+                                            .doOnNext(stepResponse -> log.info(
+                                                    "✅ LLM request executed successfully for step {}", step.getStep()))
+                                            .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
+                                                log.info(
+                                                        "📡 No LLM model found, executing microservice request for modelCategory: {}",
+                                                        step.getTarget());
+                                                return linqMicroService.execute(stepRequest);
+                                            }))
+                                            .switchIfEmpty(Mono.error(new ResponseStatusException(
+                                                    HttpStatus.INTERNAL_SERVER_ERROR,
+                                                    String.format(
+                                                            "Workflow step %d failed: Service returned empty response",
+                                                            step.getStep()))))
+                                            .flatMap(stepResponse -> {
+                                                // Check if the result contains an error
+                                                if (stepResponse.getResult() instanceof Map<?, ?> resultMap &&
+                                                        resultMap.containsKey("error")) {
+                                                    return Mono.error(new ResponseStatusException(
+                                                            HttpStatus.INTERNAL_SERVER_ERROR,
+                                                            String.format("Workflow step %d failed: %s",
+                                                                    step.getStep(),
+                                                                    resultMap.get("error"))));
+                                                }
+
+                                                stepResults.put(step.getStep(), stepResponse.getResult());
+
+                                                // Process Jump configuration after success
+                                                if (step.getJump() != null && step.getJump().getCondition() != null) {
+                                                    boolean jumpConditionMet = evaluateCondition(
+                                                            step.getJump().getCondition(), context);
+                                                    String desc = (step.getJump().getConditionDesc() != null)
+                                                            ? " [" + step.getJump().getConditionDesc() + "]"
+                                                            : "";
+                                                    log.info("🔎 Step {} jump condition '{}'{} result: {}",
+                                                            step.getStep(),
+                                                            step.getJump().getCondition(), desc, jumpConditionMet);
+
+                                                    if (jumpConditionMet) {
+                                                        Integer target = step.getJump().getTargetStep();
+                                                        if (target == null || target <= 0) {
+                                                            log.info(
+                                                                    "🛑 Step {} triggered terminal jump. Setting stopped = true.",
+                                                                    step.getStep());
+                                                            context.setStopped(true);
+                                                        } else {
+                                                            log.info(
+                                                                    "↪️ Step {} triggered jump to Step {}. Setting jumpTarget = {}",
+                                                                    step.getStep(), target, target);
+                                                            context.setJumpTarget(target);
+                                                        }
+                                                    }
+                                                }
+
+                                                long durationMs = Duration.between(start, Instant.now()).toMillis();
+                                                LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
+                                                meta.setStep(step.getStep());
+                                                meta.setStatus("success");
+                                                meta.setDurationMs(durationMs);
+                                                meta.setTarget(step.getTarget());
+                                                meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
+                                                stepMetadata.add(meta);
+                                                
+                                                return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                                        .thenReturn(response);
+                                            })
+                                            .onErrorResume(error -> {
+                                                long durationMs = Duration.between(start, Instant.now()).toMillis();
                                                 LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
                                                 meta.setStep(step.getStep());
                                                 meta.setStatus("error");
-                                                meta.setDurationMs(0);
+                                                meta.setDurationMs(durationMs);
                                                 meta.setTarget(step.getTarget());
                                                 meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
-                                                meta.setAsync(true);
                                                 stepMetadata.add(meta);
-                                            })
-                                            .then(Mono.defer(() -> {
-                                                // Create metadata for async step
-                                                LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
-                                                meta.setStep(step.getStep());
-                                                meta.setStatus("queued");
-                                                meta.setDurationMs(0);
-                                                meta.setTarget(step.getTarget());
-                                                meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
-                                                meta.setAsync(true); // Set isAsync to true for async steps
-                                                stepMetadata.add(meta);
-
-                                                return Mono.just(response);
-                                            }));
-                                }
-
-                                // Create a single-step LinqRequest
-                                LinqRequest stepRequest = new LinqRequest();
-                                LinqRequest.Link stepLink = new LinqRequest.Link();
-                                stepLink.setTarget(step.getTarget());
-                                stepLink.setAction(step.getAction());
-                                stepRequest.setLink(stepLink);
-
-                                LinqRequest.Query stepQuery = new LinqRequest.Query();
-                                log.info("🔍 Resolving step placeholders - Intent: {}, Params: {}, Payload: {}",
-                                        step.getIntent(), step.getParams(), step.getPayload());
-
-                                String resolvedIntent = resolvePlaceholder(step.getIntent(), context);
-                                if (resolvedIntent == null || resolvedIntent.isEmpty()) {
-                                    resolvedIntent = step.getAction();
-                                }
-                                stepQuery.setIntent(resolvedIntent);
-
-                                stepQuery.setParams(resolvePlaceholdersForMap(step.getParams(), context));
-                                stepQuery.setPayload(resolvePlaceholders(step.getPayload(), context));
-
-                                log.info("✅ Resolved step placeholders - Intent: {}, Params: {}",
-                                        stepQuery.getIntent(), stepQuery.getParams());
-                                stepQuery.setLlmConfig(step.getLlmConfig());
-
-                                // Merge global params (e.g., teamId, userId) so downstream services see them
-                                Map<String, Object> mergedParams = new HashMap<>();
-                                if (globalParams != null) {
-                                    mergedParams.putAll(globalParams);
-                                }
-                                if (stepQuery.getParams() != null) {
-                                    mergedParams.putAll(stepQuery.getParams());
-                                }
-                                stepQuery.setParams(mergedParams);
-
-                                // Set the workflow steps in the query to enable caching
-                                stepQuery.setWorkflow(steps);
-                                stepRequest.setQuery(stepQuery);
-
-                                // Copy the executedBy field to maintain user context
-                                stepRequest.setExecutedBy(request.getExecutedBy());
-
-                                // Execute the step
-                                // Try to get modelName from llmConfig first, then fallback to target-only
-                                // search
-                                final String modelName = (step.getLlmConfig() != null
-                                        && step.getLlmConfig().getModel() != null)
-                                                ? step.getLlmConfig().getModel()
-                                                : null;
-
-                                Mono<org.lite.gateway.entity.LinqLlmModel> llmModelMono;
-                                if (modelName != null) {
-                                    log.info(
-                                            "🔍 Searching for LLM model configuration: modelCategory={}, modelName={}, teamId={}",
-                                            step.getTarget(), modelName, finalTeamId);
-                                    llmModelMono = linqLlmModelRepository
-                                            .findByModelCategoryAndModelNameAndTeamId(step.getTarget(), modelName,
-                                                    finalTeamId)
-                                            .doOnNext(llmModel -> log.info(
-                                                    "✅ Found LLM model configuration: modelCategory={}, modelName={}",
-                                                    llmModel.getModelCategory(), llmModel.getModelName()))
-                                            .doOnError(error -> log.error(
-                                                    "❌ Error finding LLM model for modelCategory {} with modelName {}: {}",
-                                                    step.getTarget(), modelName, error.getMessage()))
-                                            .switchIfEmpty(Mono.defer(() -> {
-                                                log.warn(
-                                                        "⚠️ No LLM model found with modelName {}, falling back to target-only search",
-                                                        modelName);
-                                                return linqLlmModelRepository
-                                                        .findByModelCategoryAndTeamId(step.getTarget(), finalTeamId)
-                                                        .next() // Take the first result
-                                                        .doOnNext(llmModel -> log.info(
-                                                                "✅ Found LLM model configuration (fallback): modelCategory={}, modelName={}",
-                                                                llmModel.getModelCategory(), llmModel.getModelName()));
-                                            }));
-                                } else {
-                                    log.info("🔍 Searching for LLM model configuration: modelCategory={}, teamId={}",
-                                            step.getTarget(), finalTeamId);
-                                    llmModelMono = linqLlmModelRepository
-                                            .findByModelCategoryAndTeamId(step.getTarget(), finalTeamId)
-                                            .next() // Take the first result
-                                            .doOnNext(llmModel -> log.info(
-                                                    "✅ Found LLM model configuration: modelCategory={}, modelName={}",
-                                                    llmModel.getModelCategory(), llmModel.getModelName()))
-                                            .doOnError(error -> log.error(
-                                                    "❌ Error finding LLM model for modelCategory {}: {}",
-                                                    step.getTarget(), error.getMessage()));
-                                }
-
-                                return llmModelMono
-                                        .doOnSuccess(llmModel -> {
-                                            if (llmModel == null) {
-                                                log.warn(
-                                                        "⚠️ No LLM model configuration found for modelCategory: {}, will try microservice",
-                                                        step.getTarget());
-                                            }
-                                        })
-                                        .doOnNext(llmModel -> log.info("🚀 About to execute LLM request for step {}",
-                                                step.getStep()))
-                                        .flatMap(llmModel -> {
-                                            // Check if we should stream this step
-                                            // 1. Explicitly requested via 'stream' flag
-                                            // 2. Default: Last step if it's an LLM target and 'stream' is not
-                                            // explicitly false
-                                            boolean isLlmTarget = llmModel != null &&
-                                                    (llmModel.getModelCategory().equals("openai-chat") ||
-                                                            llmModel.getModelCategory().equals("azure-openai-chat") ||
-                                                            llmModel.getModelCategory().equals("gemini-chat") ||
-                                                            llmModel.getModelCategory().equals("claude-chat") ||
-                                                            llmModel.getModelCategory().equals("cohere-chat") ||
-                                                            llmModel.getModelCategory().equals("ollama-chat"));
-
-                                            boolean shouldStream = Boolean.TRUE.equals(step.getStream()) ||
-                                                    (step.getStream() == null && step.getStep() == steps.size()
-                                                            && isLlmTarget);
-
-                                            if (shouldStream) {
-                                                log.info("🌊 Streaming LLM step {} (target: {})...", step.getStep(),
-                                                        step.getTarget());
-                                                StringBuilder fullContent = new StringBuilder();
-                                                ExecutionProgressUpdate streamUpdate = buildProgressUpdate(request,
-                                                        step,
-                                                        steps.size(), stepResults);
-
-                                                return linqLlmModelService.streamLlmRequest(stepRequest, llmModel)
-                                                        .concatMap(chunk -> {
-                                                            if (context.isStopped()) {
-                                                                log.warn(
-                                                                        "🛑 Workflow execution cancelled during LLM streaming (agentExecutionId: {})",
-                                                                        finalAgentExecutionId);
-                                                                return Mono.error(new RuntimeException(
-                                                                        "Workflow execution cancelled"));
-                                                            }
-
-                                                            String currentFull = fullContent.toString();
-                                                            String delta;
-
-                                                            // Delta detection: if chunk starts with previous content,
-                                                            // it's cumulative
-                                                            if (!currentFull.isEmpty()
-                                                                    && chunk.startsWith(currentFull)) {
-                                                                delta = chunk.substring(currentFull.length());
-                                                                fullContent.setLength(0);
-                                                                fullContent.append(chunk);
-                                                            } else {
-                                                                // It's a true delta or the start of the stream
-                                                                delta = chunk;
-                                                                fullContent.append(chunk);
-                                                            }
-
-                                                            if (delta.isEmpty()) {
-                                                                return Mono.empty();
-                                                            }
-
-                                                            return executionMonitoringService
-                                                                    .sendResultChunkWithAccumulated(streamUpdate, delta,
-                                                                            fullContent.toString())
-                                                                    .then(Mono.just(delta));
-                                                        })
-                                                        .collectList()
-                                                        .map(chunks -> {
-                                                            String finalStr = fullContent.toString();
-                                                            LinqResponse resp = new LinqResponse();
-                                                            resp.setResult(finalStr);
-                                                            return resp;
-                                                        });
-                                            }
-
-                                            return linqLlmModelService.executeLlmRequest(stepRequest, llmModel);
-                                        })
-                                        .doOnNext(stepResponse -> log.info(
-                                                "✅ LLM request executed successfully for step {}", step.getStep()))
-                                        .switchIfEmpty(Mono.<LinqResponse>defer(() -> {
-                                            log.info(
-                                                    "📡 No LLM model found, executing microservice request for modelCategory: {}",
-                                                    step.getTarget());
-                                            return linqMicroService.execute(stepRequest);
-                                        }))
-                                        .switchIfEmpty(Mono.error(new ResponseStatusException(
-                                                HttpStatus.INTERNAL_SERVER_ERROR,
-                                                String.format("Workflow step %d failed: Service returned empty response", step.getStep()))))
-                                        .flatMap(stepResponse -> {
-                                            // Check if the result contains an error
-                                            if (stepResponse.getResult() instanceof Map<?, ?> resultMap &&
-                                                    resultMap.containsKey("error")) {
+                                                log.error("Error in workflow step {}: {}", step.getStep(),
+                                                        error.getMessage());
                                                 return Mono.error(new ResponseStatusException(
                                                         HttpStatus.INTERNAL_SERVER_ERROR,
-                                                        String.format("Workflow step %d failed: %s",
-                                                                step.getStep(),
-                                                                resultMap.get("error"))));
-                                            }
-
-                                            stepResults.put(step.getStep(), stepResponse.getResult());
-
-                                            // Process Jump configuration after success
-                                            if (step.getJump() != null && step.getJump().getCondition() != null) {
-                                                boolean jumpConditionMet = evaluateCondition(
-                                                        step.getJump().getCondition(), context);
-                                                String desc = (step.getJump().getConditionDesc() != null)
-                                                        ? " [" + step.getJump().getConditionDesc() + "]"
-                                                        : "";
-                                                log.info("🔎 Step {} jump condition '{}'{} result: {}", step.getStep(),
-                                                        step.getJump().getCondition(), desc, jumpConditionMet);
-
-                                                if (jumpConditionMet) {
-                                                    Integer target = step.getJump().getTargetStep();
-                                                    if (target == null || target <= 0) {
-                                                        log.info(
-                                                                "🛑 Step {} triggered terminal jump. Setting stopped = true.",
-                                                                step.getStep());
-                                                        context.setStopped(true);
-                                                    } else {
-                                                        log.info(
-                                                                "↪️ Step {} triggered jump to Step {}. Setting jumpTarget = {}",
-                                                                step.getStep(), target, target);
-                                                        context.setJumpTarget(target);
-                                                    }
-                                                }
-                                            }
-
-                                            long durationMs = Duration.between(start, Instant.now()).toMillis();
-                                            LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
-                                            meta.setStep(step.getStep());
-                                            meta.setStatus("success");
-                                            meta.setDurationMs(durationMs);
-                                            meta.setTarget(step.getTarget());
-                                            meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
-                                            stepMetadata.add(meta);
-                                            return Mono.just(response);
-                                        })
-                                        .onErrorResume(error -> {
-                                            long durationMs = Duration.between(start, Instant.now()).toMillis();
-                                            LinqResponse.WorkflowStepMetadata meta = new LinqResponse.WorkflowStepMetadata();
-                                            meta.setStep(step.getStep());
-                                            meta.setStatus("error");
-                                            meta.setDurationMs(durationMs);
-                                            meta.setTarget(step.getTarget());
-                                            meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
-                                            stepMetadata.add(meta);
-                                            log.error("Error in workflow step {}: {}", step.getStep(),
-                                                    error.getMessage());
-                                            return Mono.error(new ResponseStatusException(
-                                                    HttpStatus.INTERNAL_SERVER_ERROR,
-                                                    String.format("Workflow step %d failed: %s", step.getStep(),
-                                                            error.getMessage())));
-                                        });
-                            }));
-                });
-            }
-
-            return workflowMono.map(response -> {
-                // Build WorkflowResult
-                LinqResponse.WorkflowResult workflowResult = new LinqResponse.WorkflowResult();
-                if (steps == null || steps.isEmpty()) {
-                    response.setResult(workflowResult);
-                    return response;
-                }
-                List<LinqResponse.WorkflowStep> stepResultList = steps.stream()
-                        .map(step -> {
-                            LinqResponse.WorkflowStep stepResult = new LinqResponse.WorkflowStep();
-                            stepResult.setStep(step.getStep());
-                            stepResult.setTarget(step.getTarget());
-                            stepResult.setDescription(step.getDescription());
-
-                            // Find matching metadata to get status
-                            String status = stepMetadata.stream()
-                                    .filter(m -> m.getStep() == step.getStep())
-                                    .map(LinqResponse.WorkflowStepMetadata::getStatus)
-                                    .findFirst()
-                                    .orElse("unknown");
-
-                            stepResult.setStatus(status);
-                            Object result = stepResults.get(step.getStep());
-
-                            // If skipped and no result, provide a descriptive object
-                            if ("skipped".equals(status) && result == null) {
-                                result = Map.of(
-                                        "status", "skipped",
-                                        "reason", "Condition evaluated to false",
-                                        "condition", step.getCondition() != null ? step.getCondition() : "none");
-                            }
-
-                            stepResult.setResult(result);
-                            return stepResult;
-                        })
-                        .collect(Collectors.toList());
-                workflowResult.setSteps(stepResultList);
-
-                // Set final result (from last step)
-                if (steps != null && !steps.isEmpty()) {
-                    Object lastResult = stepResults.get(steps.getLast().getStep());
-                    workflowResult.setFinalResult(extractFinalResult(lastResult));
-                }
-
-                // Set response
-                response.setResult(workflowResult);
-                LinqResponse.Metadata metadata = new LinqResponse.Metadata();
-
-                // Check if any step has failed
-                boolean hasFailedStep = stepMetadata.stream()
-                        .anyMatch(meta -> "error".equals(meta.getStatus()) || "failed".equals(meta.getStatus()));
-                metadata.setStatus(hasFailedStep ? "error" : "success");
-
-                metadata.setTeamId(finalTeamId);
-                metadata.setCacheHit(false);
-                metadata.setWorkflowMetadata(stepMetadata);
-                response.setMetadata(metadata);
-                return response;
-            })
-                    .flatMap(response -> {
-                        // Log workflow execution completed/failed
-                        long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
-                        boolean hasFailedStep = stepMetadata.stream()
-                                .anyMatch(
-                                        meta -> "error".equals(meta.getStatus()) || "failed".equals(meta.getStatus()));
-
-                        Map<String, Object> completionContext = new HashMap<>();
-                        completionContext.put("workflowId", workflowId);
-                        completionContext.put("teamId", finalTeamId);
-                        completionContext.put("stepCount", steps != null ? steps.size() : 0);
-                        completionContext.put("durationMs", durationMs);
-                        completionContext.put("completionTimestamp", LocalDateTime.now().toString());
-                        completionContext.put("hasFailedStep", hasFailedStep);
-                        completionContext.put("stepMetadata", stepMetadata);
-                        if (executedBy != null) {
-                            completionContext.put("executedBy", executedBy);
-                        }
-
-                        return auditLogHelper.logDetailedEvent(
-                                hasFailedStep ? AuditEventType.WORKFLOW_EXECUTION_FAILED
-                                        : AuditEventType.WORKFLOW_EXECUTION_COMPLETED,
-                                AuditActionType.READ,
-                                AuditResourceType.WORKFLOW,
-                                workflowId,
-                                hasFailedStep ? String.format("Workflow execution failed after %d ms", durationMs)
-                                        : String.format("Workflow execution completed successfully in %d ms",
-                                                durationMs),
-                                completionContext,
-                                null,
-                                null,
-                                hasFailedStep ? AuditResultType.FAILED : AuditResultType.SUCCESS)
-                                .doOnError(auditError -> log.error(
-                                        "Failed to log audit event (workflow execution completed): {}",
-                                        auditError.getMessage(), auditError))
-                                .onErrorResume(auditError -> Mono.empty())
-                                .thenReturn(response);
-                    })
-                    .doFinally(signalType -> {
-                        if (finalAgentExecutionId != null) {
-                            activeContexts.remove(finalAgentExecutionId);
-                            log.info("📋 Unregistered workflow context for agentExecutionId: {} (Signal: {})",
-                                    finalAgentExecutionId, signalType);
-                        }
-
-                        // Clean up memory-intensive data structures after workflow completion
-                        // Note: stepResults is local to this execution and can be safely cleared.
-                        // CRITICAL: globalParams MUST NOT be cleared as it contains the institutional
-                        // tags
-                        // needed for the monitoring database queries.
-                        stepResults.clear();
-
-                        // Force garbage collection hint for memory cleanup
-                        log.info("🧹 Starting post-execution cleanup for workflow");
-                        System.gc();
-                        log.info("🧹 Completed post-execution cleanup for workflow");
-                    })
-                    .onErrorResume(error -> {
-                        // Log workflow execution failure
-                        long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
-
-                        boolean isCancellation = error.getMessage() != null
-                                && error.getMessage().toLowerCase().contains("cancelled");
-
-                        Map<String, Object> errorContext = new HashMap<>();
-                        errorContext.put("workflowId", workflowId);
-                        errorContext.put("teamId", finalTeamId);
-                        errorContext.put("stepCount", steps != null ? steps.size() : 0);
-                        errorContext.put("durationMs", durationMs);
-                        errorContext.put("error", error.getMessage());
-                        errorContext.put("errorType", error.getClass().getSimpleName());
-                        errorContext.put("failureTimestamp", LocalDateTime.now().toString());
-                        errorContext.put("stepMetadata", stepMetadata);
-                        if (executedBy != null) {
-                            errorContext.put("executedBy", executedBy);
-                        }
-
-                        Mono<Void> failureAuditLog = auditLogHelper.logDetailedEvent(
-                                isCancellation ? AuditEventType.WORKFLOW_EXECUTION_CANCELLED
-                                        : AuditEventType.WORKFLOW_EXECUTION_FAILED,
-                                AuditActionType.READ,
-                                AuditResourceType.WORKFLOW,
-                                workflowId,
-                                isCancellation ? String.format("Workflow execution cancelled after %d ms", durationMs)
-                                        : String.format("Workflow execution failed after %d ms: %s", durationMs,
-                                                error.getMessage()),
-                                errorContext,
-                                null,
-                                null,
-                                isCancellation ? AuditResultType.CANCELLED : AuditResultType.FAILED)
-                                .doOnError(auditError -> log.error(
-                                        "Failed to log audit event (workflow execution failed): {}",
-                                        auditError.getMessage(), auditError))
-                                .onErrorResume(auditError -> Mono.empty());
-
-                        return failureAuditLog.then(Mono.defer(() -> {
-                            // Create error response
-                            LinqResponse errorResponse = new LinqResponse();
-                            LinqResponse.Metadata metadata = new LinqResponse.Metadata();
-                            metadata.setSource("workflow");
-                            metadata.setStatus(isCancellation ? "cancelled" : "error");
-                            // Try to use teamId from params on error path as well
-                            String fallbackTeamId = null;
-                            if (request.getQuery() != null && request.getQuery().getParams() != null) {
-                                Object val = request.getQuery().getParams().get("teamId");
-                                if (val != null)
-                                    fallbackTeamId = String.valueOf(val);
-                            }
-                            if (fallbackTeamId == null || fallbackTeamId.isBlank()) {
-                                fallbackTeamId = "unknown-team"; // Use fallback instead of blocking
-                            }
-                            metadata.setTeamId(fallbackTeamId);
-                            metadata.setCacheHit(false);
-                            metadata.setWorkflowMetadata(stepMetadata);
-                            errorResponse.setMetadata(metadata);
-
-                            // Set error result
-                            LinqResponse.WorkflowResult errorResult = new LinqResponse.WorkflowResult();
-                            errorResult.setSteps(steps.stream()
-                                    .map(step -> {
-                                        LinqResponse.WorkflowStep stepResult = new LinqResponse.WorkflowStep();
-                                        stepResult.setStep(step.getStep());
-                                        stepResult.setTarget(step.getTarget());
-                                        stepResult.setResult(stepResults.get(step.getStep()));
-                                        return stepResult;
-                                    })
-                                    .collect(Collectors.toList()));
-                            errorResult.setFinalResult(error.getMessage());
-                            errorResponse.setResult(errorResult);
-
-                            return Mono.just(errorResponse);
-                        }));
+                                                        String.format("Workflow step %d failed: %s", step.getStep(),
+                                                                error.getMessage())));
+                                            });
+                                }));
                     });
-        }));
+                }
+
+                return workflowMono.map(response -> {
+                    // Build WorkflowResult
+                    LinqResponse.WorkflowResult workflowResult = new LinqResponse.WorkflowResult();
+                    if (steps == null || steps.isEmpty()) {
+                        response.setResult(workflowResult);
+                        return response;
+                    }
+                    List<LinqResponse.WorkflowStep> stepResultList = steps.stream()
+                            .map(step -> {
+                                LinqResponse.WorkflowStep stepResult = new LinqResponse.WorkflowStep();
+                                stepResult.setStep(step.getStep());
+                                stepResult.setTarget(step.getTarget());
+                                stepResult.setDescription(step.getDescription());
+
+                                // Find matching metadata to get status
+                                String status = stepMetadata.stream()
+                                        .filter(m -> m.getStep() == step.getStep())
+                                        .map(LinqResponse.WorkflowStepMetadata::getStatus)
+                                        .findFirst()
+                                        .orElse("unknown");
+
+                                stepResult.setStatus(status);
+                                Object result = stepResults.get(step.getStep());
+
+                                // If skipped and no result, provide a descriptive object
+                                if ("skipped".equals(status) && result == null) {
+                                    result = Map.of(
+                                            "status", "skipped",
+                                            "reason", "Condition evaluated to false",
+                                            "condition", step.getCondition() != null ? step.getCondition() : "none");
+                                }
+
+                                stepResult.setResult(result);
+                                return stepResult;
+                            })
+                            .collect(Collectors.toList());
+                    workflowResult.setSteps(stepResultList);
+
+                    // Set final result (from last step)
+                    if (steps != null && !steps.isEmpty()) {
+                        Object lastResult = stepResults.get(steps.getLast().getStep());
+                        workflowResult.setFinalResult(extractFinalResult(lastResult));
+                    }
+
+                    // Set response
+                    response.setResult(workflowResult);
+                    LinqResponse.Metadata metadata = new LinqResponse.Metadata();
+
+                    // Check if any step has failed
+                    boolean hasFailedStep = stepMetadata.stream()
+                            .anyMatch(meta -> "error".equals(meta.getStatus()) || "failed".equals(meta.getStatus()));
+                    metadata.setStatus(hasFailedStep ? "error" : "success");
+
+                    metadata.setTeamId(finalTeamId);
+                    metadata.setCacheHit(false);
+                    metadata.setWorkflowMetadata(stepMetadata);
+                    response.setMetadata(metadata);
+                    return response;
+                })
+                        .flatMap(response -> {
+                            // Log workflow execution completed/failed
+                            long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
+                            boolean hasFailedStep = stepMetadata.stream()
+                                    .anyMatch(
+                                            meta -> "error".equals(meta.getStatus())
+                                                    || "failed".equals(meta.getStatus()));
+
+                            Map<String, Object> completionContext = new HashMap<>();
+                            completionContext.put("workflowId", workflowId);
+                            completionContext.put("teamId", finalTeamId);
+                            completionContext.put("stepCount", steps != null ? steps.size() : 0);
+                            completionContext.put("durationMs", durationMs);
+                            completionContext.put("completionTimestamp", LocalDateTime.now().toString());
+                            completionContext.put("hasFailedStep", hasFailedStep);
+                            completionContext.put("stepMetadata", stepMetadata);
+                            if (executedBy != null) {
+                                completionContext.put("executedBy", executedBy);
+                            }
+
+                            return auditLogHelper.logDetailedEvent(
+                                    hasFailedStep ? AuditEventType.WORKFLOW_EXECUTION_FAILED
+                                            : AuditEventType.WORKFLOW_EXECUTION_COMPLETED,
+                                    AuditActionType.READ,
+                                    AuditResourceType.WORKFLOW,
+                                    workflowId,
+                                    hasFailedStep ? String.format("Workflow execution failed after %d ms", durationMs)
+                                            : String.format("Workflow execution completed successfully in %d ms",
+                                                    durationMs),
+                                    completionContext,
+                                    null,
+                                    null,
+                                    hasFailedStep ? AuditResultType.FAILED : AuditResultType.SUCCESS)
+                                    .doOnError(auditError -> log.error(
+                                            "Failed to log audit event (workflow execution completed): {}",
+                                            auditError.getMessage(), auditError))
+                                    .onErrorResume(auditError -> Mono.empty())
+                                    .then(sendExecutionCompletedUpdate(request, steps != null ? steps.size() : 0, context,
+                                            stepResults))
+                                    .thenReturn(response);
+                        })
+                        .doFinally(signalType -> {
+                            if (finalAgentExecutionId != null) {
+                                activeContexts.remove(finalAgentExecutionId);
+                                log.info("📋 Unregistered workflow context for agentExecutionId: {} (Signal: {})",
+                                        finalAgentExecutionId, signalType);
+                            }
+
+                            // Clean up memory-intensive data structures after workflow completion
+                            // Note: stepResults is local to this execution and can be safely cleared.
+                            // CRITICAL: globalParams MUST NOT be cleared as it contains the institutional
+                            // tags
+                            // needed for the monitoring database queries.
+                            stepResults.clear();
+
+                            // Force garbage collection hint for memory cleanup
+                            log.info("🧹 Starting post-execution cleanup for workflow");
+                            System.gc();
+                            log.info("🧹 Completed post-execution cleanup for workflow");
+                        })
+                        .onErrorResume(error -> {
+                            // Log workflow execution failure
+                            long durationMs = java.time.Duration.between(startTime, LocalDateTime.now()).toMillis();
+
+                            boolean isCancellation = error.getMessage() != null
+                                    && error.getMessage().toLowerCase().contains("cancelled");
+
+                            Map<String, Object> errorContext = new HashMap<>();
+                            errorContext.put("workflowId", workflowId);
+                            errorContext.put("teamId", finalTeamId);
+                            errorContext.put("stepCount", steps != null ? steps.size() : 0);
+                            errorContext.put("durationMs", durationMs);
+                            errorContext.put("error", error.getMessage());
+                            errorContext.put("errorType", error.getClass().getSimpleName());
+                            errorContext.put("failureTimestamp", LocalDateTime.now().toString());
+                            errorContext.put("stepMetadata", stepMetadata);
+                            if (executedBy != null) {
+                                errorContext.put("executedBy", executedBy);
+                            }
+
+                            Mono<Void> failureAuditLog = auditLogHelper.logDetailedEvent(
+                                    isCancellation ? AuditEventType.WORKFLOW_EXECUTION_CANCELLED
+                                            : AuditEventType.WORKFLOW_EXECUTION_FAILED,
+                                    AuditActionType.READ,
+                                    AuditResourceType.WORKFLOW,
+                                    workflowId,
+                                    isCancellation
+                                            ? String.format("Workflow execution cancelled after %d ms", durationMs)
+                                            : String.format("Workflow execution failed after %d ms: %s", durationMs,
+                                                    error.getMessage()),
+                                    errorContext,
+                                    null,
+                                    null,
+                                    isCancellation ? AuditResultType.CANCELLED : AuditResultType.FAILED)
+                                    .doOnError(auditError -> log.error(
+                                            "Failed to log audit event (workflow execution failed): {}",
+                                            auditError.getMessage(), auditError))
+                                    .onErrorResume(auditError -> Mono.empty());
+
+                            Mono<Void> monitorUpdate;
+                            if (isCancellation) {
+                                monitorUpdate = sendExecutionCancelledUpdate(request, steps != null ? steps.size() : 0,
+                                        context, "Workflow execution cancelled");
+                            } else {
+                                monitorUpdate = sendExecutionFailedUpdate(request, steps != null ? steps.size() : 0,
+                                        context, error.getMessage());
+                            }
+
+                            return failureAuditLog.then(monitorUpdate).onErrorResume(e -> Mono.empty())
+                                    .then(Mono.defer(() -> {
+                                // Create error response
+                                LinqResponse errorResponse = new LinqResponse();
+                                LinqResponse.Metadata metadata = new LinqResponse.Metadata();
+                                metadata.setSource("workflow");
+                                metadata.setStatus(isCancellation ? "cancelled" : "error");
+                                // Try to use teamId from params on error path as well
+                                String fallbackTeamId = null;
+                                if (request.getQuery() != null && request.getQuery().getParams() != null) {
+                                    Object val = request.getQuery().getParams().get("teamId");
+                                    if (val != null)
+                                        fallbackTeamId = String.valueOf(val);
+                                }
+                                if (fallbackTeamId == null || fallbackTeamId.isBlank()) {
+                                    fallbackTeamId = "unknown-team"; // Use fallback instead of blocking
+                                }
+                                metadata.setTeamId(fallbackTeamId);
+                                metadata.setCacheHit(false);
+                                metadata.setWorkflowMetadata(stepMetadata);
+                                errorResponse.setMetadata(metadata);
+
+                                // Set error result
+                                LinqResponse.WorkflowResult errorResult = new LinqResponse.WorkflowResult();
+                                errorResult.setSteps(steps.stream()
+                                        .map(step -> {
+                                            LinqResponse.WorkflowStep stepResult = new LinqResponse.WorkflowStep();
+                                            stepResult.setStep(step.getStep());
+                                            stepResult.setTarget(step.getTarget());
+                                            stepResult.setResult(stepResults.get(step.getStep()));
+                                            return stepResult;
+                                        })
+                                        .collect(Collectors.toList()));
+                                errorResult.setFinalResult(error.getMessage());
+                                errorResponse.setResult(errorResult);
+
+                                return Mono.just(errorResponse);
+                            }));
+                        });
+            }));
+        });
     }
 
     @Override
@@ -1111,9 +1191,21 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             String agentExecutionId = (String) agentContext.get("agentExecutionId");
             execution.setAgentExecutionId(agentExecutionId);
 
-            // Inject into request params so executeWorkflow can pick it up for registration
+            // Inject into request params so executeWorkflow and monitoring can pick it up
             if (agentExecutionId != null) {
                 request.getQuery().getParams().put("agentExecutionId", agentExecutionId);
+            }
+            if (agentContext.get("agentId") != null) {
+                request.getQuery().getParams().put("agentId", agentContext.get("agentId"));
+            }
+            if (agentContext.get("agentName") != null) {
+                request.getQuery().getParams().put("agentName", agentContext.get("agentName"));
+            }
+            if (agentContext.get("agentTaskId") != null) {
+                request.getQuery().getParams().put("agentTaskId", agentContext.get("agentTaskId"));
+            }
+            if (agentContext.get("agentTaskName") != null) {
+                request.getQuery().getParams().put("agentTaskName", agentContext.get("agentTaskName"));
             }
         }
 
@@ -1501,7 +1593,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             // fallback)
             // If so, return the actual object instead of converting to string
             Pattern singlePlaceholderPattern = Pattern
-                    .compile("^\\{\\{(step\\d+\\.result(?:\\.[^?]+)?|params\\.[^?]+?)(?:\\?\\?([^}]+?))?\\}\\}$");
+                    .compile(
+                            "^\\{\\{(step\\d+\\.result(?:\\.[^?]+)?|params\\.[^?]+?)(?:\\?\\?((?:[^{}]|\\{(?!\\{)|(?<!\\})\\}|\\{\\{.*?\\}\\})*))?\\}\\}$");
             Matcher singleMatcher = singlePlaceholderPattern.matcher(stringInput);
             if (singleMatcher.matches()) {
                 String placeholderContent = singleMatcher.group(1);
@@ -1514,8 +1607,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 if (isMissing && fallback != null) {
                     log.debug("🔍 Placeholder {{{}}} was missing, attempting to resolve fallback: {}",
                             placeholderContent, fallback);
-                    // Check if fallback is another variable or a literal
-                    if (fallback.contains("step") || fallback.contains("params.")) {
+
+                    // Check if fallback contains placeholders or is another variable
+                    if (fallback.contains("{{")) {
+                        // It's a template string, resolve the placeholders inside it
+                        return resolvePlaceholders(fallback, context, depth + 1);
+                    } else if (fallback.contains("step") || fallback.contains("params.")) {
+                        // It's a single variable reference, resolve it
                         return resolvePlaceholders("{{" + fallback + "}}", context, depth + 1);
                     } else {
                         // Return literal fallback (parse as boolean/number if possible)
@@ -1529,6 +1627,11 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     // Recursively resolve the object in case it's also a placeholder OR contains
                     // them
                     return resolvePlaceholders(resolvedObject, context, depth + 1);
+                }
+
+                // If it was a single placeholder and we got null, return null (to preserve nulls for non-string fields like Maps/Lists)
+                if (singleMatcher.group(2) == null) { // No fallback provided
+                    return null;
                 }
             }
             // Otherwise, resolve as string (for string interpolation cases)
@@ -1565,15 +1668,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             String path = stepMatcher.group(2);
             Object stepResult = context.getStepResults().get(stepNum);
             if (stepResult != null) {
-                // If path is "output" or "result" and not found directly, try smart extraction
+                // Always try smart extraction first to handle AI responses consistently
+                Object base = smartExtractContent(stepResult);
                 if (path == null) {
-                    return stepResult;
+                    return base;
                 }
-                Object val = extractObjectFromPath(stepResult, path);
-                if (val == null && ("output".equals(path) || "result".equals(path))) {
-                    return smartExtractContent(stepResult);
-                }
-                return val;
+                return extractObjectFromPath(base, path);
             }
         }
 
@@ -1622,8 +1722,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 if (current instanceof Map<?, ?> map) {
                     Object next = map.get(part);
                     // If part is "output" or "result" and not found directly, try smart extraction
-                    if (next == null && ("output".equals(part) || "result".equals(part))) {
-                        next = trySmartExtractContent(map);
+                    if (next == null) {
+                        Object smart = trySmartExtractContent(map);
+                        if (smart instanceof Map<?, ?> smartMap) {
+                            next = smartMap.get(part);
+                        } else if ("output".equals(part) || "result".equals(part)) {
+                            next = smart;
+                        }
                     }
                     current = next;
                 } else if (current instanceof List<?> list && part.matches("\\d+")) {
@@ -1648,8 +1753,10 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         String result = value;
         // Step result pattern - updated to handle fallbacks via ?? symbol
         // Regex explanation: {{ (steps.)?stepX.(result|output)(.path)?(??fallback)? }}
+        // Updated regex to support one level of nested {{}} in fallback
         Pattern stepPattern = Pattern
-                .compile("\\{\\{(?:steps\\.)?step(\\d+)\\.(?:result|output)(?:\\.([^?]+?))?(?:\\?\\?([^}]+))?\\}\\}");
+                .compile(
+                        "\\{\\{(?:steps\\.)?step(\\d+)\\.(?:result|output)(?:\\.([^?]+?))?(?:\\?\\?((?:[^{}]|\\{(?!\\{)|(?<!\\})\\}|\\{\\{.*?\\}\\})*))?\\}\\}");
         Matcher stepMatcher = stepPattern.matcher(value);
         while (stepMatcher.find()) {
             int stepNum = Integer.parseInt(stepMatcher.group(1));
@@ -1659,14 +1766,19 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
 
             String replacement = "";
             if (stepResult != null) {
-                Object val = path != null ? extractObjectFromPath(stepResult, path) : smartExtractContent(stepResult);
+                // Always try smart extraction first to handle AI responses consistently
+                Object base = smartExtractContent(stepResult);
+                Object val = path != null ? extractObjectFromPath(base, path) : base;
                 replacement = val != null ? String.valueOf(val) : "";
             }
 
             if (replacement.isEmpty() && fallback != null) {
-                // Recursively resolve fallback only if it looks like another variable
-                if (fallback.contains("step") || fallback.contains("params.")) {
-                    log.debug("🔄 Resolving step fallback recursively: {}", fallback);
+                // Recursively resolve fallback based on its type
+                if (fallback.contains("{{")) {
+                    log.debug("🔄 Resolving step fallback template: {}", fallback);
+                    replacement = resolvePlaceholder(fallback, context);
+                } else if (fallback.contains("step") || fallback.contains("params.")) {
+                    log.debug("🔄 Resolving step fallback variable: {}", fallback);
                     replacement = resolvePlaceholder("{{" + fallback + "}}", context);
                 } else {
                     log.debug("🔄 Using literal fallback: {}", fallback);
@@ -1678,7 +1790,8 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         }
 
         // Global params pattern - updated to handle fallbacks via ??
-        Pattern paramsPattern = Pattern.compile("\\{\\{params\\.([^?]+?)(?:\\?\\?([^}]+?))?\\}\\}");
+        Pattern paramsPattern = Pattern
+                .compile("\\{\\{params\\.([^?]+?)(?:\\?\\?((?:[^{}]|\\{(?!\\{)|(?<!\\})\\}|\\{\\{.*?\\}\\})*))?\\}\\}");
         Matcher paramsMatcher = paramsPattern.matcher(result);
         while (paramsMatcher.find()) {
             String paramPath = paramsMatcher.group(1);
@@ -1690,9 +1803,12 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             }
 
             if (replacement.isEmpty() && fallback != null) {
-                // Recursively resolve fallback only if it looks like another variable
-                if (fallback.contains("step") || fallback.contains("params.")) {
-                    log.debug("🔄 Resolving params fallback recursively: {}", fallback);
+                // Recursively resolve fallback based on its type
+                if (fallback.contains("{{")) {
+                    log.debug("🔄 Resolving params fallback template: {}", fallback);
+                    replacement = resolvePlaceholder(fallback, context);
+                } else if (fallback.contains("step") || fallback.contains("params.")) {
+                    log.debug("🔄 Resolving params fallback variable: {}", fallback);
                     replacement = resolvePlaceholder("{{" + fallback + "}}", context);
                 } else {
                     log.debug("🔄 Using literal fallback: {}", fallback);
@@ -1798,7 +1914,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                 strContent = strContent.substring(0, strContent.length() - 3);
             }
             strContent = strContent.trim();
-            
+
             try {
                 com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(strContent);
                 if (node.isObject() || node.isArray()) {
@@ -1833,19 +1949,21 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
      * Build execution progress update DTO
      */
     private ExecutionProgressUpdate buildProgressUpdate(LinqRequest request, LinqRequest.Query.WorkflowStep step,
-            int totalSteps, Map<Integer, Object> stepResults) {
-        // Extract execution context from request
-        String executionId = extractExecutionId(request);
-        String agentId = extractAgentId(request);
-        String agentName = extractAgentName(request);
-        String taskId = extractTaskId(request);
-        String taskName = extractTaskName(request);
-        String teamId = extractTeamId(request);
+            int totalSteps, Map<Integer, Object> stepResults, WorkflowExecutionContext context) {
+        // Extract execution context from request/context
+        String executionId = extractExecutionId(request, context);
+        String agentId = extractAgentId(request, context);
+        String agentName = extractAgentName(request, context);
+        String taskId = extractTaskId(request, context);
+        String taskName = extractTaskName(request, context);
+        String teamId = extractTeamId(request, context);
 
         // Get the actual execution start time and calculate duration
+        long startMs = context != null ? context.getStartTime() : System.currentTimeMillis();
+        java.time.LocalDateTime startedAt = java.time.LocalDateTime
+                .ofInstant(java.time.Instant.ofEpochMilli(startMs), java.time.ZoneOffset.UTC);
         java.time.LocalDateTime now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
-        java.time.LocalDateTime startedAt = now;
-        long durationMs = 0;
+        long durationMs = java.time.Duration.between(startedAt, now).toMillis();
 
         // Extract final result if this is the last step or we have a final result
         String finalResult = null;
@@ -1879,10 +1997,10 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
      * Send step progress update for execution monitoring
      */
     private Mono<Void> sendStepProgressUpdate(LinqRequest request, LinqRequest.Query.WorkflowStep step,
-            int totalSteps, Map<Integer, Object> stepResults) {
+            int totalSteps, Map<Integer, Object> stepResults, WorkflowExecutionContext context) {
         return Mono.defer(() -> {
             try {
-                ExecutionProgressUpdate update = buildProgressUpdate(request, step, totalSteps, stepResults);
+                ExecutionProgressUpdate update = buildProgressUpdate(request, step, totalSteps, stepResults, context);
 
                 if (update.getExecutionId() == null) {
                     return Mono.empty();
@@ -1896,52 +2014,198 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         });
     }
 
-    private String extractExecutionId(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private Mono<Void> updatePersistentProgress(String executionId, int currentStep, int totalSteps, WorkflowExecutionContext context) {
+        if (executionId == null) return Mono.empty();
+        
+        // Try to get the MongoDB internal ID (_id) for the most efficient primary key update
+        String mongoId = null;
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("_executionId");
+            if (id != null) mongoId = id.toString();
+        }
+
+        Query query;
+        if (mongoId != null) {
+            query = new Query(Criteria.where("_id").is(mongoId));
+        } else {
+            // Fallback to executionId index if _id is not available
+            query = new Query(Criteria.where("executionId").is(executionId));
+        }
+
+        Update update = new Update()
+                .set("currentStep", currentStep)
+                .set("totalSteps", totalSteps)
+                .set("updatedAt", LocalDateTime.now());
+                
+        return mongoTemplate.updateFirst(query, update, AgentExecution.class).then();
+    }
+
+    private Mono<Void> sendExecutionStartedUpdate(LinqRequest request, int totalSteps,
+            WorkflowExecutionContext context) {
+        return Mono.defer(() -> {
+            try {
+                ExecutionProgressUpdate update = buildProgressUpdate(request, null, totalSteps, null, context);
+                if (update.getExecutionId() == null) {
+                    return Mono.empty();
+                }
+                return executionMonitoringService.sendExecutionStarted(update)
+                        .then(updatePersistentProgress(update.getExecutionId(), 0, totalSteps, context));
+            } catch (Exception e) {
+                log.warn("Failed to send execution started update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+
+    private Mono<Void> sendExecutionCompletedUpdate(LinqRequest request, int totalSteps,
+            WorkflowExecutionContext context, Map<Integer, Object> stepResults) {
+        return Mono.defer(() -> {
+            try {
+                ExecutionProgressUpdate update = buildProgressUpdate(request, null, totalSteps, stepResults, context);
+                if (update.getExecutionId() == null) {
+                    return Mono.empty();
+                }
+                update.setStatus("COMPLETED");
+                
+                // Determine completion state
+                int lastStepExecuted = 0;
+                if (stepResults != null && !stepResults.isEmpty()) {
+                    lastStepExecuted = stepResults.keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
+                }
+
+                if (context.isStopped()) {
+                    update.setCurrentStep(lastStepExecuted);
+                    update.setCurrentStepName("Workflow completed via jump/condition");
+                } else {
+                    update.setCurrentStep(totalSteps);
+                    update.setCurrentStepName("Workflow completed successfully");
+                }
+
+                log.info("📊 Sending terminal COMPLETED update for execution {} (Step {}/{})", 
+                    update.getExecutionId(), update.getCurrentStep(), totalSteps);
+                
+                return executionMonitoringService.sendExecutionCompleted(update);
+            } catch (Exception e) {
+                log.warn("Failed to send execution completed update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+
+    private Mono<Void> sendExecutionFailedUpdate(LinqRequest request, int totalSteps, WorkflowExecutionContext context,
+            String error) {
+        return Mono.defer(() -> {
+            try {
+                ExecutionProgressUpdate update = buildProgressUpdate(request, null, totalSteps, null, context);
+                if (update.getExecutionId() == null) {
+                    return Mono.empty();
+                }
+                update.setStatus("FAILED");
+                update.setErrorMessage(error);
+                
+                // Track where it failed
+                if (context != null && context.getStepResults() != null) {
+                    int lastStep = context.getStepResults().keySet().stream().mapToInt(Integer::intValue).max().orElse(0);
+                    update.setCurrentStep(lastStep);
+                }
+                
+                log.error("📊 Sending terminal FAILED update for execution {}: {}", update.getExecutionId(), error);
+                return executionMonitoringService.sendExecutionFailed(update, error);
+            } catch (Exception e) {
+                log.warn("Failed to send execution failed update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+
+    private Mono<Void> sendExecutionCancelledUpdate(LinqRequest request, int totalSteps,
+            WorkflowExecutionContext context, String reason) {
+        return Mono.defer(() -> {
+            try {
+                ExecutionProgressUpdate update = buildProgressUpdate(request, null, totalSteps, null, context);
+                if (update.getExecutionId() == null) {
+                    return Mono.empty();
+                }
+                update.setStatus("CANCELLED");
+                update.setErrorMessage(reason);
+                
+                log.info("📊 Sending terminal CANCELLED update for execution {}: {}", update.getExecutionId(), reason);
+                return executionMonitoringService.sendExecutionCancelled(update, reason);
+            } catch (Exception e) {
+                log.warn("Failed to send execution cancelled update: {}", e.getMessage());
+                return Mono.empty();
+            }
+        });
+    }
+
+    private String extractExecutionId(LinqRequest request, WorkflowExecutionContext context) {
+        // 1. Try context params (most reliable during execution)
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("agentExecutionId");
+            if (id != null) return id.toString();
+        }
+        // 2. Try request params
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object executionId = request.getQuery().getParams().get("agentExecutionId");
-            log.debug("🔍 Extracting executionId from params: {}", executionId);
             return executionId != null ? executionId.toString() : null;
         }
-        log.debug("🔍 No query or params found in request");
         return null;
     }
 
-    private String extractAgentId(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractAgentId(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("agentId");
+            if (id != null) return id.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object agentId = request.getQuery().getParams().get("agentId");
             return agentId != null ? agentId.toString() : null;
         }
         return null;
     }
 
-    private String extractAgentName(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractAgentName(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object name = context.getGlobalParams().get("agentName");
+            if (name != null) return name.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object agentName = request.getQuery().getParams().get("agentName");
-            log.debug("🔍 Extracting agentName from params: {}", agentName);
             return agentName != null ? agentName.toString() : null;
         }
-        log.debug("🔍 No query or params found in request for agentName");
         return null;
     }
 
-    private String extractTaskId(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractTaskId(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("agentTaskId");
+            if (id != null) return id.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object taskId = request.getQuery().getParams().get("agentTaskId");
             return taskId != null ? taskId.toString() : null;
         }
         return null;
     }
 
-    private String extractTaskName(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractTaskName(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object name = context.getGlobalParams().get("agentTaskName");
+            if (name != null) return name.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object taskName = request.getQuery().getParams().get("agentTaskName");
             return taskName != null ? taskName.toString() : null;
         }
         return null;
     }
 
-    private String extractTeamId(LinqRequest request) {
-        if (request.getQuery() != null && request.getQuery().getParams() != null) {
+    private String extractTeamId(LinqRequest request, WorkflowExecutionContext context) {
+        if (context != null && context.getGlobalParams() != null) {
+            Object id = context.getGlobalParams().get("teamId");
+            if (id != null) return id.toString();
+        }
+        if (request != null && request.getQuery() != null && request.getQuery().getParams() != null) {
             Object teamId = request.getQuery().getParams().get("teamId");
             return teamId != null ? teamId.toString() : null;
         }
@@ -2090,6 +2354,16 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         if (fallback == null)
             return null;
         String trimmed = fallback.trim();
+
+        // Handle JSON literals (e.g. for Map/List fallbacks)
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+            try {
+                return objectMapper.readValue(trimmed, Object.class);
+            } catch (Exception e) {
+                // Not valid JSON, continue to other types
+            }
+        }
+
         if ("true".equalsIgnoreCase(trimmed))
             return Boolean.TRUE;
         if ("false".equalsIgnoreCase(trimmed))

@@ -15,14 +15,47 @@ export const formatDateTime = (timestamp, formatStr = 'MM/dd/yyyy HH:mm:ss') => 
             const [year, month, day, hour, minute, second, nano] = timestamp;
             // LocalDateTime from backend is UTC, so we must use Date.UTC to avoid local offset shift twice
             date = new Date(Date.UTC(year, month - 1, day, hour, minute, second || 0, Math.floor((nano || 0) / 1000000)));
+        } else if (typeof timestamp === 'object' && timestamp !== null) {
+            // Handle standard MongoDB BSON wrapper
+            if (timestamp.$date) {
+                if (typeof timestamp.$date === 'object' && timestamp.$date.$numberLong) {
+                    date = new Date(parseInt(timestamp.$date.$numberLong, 10));
+                } else {
+                    date = new Date(timestamp.$date);
+                }
+            } else if (timestamp.epochSecond) {
+                date = new Date(timestamp.epochSecond * 1000);
+            } else {
+                date = new Date(timestamp);
+            }
         } else {
             date = new Date(timestamp);
         }
         
         if (isNaN(date.getTime())) return 'Invalid Date';
         
-        // Return local time formatted string
-        return format(date, formatStr);
+        // Extract local timezone abbreviation
+        let tzName = '';
+        try {
+            const parts = Intl.DateTimeFormat(undefined, { timeZoneName: 'short' }).formatToParts(date);
+            tzName = parts.find(p => p.type === 'timeZoneName')?.value || '';
+        } catch (e) {
+            console.error('Error fetching timezone abbreviation:', e);
+        }
+
+        // Support custom 'zzz' token for friendly timezone name (e.g. EST, EDT, CST)
+        let hasCustomTz = false;
+        let targetStr = formatStr;
+        if (targetStr.includes('zzz')) {
+            targetStr = targetStr.replace('zzz', "'__TZ__'");
+            hasCustomTz = true;
+        }
+
+        let formatted = format(date, targetStr);
+        if (hasCustomTz) {
+            formatted = formatted.replace('__TZ__', tzName);
+        }
+        return formatted;
     } catch (error) {
         console.error('Date formatting error:', error);
         return 'Invalid Date';

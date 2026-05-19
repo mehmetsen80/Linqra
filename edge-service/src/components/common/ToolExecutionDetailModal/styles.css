@@ -1,0 +1,79 @@
+.tool-execution-detail-modal .modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.tool-execution-detail-modal .modal-header {
+    background-color: #f8fafc;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    padding: 1.25rem 1.5rem !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.tool-execution-detail-modal .modal-header .btn-close {
+    filter: none !important;
+    opacity: 0.75 !important;
+    transition: opacity 0.15s ease;
+}
+
+.tool-execution-detail-modal .modal-header .btn-close:hover {
+    opacity: 1 !important;
+}
+
+.tool-execution-detail-modal .modal-footer {
+    background-color: #f8fafc;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+    padding: 1rem 1.5rem !important;
+    border-top: 1px solid #e2e8f0 !important;
+}
+
+.copy-payload-btn {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+    font-size: 0.75rem !important;
+    padding: 6px 12px !important;
+    border-radius: 6px !important;
+    backdrop-filter: blur(4px);
+    z-index: 10;
+    transition: all 0.2s ease;
+}
+
+.copy-payload-btn:hover {
+    background: rgba(255, 255, 255, 0.25) !important;
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    color: #ffffff !important;
+}
+
+.json-block {
+    background: #0f172a;
+    color: #f1f5f9;
+    font-family: 'Fira Code', 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    max-height: 480px;
+    overflow-y: auto;
+    border: 1px solid #1e293b;
+    text-align: left;
+}
+
+.mcp-modal-tabs .nav-link {
+    border: none !important;
+    color: #64748b !important;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem !important;
+    margin-right: 0.5rem;
+    border-radius: 6px 6px 0 0;
+}
+
+.mcp-modal-tabs .nav-link.active {
+    color: var(--primary-color, #f97316) !important;
+    background: transparent !important;
+    border-bottom: 2px solid var(--primary-color, #f97316) !important;
+}

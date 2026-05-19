@@ -54,7 +54,7 @@ const ConfirmationModalWithVerification = ({
       className="confirmation-modal-with-verification"
       backdrop={loading ? 'static' : true}
     >
-      <Modal.Header closeButton className="border-0 p-3">
+      <Modal.Header closeButton>
         <Modal.Title className="d-flex align-items-center gap-0">
           {title}
         </Modal.Title>
@@ -95,7 +95,7 @@ const ConfirmationModalWithVerification = ({
           </Form.Group>
         </div>
       </Modal.Body>
-      <Modal.Footer className="border-0">
+      <Modal.Footer>
         <div className="d-flex justify-content-end gap-2 w-100">
           <Button 
             variant="light" 

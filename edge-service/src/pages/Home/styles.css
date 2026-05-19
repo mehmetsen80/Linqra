@@ -1963,6 +1963,8 @@ html {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 2rem;
   margin-top: 3rem;
+  width: 100%;
+  max-width: 1200px;
 }
 
 .solution-card {
@@ -2503,5 +2505,477 @@ body,
 
   100% {
     transform: translateY(0px);
+  }
+}
+
+/* =========================================
+   HOMEPAGE ECOSYSTEM & MCP STYLING REVAMP
+   ========================================= */
+
+/* Glassmorphic Product Ecosystem Section */
+.ecosystem-section {
+  padding: 6rem 2rem;
+  background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
+  color: white;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.ecosystem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 3rem;
+  max-width: 1200px;
+  margin: 3rem auto 0;
+}
+
+.ecosystem-card {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  padding: 3rem 2.5rem;
+  backdrop-filter: blur(16px);
+  text-align: left;
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.ecosystem-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  transition: opacity 0.3s ease;
+  opacity: 0.5;
+}
+
+.ecosystem-card.smartadvising::before {
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+}
+
+.ecosystem-card.komunas::before {
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
+}
+
+.ecosystem-card:hover {
+  transform: translateY(-8px);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.ecosystem-card.smartadvising:hover {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.ecosystem-card.komunas:hover {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.ecosystem-card h3 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin-top: 0.5rem;
+  margin-bottom: 0.75rem;
+  background: linear-gradient(135deg, #ffffff 50%, #94a3b8 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.ecosystem-domain {
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 1.5rem;
+  display: inline-block;
+  padding: 0.3rem 0.8rem;
+  border-radius: 30px;
+}
+
+.smartadvising .ecosystem-domain {
+  color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--primary-color);
+}
+
+.komunas .ecosystem-domain {
+  color: var(--primary-color);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--primary-color);
+}
+
+.ecosystem-desc {
+  font-size: 1.15rem;
+  line-height: 1.6;
+  color: #94a3b8;
+  margin-bottom: 2rem;
+}
+
+.ecosystem-features {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2.5rem 0;
+}
+
+.ecosystem-features li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+  font-size: 1.05rem;
+  color: #cbd5e1;
+}
+
+.ecosystem-features li i {
+  font-size: 1rem;
+}
+
+.smartadvising .ecosystem-features li i {
+  color: var(--primary-color);
+}
+
+.komunas .ecosystem-features li i {
+  color: var(--primary-color);
+}
+
+.ecosystem-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.smartadvising .ecosystem-btn {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  color: white;
+}
+
+.smartadvising .ecosystem-btn:hover {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+  transform: translateX(4px);
+}
+
+.komunas .ecosystem-btn {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  color: white;
+}
+
+.komunas .ecosystem-btn:hover {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
+  transform: translateX(4px);
+}
+
+/* MCP Developer Section */
+.mcp-showcase-section {
+  padding: 6rem 2rem;
+  background: #090d16;
+  color: white;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mcp-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3.5rem;
+  align-items: center;
+}
+
+.mcp-text-block {
+  text-align: center;
+  max-width: 800px;
+}
+
+.mcp-badge {
+  background: rgba(249, 115, 22, 0.1);
+  color: var(--primary-color);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  padding: 0.4rem 1rem;
+  border-radius: 30px;
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  display: inline-block;
+  margin-bottom: 1.5rem;
+}
+
+.mcp-text-block h2 {
+  font-size: 2.75rem;
+  font-weight: 800;
+  margin-bottom: 1.5rem;
+  line-height: 1.2;
+}
+
+.mcp-text-block p {
+  font-size: 1.15rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin-bottom: 2rem;
+}
+
+.mcp-integrations {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.mcp-platform-pill {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.5rem 1.25rem;
+  border-radius: 30px;
+  font-size: 0.95rem;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.mcp-platform-pill:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.mcp-platform-pill.active {
+  background: rgba(249, 115, 22, 0.1);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: #ff9800;
+}
+
+.mcp-platform-pill.active i {
+  color: #ff9800 !important;
+}
+
+.mcp-platform-pill i {
+  color: var(--primary-color);
+}
+
+.mcp-console {
+  width: 100%;
+  max-width: 1000px;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.mcp-console-header {
+  background: #111827;
+  padding: 1rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.mcp-console-tabs {
+  display: flex;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.25rem;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  gap: 0.25rem;
+}
+
+.mcp-tab-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 0.5rem 1.25rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.mcp-tab-btn:hover {
+  color: #e2e8f0;
+}
+
+.mcp-tab-btn.active {
+  background: var(--primary-color);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25);
+}
+
+.mcp-copy-btn {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.5rem 1rem;
+  border-radius: 30px;
+  color: #38bdf8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.mcp-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+}
+
+.mcp-console-body {
+  padding: 1.5rem;
+}
+
+.mcp-code-container {
+  margin: 0;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.9rem;
+  color: #f8fafc;
+  line-height: 1.5;
+  text-align: left;
+}
+
+/* Dynamic Registry Callout */
+.tools-registry-callout {
+  max-width: calc(100% + 4rem);
+  width: calc(100% + 4rem);
+  margin: 4rem -2rem -4rem -2rem;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-left: none;
+  border-right: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  border-radius: 0;
+  padding: 4rem 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.3);
+  color: white;
+}
+
+.tools-registry-callout::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.02) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.callout-header-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  padding: 0.4rem 1rem;
+  border-radius: 30px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 1.5rem;
+}
+
+.tools-registry-callout h3 {
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin-bottom: 1.25rem;
+  color: white;
+}
+
+.tools-registry-callout p {
+  font-size: 1.15rem;
+  color: #94a3b8;
+  line-height: 1.6;
+  max-width: 720px;
+  margin: 0 auto 2.5rem;
+}
+
+.callout-metrics {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+}
+
+.metric-pill {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.5rem 1.25rem;
+  border-radius: 30px;
+  font-size: 0.95rem;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.metric-pill strong {
+  color: var(--primary-color);
+}
+
+.metric-pill i {
+  color: #10b981;
+}
+
+.explore-tools-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  color: white;
+  padding: 1rem 2.25rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  border-radius: 30px;
+  text-decoration: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.explore-tools-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+  color: white;
+}
+
+/* Responsive Rules for Ecosystem and MCP */
+@media (max-width: 992px) {
+  .mcp-container {
+    grid-template-columns: 1fr;
+    text-align: center;
+    gap: 3rem;
+  }
+
+  .mcp-text-block {
+    text-align: center;
+  }
+
+  .mcp-integrations {
+    justify-content: center;
+  }
+
+  .ecosystem-grid {
+    grid-template-columns: 1fr;
+    padding: 0 1rem;
   }
 }

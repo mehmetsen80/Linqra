@@ -65,3 +65,42 @@
   border-color: var(--primary-color, #ed7534) !important;
   opacity: 0.65;
 }
+
+/* Premium Standard Modal Header / Footer layouts */
+.confirmation-modal-with-verification .modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.confirmation-modal-with-verification .modal-header {
+    background-color: #f8fafc;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    padding: 1.25rem 1.5rem !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.confirmation-modal-with-verification .modal-header .btn-close {
+    filter: none !important;
+    opacity: 0.75 !important;
+    transition: opacity 0.15s ease;
+}
+
+.confirmation-modal-with-verification .modal-header .btn-close:hover {
+    opacity: 1 !important;
+}
+
+.confirmation-modal-with-verification .modal-footer {
+    background-color: #f8fafc;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+    padding: 1rem 1.5rem !important;
+    border-top: 1px solid #e2e8f0 !important;
+}
+
+.confirmation-modal-with-verification .modal-title {
+    color: #0f172a !important;
+    font-weight: 700;
+    font-size: 1.25rem;
+}

@@ -8,6 +8,7 @@ import Button from '../../components/common/Button';
 import ToolEditorModal from '../../components/tools/ToolEditorModal';
 import ToolCatalog from './ToolCatalog';
 import McpConsole from './McpConsole';
+import ToolExecutionsHistory from './ToolExecutionsHistory';
 import toolService from '../../services/toolService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import './styles.css';
@@ -89,6 +90,11 @@ const Tools = () => {
                     <Tab eventKey="mcp" title="⚡ MCP Developer Console">
                         <div className="py-2">
                             <McpConsole teamId={currentTeam?.id} />
+                        </div>
+                    </Tab>
+                    <Tab eventKey="history" title="📜 Tool Executions History">
+                        <div className="py-2">
+                            <ToolExecutionsHistory />
                         </div>
                     </Tab>
                 </Tabs>

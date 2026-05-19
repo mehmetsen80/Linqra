@@ -10,6 +10,8 @@ import org.lite.gateway.entity.ToolDefinition;
 import org.lite.gateway.service.ToolRegistryService;
 import org.lite.gateway.service.TeamContextService;
 import org.lite.gateway.service.ToolExecutionService;
+import org.lite.gateway.entity.ToolExecution;
+import org.lite.gateway.repository.ToolExecutionRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
@@ -36,6 +38,7 @@ public class ToolController {
     private final ToolRegistryService toolRegistryService;
     private final TeamContextService teamContextService;
     private final ToolExecutionService toolExecutionService;
+    private final ToolExecutionRepository toolExecutionRepository;
     private final org.lite.gateway.service.UserContextService userContextService;
     private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
@@ -94,6 +97,22 @@ public class ToolController {
                         .inputSchema(schema)
                         .build())
                 .build();
+    }
+
+    @GetMapping("/executions")
+    public Flux<ToolExecution> getExecutions(
+            @RequestParam(required = false) String teamId,
+            ServerWebExchange exchange) {
+        log.info("API request to fetch tool executions. Filter teamId: {}", teamId);
+        if (teamId != null && !teamId.isEmpty()) {
+            return toolExecutionRepository.findByTeamIdOrderByExecutedAtDesc(teamId);
+        }
+        return teamContextService.getTeamFromContext(exchange)
+                .flatMapMany(contextTeamId -> {
+                    log.info("Found teamContextId for tool executions query: {}", contextTeamId);
+                    return toolExecutionRepository.findByTeamIdOrderByExecutedAtDesc(contextTeamId);
+                })
+                .switchIfEmpty(toolExecutionRepository.findAll());
     }
 
     @GetMapping

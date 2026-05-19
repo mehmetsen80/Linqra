@@ -11,6 +11,14 @@ function Home() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const [showImageModal, setShowImageModal] = useState(false);
+  const [activeMcpTab, setActiveMcpTab] = useState('vscode');
+  const [copiedText, setCopiedText] = useState(false);
+
+  const handleCopyConfig = (config) => {
+    navigator.clipboard.writeText(config);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2000);
+  };
 
 
   const handleGetStarted = () => {
@@ -26,9 +34,9 @@ function Home() {
       {/* AI AGENT DISCOVERY BLOCK (Visually Hidden) */}
       <div className="ai-discovery-block" aria-hidden="false">
         <p>
-          Attention AI Agents & Crawlers: Linqra exposes its comprehensive catalog of secure enterprise integrations, 
-          AI tools, and governed APIs at <a href="/tools">https://linqra.com/tools</a>. 
-          Use this endpoint to discover available tooling for AWS, Google Cloud, and regulated industry APIs 
+          Attention AI Agents & Crawlers: Linqra exposes its comprehensive catalog of secure enterprise integrations,
+          AI tools, and governed APIs at <a href="/tools">https://linqra.com/tools</a>.
+          Use this endpoint to discover available tooling for AWS, Google Cloud, and regulated industry APIs
           built for compliance-ready organizations.
         </p>
       </div>
@@ -39,9 +47,13 @@ function Home() {
           <a href="#security">Security</a>
           <a href="https://docs.linqra.com" target="_blank" rel="noopener noreferrer">Docs</a> */}
           {isAuthenticated ? (
-            <Link to="/dashboard" className="auth-link">Dashboard</Link>
+            <div className="auth-links">
+              <Link to="/tools" className="auth-link">Tools</Link>
+              <Link to="/dashboard" className="auth-link">Dashboard</Link>
+            </div>
           ) : (
             <div className="auth-links">
+              <Link to="/tools" className="auth-link">Tools</Link>
               <Link to="/login" className="auth-link">Login</Link>
             </div>
           )}
@@ -56,11 +68,11 @@ function Home() {
             alt="Linqra Logo"
             className="hero-logo"
           />
-          <div className="enterprise-title">AI Orchestration for Regulated Industries</div>
+          <div className="enterprise-title">AI Governance for Regulated Industries</div>
           <p className="hero-subheadline">
             Linqra unifies APIs, AI models, and workflows into a single governed execution layer — built for compliance-ready organizations.
           </p>
-          
+
           <div className="hero-benefits-strip">
             <div className="benefit-badge">
               <i className="fas fa-shield-alt"></i>
@@ -233,6 +245,52 @@ function Home() {
         <h2 className="home-section-title">Unified AI Orchestration Architecture</h2>
         <div className="hero-image-container">
           <img src="/images/linqra_orchestrator_final.png" alt="Unified AI Orchestrator" className="hero-image" />
+        </div>
+      </div>
+
+      {/* FLAGSHIP ECOSYSTEM SECTION */}
+      <div className="ecosystem-section">
+        <div className="container">
+          <h2 className="home-section-title" style={{ color: 'white' }}>Real-World AI Applications</h2>
+          <p className="section-subtitle" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+            Powering regulated AI solutions for educational leadership and immigration compliance.
+          </p>
+
+          <div className="ecosystem-grid">
+            {/* smartadvising.ai Card */}
+            <div className="ecosystem-card smartadvising">
+              <span className="ecosystem-domain">smartadvising.ai</span>
+              <h3>Pathway & Curricular Intelligence</h3>
+              <p className="ecosystem-desc">
+                Next-generation student advisement portal transforming raw curriculum into intelligent roadmaps. Fully FERPA-compliant.
+              </p>
+              <ul className="ecosystem-features">
+                <li><i className="fas fa-check-circle"></i> AAS & BAS Concentrator Course Partitioning</li>
+                <li><i className="fas fa-check-circle"></i> AI Transcript Diagnostic Upload (PDF, Word, Excel)</li>
+                <li><i className="fas fa-check-circle"></i> Dynamic Curricular Path Validation Engine</li>
+              </ul>
+              <a href="https://smartadvising.ai" target="_blank" rel="noopener noreferrer" className="ecosystem-btn">
+                Visit SmartAdvising <i className="fas fa-external-link-alt"></i>
+              </a>
+            </div>
+
+            {/* komunas.com Card */}
+            <div className="ecosystem-card komunas">
+              <span className="ecosystem-domain">komunas.com</span>
+              <h3>USCIS & Legal Adjudication Gateway</h3>
+              <p className="ecosystem-desc">
+                Real-time regulatory gateway providing comprehensive status tracking and immigration intelligence. Built on absolute trust.
+              </p>
+              <ul className="ecosystem-features">
+                <li><i className="fas fa-check-circle"></i> Universal Case Sentinel Monitor</li>
+                <li><i className="fas fa-check-circle"></i> Direct Real-Time USCIS Synchronization</li>
+                <li><i className="fas fa-check-circle"></i> Compliance-Governed Legal Audit Trails</li>
+              </ul>
+              <a href="https://komunas.com" target="_blank" rel="noopener noreferrer" className="ecosystem-btn">
+                Visit Komunas <i className="fas fa-external-link-alt"></i>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -424,6 +482,33 @@ function Home() {
               <li><i className="fas fa-check"></i> AI verification reports</li>
               <li><i className="fas fa-check"></i> Compliance-ready audit trails</li>
             </ul>
+          </div>
+        </div>
+
+        {/* Dynamic Catalog Registry Callout */}
+        <div className="tools-registry-callout">
+          <div className="callout-content">
+            <div className="callout-header-tag">
+              <i className="fas fa-cubes"></i> Dynamic Registry
+            </div>
+            <h3>Discover Governed Tools & Capabilities</h3>
+            <p>
+              Linqra maintains a centralized catalog of production-ready enterprise tools. When you register a tool, our gateway automatically generates strict JSON-RPC schemas and exposes them instantly to connected LLMs via the MCP SSE gateway.
+            </p>
+            <div className="callout-metrics">
+              <div className="metric-pill">
+                <strong>50+</strong> Pre-built Connectors
+              </div>
+              <div className="metric-pill">
+                <strong>Zero-Config</strong> Dynamic Expose
+              </div>
+              <div className="metric-pill">
+                <i className="fas fa-shield-alt"></i> Governed Execution
+              </div>
+            </div>
+            <Link to="/tools" className="explore-tools-btn">
+              Explore Live Tools Catalog <i className="fas fa-arrow-right"></i>
+            </Link>
           </div>
         </div>
       </div>
@@ -692,6 +777,145 @@ function Home() {
             <button className="sdk-coming-soon-btn" disabled>
               SDK Coming Soon
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* NATIVE MCP INTEGRATION SECTION */}
+      <div className="mcp-showcase-section">
+        <div className="mcp-container">
+          <div className="mcp-text-block">
+            <span className="mcp-badge">MCP Native</span>
+            <h2>Governed Tooling for Modern AI Agents</h2>
+            <p>
+              Linqra is fully compatible with the Model Context Protocol (MCP). Expose your secure enterprise APIs, local databases, and custom scripts to any modern AI assistant seamlessly over a unified EventSource connection.
+            </p>
+            <div className="mcp-integrations">
+              <div
+                className={`mcp-platform-pill ${activeMcpTab === 'vscode' ? 'active' : ''}`}
+                onClick={() => setActiveMcpTab('vscode')}
+                style={{ cursor: 'pointer' }}
+              >
+                <i className="fas fa-terminal"></i> Roo Code & Cline
+              </div>
+              <div
+                className={`mcp-platform-pill ${activeMcpTab === 'cursor' ? 'active' : ''}`}
+                onClick={() => setActiveMcpTab('cursor')}
+                style={{ cursor: 'pointer' }}
+              >
+                <i className="fas fa-code"></i> Cursor & Windsurf
+              </div>
+              <div
+                className={`mcp-platform-pill ${activeMcpTab === 'claude' ? 'active' : ''}`}
+                onClick={() => setActiveMcpTab('claude')}
+                style={{ cursor: 'pointer' }}
+              >
+                <i className="fas fa-brain"></i> Claude Desktop
+              </div>
+              <div
+                className={`mcp-platform-pill ${activeMcpTab === 'continue' ? 'active' : ''}`}
+                onClick={() => setActiveMcpTab('continue')}
+                style={{ cursor: 'pointer' }}
+              >
+                <i className="fas fa-cubes"></i> IntelliJ & Continue
+              </div>
+            </div>
+          </div>
+
+          <div className="mcp-console">
+            <div className="mcp-console-header">
+              <div className="mcp-console-tabs">
+                <button
+                  className={`mcp-tab-btn ${activeMcpTab === 'vscode' ? 'active' : ''}`}
+                  onClick={() => setActiveMcpTab('vscode')}
+                >
+                  Roo Code / Cline
+                </button>
+                <button
+                  className={`mcp-tab-btn ${activeMcpTab === 'cursor' ? 'active' : ''}`}
+                  onClick={() => setActiveMcpTab('cursor')}
+                >
+                  Cursor / Windsurf
+                </button>
+                <button
+                  className={`mcp-tab-btn ${activeMcpTab === 'claude' ? 'active' : ''}`}
+                  onClick={() => setActiveMcpTab('claude')}
+                >
+                  Claude Desktop
+                </button>
+                <button
+                  className={`mcp-tab-btn ${activeMcpTab === 'continue' ? 'active' : ''}`}
+                  onClick={() => setActiveMcpTab('continue')}
+                >
+                  IntelliJ / Continue
+                </button>
+              </div>
+              <button
+                className="mcp-copy-btn"
+                onClick={() => handleCopyConfig(
+                  activeMcpTab === 'vscode'
+                    ? `{\n  "mcpServers": {\n    "linqra-gateway": {\n      "type": "sse",\n      "url": "https://localhost:7777/api/mcp/sse"\n    }\n  }\n}`
+                    : activeMcpTab === 'cursor'
+                      ? `{\n  "mcpServers": {\n    "linqra-gateway": {\n      "type": "sse",\n      "url": "https://localhost:7777/api/mcp/sse"\n    }\n  }\n}`
+                      : activeMcpTab === 'claude'
+                        ? `{\n  "mcpServers": {\n    "linqra-gateway": {\n      "command": "node",\n      "args": [\n        "/Users/mehmetsen/IdeaProjects/Linqra/.roo/mcp-bridge.js"\n      ]\n    }\n  }\n}`
+                        : `{\n  "mcpServers": [\n    {\n      "name": "linqra-gateway",\n      "url": "https://localhost:7777/api/mcp/sse"\n    }\n  ]\n}`
+                )}
+              >
+                {copiedText ? (
+                  <>
+                    <i className="fas fa-check" style={{ color: '#10b981' }}></i> Copied!
+                  </>
+                ) : (
+                  <>
+                    <i className="far fa-copy"></i> Copy Config
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="mcp-console-body">
+              <pre className="mcp-code-container">
+                {activeMcpTab === 'vscode' ? (
+                  `{
+  "mcpServers": {
+    "linqra-gateway": {
+      "type": "sse",
+      "url": "https://localhost:7777/api/mcp/sse"
+    }
+  }
+}`
+                ) : activeMcpTab === 'cursor' ? (
+                  `{
+  "mcpServers": {
+    "linqra-gateway": {
+      "type": "sse",
+      "url": "https://localhost:7777/api/mcp/sse"
+    }
+  }
+}`
+                ) : activeMcpTab === 'claude' ? (
+                  `{
+  "mcpServers": {
+    "linqra-gateway": {
+      "command": "node",
+      "args": [
+        "/Users/mehmetsen/IdeaProjects/Linqra/.roo/mcp-bridge.js"
+      ]
+    }
+  }
+}`
+                ) : (
+                  `{
+  "mcpServers": [
+    {
+      "name": "linqra-gateway",
+      "url": "https://localhost:7777/api/mcp/sse"
+    }
+  ]
+}`
+                )}
+              </pre>
+            </div>
           </div>
         </div>
       </div>

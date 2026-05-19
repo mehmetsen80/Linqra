@@ -82,6 +82,16 @@ const toolService = {
 
     executeTool: async (toolId, params, refresh = false) => {
         return toolService.execute(toolId, params, refresh);
+    },
+
+    getToolExecutions: async (teamId) => {
+        try {
+            const config = teamId ? { params: { teamId } } : {};
+            const response = await axiosInstance.get('/api/tools/executions', config);
+            return { success: true, data: response.data };
+        } catch (error) {
+            return { success: false, error: error.response?.data?.message || error.message };
+        }
     }
 };
 

@@ -1,0 +1,308 @@
+.tool-executions-history {
+    animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Statistics Banner styling */
+.executions-stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+}
+
+.exec-stat-card {
+    background: #ffffff;
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.exec-stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+.exec-stat-card .card-body {
+    display: flex;
+    align-items: center;
+    padding: 1.25rem !important;
+}
+
+.stat-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-right: 1rem;
+    flex-shrink: 0;
+}
+
+.blue-icon { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+.green-icon { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+.orange-icon { background: rgba(249, 115, 22, 0.1); color: var(--primary-color, #f97316); }
+.red-icon { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+.stat-text-block {
+    text-align: left;
+}
+
+.stat-label {
+    font-size: 0.85rem;
+    color: #64748b;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 2px;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+}
+
+/* Control/Filter Bar */
+.filter-panel {
+    background: #ffffff !important;
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+    border-radius: 10px !important;
+}
+
+.max-width-search {
+    max-width: 450px;
+}
+
+.search-input-group {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+}
+
+.search-input-group input {
+    font-size: 0.9rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.status-dropdown {
+    width: 160px !important;
+    border-radius: 8px !important;
+    border: 1px solid #cbd5e1 !important;
+    font-size: 0.9rem !important;
+    padding: 0.5rem 2rem 0.5rem 0.75rem !important;
+}
+
+.refresh-button {
+    border-radius: 8px !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #64748b !important;
+    padding: 0.5rem 0.75rem !important;
+}
+
+.refresh-button:hover {
+    background: #f8fafc !important;
+    color: #1e293b !important;
+}
+
+/* Grid/Table Styling */
+.table-card {
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+    border-radius: 12px !important;
+}
+
+.execution-table thead {
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.execution-table th {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+    padding: 1rem 0.75rem !important;
+    text-align: left;
+}
+
+.execution-table td {
+    padding: 0.85rem 0.75rem !important;
+}
+
+.execution-row {
+    transition: background 0.15s ease;
+}
+
+.execution-row:hover {
+    background-color: #f8fafc !important;
+}
+
+/* Custom Status Badges */
+.execution-badge {
+    padding: 5px 10px !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    border-radius: 6px !important;
+    display: inline-flex;
+    align-items: center;
+    letter-spacing: 0.02em;
+}
+
+.success-badge {
+    background: rgba(16, 185, 129, 0.1) !important;
+    color: #10b981 !important;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.failed-badge {
+    background: rgba(239, 68, 68, 0.1) !important;
+    color: #ef4444 !important;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.progress-badge {
+    background: rgba(59, 130, 246, 0.1) !important;
+    color: #3b82f6 !important;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.pulse-icon {
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.15); opacity: 0.6; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.copy-btn {
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.copy-btn:hover {
+    opacity: 1;
+}
+
+.action-btn {
+    background-color: #f1f5f9 !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #334155 !important;
+    border-radius: 8px !important;
+    font-size: 0.8rem !important;
+    box-shadow: none !important;
+    transition: all 0.2s;
+}
+
+.action-btn:hover {
+    background-color: var(--primary-color, #f97316) !important;
+    border-color: var(--primary-color, #f97316) !important;
+    color: #ffffff !important;
+}
+
+/* Detail Modal Styling */
+.execution-details-modal .modal-content {
+    border-radius: 14px;
+    border: none;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+.modal-title-header {
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 1.25rem;
+}
+
+.copy-payload-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+    font-size: 0.75rem !important;
+    padding: 4px 10px !important;
+    border-radius: 6px !important;
+    transition: all 0.2s;
+    backdrop-filter: blur(4px);
+    z-index: 10;
+}
+
+.copy-payload-btn:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.json-block {
+    background: #0f172a;
+    color: #e2e8f0;
+    font-family: 'Fira Code', 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    max-height: 450px;
+    overflow-y: auto;
+    border: 1px solid #1e293b;
+    text-align: left;
+}
+
+.mcp-modal-tabs .nav-link {
+    border: none !important;
+    color: #64748b !important;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem !important;
+    margin-right: 0.5rem;
+    border-radius: 6px 6px 0 0;
+}
+
+.mcp-modal-tabs .nav-link.active {
+    color: var(--primary-color, #f97316) !important;
+    background: transparent !important;
+    border-bottom: 2px solid var(--primary-color, #f97316) !important;
+}
+
+/* Premium Pill-shaped Latency Badges */
+.latency-badge {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 12px;
+    display: inline-block;
+    font-family: 'Fira Code', 'Courier New', Courier, monospace;
+    text-align: center;
+    letter-spacing: 0.02em;
+}
+
+.latency-none {
+    background: #f1f5f9;
+    color: #94a3b8;
+    border: 1px solid #e2e8f0;
+}
+
+.latency-fast {
+    background: rgba(16, 185, 129, 0.12);
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.latency-medium {
+    background: rgba(249, 115, 22, 0.12);
+    color: #c2410c;
+    border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.latency-slow {
+    background: rgba(239, 68, 68, 0.12);
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+

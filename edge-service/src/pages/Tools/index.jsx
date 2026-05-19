@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Container, Breadcrumb, Card } from 'react-bootstrap';
+import { Container, Breadcrumb, Card, Tabs, Tab } from 'react-bootstrap';
 import { HiPlus } from 'react-icons/hi';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTeam } from '../../contexts/TeamContext';
@@ -7,11 +7,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/common/Button';
 import ToolEditorModal from '../../components/tools/ToolEditorModal';
 import ToolCatalog from './ToolCatalog';
+import McpConsole from './McpConsole';
 import toolService from '../../services/toolService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
 import './styles.css';
-
-
 
 const Tools = () => {
     const navigate = useNavigate();
@@ -19,6 +18,7 @@ const Tools = () => {
     const { currentTeam } = useTeam();
     const [showModal, setShowModal] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [activeTab, setActiveTab] = useState('catalog');
 
     return (
         <Container fluid className="tools-page py-4">
@@ -72,10 +72,32 @@ const Tools = () => {
                 </Card.Header>
             </Card>
 
-            <ToolCatalog
-                key={`${refreshKey}-${currentTeam?.id}`}
-                teamId={currentTeam?.id}
-            />
+            {user ? (
+                <Tabs
+                    activeKey={activeTab}
+                    onSelect={(k) => setActiveTab(k)}
+                    className="mb-4 border-0 mcp-page-tabs mx-1"
+                >
+                    <Tab eventKey="catalog" title="📦 Curated Tools Catalog">
+                        <div className="py-2">
+                            <ToolCatalog
+                                key={`${refreshKey}-${currentTeam?.id}`}
+                                teamId={currentTeam?.id}
+                            />
+                        </div>
+                    </Tab>
+                    <Tab eventKey="mcp" title="⚡ MCP Developer Console">
+                        <div className="py-2">
+                            <McpConsole teamId={currentTeam?.id} />
+                        </div>
+                    </Tab>
+                </Tabs>
+            ) : (
+                <ToolCatalog
+                    key={`${refreshKey}-${currentTeam?.id}`}
+                    teamId={currentTeam?.id}
+                />
+            )}
 
             <ToolEditorModal
                 show={showModal}

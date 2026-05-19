@@ -1,0 +1,343 @@
+/* MCP Developer Console - Premium Styling System */
+
+.mcp-console-section {
+  color: #f8f9fa;
+  animation: fadeIn 0.4s ease-out;
+}
+
+.mcp-desc-text {
+  color: #ffffff !important;
+  opacity: 1 !important;
+  font-size: 0.9rem !important;
+  line-height: 1.5 !important;
+}
+
+.mcp-console-section .text-muted {
+  color: #cbd5e1 !important;
+  opacity: 0.9 !important;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Glassmorphism Cards */
+.mcp-glass-card {
+  background: rgba(30, 41, 59, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mcp-glass-card:hover {
+  border-color: rgba(237, 117, 52, 0.3);
+  box-shadow: 0 12px 40px 0 rgba(237, 117, 52, 0.08);
+}
+
+.mcp-card-header {
+  background: rgba(15, 23, 42, 0.3) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  padding: 1.25rem 1.5rem !important;
+}
+
+/* Connection Badge Indicator */
+.connection-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.connection-indicator.disconnected {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.connection-indicator.connecting {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.connection-indicator.connected {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.connection-indicator.connected .pulse-dot {
+  animation: pulse-glow 1.5s infinite alternate;
+}
+
+@keyframes pulse-glow {
+  0% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); }
+  70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+  100% { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
+/* Terminal Stream Panel */
+.terminal-stream-panel {
+  background: #0b0f19;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-family: 'Fira Code', 'Courier New', Courier, monospace;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+}
+
+.terminal-header {
+  background: rgba(15, 23, 42, 0.6);
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.terminal-window-dots {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.window-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot-red { background: #ef4444; }
+.dot-yellow { background: #f59e0b; }
+.dot-green { background: #10b981; }
+
+.terminal-logs {
+  padding: 1rem;
+  overflow-y: auto;
+  max-height: 250px;
+  min-height: 180px;
+  scroll-behavior: smooth;
+  font-size: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.log-entry {
+  display: flex;
+  gap: 0.75rem;
+  line-height: 1.4;
+  animation: slideInLog 0.2s ease-out;
+}
+
+@keyframes slideInLog {
+  from { opacity: 0; transform: translateX(-5px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.log-timestamp {
+  color: #64748b;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.log-type {
+  font-weight: 700;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.log-type.sys { color: #ff9d66; }
+.log-type.in { color: #f472b6; }
+.log-type.out { color: #34d399; }
+.log-type.err { color: #f87171; }
+
+.log-text {
+  color: #cbd5e1;
+  word-break: break-all;
+}
+
+/* Split-screen Playground Layout */
+.playground-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 991px) {
+  .playground-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.playground-editor-wrapper {
+  background: #0b0f19;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  overflow: hidden;
+  height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-toolbar {
+  background: rgba(15, 23, 42, 0.5);
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editor-textarea {
+  flex-grow: 1;
+  background: transparent !important;
+  border: none !important;
+  color: #ff9d66 !important;
+  font-family: 'Fira Code', 'Courier New', Courier, monospace !important;
+  font-size: 0.8rem !important;
+  padding: 1rem !important;
+  resize: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.editor-textarea::placeholder {
+  color: #475569;
+}
+
+/* Tab Sub-navigations */
+.mcp-pill-nav {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 0.35rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.mcp-pill-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.mcp-pill-btn:hover {
+  color: #f1f5f9;
+}
+
+.mcp-pill-btn.active {
+  background: rgba(237, 117, 52, 0.15);
+  color: var(--primary-color, #ed7534);
+  border: 1px solid rgba(237, 117, 52, 0.25);
+}
+
+/* Endpoint Coordinates Card */
+.endpoint-coord {
+  background: rgba(15, 23, 42, 0.25);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  padding: 1rem;
+}
+
+.coord-label {
+  font-size: 0.72rem;
+  color: #e2e8f0;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.35rem;
+}
+
+.coord-value {
+  font-family: 'Fira Code', monospace;
+  font-size: 0.82rem;
+  color: #ffffff;
+  word-break: break-all;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.coord-value .italic {
+  color: #f6ad55 !important;
+  font-style: italic;
+  opacity: 0.95;
+}
+
+.coord-copy-btn {
+  background: transparent;
+  border: none;
+  color: #a0aec0;
+  padding: 0.2rem;
+  transition: all 0.2s ease;
+}
+
+.coord-copy-btn:hover {
+  color: var(--primary-color, #ed7534);
+}
+
+/* Instructions config highlights */
+.instructions-config-pre {
+  background: #0b0f19 !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 12px !important;
+  padding: 1.25rem !important;
+  margin: 0 !important;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Response view selector buttons inside toolbar */
+.mcp-response-view-selector {
+  display: inline-flex;
+  gap: 0.25rem;
+  background: rgba(15, 23, 42, 0.4);
+  padding: 0.2rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.response-selector-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.response-selector-btn:hover {
+  color: #cbd5e1;
+}
+
+.response-selector-btn.active {
+  background: rgba(237, 117, 52, 0.18);
+  color: var(--primary-color, #ed7534);
+  border: 1px solid rgba(237, 117, 52, 0.2);
+}
+

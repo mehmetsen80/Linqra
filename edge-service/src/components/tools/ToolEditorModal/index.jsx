@@ -15,19 +15,19 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
     const [slugError, setSlugError] = useState(null);
     const [manuallyEditedSlug, setManuallyEditedSlug] = useState(false);
 
-    const SL_REGEX = /^[a-z]+(\.[a-z]+)*$/;
+    const SL_REGEX = /^[a-z0-9_-]+$/;
 
     const slugify = (text) => {
         return text
             .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '.') // Replace non-alpha with dots
-            .replace(/^\.|\.$/g, '')     // Trim dots from ends
-            .replace(/\.{2,}/g, '.');    // Collapse multiple dots
+            .replace(/[^a-z0-9_-]+/g, '_') // Keep underscores and hyphens, replace others with underscores
+            .replace(/^_+|_+$/g, '')       // Trim underscores from ends
+            .replace(/_{2,}/g, '_');       // Collapse multiple underscores
     };
 
     const validateSlug = (slug) => {
         if (!slug) return 'Tool ID is required';
-        if (!SL_REGEX.test(slug)) return 'Invalid format (lowercase letters and dots only)';
+        if (!SL_REGEX.test(slug)) return 'Invalid format (lowercase letters, numbers, hyphens, and underscores only)';
         return null;
     };
 
@@ -206,7 +206,7 @@ const ToolEditorModal = ({ show, onHide, tool, editMode, onSuccess }) => {
                                     </Form.Label>
                                     <Form.Control
                                         name="toolId"
-                                        placeholder="e.g. uscis.form.monitor"
+                                        placeholder="e.g. uscis_form_monitor"
                                         value={form.toolId || ''}
                                         required
                                         disabled={editMode && isSlugLocked}

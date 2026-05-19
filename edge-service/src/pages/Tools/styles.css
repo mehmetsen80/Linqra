@@ -50,3 +50,46 @@
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* SLEEK TAB NAVIGATION - LINQRA ORANGE STYLE */
+.mcp-page-tabs {
+    gap: 1.5rem;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.mcp-page-tabs .nav-link {
+    background: transparent !important;
+    border: none !important;
+    color: #64748b !important;
+    font-weight: 600;
+    font-size: 0.95rem;
+    padding: 0.75rem 0.5rem !important;
+    position: relative;
+    transition: all 0.25s ease;
+}
+
+.mcp-page-tabs .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--primary-color, #ed7534);
+    box-shadow: 0 0 12px var(--primary-color, #ed7534);
+    transition: all 0.25s ease;
+}
+
+.mcp-page-tabs .nav-link:hover {
+    color: var(--primary-light, #ff8c4c) !important;
+}
+
+.mcp-page-tabs .nav-link.active {
+    color: var(--primary-color, #ed7534) !important;
+}
+
+.mcp-page-tabs .nav-link.active::after {
+    width: 100%;
+}
+
+

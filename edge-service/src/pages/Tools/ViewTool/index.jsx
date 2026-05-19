@@ -324,19 +324,47 @@ func main() {
     };
 
     const generateMCP = (toolObj) => {
-        if (toolSkill?.mcp) return JSON.stringify(toolSkill.mcp, null, 2);
-        // Fallback
-        let schema = { type: "object", properties: {} };
-        if (toolObj && toolObj.inputSchema) {
-            try { schema = JSON.parse(toolObj.inputSchema); } catch (e) { }
+        if (!toolObj) return 'Loading...';
+        
+        // Resolve dynamic base gateway URL based on environment context (local vs production)
+        const envUrl = import.meta.env.VITE_API_GATEWAY_URL;
+        let baseGatewayUrl = '';
+        if (envUrl && envUrl.startsWith('http')) {
+            baseGatewayUrl = envUrl.replace(/\/$/, '');
+        } else {
+            baseGatewayUrl = `${window.location.protocol}//${window.location.host.replace(':3000', ':7777')}`;
         }
 
-        const spec = {
-            name: (toolObj?.toolId || "tool").replace(/\./g, "_"),
-            description: toolObj?.description || "",
-            inputSchema: schema
+        // Map internal tool ID to strict MCP name (underscores)
+        const mcpToolName = (toolObj.toolId || "tool").replace(/\./g, "_");
+
+        // Guessed params for the arguments block
+        const guessedArgs = getGuessedParams(toolObj);
+
+        const mcpIntegrationSpec = {
+            mcp_gateway_info: {
+                sse_handshake_url: `${baseGatewayUrl}/api/mcp/sse`,
+                message_dispatch_url: `${baseGatewayUrl}/api/mcp/message?sessionId={YOUR_SESSION_ID}`,
+                transport_type: "Server-Sent Events (SSE)",
+                connection_center_portal: `${window.location.protocol}//${window.location.host}/tools/mcp`
+            },
+            mcp_tool_details: {
+                mcp_compliant_name: mcpToolName,
+                original_registry_id: toolObj.toolId,
+                description: toolObj.description?.replace(/<[^>]*>/g, '').trim().substring(0, 120) + "..."
+            },
+            sample_json_rpc_call: {
+                jsonrpc: "2.0",
+                method: "tools/call",
+                params: {
+                    name: mcpToolName,
+                    arguments: guessedArgs
+                },
+                id: "1"
+            }
         };
-        return JSON.stringify(spec, null, 2);
+
+        return JSON.stringify(mcpIntegrationSpec, null, 2);
     };
 
     const copyToClipboard = (text, message = 'Copied to clipboard') => {

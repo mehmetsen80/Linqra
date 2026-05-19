@@ -34,7 +34,14 @@ export default defineConfig(({ mode }) => {
       cors: true,
       open: true,
       https: httpsConfig,
-      proxy: {}
+      proxy: {
+        '/api': {
+          target: apiGatewayUrl,
+          secure: false, // Bypasses self-signed SSL certificate warning on backend gateway
+          changeOrigin: true,
+          ws: true // Support websocket / persistent streams
+        }
+      }
     },
     build: {
       outDir: 'dist',

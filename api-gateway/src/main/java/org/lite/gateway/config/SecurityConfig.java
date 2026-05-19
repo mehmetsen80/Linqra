@@ -139,6 +139,7 @@ public class SecurityConfig implements BeanFactoryAware {
             "/api/tools", // Public Tool Catalog base
             "/api/tools/**", // All tool-related endpoints (Detail, Catalog, Search)
             "/api/tools/*/execute", // Unified execution endpoint (Public/Private handled by controller)
+            "/api/mcp/**", // Model Context Protocol Live Adapter Server
             "/api/agent-tasks/**", // Agent Task Management & Execution
             "/ws-linqra", // Native Gateway WebSocket base
             "/ws-linqra/**", // Native Gateway WebSocket subpaths

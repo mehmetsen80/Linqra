@@ -29,8 +29,8 @@ public class ToolDefinition {
 
     @Indexed(unique = true)
     @NotBlank(message = "Tool ID is required")
-    @Pattern(regexp = "^[a-z]+(\\.[a-z]+)*$", message = "Tool ID must be lowercase alpha characters separated by dots (e.g. uscis.status.forms)")
-    private String toolId; // e.g., "uscis.form.monitor"
+    @Pattern(regexp = "^[a-z0-9_-]+$", message = "Tool ID must be lowercase alphanumeric characters, hyphens, or underscores only (e.g. uscis_status_forms)")
+    private String toolId; // e.g., "uscis_status_forms"
 
     private String name;
     private String description;

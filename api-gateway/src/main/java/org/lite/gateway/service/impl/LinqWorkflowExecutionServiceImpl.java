@@ -1725,7 +1725,13 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                     if (next == null) {
                         Object smart = trySmartExtractContent(map);
                         if (smart instanceof Map<?, ?> smartMap) {
-                            next = smartMap.get(part);
+                            if (smartMap.containsKey(part)) {
+                                next = smartMap.get(part);
+                            } else if ("output".equals(part) || "result".equals(part)) {
+                                next = smart;
+                            } else {
+                                next = null;
+                            }
                         } else if ("output".equals(part) || "result".equals(part)) {
                             next = smart;
                         }

@@ -404,7 +404,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 // Log payload size for diagnostics
                 if (payload != null) {
                     try {
-                        String payloadStr = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(payload);
+                        String payloadStr = new com.fasterxml.jackson.databind.ObjectMapper()
+                                .writeValueAsString(payload);
                         log.info("📊 [LLM-GATEWAY] Request Payload Size: {} chars (URL: {})", payloadStr.length(), url);
                     } catch (Exception ex) {
                         log.warn("Failed to log payload size: {}", ex.getMessage());
@@ -422,7 +423,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         .timeout(Duration.ofMinutes(2))
                         .onErrorResume(e -> {
                             log.error("❌ [LLM-GATEWAY] Error in LLM stream {}: {}", url, e.getMessage());
-                            // Propagate error to workflow orchestration so it can be handled/logged correctly
+                            // Propagate error to workflow orchestration so it can be handled/logged
+                            // correctly
                             return Flux.error(e);
                         });
             } catch (Exception e) {
@@ -446,7 +448,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
             if (json.isEmpty() || json.equals("[DONE]"))
                 return "";
 
-            com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(json);
+            com.fasterxml.jackson.databind.JsonNode node = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(json);
 
             switch (modelCategory) {
                 case "openai-chat":
@@ -468,7 +471,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     break;
 
                 case "gemini-chat":
-                    if (node.has("candidates") && node.get("candidates").isArray() && node.get("candidates").size() > 0) {
+                    if (node.has("candidates") && node.get("candidates").isArray()
+                            && node.get("candidates").size() > 0) {
                         com.fasterxml.jackson.databind.JsonNode content = node.get("candidates").get(0).get("content");
                         if (content != null && content.has("parts") && content.get("parts").isArray()) {
                             return content.get("parts").get(0).get("text").asText();
@@ -538,6 +542,43 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             auditError.getMessage(), auditError))
                     .onErrorResume(auditError -> Mono.empty())
                     .then(Mono.error(new IllegalArgumentException(errorMsg)));
+        }
+
+        // Validate that the requested model matches the authorized team model
+        LinqRequest.Query.LlmConfig llmConfig = request.getQuery().getLlmConfig();
+        if (llmConfig != null && llmConfig.getModel() != null) {
+            String requestedModel = llmConfig.getModel();
+            if (llmModel.getModelName() != null && !requestedModel.equals(llmModel.getModelName())) {
+                String errorMsg = "Model '" + requestedModel + "' is not authorized for this team (resolved authorized model: " + llmModel.getModelName() + "). Dynamic overrides to unauthorized models are restricted.";
+
+                Map<String, Object> errorContext = new HashMap<>();
+                errorContext.put("modelCategory", llmModel.getModelCategory());
+                errorContext.put("requestedModel", requestedModel);
+                errorContext.put("authorizedModel", llmModel.getModelName());
+                errorContext.put("teamId", llmModel.getTeamId());
+                errorContext.put("intent", intent);
+                errorContext.put("error", errorMsg);
+                errorContext.put("durationMs", java.time.Duration.between(startTime, LocalDateTime.now()).toMillis());
+
+                if (request.getExecutedBy() != null) {
+                    errorContext.put("executedBy", request.getExecutedBy());
+                }
+
+                return auditLogHelper.logDetailedEvent(
+                        AuditEventType.LLM_REQUEST_FAILED,
+                        AuditActionType.READ,
+                        AuditResourceType.LLM_MODEL,
+                        llmModel.getModelCategory() + "/" + requestedModel,
+                        String.format("LLM request validation failed: %s", errorMsg),
+                        errorContext,
+                        null,
+                        null,
+                        AuditResultType.FAILED)
+                        .doOnError(auditError -> log.error("Failed to log audit event (model validation failed): {}",
+                                auditError.getMessage(), auditError))
+                        .onErrorResume(auditError -> Mono.empty())
+                        .then(Mono.error(new IllegalArgumentException(errorMsg)));
+            }
         }
 
         AtomicReference<String> url = new AtomicReference<>(buildLlmUrl(llmModel, request));
@@ -848,22 +889,74 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         Object contentObj = message.get("content");
                         String content = contentObj != null ? contentObj.toString() : "";
 
-                        // Gemini uses "user" and "model" roles (not "assistant" or "system")
-                        String geminiRole = "user".equals(role) ? "user"
-                                : ("assistant".equals(role) || "system".equals(role)) ? "model" : "user";
+                        if ("system".equals(role)) {
+                            // Map system message to top-level systemInstruction field for Gemini
+                            if (content.trim().isEmpty()) content = " "; // Prevent empty system prompt
+                            Map<String, Object> systemPart = new HashMap<>();
+                            systemPart.put("text", content);
+                            Map<String, Object> systemInstruction = new HashMap<>();
+                            systemInstruction.put("parts", List.of(systemPart));
+                            payload.put("systemInstruction", systemInstruction);
+                        } else {
+                            // Gemini uses "user" and "model" roles (not "assistant" or "system")
+                            String geminiRole = "user".equals(role) ? "user" : "model";
+                            if (content.trim().isEmpty()) content = " "; // Prevent 'model output must contain either output text or tool calls' error
 
+                            Map<String, Object> part = new HashMap<>();
+                            part.put("text", content);
+
+                            Map<String, Object> geminiContent = new HashMap<>();
+                            geminiContent.put("role", geminiRole);
+                            geminiContent.put("parts", List.of(part));
+
+                            geminiContents.add(geminiContent);
+                        }
+                    }
+                } else if (request.getQuery().getPayload() instanceof Map) {
+                    Map<String, Object> payloadMap = (Map<String, Object>) request.getQuery().getPayload();
+                    if (payloadMap.containsKey("messages")) {
+                        @SuppressWarnings("unchecked")
+                        List<Map<String, Object>> messages = (List<Map<String, Object>>) payloadMap.get("messages");
+                        for (Map<String, Object> message : messages) {
+                            String role = (String) message.get("role");
+                            Object contentObj = message.get("content");
+                            String content = contentObj != null ? contentObj.toString() : "";
+
+                            if ("system".equals(role)) {
+                                if (content.trim().isEmpty()) content = " "; // Prevent empty system prompt
+                                Map<String, Object> systemPart = new HashMap<>();
+                                systemPart.put("text", content);
+                                Map<String, Object> systemInstruction = new HashMap<>();
+                                systemInstruction.put("parts", List.of(systemPart));
+                                payload.put("systemInstruction", systemInstruction);
+                            } else {
+                                String geminiRole = "user".equals(role) ? "user" : "model";
+                                if (content.trim().isEmpty()) content = " "; // Prevent 'model output must contain either output text or tool calls' error
+
+                                Map<String, Object> part = new HashMap<>();
+                                part.put("text", content);
+
+                                Map<String, Object> geminiContent = new HashMap<>();
+                                geminiContent.put("role", geminiRole);
+                                geminiContent.put("parts", List.of(part));
+
+                                geminiContents.add(geminiContent);
+                            }
+                        }
+                    } else {
+                        String content = payloadMap.getOrDefault("content", payloadMap.getOrDefault("prompt", "")).toString();
+                        if (content.trim().isEmpty()) content = " ";
                         Map<String, Object> part = new HashMap<>();
                         part.put("text", content);
-
                         Map<String, Object> geminiContent = new HashMap<>();
-                        geminiContent.put("role", geminiRole);
+                        geminiContent.put("role", "user");
                         geminiContent.put("parts", List.of(part));
-
                         geminiContents.add(geminiContent);
                     }
                 } else {
                     // Fallback to prompt from params
                     String prompt = request.getQuery().getParams().getOrDefault("prompt", "").toString();
+                    if (prompt.trim().isEmpty()) prompt = " ";
                     Map<String, Object> part = new HashMap<>();
                     part.put("text", prompt);
                     Map<String, Object> geminiContent = new HashMap<>();
@@ -884,6 +977,19 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     if (settings.containsKey("max.tokens")) {
                         Object value = settings.remove("max.tokens");
                         settings.put("maxOutputTokens", value);
+                    }
+                    // Handle JSON response format mapping
+                    if (settings.containsKey("response_format")) {
+                        Object format = settings.remove("response_format");
+                        if (format instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> formatMap = (Map<String, Object>) format;
+                            if ("json_object".equals(formatMap.get("type"))) {
+                                settings.put("responseMimeType", "application/json");
+                            }
+                        } else if ("json_object".equals(format)) {
+                            settings.put("responseMimeType", "application/json");
+                        }
                     }
                     payload.put("generationConfig", settings);
                 }
@@ -1218,7 +1324,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             }
                         })
                         .timeout(Duration.ofMinutes(10)) // Increased timeout for Ollama
-                        .retryWhen(reactor.util.retry.Retry.backoff(3, java.time.Duration.ofSeconds(5))
+                        .retryWhen(reactor.util.retry.Retry.backoff(5, java.time.Duration.ofSeconds(10))
                                 .filter(throwable -> {
                                     // Retry on HTTP 429 (Rate Limit), HTTP 5xx (Server Error), or Timeout
                                     String msg = throwable.getMessage();
@@ -1227,7 +1333,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                                             || throwable instanceof java.util.concurrent.TimeoutException;
                                 })
                                 .doBeforeRetry(retrySignal -> log.warn(
-                                        "⚠️ Retrying LLM service call {} due to error: {} (Attempt {}/3)",
+                                        "⚠️ Retrying LLM service call {} due to error: {} (Attempt {}/5)",
                                         url, retrySignal.failure().getMessage(), retrySignal.totalRetries() + 1))
                                 .onRetryExhaustedThrow((spec, signal) -> signal.failure()))
                         .timeout(java.time.Duration.ofMinutes(10)) // Global timeout (including retries) increased to 10

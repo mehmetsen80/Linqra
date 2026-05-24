@@ -35,6 +35,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import './styles.css';
 import ExecuteAgentWithQuestionModal from '../../../components/agents/ExecuteAgentWithQuestionModal';
 import RichTextEditor from '../../../components/common/RichTextEditor';
+import LinqConfigViewerModal from '../../../components/common/LinqConfigViewerModal';
 
 function ViewAgentTask() {
     const { taskId } = useParams();
@@ -84,6 +85,7 @@ function ViewAgentTask() {
     const [showSchedulingModal, setShowSchedulingModal] = useState(false);
     const [showUnscheduleModal, setShowUnscheduleModal] = useState(false);
     const [unscheduling, setUnscheduling] = useState(false);
+    const [showConfigViewerModal, setShowConfigViewerModal] = useState(false);
 
     // Timezone conversion utilities
     // User local timezone
@@ -1175,14 +1177,24 @@ function ViewAgentTask() {
                                 <Form.Group className="mb-3">
                                     <div className="d-flex justify-content-between align-items-center mb-2">
                                         <Form.Label>Linq Configuration</Form.Label>
-                                        <button
-                                            className="btn btn-sm btn-outline-secondary"
-                                            onClick={formatJson}
-                                            title="Format JSON"
-                                            type="button"
-                                        >
-                                            <i className="fas fa-code"></i> Format
-                                        </button>
+                                        <div className="d-flex align-items-center gap-2 flex-nowrap">
+                                            <button
+                                                className="btn btn-sm btn-secondary text-white text-nowrap"
+                                                onClick={() => setShowConfigViewerModal(true)}
+                                                title="View Config"
+                                                type="button"
+                                            >
+                                                <i className="fas fa-sitemap me-1"></i> View Visualizer
+                                            </button>
+                                            <button
+                                                className="btn btn-sm btn-outline-secondary text-nowrap"
+                                                onClick={formatJson}
+                                                title="Format JSON"
+                                                type="button"
+                                            >
+                                                <i className="fas fa-code me-1"></i> Format
+                                            </button>
+                                        </div>
                                     </div>
                                     {validationError && (
                                         <div className="alert alert-warning alert-sm mb-2">
@@ -3074,6 +3086,14 @@ function ViewAgentTask() {
                     setTask(prev => ({ ...prev, linq_config: newConfig }));
                     setShowConfirmModal(true);
                 }}
+            />
+
+            {/* Linq Config Viewer Modal */}
+            <LinqConfigViewerModal
+                show={showConfigViewerModal}
+                onHide={() => setShowConfigViewerModal(false)}
+                configText={configText}
+                taskName={task?.name}
             />
         </div>
     );

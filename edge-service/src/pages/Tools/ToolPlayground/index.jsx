@@ -113,6 +113,75 @@ const ToolPlayground = ({ initialTool, initialParams }) => {
         setExecuting(false);
     };
 
+    const renderSafeResult = (res) => {
+        if (!res) return null;
+        const jsonStr = JSON.stringify(res, null, 2);
+        const isLarge = jsonStr.length > 100000;
+        const sizeInKb = (jsonStr.length / 1024).toFixed(1);
+        const sizeDisplay = jsonStr.length > 1024 * 1024 
+          ? `${(jsonStr.length / (1024 * 1024)).toFixed(2)} MB` 
+          : `${sizeInKb} KB`;
+
+        let contentNode;
+        if (isLarge) {
+            const previewText = jsonStr.substring(0, 5000) + '\n\n... [TRUNCATED - Output is too large to render dynamically (' + sizeDisplay + ')]';
+            contentNode = (
+                <pre className="text-success m-0 font-monospace" style={{ fontSize: '0.85rem', maxHeight: '350px', overflow: 'auto', whiteSpace: 'pre-wrap', color: '#10b981' }}>
+                    {previewText}
+                </pre>
+            );
+        } else {
+            contentNode = (
+                <pre className="m-0 text-success" style={{ fontSize: '0.85rem', maxHeight: '400px', overflow: 'auto', whiteSpace: 'pre' }}>
+                    {jsonStr}
+                </pre>
+            );
+        }
+
+        return (
+            <div className={`payload-container rounded border ${isLarge ? 'border-warning' : 'border-secondary'}`} style={{ background: '#0b0f19' }}>
+                <div className="d-flex justify-content-between align-items-center p-2 px-3 border-bottom border-secondary bg-dark bg-opacity-50">
+                    <span className={`fw-bold small d-flex align-items-center gap-1 ${isLarge ? 'text-warning' : 'text-muted'}`}>
+                        {isLarge ? '⚠️ Large Output Bypassed' : '✨ Output Payload'} ({sizeDisplay})
+                    </span>
+                    <div className="d-flex gap-2">
+                        <button 
+                            className="btn btn-outline-secondary btn-sm py-1 font-monospace"
+                            style={{ fontSize: '0.72rem' }}
+                            onClick={(e) => {
+                                navigator.clipboard.writeText(jsonStr);
+                                const origText = e.target.innerHTML;
+                                e.target.innerHTML = "Copied! ✓";
+                                setTimeout(() => { e.target.innerHTML = origText; }, 1500);
+                            }}
+                        >
+                            📋 Copy
+                        </button>
+                        <button 
+                            className={`btn btn-sm py-1 font-monospace text-decoration-none ${isLarge ? 'btn-warning' : 'btn-outline-info'}`}
+                            style={{ fontSize: '0.72rem' }}
+                            onClick={() => {
+                                const blob = new Blob([jsonStr], { type: 'application/json' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = 'tool_execution_result.json';
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }}
+                        >
+                            💾 Download JSON
+                        </button>
+                    </div>
+                </div>
+                <div className="p-3 text-start">
+                    {contentNode}
+                </div>
+            </div>
+        );
+    };
+
+
     return (
         <div className="tool-playground-section pt-3">
             <Row>
@@ -252,9 +321,7 @@ const ToolPlayground = ({ initialTool, initialParams }) => {
                                     </div>
                                 )}
                                 {result ? (
-                                    <pre className="m-0 text-success">
-                                        {JSON.stringify(result, null, 2)}
-                                    </pre>
+                                    renderSafeResult(result)
                                 ) : !error && !executing ? (
                                     <div className="text-muted italic">Waiting for tool execution...</div>
                                 ) : executing ? (

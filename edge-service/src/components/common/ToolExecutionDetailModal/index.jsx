@@ -26,6 +26,75 @@ const ToolExecutionDetailModal = ({ show, onHide, execution }) => {
     }
   };
 
+  const renderSafeContent = (payload, filename = "data.json") => {
+    if (!payload) return null;
+    const jsonStr = typeof payload === "string" ? payload : JSON.stringify(payload, null, 2);
+    const isLarge = jsonStr.length > 100000;
+    const sizeInKb = (jsonStr.length / 1024).toFixed(1);
+    const sizeDisplay = jsonStr.length > 1024 * 1024 
+      ? `${(jsonStr.length / (1024 * 1024)).toFixed(2)} MB` 
+      : `${sizeInKb} KB`;
+
+    let contentNode;
+    if (isLarge) {
+      const previewText = jsonStr.substring(0, 5000) + '\n\n... [TRUNCATED - Payload is too large to render dynamically (' + sizeDisplay + ')]';
+      contentNode = (
+        <pre className="text-dark m-0 font-monospace" style={{ fontSize: '0.8rem', maxHeight: '300px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+          {previewText}
+        </pre>
+      );
+    } else {
+      contentNode = (
+        <pre className="m-0 font-monospace text-light" style={{ fontSize: '0.8rem', maxHeight: '480px', overflow: 'auto', whiteSpace: 'pre' }}>
+          <code>{jsonStr}</code>
+        </pre>
+      );
+    }
+
+    return (
+      <div className={`payload-container rounded mt-2 border ${isLarge ? 'border-warning' : 'border-secondary'}`} style={{ background: isLarge ? '#f8fafc' : '#0f172a' }}>
+        <div className={`d-flex justify-content-between align-items-center p-2 px-3 border-bottom ${isLarge ? 'border-warning-subtle bg-warning-subtle' : 'border-secondary bg-dark bg-opacity-70'}`}>
+          <span className={`fw-bold small d-flex align-items-center gap-1 ${isLarge ? 'text-warning' : 'text-muted'}`}>
+            {isLarge ? '⚠️ Large Payload Bypassed' : '✨ JSON Payload'} ({sizeDisplay})
+          </span>
+          <div className="d-flex gap-2">
+            <button 
+              className={`btn btn-sm py-1 font-monospace text-decoration-none ${isLarge ? 'btn-outline-warning' : 'btn-outline-light'}`}
+              style={{ fontSize: '0.72rem' }}
+              onClick={(e) => {
+                copyToClipboard(jsonStr);
+                const origText = e.target.innerHTML;
+                e.target.innerHTML = "Copied! ✓";
+                setTimeout(() => { e.target.innerHTML = origText; }, 1500);
+              }}
+            >
+              <HiClipboardCopy className="me-1" /> Copy Full JSON
+            </button>
+            <button 
+              className={`btn btn-sm py-1 font-monospace text-decoration-none ${isLarge ? 'btn-warning' : 'btn-outline-info'}`}
+              style={{ fontSize: '0.72rem' }}
+              onClick={() => {
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+            >
+              💾 Download Full JSON File
+            </button>
+          </div>
+        </div>
+        <div className="p-3">
+          {contentNode}
+        </div>
+      </div>
+    );
+  };
+
+
   return (
     <Modal
       show={show}
@@ -60,36 +129,14 @@ const ToolExecutionDetailModal = ({ show, onHide, execution }) => {
         <Tabs defaultActiveKey="request" className="mcp-modal-tabs border-bottom mb-3">
           <Tab eventKey="request" title="📥 Caller Request Payload">
             <div className="position-relative mt-2">
-              <Button
-                variant="light"
-                size="sm"
-                className="copy-payload-btn shadow-sm"
-                onClick={() => copyToClipboard(JSON.stringify(execution.request, null, 2))}
-              >
-                <HiClipboardCopy className="me-1" /> Copy Request
-              </Button>
-              <pre className="json-block p-3 rounded mt-2">
-                <code>{JSON.stringify(execution.request, null, 2)}</code>
-              </pre>
+              {renderSafeContent(execution.request, "mcp_request_payload.json")}
             </div>
           </Tab>
 
           <Tab eventKey="response" title="📤 Governed Gateway Response">
             <div className="position-relative mt-2">
               {execution.response ? (
-                <>
-                  <Button
-                    variant="light"
-                    size="sm"
-                    className="copy-payload-btn shadow-sm"
-                    onClick={() => copyToClipboard(JSON.stringify(execution.response, null, 2))}
-                  >
-                    <HiClipboardCopy className="me-1" /> Copy Response
-                  </Button>
-                  <pre className="json-block p-3 rounded mt-2">
-                    <code>{JSON.stringify(execution.response, null, 2)}</code>
-                  </pre>
-                </>
+                renderSafeContent(execution.response, "mcp_governed_response.json")
               ) : (
                 <div className="bg-light border text-center py-4 rounded text-muted mt-2">
                   {execution.errorMessage ? (

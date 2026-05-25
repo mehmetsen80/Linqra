@@ -67,7 +67,8 @@ public class LinqMicroServiceImpl implements LinqMicroService {
 
         // Check if this is a fetch action
         if ("fetch".equalsIgnoreCase(action)) {
-            // First check if this is part of a workflow step
+            // Path 1: Workflow-based caching — cache config lives on individual workflow
+            // steps
             if (request.getQuery() != null && request.getQuery().getWorkflow() != null
                     && !request.getQuery().getWorkflow().isEmpty()) {
                 // Find the current step
@@ -101,27 +102,64 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                                     throw new RuntimeException("Failed to deserialize cached LinqResponse", e);
                                 }
                             })
-                            .switchIfEmpty(
-                                    executeLinqRequest(request)
-                                            .doOnNext(response -> {
-                                                try {
-                                                    log.info(
-                                                            "Cache miss for workflow step with key: {}, storing in cache",
-                                                            cacheKey);
-                                                    String jsonResponse = objectMapper.writeValueAsString(response);
-                                                    Duration ttl = currentStep.getCacheConfig().getTtlAsDuration();
-                                                    cacheService.set(cacheKey, jsonResponse, ttl)
-                                                            .subscribe();
-                                                } catch (Exception e) {
-                                                    log.error("Failed to serialize LinqResponse for cache", e);
-                                                    throw new RuntimeException(
-                                                            "Failed to serialize LinqResponse for cache", e);
-                                                }
-                                            }));
+                            .switchIfEmpty(Mono.defer(() -> executeLinqRequest(request)
+                                    .doOnNext(response -> {
+                                        try {
+                                            log.info(
+                                                    "Cache miss for workflow step with key: {}, storing in cache",
+                                                    cacheKey);
+                                            String jsonResponse = objectMapper.writeValueAsString(response);
+                                            Duration ttl = currentStep.getCacheConfig().getTtlAsDuration();
+                                            cacheService.set(cacheKey, jsonResponse, ttl)
+                                                    .subscribe();
+                                        } catch (Exception e) {
+                                            log.error("Failed to serialize LinqResponse for cache", e);
+                                            throw new RuntimeException(
+                                                    "Failed to serialize LinqResponse for cache", e);
+                                        }
+                                    })));
                 }
             }
 
-            // If caching is not explicitly enabled, execute without caching
+            // Path 2: Top-level cacheConfig on the query — for simple (non-workflow) fetch
+            // tools
+            LinqRequest.Query.CacheConfig topLevelCache = request.getQuery() != null
+                    ? request.getQuery().getCacheConfig()
+                    : null;
+            if (topLevelCache != null && topLevelCache.isEnabled()) {
+                String cacheKey = topLevelCache.getKey() != null
+                        ? topLevelCache.getKey()
+                        : generateCacheKey(request);
+
+                log.info("Checking top-level cache for simple fetch tool with key: {}", cacheKey);
+
+                return cacheService.get(cacheKey)
+                        .map(value -> {
+                            try {
+                                log.info("Cache hit (top-level) for key: {}", cacheKey);
+                                LinqResponse response = objectMapper.readValue(value, LinqResponse.class);
+                                response.getMetadata().setCacheHit(true);
+                                return response;
+                            } catch (Exception e) {
+                                log.error("Failed to deserialize cached LinqResponse (top-level)", e);
+                                throw new RuntimeException("Failed to deserialize cached LinqResponse", e);
+                            }
+                        })
+                        .switchIfEmpty(Mono.defer(() -> executeLinqRequest(request)
+                                .doOnNext(response -> {
+                                    try {
+                                        log.info("Cache miss (top-level) for key: {}, storing in cache", cacheKey);
+                                        String jsonResponse = objectMapper.writeValueAsString(response);
+                                        Duration ttl = topLevelCache.getTtlAsDuration();
+                                        cacheService.set(cacheKey, jsonResponse, ttl).subscribe();
+                                    } catch (Exception e) {
+                                        log.error("Failed to serialize LinqResponse for cache (top-level)", e);
+                                        throw new RuntimeException("Failed to serialize LinqResponse for cache", e);
+                                    }
+                                })));
+            }
+
+            // No cache configured — execute directly
             log.info("Caching not enabled for request, executing directly");
             return executeLinqRequest(request);
         }
@@ -296,11 +334,12 @@ public class LinqMicroServiceImpl implements LinqMicroService {
     }
 
     private String generateCacheKey(LinqRequest request) {
-        // Build the actual URL path that would be cached
-        String path = request.getQuery().getIntent();
+        String target = request.getLink().getTarget();
+        String intent = request.getQuery().getIntent();
         Map<String, Object> params = request.getQuery().getParams();
 
         // Replace path variables
+        String path = intent;
         if (params != null) {
             for (Map.Entry<String, Object> entry : params.entrySet()) {
                 Object value = entry.getValue();
@@ -310,7 +349,21 @@ public class LinqMicroServiceImpl implements LinqMicroService {
             }
         }
 
-        // Create cache key using target and resolved path
-        return "linq:" + request.getLink().getTarget() + ":" + path;
+        // Add remaining params as query parameters to cache key to avoid cache
+        // collision
+        Map<String, String> queryParams = params != null ? params.entrySet().stream()
+                .filter(e -> !intent.contains("{" + e.getKey() + "}") && e.getValue() != null)
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().toString()))
+                : Map.of();
+
+        String cacheKey = "linq:" + target + ":" + path;
+        if (!queryParams.isEmpty()) {
+            cacheKey += "?" + queryParams.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey()) // Sort to ensure deterministic key regardless of map order
+                    .map(e -> e.getKey() + "=" + e.getValue())
+                    .collect(Collectors.joining("&"));
+        }
+
+        return cacheKey;
     }
 }

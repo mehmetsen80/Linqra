@@ -5,7 +5,7 @@ import Button from '../../../components/common/Button';
 import {
     FiArrowLeft, FiBox, FiPlay, FiSettings, FiActivity, FiCopy, FiEdit, FiTrash,
     FiExternalLink, FiGlobe, FiTerminal, FiEdit2, FiHelpCircle, FiShield,
-    FiLock, FiCpu, FiLayout, FiMaximize2, FiMinimize2, FiGift, FiX
+    FiLock, FiCpu, FiLayout, FiMaximize2, FiMinimize2, FiGift, FiX, FiZap
 } from 'react-icons/fi';
 import { HiShieldCheck, HiScale, HiCube, HiLightningBolt } from 'react-icons/hi';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -809,6 +809,34 @@ func main() {
                                         EXECUTE
                                     </Button>
                                 </div>
+
+                                {/* Row 3: MCP Console shortcut (authenticated only) */}
+                                {user && (
+                                    <div className="taskbar-row d-flex justify-content-end py-1 border-top">
+                                        <Button
+                                            variant="outline-secondary"
+                                            size="sm"
+                                            className="d-flex align-items-center gap-1 text-nowrap"
+                                            title="Open this tool in the MCP Developer Console"
+                                            onClick={() => {
+                                                const mcpToolName = (tool.toolId || 'tool').replace(/\./g, '_');
+                                                const guessedArgs = getGuessedParams(tool);
+                                                const mcpPayload = JSON.stringify({
+                                                    jsonrpc: '2.0',
+                                                    method: 'tools/call',
+                                                    params: {
+                                                        name: mcpToolName,
+                                                        arguments: guessedArgs
+                                                    },
+                                                    id: '1'
+                                                }, null, 2);
+                                                navigate('/tools', { state: { tab: 'mcp', mcpPayload } });
+                                            }}
+                                        >
+                                            <FiZap size={13} /> Test in MCP Console
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                             <div className="flex-grow-1 overflow-hidden">
                                 {renderTestConsole()}

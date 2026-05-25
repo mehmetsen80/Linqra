@@ -5,6 +5,17 @@
   animation: fadeIn 0.4s ease-out;
 }
 
+.mcp-console-title {
+  color: #1e293b !important;
+  font-weight: 700;
+}
+
+.mcp-console-desc {
+  color: #475569 !important;
+  font-size: 0.88rem !important;
+  line-height: 1.5;
+}
+
 .mcp-desc-text {
   color: #ffffff !important;
   opacity: 1 !important;
@@ -206,20 +217,42 @@
   align-items: center;
 }
 
-.editor-textarea {
+/* Syntax-highlighted code editor: SyntaxHighlighter as display layer, transparent textarea on top */
+.mcp-code-editor-wrapper {
+  position: relative;
   flex-grow: 1;
+  overflow: auto;
+  background: #0b0f19;
+}
+
+.mcp-code-editor-wrapper pre {
+  margin: 0 !important;
+  min-height: 100%;
+}
+
+.mcp-code-editor-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
   background: transparent !important;
   border: none !important;
-  color: #ff9d66 !important;
+  color: transparent !important;
+  caret-color: #ffffff;
   font-family: 'Fira Code', 'Courier New', Courier, monospace !important;
   font-size: 0.8rem !important;
+  line-height: 1.5 !important;
   padding: 1rem !important;
   resize: none !important;
   outline: none !important;
   box-shadow: none !important;
+  overflow: hidden;
+  white-space: pre;
+  z-index: 2;
 }
 
-.editor-textarea::placeholder {
+.mcp-code-editor-overlay::placeholder {
   color: #475569;
 }
 
@@ -286,6 +319,12 @@
   color: #f6ad55 !important;
   font-style: italic;
   opacity: 0.95;
+}
+
+.coord-value .text-success {
+  color: #4ade80 !important; /* Premium high-contrast vibrant bright green */
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .coord-copy-btn {

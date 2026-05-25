@@ -35,7 +35,7 @@ function Home() {
       <div className="ai-discovery-block" aria-hidden="false">
         <p>
           Attention AI Agents & Crawlers: Linqra exposes its comprehensive catalog of secure enterprise integrations,
-          AI tools, and governed APIs at <a href="/tools">https://linqra.com/tools</a>.
+          AI tools, and governed APIs at <a href="/mcp-marketplace">https://linqra.com/mcp-marketplace</a>.
           Use this endpoint to discover available tooling for AWS, Google Cloud, and regulated industry APIs
           built for compliance-ready organizations.
         </p>
@@ -48,12 +48,12 @@ function Home() {
           <a href="https://docs.linqra.com" target="_blank" rel="noopener noreferrer">Docs</a> */}
           {isAuthenticated ? (
             <div className="auth-links">
-              <Link to="/tools" className="auth-link">Tools</Link>
+              <Link to="/mcp-marketplace" className="auth-link">MCP Marketplace</Link>
               <Link to="/dashboard" className="auth-link">Dashboard</Link>
             </div>
           ) : (
             <div className="auth-links">
-              <Link to="/tools" className="auth-link">Tools</Link>
+              <Link to="/mcp-marketplace" className="auth-link">MCP Marketplace</Link>
               <Link to="/login" className="auth-link">Login</Link>
             </div>
           )}
@@ -491,9 +491,9 @@ function Home() {
             <div className="callout-header-tag">
               <i className="fas fa-cubes"></i> Dynamic Registry
             </div>
-            <h3>Discover Governed Tools & Capabilities</h3>
+            <h3>Discover Governed MCP Tools & Capabilities</h3>
             <p>
-              Linqra maintains a centralized catalog of production-ready enterprise tools. When you register a tool, our gateway automatically generates strict JSON-RPC schemas and exposes them instantly to connected LLMs via the MCP SSE gateway.
+              Linqra maintains a centralized marketplace of production-ready Model Context Protocol (MCP) tools. When you register a tool, our gateway automatically generates strict JSON-RPC schemas and exposes them instantly to connected LLMs via the MCP SSE gateway.
             </p>
             <div className="callout-metrics">
               <div className="metric-pill">
@@ -506,8 +506,8 @@ function Home() {
                 <i className="fas fa-shield-alt"></i> Governed Execution
               </div>
             </div>
-            <Link to="/tools" className="explore-tools-btn">
-              Explore Live Tools Catalog <i className="fas fa-arrow-right"></i>
+            <Link to="/mcp-marketplace" className="explore-tools-btn">
+              Explore MCP Marketplace <i className="fas fa-arrow-right"></i>
             </Link>
           </div>
         </div>

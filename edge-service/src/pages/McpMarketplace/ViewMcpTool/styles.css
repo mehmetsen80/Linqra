@@ -1,0 +1,467 @@
+/* ─── ViewMcpTool – Page styles ──────────────────────────────────────── */
+
+.view-mcp-tool-page {
+    background: #f8fafc;
+    min-height: calc(100vh - 80px);
+}
+
+/* ── Breadcrumb bar – sits above the white header, full-width ── */
+.vmcp-breadcrumb-bar {
+    background: #f8fafc;
+    padding: 1rem 0;
+    border-bottom: 1px solid #e2e8f0;
+    text-align: left !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+}
+
+.vmcp-breadcrumb-bar .container,
+.vmcp-breadcrumb-bar .container-fluid {
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    text-align: left !important;
+    margin-left: 0 !important;
+    margin-right: auto !important;
+}
+
+.vmcp-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+.vmcp-back-link:hover {
+    color: #ed7534;
+}
+
+/* ── Page Header ── */
+.vmcp-page-header {
+    background: transparent;
+    border-bottom: none;
+    padding: 1.5rem 0 0.5rem 0;
+    text-align: left !important;
+}
+
+.vmcp-page-header .container,
+.vmcp-page-header .container-fluid {
+    display: block !important;
+    text-align: left !important;
+}
+
+.vmcp-details-card,
+.vmcp-stats-card {
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05) !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vmcp-details-card:hover,
+.vmcp-stats-card:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.08) !important;
+    border-color: #cbd5e1 !important;
+}
+
+.vmcp-stat-box {
+    border: 1px solid #f1f5f9 !important;
+    background-color: #f8fafc !important;
+    transition: all 0.2s ease;
+}
+
+.vmcp-stat-box:hover {
+    border-color: #fed7aa !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 2px 4px rgba(237, 117, 52, 0.05);
+}
+
+.vmcp-hero-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.vmcp-tool-name {
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    line-height: 1.25;
+    text-align: left !important;
+}
+
+.vmcp-tool-id-badge {
+    display: inline-flex;
+    align-items: center;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 0.75rem;
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+}
+
+.vmcp-meta-divider {
+    width: 4px;
+    height: 4px;
+    background-color: #cbd5e1;
+    border-radius: 50%;
+    display: inline-block;
+    align-self: center;
+}
+
+.vmcp-category-tag {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    gap: 5px;
+}
+
+.vmcp-description {
+    font-size: 0.95rem;
+    color: #475569;
+    line-height: 1.75;
+    max-width: 100%;
+    margin-top: 0.5rem;
+    text-align: left !important;
+}
+
+/* ── Status / visibility badges ── */
+.vmcp-live-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #166534;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 3px 10px;
+    border-radius: 20px;
+}
+
+.vmcp-public-badge {
+    display: inline-flex;
+    align-items: center;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #c2410c;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    padding: 3px 10px;
+    border-radius: 20px;
+}
+
+/* ── Execute Console Card ── */
+.vmcp-console-card {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    background: #0f172a;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.15);
+    min-height: 500px;
+}
+
+.vmcp-console-card.vmcp-fullscreen {
+    position: fixed;
+    inset: 0;
+    z-index: 1050;
+    border-radius: 0 !important;
+    min-height: 100vh;
+}
+
+/* Toolbar */
+.vmcp-console-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.vmcp-endpoint-pill {
+    display: flex;
+    align-items: center;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 8px;
+    padding: 5px 12px;
+    gap: 6px;
+    overflow: hidden;
+    max-width: 100%;
+}
+
+.vmcp-method-tag {
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #fff;
+    background: #ed7534;
+    padding: 3px 8px;
+    border-radius: 5px;
+    flex-shrink: 0;
+}
+
+.vmcp-endpoint-url {
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 0.78rem;
+    color: #9a3412;
+    white-space: nowrap;
+}
+
+.vmcp-icon-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #94a3b8;
+    padding: 4px 9px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.vmcp-icon-btn:hover {
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.28);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.vmcp-refresh-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Sub-tabs */
+.vmcp-sub-tabs {
+    background: rgba(255, 255, 255, 0.02);
+}
+.vmcp-sub-tabs .nav-link {
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.6px !important;
+    color: #64748b !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 8px 14px !important;
+    text-transform: uppercase;
+    transition: all 0.18s ease;
+}
+.vmcp-sub-tabs .nav-link:hover {
+    color: #e2e8f0 !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+.vmcp-sub-tabs .nav-link.active {
+    color: #ed7534 !important;
+    border-bottom: 2px solid #ed7534 !important;
+    background: rgba(237, 117, 52, 0.06) !important;
+}
+
+/* JSON editor */
+.vmcp-editor-area {
+    position: relative;
+    flex: 1;
+}
+.vmcp-editor-actions {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+    z-index: 10;
+}
+.vmcp-json-editor {
+    background: #0f172a !important;
+    color: #e2e8f0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 0.82rem;
+    min-height: 300px;
+    resize: none;
+    outline: none !important;
+    box-shadow: none !important;
+    padding: 16px;
+    line-height: 1.6;
+}
+.vmcp-json-editor:focus { box-shadow: none !important; }
+
+/* Output area */
+.vmcp-output-area {
+    min-height: 300px;
+    overflow: auto;
+    background: #0f172a;
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #0f172a;
+}
+.vmcp-output-area::-webkit-scrollbar { width: 5px; }
+.vmcp-output-area::-webkit-scrollbar-track { background: #0f172a; }
+.vmcp-output-area::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+
+.vmcp-output-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 260px;
+    color: #334155;
+}
+
+/* Execute bar */
+.vmcp-execute-bar {
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+}
+.vmcp-execute-btn {
+    display: inline-flex;
+    align-items: center;
+    background: #ed7534;
+    border: none;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.875rem;
+    padding: 10px 28px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    box-shadow: 0 2px 10px rgba(237, 117, 52, 0.35);
+    letter-spacing: 0.01em;
+}
+.vmcp-execute-btn:hover:not(:disabled) {
+    background: #d35f28;
+    box-shadow: 0 4px 18px rgba(237, 117, 52, 0.5);
+    transform: translateY(-1px);
+}
+.vmcp-execute-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+.vmcp-execute-btn-compact {
+    display: inline-flex;
+    align-items: center;
+    background: #ed7534;
+    border: none;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.76rem;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    box-shadow: 0 1.5px 6px rgba(237, 117, 52, 0.25);
+    letter-spacing: 0.01em;
+}
+.vmcp-execute-btn-compact:hover:not(:disabled) {
+    background: #d35f28;
+    box-shadow: 0 3px 10px rgba(237, 117, 52, 0.4);
+    transform: translateY(-0.5px);
+}
+.vmcp-execute-btn-compact:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+/* ── Config Card (right column) ── */
+.vmcp-config-card {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    background: #0f172a;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.1);
+    text-align: left !important;
+}
+
+.vmcp-config-header {
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+    color: #e2e8f0;
+    font-weight: 600;
+    font-size: 0.875rem;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    text-align: left !important;
+}
+
+/* Config tabs */
+.vmcp-config-tabs .nav-link {
+    font-size: 0.85rem !important;
+    padding: 8px 14px !important;
+    color: #94a3b8 !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    transition: all 0.15s ease;
+    font-weight: 600 !important;
+}
+.vmcp-config-tabs .nav-link:hover {
+    color: #e2e8f0 !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+.vmcp-config-tabs .nav-link.active {
+    color: #ed7534 !important;
+    border-bottom-color: #ed7534 !important;
+    background: transparent !important;
+}
+
+/* Config block inside tabs */
+.vmcp-config-block {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    overflow: hidden;
+    text-align: left !important;
+}
+
+.vmcp-config-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 0.73rem;
+    color: #8892b0;
+    text-align: left !important;
+}
+
+.vmcp-config-pre {
+    font-size: 0.82rem;
+    color: #f8fafc;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    white-space: pre-wrap;
+    margin: 0;
+    padding: 14px;
+    line-height: 1.65;
+    text-align: left !important;
+}
+
+/* no-scroll body lock */
+.no-scroll { overflow: hidden !important; }

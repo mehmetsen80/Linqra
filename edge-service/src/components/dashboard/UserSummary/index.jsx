@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card } from 'react-bootstrap';
-import { HiClock, HiCalendar, HiKey, HiViewGrid, HiDocumentText, HiUserGroup, HiOfficeBuilding, HiShieldCheck, HiHashtag, HiSparkles, HiCollection, HiDatabase, HiChatAlt, HiLightBulb, HiHome, HiClipboardList, HiClipboardCheck } from 'react-icons/hi';
+import { HiClock, HiCalendar, HiKey, HiViewGrid, HiDocumentText, HiUserGroup, HiOfficeBuilding, HiShieldCheck, HiHashtag, HiSparkles, HiCollection, HiDatabase, HiChatAlt, HiLightBulb, HiHome, HiClipboardList, HiClipboardCheck, HiPuzzle, HiTerminal } from 'react-icons/hi';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useTeam } from '../../../contexts/TeamContext';
 import { useEnvironment } from '../../../contexts/EnvironmentContext';
@@ -81,6 +81,14 @@ const UserSummary = () => {
           <Link to="/ai-assistants" className="quick-action-button">
             <HiChatAlt />
             <span>AI Assistants</span>
+          </Link>
+          <Link to="/tools" className="quick-action-button">
+            <HiTerminal />
+            <span>Tools</span>
+          </Link>
+          <Link to="/mcp-marketplace" className="quick-action-button">
+            <HiPuzzle />
+            <span>MCP Marketplace</span>
           </Link>
           <Link to="/knowledge-hub" className="quick-action-button">
             <HiLightBulb />

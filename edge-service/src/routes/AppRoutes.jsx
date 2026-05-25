@@ -59,6 +59,8 @@ const HealthcareSolution = React.lazy(() => import('../pages/Solutions/Healthcar
 
 const Tools = React.lazy(() => import('../pages/Tools'));
 const ViewTool = React.lazy(() => import('../pages/Tools/ViewTool'));
+const McpMarketplace = React.lazy(() => import('../pages/McpMarketplace'));
+const ViewMcpTool = React.lazy(() => import('../pages/McpMarketplace/ViewMcpTool'));
 const KnowledgeHub = React.lazy(() => import('../pages/KnowledgeHub'));
 const ToolLayout = React.lazy(() => import('../layouts/ToolLayout'));
 
@@ -114,11 +116,23 @@ const AppRoutes = () => {
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
       <Route path="/terms-of-service" element={<TermsOfService />} />
 
-      {/* Public Tool Documentation Portal */}
+      {/* Public MCP Marketplace Portal */}
       <Route element={
         <React.Suspense fallback={<LoadingSpinner />}>
           <ToolLayout />
         </React.Suspense>
+      }>
+        <Route path="/mcp-marketplace" element={<McpMarketplace />} />
+        <Route path="/mcp-marketplace/:toolId" element={<ViewMcpTool />} />
+      </Route>
+
+      {/* Protected Tools Routes - requires authentication */}
+      <Route element={
+        <ProtectedRoute>
+          <React.Suspense fallback={<LoadingSpinner />}>
+            <ToolLayout />
+          </React.Suspense>
+        </ProtectedRoute>
       }>
         <Route path="/tools" element={<Tools />} />
         <Route path="/tools/:toolId" element={<ViewTool />} />

@@ -61,6 +61,8 @@ public class LinqRequest {
         @ValidStep
         private List<WorkflowStep> workflow; // For chained steps (workflow execution)
 
+        private CacheConfig cacheConfig; // Top-level cache config for simple (non-workflow) fetch tools
+
         // Chat conversation support
         private ChatConversation chat; // For AI Assistant chat conversations
 
@@ -117,25 +119,6 @@ public class LinqRequest {
                 private Integer targetStep; // Step number to jump to (null or 0 means terminal)
             }
 
-            @Data
-            public static class CacheConfig {
-                private boolean enabled = false; // Whether caching is enabled for this step
-                private String ttl; // Time-to-live in seconds
-                private String key; // Custom cache key (optional)
-
-                @JsonIgnore
-                public Duration getTtlAsDuration() {
-                    if (ttl == null) {
-                        return Duration.ofMinutes(5); // Default 5 minutes
-                    }
-                    try {
-                        return Duration.ofSeconds(Long.parseLong(ttl));
-                    } catch (NumberFormatException e) {
-                        return Duration.ofMinutes(5); // Default to 5 minutes if parsing fails
-                    }
-                }
-            }
-
             // Do not delete this, it's being used internally by the json
             public void setLlmConfig(LlmConfig llmConfig) {
                 if (llmConfig != null && llmConfig.getSettings() != null) {
@@ -147,6 +130,30 @@ public class LinqRequest {
                     llmConfig.setSettings(settings);
                 }
                 this.llmConfig = llmConfig;
+            }
+        }
+
+        /**
+         * Shared cache configuration used by both:
+         * - Query.cacheConfig  → top-level, for simple (non-workflow) fetch tools
+         * - WorkflowStep.cacheConfig → per-step, for workflow-based fetch steps
+         */
+        @Data
+        public static class CacheConfig {
+            private boolean enabled = false; // Whether caching is enabled
+            private String ttl; // Time-to-live in seconds (e.g. "3600")
+            private String key; // Custom cache key (optional)
+
+            @JsonIgnore
+            public Duration getTtlAsDuration() {
+                if (ttl == null) {
+                    return Duration.ofMinutes(5); // Default 5 minutes
+                }
+                try {
+                    return Duration.ofSeconds(Long.parseLong(ttl));
+                } catch (NumberFormatException e) {
+                    return Duration.ofMinutes(5); // Default to 5 minutes if parsing fails
+                }
             }
         }
 

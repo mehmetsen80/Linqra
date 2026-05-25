@@ -92,6 +92,15 @@ const toolService = {
         } catch (error) {
             return { success: false, error: error.response?.data?.message || error.message };
         }
+    },
+
+    getToolExecutionDetail: async (executionId) => {
+        try {
+            const response = await axiosInstance.get(`/api/tools/executions/${executionId}`);
+            return { success: true, data: response.data };
+        } catch (error) {
+            return { success: false, error: error.response?.data?.message || error.message };
+        }
     }
 };
 

@@ -204,7 +204,7 @@ function ModulesSection() {
           </Link>
         </div>
 
-        <div className="dashboard-card disabled">
+        <div className="dashboard-card">
           <Link to="/tools" className="card-icon-link">
             <div className="card-icon">
               <i className="fas fa-toolbox"></i>
@@ -212,10 +212,22 @@ function ModulesSection() {
           </Link>
           <h3>Tools</h3>
           <p>Connect and manage integrations like Google Drive, Excel, and PDF converters for your AI apps</p>
-          <span className="coming-soon-badge">Coming Soon</span>
-          <button className="card-link" disabled>
+          <Link to="/tools" className="card-link">
             Explore Tools <i className="fas fa-arrow-right"></i>
-          </button>
+          </Link>
+        </div>
+
+        <div className="dashboard-card">
+          <Link to="/mcp-marketplace" className="card-icon-link">
+            <div className="card-icon">
+              <i className="fas fa-store"></i>
+            </div>
+          </Link>
+          <h3>MCP Marketplace</h3>
+          <p>Discover, share, and connect Model Context Protocol (MCP) servers and tools for your AI orchestrations</p>
+          <Link to="/mcp-marketplace" className="card-link">
+            Explore Marketplace <i className="fas fa-arrow-right"></i>
+          </Link>
         </div>
       </div>
     </div>

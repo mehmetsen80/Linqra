@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Container, Breadcrumb, Card, Tabs, Tab } from 'react-bootstrap';
 import { HiPlus } from 'react-icons/hi';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useTeam } from '../../contexts/TeamContext';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/common/Button';
@@ -15,11 +15,25 @@ import './styles.css';
 
 const Tools = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { user } = useAuth();
     const { currentTeam } = useTeam();
     const [showModal, setShowModal] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const [activeTab, setActiveTab] = useState('catalog');
+    const [mcpInitialPayload, setMcpInitialPayload] = useState(null);
+
+    // If navigated here from ViewTool with MCP payload, activate MCP tab
+    React.useEffect(() => {
+        if (location.state?.tab === 'mcp') {
+            setActiveTab('mcp');
+            if (location.state?.mcpPayload) {
+                setMcpInitialPayload(location.state.mcpPayload);
+            }
+            // Clear nav state so re-visiting tab doesn't re-inject
+            window.history.replaceState({}, document.title);
+        }
+    }, [location.state]);
 
     return (
         <Container fluid className="tools-page py-4">
@@ -89,7 +103,7 @@ const Tools = () => {
                     </Tab>
                     <Tab eventKey="mcp" title="⚡ MCP Developer Console">
                         <div className="py-2">
-                            <McpConsole teamId={currentTeam?.id} />
+                            <McpConsole teamId={currentTeam?.id} initialPayload={mcpInitialPayload} />
                         </div>
                     </Tab>
                     <Tab eventKey="history" title="📜 Tool Executions History">

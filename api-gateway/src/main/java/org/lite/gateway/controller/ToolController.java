@@ -103,24 +103,32 @@ public class ToolController {
     public Flux<ToolExecution> getExecutions(
             @RequestParam(required = false) String teamId,
             ServerWebExchange exchange) {
-        log.info("API request to fetch tool executions. Filter teamId: {}", teamId);
+        log.info("API request to fetch tool executions (projected). Filter teamId: {}", teamId);
         if (teamId != null && !teamId.isEmpty()) {
-            return toolExecutionRepository.findByTeamIdOrderByExecutedAtDesc(teamId);
+            return toolExecutionRepository.findByTeamIdOrderByExecutedAtDescProjected(teamId);
         }
         return teamContextService.getTeamFromContext(exchange)
                 .flatMapMany(contextTeamId -> {
-                    log.info("Found teamContextId for tool executions query: {}", contextTeamId);
-                    return toolExecutionRepository.findByTeamIdOrderByExecutedAtDesc(contextTeamId);
+                    log.info("Found teamContextId for tool executions query (projected): {}", contextTeamId);
+                    return toolExecutionRepository.findByTeamIdOrderByExecutedAtDescProjected(contextTeamId);
                 })
-                .switchIfEmpty(toolExecutionRepository.findAll());
+                .switchIfEmpty(toolExecutionRepository.findAllProjected());
     }
+
+    @GetMapping("/executions/{executionId}")
+    public Mono<ToolExecution> getExecution(@PathVariable String executionId) {
+        log.info("API request to fetch tool execution details for id: {}", executionId);
+        return toolExecutionRepository.findByExecutionId(executionId)
+                .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Execution not found")));
+    }
+
 
     @GetMapping
     public Flux<ToolDefinition> getAllTools(
             @RequestParam(required = false) String teamId,
             ServerWebExchange exchange) {
 
-        return ReactiveSecurityContextHolder.getContext()
+        Flux<ToolDefinition> toolsFlux = ReactiveSecurityContextHolder.getContext()
                 .map(SecurityContext::getAuthentication)
                 .flatMapMany(auth -> {
 
@@ -136,6 +144,8 @@ public class ToolController {
                     return tools;
                 })
                 .switchIfEmpty(toolRegistryService.getAllPublicTools());
+
+        return toolsFlux.flatMap(this::populateToolStats);
     }
 
     @GetMapping("/{toolId}")
@@ -143,11 +153,11 @@ public class ToolController {
         return ReactiveSecurityContextHolder.getContext()
                 .map(SecurityContext::getAuthentication)
                 .flatMap(auth -> {
-
                     Mono<ToolDefinition> tool = toolRegistryService.getTool(toolId);
                     return tool;
                 })
-                .switchIfEmpty(toolRegistryService.getTool(toolId));
+                .switchIfEmpty(toolRegistryService.getTool(toolId))
+                .flatMap(this::populateToolStats);
     }
 
     @PostMapping
@@ -343,6 +353,47 @@ public class ToolController {
                         return Mono.error(
                                 new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid test request format"));
                     }
+                });
+    }
+
+    private Mono<ToolDefinition> populateToolStats(ToolDefinition tool) {
+        if (tool == null) return Mono.empty();
+        
+        return toolExecutionRepository.findByToolId(tool.getToolId())
+                .collectList()
+                .map(executions -> {
+                    Map<String, Object> stats = new HashMap<>();
+                    long total = executions.size();
+                    stats.put("totalExecutions", String.valueOf(total));
+                    
+                    if (total > 0) {
+                        long success = executions.stream()
+                                .filter(e -> org.lite.gateway.model.ExecutionStatus.SUCCESS.equals(e.getStatus()))
+                                .count();
+                        double successRate = (double) success / total * 100.0;
+                        stats.put("successRate", String.format("%.2f%%", successRate));
+                        
+                        double avgLatency = executions.stream()
+                                .filter(e -> e.getDurationMs() != null)
+                                .mapToLong(ToolExecution::getDurationMs)
+                                .average()
+                                .orElse(0.0);
+                        stats.put("avgLatencyMs", String.format("%.0fms", avgLatency));
+                        
+                        // Active/concurrent connections (executions in the last 5 minutes)
+                        long active = executions.stream()
+                                .filter(e -> e.getExecutedAt() != null && 
+                                        e.getExecutedAt().isAfter(java.time.LocalDateTime.now().minusMinutes(5)))
+                                .count();
+                        stats.put("activeConnections", active > 0 ? active + " Active" : "0 Active");
+                    } else {
+                        stats.put("successRate", "—");
+                        stats.put("avgLatencyMs", "—");
+                        stats.put("activeConnections", "0 Active");
+                    }
+                    
+                    tool.setStats(stats);
+                    return tool;
                 });
     }
 }

@@ -11,9 +11,9 @@ import toolService from '../../../services/toolService';
 import { showSuccessToast, showErrorToast } from '../../../utils/toastConfig';
 import './styles.css';
 
-const McpConsole = ({ teamId }) => {
+const McpConsole = ({ teamId, initialPayload, predefinedToolId, onExecute }) => {
     const [tools, setTools] = useState([]);
-    const [selectedToolId, setSelectedToolId] = useState('');
+    const [selectedToolId, setSelectedToolId] = useState(predefinedToolId || '');
     const [loadingTools, setLoadingTools] = useState(true);
 
     // SSE Connection State
@@ -46,6 +46,30 @@ const McpConsole = ({ teamId }) => {
             disconnectSse();
         };
     }, [teamId]);
+
+    // Pre-populate playground with payload passed from ViewTool "MCP Console" button
+    useEffect(() => {
+        if (initialPayload) {
+            setJsonRpcPayload(initialPayload);
+            // Try to pre-select the tool in the dropdown
+            try {
+                const parsed = JSON.parse(initialPayload);
+                const toolName = parsed?.params?.name;
+                if (toolName) {
+                    // MCP name uses underscores; match against toolId (dots)
+                    const matchingToolId = toolName.replace(/_/g, '.');
+                    setSelectedToolId(matchingToolId);
+                }
+            } catch (e) {}
+        }
+    }, [initialPayload]);
+
+    // Auto-select predefined tool when tools load
+    useEffect(() => {
+        if (predefinedToolId && tools.length > 0) {
+            handleToolSelect(predefinedToolId);
+        }
+    }, [predefinedToolId, tools]);
 
     const loadTools = async () => {
         setLoadingTools(true);
@@ -92,31 +116,48 @@ const McpConsole = ({ teamId }) => {
                 addLog('sys', 'Receiving active ping heartbeats...');
             };
 
+            eventSource.addEventListener('endpoint', (event) => {
+                const endpoint = event.data;
+                try {
+                    const url = new URL(endpoint, window.location.origin);
+                    const sessionId = url.searchParams.get('sessionId');
+                    if (sessionId) {
+                        setSseSessionId(sessionId);
+                        addLog('sys', `Session registered! ID: ${sessionId}`);
+                        addLog('sys', `Post messages to: ${endpoint}`);
+                        
+                        setJsonRpcPayload(prev => {
+                            try {
+                                const parsed = JSON.parse(prev);
+                                if (parsed.method === 'tools/list') {
+                                    return JSON.stringify(parsed, null, 2);
+                                }
+                            } catch(e){}
+                            return prev;
+                        });
+                    }
+                } catch (e) {
+                    console.error('Failed to parse endpoint URL:', e);
+                }
+            });
+
+            eventSource.addEventListener('ping', (event) => {
+                addLog('in', 'ping [heartbeat]');
+            });
+
             eventSource.onmessage = (event) => {
-                // Parse standard MCP SSE endpoint registration or ping heartbeats
+                // Parse standard MCP SSE endpoint registration or ping heartbeats fallback
                 try {
                     const data = JSON.parse(event.data);
                     if (data.ping) {
                         addLog('in', `ping [heartbeat]: seq=${data.ping}`);
                     } else if (data.endpoint) {
-                        // Extract sessionId from endpoint URL
                         const url = new URL(data.endpoint, window.location.origin);
                         const sessionId = url.searchParams.get('sessionId');
                         if (sessionId) {
                             setSseSessionId(sessionId);
                             addLog('sys', `Session registered! ID: ${sessionId}`);
                             addLog('sys', `Post messages to: ${data.endpoint}`);
-                            
-                            // Dynamically update payload template with current sessionId
-                            setJsonRpcPayload(prev => {
-                                try {
-                                    const parsed = JSON.parse(prev);
-                                    if (parsed.method === 'tools/list') {
-                                        return JSON.stringify(parsed, null, 2);
-                                    }
-                                } catch(e){}
-                                return prev;
-                            });
                         }
                     } else {
                         addLog('in', event.data);
@@ -185,7 +226,7 @@ const McpConsole = ({ teamId }) => {
             jsonrpc: "2.0",
             method: "tools/call",
             params: {
-                name: targetTool.toolId,
+                name: targetTool.toolId?.replace(/\./g, '_') || targetTool.toolId,
                 arguments: sampleParams
             },
             id: String(Math.floor(Math.random() * 100) + 1)
@@ -244,6 +285,9 @@ const McpConsole = ({ teamId }) => {
                 addLog('err', `Response Error: ${result.error.message} (code: ${result.error.code})`);
             } else {
                 addLog('sys', `Received response for JSON-RPC Request (ID: ${requestBody.id || 'N/A'})`);
+                if (onExecute) {
+                    onExecute();
+                }
             }
         } catch (error) {
             const errStr = `HTTP execution failed: ${error.message}`;
@@ -347,8 +391,98 @@ const tools = await client.listTools();
 console.log(tools);`;
     };
 
+    const renderSafePayload = (payload, isParsed = false) => {
+        if (!payload) return null;
+        const isLarge = payload.length > 100000;
+        const sizeInKb = (payload.length / 1024).toFixed(1);
+        const sizeDisplay = payload.length > 1024 * 1024 
+          ? `${(payload.length / (1024 * 1024)).toFixed(2)} MB` 
+          : `${sizeInKb} KB`;
+
+        let contentNode;
+        if (isLarge) {
+            const previewText = payload.substring(0, 5000) + '\n\n... [TRUNCATED - Payload is too large to render dynamically (' + sizeDisplay + ')]';
+            contentNode = (
+                <pre className="text-light m-0 font-monospace" style={{ fontSize: '0.8rem', maxHeight: '300px', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+                    {previewText}
+                </pre>
+            );
+        } else {
+            contentNode = (
+                <SyntaxHighlighter
+                    language="json"
+                    style={dracula}
+                    customStyle={{ margin: 0, padding: 0, fontSize: '0.8rem', background: 'transparent' }}
+                >
+                    {payload}
+                </SyntaxHighlighter>
+            );
+        }
+
+        return (
+            <div className={`payload-container rounded border ${isLarge ? 'border-warning' : 'border-secondary'}`} style={{ background: '#0e1424' }}>
+                <div className="d-flex justify-content-between align-items-center p-2 px-3 border-bottom border-secondary bg-dark bg-opacity-50">
+                    <span className={`fw-bold small d-flex align-items-center gap-1 ${isLarge ? 'text-warning' : 'text-muted'}`}>
+                        {isLarge ? '⚠️ Large Payload Bypassed' : '✨ JSON Payload'} ({sizeDisplay})
+                    </span>
+                    <div className="d-flex gap-2">
+                        <button 
+                            className="btn btn-outline-secondary btn-sm py-1 font-monospace"
+                            style={{ fontSize: '0.72rem' }}
+                            onClick={(e) => {
+                                copyToClipboard(payload, 'JSON copied');
+                                const origText = e.target.innerHTML;
+                                e.target.innerHTML = "Copied! ✓";
+                                setTimeout(() => { e.target.innerHTML = origText; }, 1500);
+                            }}
+                        >
+                            📋 Copy
+                        </button>
+                        <button 
+                            className={`btn btn-sm py-1 font-monospace text-decoration-none ${isLarge ? 'btn-warning' : 'btn-outline-info'}`}
+                            style={{ fontSize: '0.72rem' }}
+                            onClick={() => {
+                                const blob = new Blob([payload], { type: 'application/json' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = isParsed ? 'mcp_parsed_response.json' : 'mcp_raw_envelope.json';
+                                a.click();
+                                URL.revokeObjectURL(url);
+                            }}
+                        >
+                            💾 Download JSON
+                        </button>
+                    </div>
+                </div>
+                <div className="p-3 text-start">
+                    {contentNode}
+                </div>
+            </div>
+        );
+    };
+
+
     return (
         <div className="mcp-console-section px-1">
+            {/* Component Title & Workspace Context Indicator */}
+            <div className="mcp-console-header-block mb-4 text-start">
+                <div className="d-flex align-items-center gap-2 mb-2">
+                    <span className="badge bg-primary text-uppercase font-monospace px-2 py-1" style={{ fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                        MCP Execution Environment
+                    </span>
+                    <span className="badge bg-success text-uppercase font-monospace px-2 py-1" style={{ fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                        Live Playground
+                    </span>
+                </div>
+                <h4 className="fw-bold mcp-console-title mb-1 d-flex align-items-center gap-2">
+                    <FiTerminal size={20} className="text-primary" /> MCP Live Console & Execution Playground
+                </h4>
+                <p className="mcp-console-desc small mb-0">
+                    Interact directly with registered Model Context Protocol servers. Connect the SSE event stream to initiate a persistent state channel and execute live JSON-RPC messages.
+                </p>
+            </div>
+
             <Row className="mb-4">
                 <Col lg={4}>
                     <Card className="mcp-glass-card border-0 mb-4 h-100">
@@ -469,32 +603,42 @@ console.log(tools);`;
                         <FiZap size={16} className="text-warning" /> JSON-RPC 2.0 Command Playground
                     </h5>
                     <div className="d-flex align-items-center gap-3">
-                        <Form.Select 
-                            className="bg-dark text-light border-secondary size-sm py-1 font-monospace" 
-                            style={{ fontSize: '0.8rem', width: '220px' }}
-                            value={selectedToolId}
-                            onChange={(e) => handleToolSelect(e.target.value)}
-                            disabled={loadingTools || tools.length === 0}
-                        >
-                            {loadingTools ? (
-                                <option>Loading tools...</option>
-                            ) : tools.length === 0 ? (
-                                <option>No tools registered</option>
-                            ) : (
-                                <>
-                                    <option value="">-- Choose Tool Template --</option>
-                                    {tools.map(tool => (
-                                        <option key={tool.toolId} value={tool.toolId}>
-                                            {tool.toolId}
-                                        </option>
-                                    ))}
-                                </>
-                            )}
-                        </Form.Select>
+                        {predefinedToolId ? (
+                            <div className="d-flex align-items-center gap-2">
+                                <span className="text-muted small">Predefined Tool:</span>
+                                <span className="badge bg-secondary font-monospace px-3 py-2 text-white" style={{ fontSize: '0.78rem', border: '1px solid rgba(255,255,255,0.15)', background: '#1e293b' }}>
+                                    {predefinedToolId}
+                                </span>
+                            </div>
+                        ) : (
+                            <Form.Select 
+                                className="bg-dark text-light border-secondary size-sm py-1 font-monospace" 
+                                style={{ fontSize: '0.8rem', width: '220px' }}
+                                value={selectedToolId}
+                                onChange={(e) => handleToolSelect(e.target.value)}
+                                disabled={loadingTools || tools.length === 0}
+                            >
+                                {loadingTools ? (
+                                    <option>Loading tools...</option>
+                                ) : tools.length === 0 ? (
+                                    <option>No tools registered</option>
+                                ) : (
+                                    <>
+                                        <option value="">-- Choose Tool Template --</option>
+                                        {tools.map(tool => (
+                                            <option key={tool.toolId} value={tool.toolId}>
+                                                {tool.toolId}
+                                            </option>
+                                        ))}
+                                    </>
+                                )}
+                            </Form.Select>
+                        )}
                         <Button 
                             variant="primary" 
                             size="sm"
-                            disabled={sendingRequest}
+                            disabled={sendingRequest || connectionStatus !== 'connected'}
+                            title={connectionStatus !== 'connected' ? 'Please connect SSE Stream first to establish an active session' : 'Send JSON-RPC Message'}
                             onClick={handleSendPayload}
                             className="py-1 px-3 d-flex align-items-center gap-2"
                         >
@@ -518,13 +662,22 @@ console.log(tools);`;
                                     <FiCopy size={13} />
                                 </button>
                             </div>
-                            <Form.Control
-                                as="textarea"
-                                className="editor-textarea"
-                                value={jsonRpcPayload}
-                                onChange={(e) => setJsonRpcPayload(e.target.value)}
-                                placeholder="Write standard JSON-RPC 2.0 payload..."
-                            />
+                            <div className="mcp-code-editor-wrapper">
+                                <SyntaxHighlighter
+                                    language="json"
+                                    style={dracula}
+                                    customStyle={{ margin: 0, padding: '1rem', fontSize: '0.8rem', background: 'transparent', minHeight: '100%' }}
+                                >
+                                    {jsonRpcPayload || ' '}
+                                </SyntaxHighlighter>
+                                <textarea
+                                    className="mcp-code-editor-overlay"
+                                    value={jsonRpcPayload}
+                                    onChange={(e) => setJsonRpcPayload(e.target.value)}
+                                    placeholder="Write standard JSON-RPC 2.0 payload..."
+                                    spellCheck={false}
+                                />
+                            </div>
                         </div>
 
                         {/* Response Terminal */}
@@ -572,21 +725,9 @@ console.log(tools);`;
                             <div className="flex-grow-1 overflow-auto p-3" style={{ background: '#0b0f19' }}>
                                 {responsePayload ? (
                                     responseViewMode === 'parsed' && extractInnerJson(responsePayload) ? (
-                                        <SyntaxHighlighter
-                                            language="json"
-                                            style={dracula}
-                                            customStyle={{ margin: 0, padding: 0, fontSize: '0.8rem', background: 'transparent' }}
-                                        >
-                                            {JSON.stringify(extractInnerJson(responsePayload), null, 2)}
-                                        </SyntaxHighlighter>
+                                        renderSafePayload(JSON.stringify(extractInnerJson(responsePayload), null, 2), true)
                                     ) : (
-                                        <SyntaxHighlighter
-                                            language="json"
-                                            style={dracula}
-                                            customStyle={{ margin: 0, padding: 0, fontSize: '0.8rem', background: 'transparent' }}
-                                        >
-                                            {responsePayload}
-                                        </SyntaxHighlighter>
+                                        renderSafePayload(responsePayload, false)
                                     )
                                 ) : (
                                     <div className="text-muted italic py-5 text-center small">

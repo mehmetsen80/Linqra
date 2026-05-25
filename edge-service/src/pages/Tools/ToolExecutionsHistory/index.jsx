@@ -366,10 +366,21 @@ const ToolExecutionsHistory = ({ teamId }) => {
 
 
 
-  const openDetails = (execution) => {
-    setSelectedExecution(execution);
+  const openDetails = async (execution) => {
+    try {
+      const res = await toolService.getToolExecutionDetail(execution.executionId);
+      if (res.success && res.data) {
+        setSelectedExecution(res.data);
+      } else {
+        setSelectedExecution(execution);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch full tool execution details, falling back:", err);
+      setSelectedExecution(execution);
+    }
     setShowModal(true);
   };
+
 
   return (
     <div className="tool-executions-history">

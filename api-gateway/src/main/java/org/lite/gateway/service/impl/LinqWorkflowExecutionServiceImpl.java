@@ -564,9 +564,16 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
                                                 meta.setTarget(step.getTarget());
                                                 meta.setExecutedAt(LocalDateTime.now(java.time.ZoneOffset.UTC));
                                                 stepMetadata.add(meta);
-                                                
-                                                return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
-                                                        .thenReturn(response);
+
+                                                // Only send a post-success progress update for the final step.
+                                                // Intermediate steps already sent a RUNNING update at step START (line 266).
+                                                // Re-emitting here with the same status="RUNNING" causes duplicate
+                                                // step entries in the UI.
+                                                if (step.getStep() == steps.size()) {
+                                                    return sendStepProgressUpdate(request, step, steps.size(), stepResults, context)
+                                                            .thenReturn(response);
+                                                }
+                                                return Mono.just(response);
                                             })
                                             .onErrorResume(error -> {
                                                 long durationMs = Duration.between(start, Instant.now()).toMillis();

@@ -59,6 +59,9 @@ public class ToolDefinition {
     @Builder.Default
     private LocalDateTime lastModifiedDate = LocalDateTime.now();
 
+    @org.springframework.data.annotation.Transient
+    private Map<String, Object> stats;
+
     @Data
     @Builder
     @NoArgsConstructor

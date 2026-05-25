@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import org.springframework.data.mongodb.repository.Query;
 import java.time.LocalDateTime;
 
 @Repository
@@ -24,6 +25,13 @@ public interface ToolExecutionRepository extends ReactiveMongoRepository<ToolExe
     // Team-level analytics
     Flux<ToolExecution> findByTeamId(String teamId);
     Flux<ToolExecution> findByTeamIdOrderByExecutedAtDesc(String teamId);
+
+    @Query(value = "{'teamId': ?0}", fields = "{'response': 0, 'request': 0}")
+    Flux<ToolExecution> findByTeamIdOrderByExecutedAtDescProjected(String teamId);
+
+    @Query(value = "{}", fields = "{'response': 0, 'request': 0}")
+    Flux<ToolExecution> findAllProjected();
+
 
     // Per-user history
     Flux<ToolExecution> findByExecutedBy(String executedBy);

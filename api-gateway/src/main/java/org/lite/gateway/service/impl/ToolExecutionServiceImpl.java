@@ -23,8 +23,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -38,6 +40,7 @@ public class ToolExecutionServiceImpl implements ToolExecutionService {
     private final ToolExecutionRepository toolExecutionRepository;
     private final AuditLogHelper auditLogHelper;
     private final ToolParameterValidationService parameterValidationService;
+    private final ObjectMapper objectMapper;
 
     @Override
     public Mono<LinqResponse> executeTool(LinqRequest request, CallerParams callerParams) {
@@ -129,8 +132,11 @@ public class ToolExecutionServiceImpl implements ToolExecutionService {
 
         return auditLogHelper.logDetailedEvent(AuditEventType.TOOL_EXECUTION_STARTED, AuditActionType.READ,
                 AuditResourceType.TOOL_EXECUTION, saved.getExecutionId(), "Execution started", auditCtx)
-                .onErrorResume(e -> Mono.empty())
-                .then(executeViaLinqConfig(tool, params, executedBy, cp))
+                .onErrorResume(e -> {
+                    log.error("TOOL_EXECUTION_STARTED logging failed for {}: {}", saved.getExecutionId(), e.getMessage());
+                    return Mono.empty();
+                })
+                .then(Mono.defer(() -> executeViaLinqConfig(tool, params, executedBy, cp)))
                 .flatMap(resp -> handleSuccess(tool, saved, start, resp, cp, executedBy, params))
                 .onErrorResume(err -> handleFailure(tool, saved, start, err, cp, executedBy, params));
     }
@@ -143,13 +149,14 @@ public class ToolExecutionServiceImpl implements ToolExecutionService {
         saved.setDurationMs(duration);
 
         return toolExecutionRepository.save(saved)
+                .doOnError(err -> log.error("Failed to save ToolExecution {}: {}", saved.getExecutionId(), err.getMessage(), err))
                 .flatMap(done -> {
                     Map<String, Object> ctx = buildAuditContext(tool, saved.getExecutionId(), executedBy, params, cp);
                     ctx.put("durationMs", duration);
                     return auditLogHelper
                             .logDetailedEvent(AuditEventType.TOOL_EXECUTION_COMPLETED, AuditActionType.READ,
-                                    AuditResourceType.TOOL_EXECUTION, saved.getExecutionId(), "Success", ctx, null,
-                                    null, AuditResultType.SUCCESS)
+                                     AuditResourceType.TOOL_EXECUTION, saved.getExecutionId(), "Success", ctx, null,
+                                     null, AuditResultType.SUCCESS)
                             .thenReturn(resp);
                 });
     }
@@ -190,6 +197,32 @@ public class ToolExecutionServiceImpl implements ToolExecutionService {
         Map<String, Object> linkMap = (Map<String, Object>) config.get("link");
         Map<String, Object> queryMap = (Map<String, Object>) config.get("query");
 
+        // Deserialize workflow steps from linq_config so cacheConfig per-step is preserved
+        List<LinqRequest.Query.WorkflowStep> workflowSteps = null;
+        Object rawWorkflow = queryMap.get("workflow");
+        if (rawWorkflow != null) {
+            try {
+                workflowSteps = objectMapper.convertValue(
+                        rawWorkflow,
+                        objectMapper.getTypeFactory().constructCollectionType(
+                                List.class, LinqRequest.Query.WorkflowStep.class));
+            } catch (Exception e) {
+                log.warn("Could not deserialize workflow steps from linq_config for tool {}: {}", tool.getToolId(), e.getMessage());
+            }
+        }
+
+        // Deserialize top-level cacheConfig for simple (non-workflow) fetch tools
+        LinqRequest.Query.CacheConfig topLevelCacheConfig = null;
+        Object rawCacheConfig = queryMap.get("cacheConfig");
+        if (rawCacheConfig != null) {
+            try {
+                topLevelCacheConfig = objectMapper.convertValue(rawCacheConfig,
+                        LinqRequest.Query.CacheConfig.class);
+            } catch (Exception e) {
+                log.warn("Could not deserialize top-level cacheConfig from linq_config for tool {}: {}", tool.getToolId(), e.getMessage());
+            }
+        }
+
         LinqRequest linqRequest = LinqRequest.builder()
                 .link(LinqRequest.Link.builder()
                         .target((String) linkMap.get("target"))
@@ -198,6 +231,8 @@ public class ToolExecutionServiceImpl implements ToolExecutionService {
                 .query(LinqRequest.Query.builder()
                         .intent((String) queryMap.get("intent"))
                         .params(callerParamsMap)
+                        .workflow(workflowSteps)
+                        .cacheConfig(topLevelCacheConfig)
                         .build())
                 .executedBy(executedBy)
                 .build();

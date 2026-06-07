@@ -17,6 +17,8 @@ public interface ResourceSubscriptionService {
 
         Flux<ResourceSubscription> getSubscriptionsForUser(String userId);
 
+        Flux<ResourceSubscription> getSubscriptionsForUser(java.util.List<String> userIds);
+
         Flux<ResourceSubscription> getSubscriptionsForTeam(String teamId);
 
         Flux<ResourceSubscription> getActiveSubscriptionsForResource(String domain, String category, String resourceId);

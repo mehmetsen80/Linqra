@@ -49,7 +49,7 @@ public class ResourceSubscriptionController {
 
         @GetMapping("/user")
         public Flux<ResourceSubscription> getMySubscriptions(ServerWebExchange exchange) {
-                return userContextService.getCurrentUsername(exchange)
+                return userContextService.getCurrentUserIdentifiers(exchange)
                                 .flatMapMany(subscriptionService::getSubscriptionsForUser);
         }
 

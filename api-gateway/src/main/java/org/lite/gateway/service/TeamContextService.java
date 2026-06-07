@@ -210,9 +210,9 @@ public class TeamContextService {
 
                     // Check for admin role in authorities first (for API key bypass cases)
                     boolean hasAdminRole = auth.getAuthorities().stream()
-                            .anyMatch(a -> a.getAuthority().equals("ROLE_GATEWAY_ADMIN") || 
-                                          a.getAuthority().equals("ROLE_ADMIN") ||
-                                          a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+                            .anyMatch(a -> a.getAuthority().equals("ROLE_GATEWAY_ADMIN") ||
+                                    a.getAuthority().equals("ROLE_ADMIN") ||
+                                    a.getAuthority().equals("ROLE_SUPER_ADMIN"));
 
                     Object principal = auth.getPrincipal();
                     if (principal instanceof Jwt jwt) {
@@ -232,20 +232,21 @@ public class TeamContextService {
                         }
                         return Mono.just(List.of(principalStr));
                     }
-                    
+
                     if (hasAdminRole) {
                         return Mono.just(List.of("ALL_TEAMS_BYPASS"));
                     }
-                    
+
                     return Mono.just(Collections.<String>emptyList());
                 });
     }
 
     public boolean isSuperAdmin(Jwt jwt) {
         List<String> roles = new ArrayList<>();
-        
+
         log.info("🛡️ Checking roles in token for user: {}", jwt.getSubject());
-        // Log all claims for one-time diagnostic if needed (be careful with sensitive data)
+        // Log all claims for one-time diagnostic if needed (be careful with sensitive
+        // data)
         // log.debug("Token Claims: {}", jwt.getClaims());
 
         try {
@@ -278,16 +279,19 @@ public class TeamContextService {
             // 3. Check roles or authorities claim (Spring/OIDC standard)
             if (jwt.hasClaim("roles")) {
                 List<String> directRoles = jwt.getClaimAsStringList("roles");
-                if (directRoles != null) roles.addAll(directRoles);
+                if (directRoles != null)
+                    roles.addAll(directRoles);
             }
             if (jwt.hasClaim("authorities")) {
                 List<String> authorities = jwt.getClaimAsStringList("authorities");
-                if (authorities != null) roles.addAll(authorities);
+                if (authorities != null)
+                    roles.addAll(authorities);
             }
             // 4. Check groups claim (Keycloak/Standard)
             if (jwt.hasClaim("groups")) {
                 List<String> groups = jwt.getClaimAsStringList("groups");
-                if (groups != null) roles.addAll(groups);
+                if (groups != null)
+                    roles.addAll(groups);
             }
         } catch (Exception e) {
             log.error("❌ Error extracting roles from token: {}", e.getMessage());
@@ -298,15 +302,13 @@ public class TeamContextService {
             log.warn("⚠️ No roles found. Available claims: {}", jwt.getClaims().keySet());
         }
 
-        boolean isAdmin = roles.stream().anyMatch(r -> 
-            r.equalsIgnoreCase("SUPER_ADMIN") || 
-            r.equalsIgnoreCase("ADMIN") || 
-            r.equalsIgnoreCase("ROLE_SUPER_ADMIN") ||
-            r.equalsIgnoreCase("ROLE_ADMIN") ||
-            r.equalsIgnoreCase("gateway_admin") ||
-            r.equalsIgnoreCase("gateway_admin_realm") ||
-            r.equalsIgnoreCase("linqra_admin")
-        );
+        boolean isAdmin = roles.stream().anyMatch(r -> r.equalsIgnoreCase("SUPER_ADMIN") ||
+                r.equalsIgnoreCase("ADMIN") ||
+                r.equalsIgnoreCase("ROLE_SUPER_ADMIN") ||
+                r.equalsIgnoreCase("ROLE_ADMIN") ||
+                r.equalsIgnoreCase("gateway_admin") ||
+                r.equalsIgnoreCase("gateway_admin_realm") ||
+                r.equalsIgnoreCase("linqra_admin"));
 
         if (isAdmin) {
             log.info("✅ User confirmed as ADMIN/SUPER_ADMIN");

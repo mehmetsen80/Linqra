@@ -2,6 +2,9 @@ package org.lite.gateway.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.util.List;
+
 import org.lite.gateway.exception.InvalidAuthenticationException;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
@@ -24,55 +27,109 @@ public class UserContextService {
      */
     public Mono<String> getCurrentUsername(ServerWebExchange exchange) {
         return ReactiveSecurityContextHolder.getContext()
-            .flatMap(context -> {
-                String userToken = exchange.getRequest()
-                    .getHeaders()
-                    .getFirst("X-User-Token");
+                .flatMap(context -> {
+                    String userToken = exchange.getRequest()
+                            .getHeaders()
+                            .getFirst("X-User-Token");
 
-                if (userToken == null) {
-                    return Mono.error(new InvalidAuthenticationException("No valid user token found"));
-                }
-                
-                // Remove 'Bearer ' if it's still present
-                String token = userToken.startsWith("Bearer ") ? 
-                    userToken.substring(7) : userToken;
-                
-                // Try to determine if this is a Keycloak token by checking its structure
-                boolean isKeycloakToken = isKeycloakToken(token);
-                //log.debug("Token type: {}", isKeycloakToken ? "Keycloak" : "User");
-                
-                ReactiveJwtDecoder decoder = isKeycloakToken ? keycloakJwtDecoder : userJwtDecoder;
-                
-                return decoder.decode(token)
-                    .map(jwt -> {
-                        String username = isKeycloakToken ? 
-                            jwt.getClaimAsString("preferred_username") : 
-                            jwt.getClaimAsString("sub");
-                        log.debug("Decoded token claims: {}", jwt.getClaims());
-                        log.debug("Username from token: {}", username);
-                        if (username == null || username.trim().isEmpty()) {
-                            throw new InvalidAuthenticationException("No username found in JWT token");
-                        }
-                        return username;
-                    })
-                    .onErrorResume(e -> {
-                        log.error("Error decoding token: {}", e.getMessage());
-                        return Mono.error(new InvalidAuthenticationException("Invalid token: " + e.getMessage()));
-                    });
-            });
+                    if (userToken == null) {
+                        return Mono.error(new InvalidAuthenticationException("No valid user token found"));
+                    }
+
+                    // Remove 'Bearer ' if it's still present
+                    String token = userToken.startsWith("Bearer ") ? userToken.substring(7) : userToken;
+
+                    // Try to determine if this is a Keycloak token by checking its structure
+                    boolean isKeycloakToken = isKeycloakToken(token);
+                    // log.debug("Token type: {}", isKeycloakToken ? "Keycloak" : "User");
+
+                    ReactiveJwtDecoder decoder = isKeycloakToken ? keycloakJwtDecoder : userJwtDecoder;
+
+                    return decoder.decode(token)
+                            .map(jwt -> {
+                                String username = isKeycloakToken ? jwt.getClaimAsString("preferred_username")
+                                        : jwt.getClaimAsString("sub");
+                                log.debug("Decoded token claims: {}", jwt.getClaims());
+                                log.debug("Username from token: {}", username);
+                                if (username == null || username.trim().isEmpty()) {
+                                    throw new InvalidAuthenticationException("No username found in JWT token");
+                                }
+                                return username;
+                            })
+                            .onErrorResume(e -> {
+                                log.error("Error decoding token: {}", e.getMessage());
+                                return Mono
+                                        .error(new InvalidAuthenticationException("Invalid token: " + e.getMessage()));
+                            });
+                });
     }
-    
+
+    /**
+     * Get all current user identifiers from request headers (preferred_username,
+     * email, sub)
+     */
+    public Mono<List<String>> getCurrentUserIdentifiers(ServerWebExchange exchange) {
+        return ReactiveSecurityContextHolder.getContext()
+                .flatMap(context -> {
+                    String userToken = exchange.getRequest()
+                            .getHeaders()
+                            .getFirst("X-User-Token");
+
+                    if (userToken == null) {
+                        return Mono.error(new InvalidAuthenticationException("No valid user token found"));
+                    }
+
+                    String token = userToken.startsWith("Bearer ") ? userToken.substring(7) : userToken;
+
+                    boolean isKeycloakToken = isKeycloakToken(token);
+                    ReactiveJwtDecoder decoder = isKeycloakToken ? keycloakJwtDecoder : userJwtDecoder;
+
+                    return decoder.decode(token)
+                            .map(jwt -> {
+                                java.util.List<String> ids = new java.util.ArrayList<>();
+
+                                String username = isKeycloakToken ? jwt.getClaimAsString("preferred_username")
+                                        : jwt.getClaimAsString("sub");
+                                if (username != null && !username.trim().isEmpty()) {
+                                    ids.add(username);
+                                }
+
+                                String email = jwt.getClaimAsString("email");
+                                if (email != null && !email.trim().isEmpty()) {
+                                    ids.add(email);
+                                }
+
+                                if (isKeycloakToken) {
+                                    String sub = jwt.getClaimAsString("sub");
+                                    if (sub != null && !sub.trim().isEmpty()) {
+                                        ids.add(sub);
+                                    }
+                                }
+
+                                if (ids.isEmpty()) {
+                                    throw new InvalidAuthenticationException("No user identifiers found in JWT token");
+                                }
+                                return ids;
+                            })
+                            .onErrorResume(e -> {
+                                log.error("Error decoding token for identifiers: {}", e.getMessage());
+                                return Mono
+                                        .error(new InvalidAuthenticationException("Invalid token: " + e.getMessage()));
+                            });
+                });
+    }
+
     /**
      * Get current user from security context (for internal service calls)
      */
     public Mono<String> getCurrentUsername() {
         return ReactiveSecurityContextHolder.getContext()
-            .map(context -> {
-                if (context.getAuthentication() == null) {
-                    return SYSTEM_USER;
-                }
-                return context.getAuthentication().getName();
-            });
+                .map(context -> {
+                    if (context.getAuthentication() == null) {
+                        return SYSTEM_USER;
+                    }
+                    return context.getAuthentication().getName();
+                });
     }
 
     public boolean isKeycloakToken(String token) {
@@ -81,12 +138,13 @@ public class UserContextService {
             if (parts.length != 3) {
                 return false;
             }
-            
+
             // Decode the header
             String header = new String(java.util.Base64.getDecoder().decode(parts[0]));
-            
+
             // Check for Keycloak-specific claims or structure
-            // Keycloak tokens always have a kid, and can use either RS256 (access) or HS512 (refresh)
+            // Keycloak tokens always have a kid, and can use either RS256 (access) or HS512
+            // (refresh)
             return header.contains("\"kid\""); // Only check for kid, don't check algorithm
         } catch (Exception e) {
             log.error("Error parsing token: {}", e.getMessage());
@@ -101,7 +159,7 @@ public class UserContextService {
             if (parts.length != 3) {
                 return false;
             }
-            
+
             // For standard login, check header for HS256 algorithm
             String header = new String(java.util.Base64.getDecoder().decode(parts[0]));
             if (header.contains("\"alg\":\"HS256\"")) {
@@ -109,14 +167,14 @@ public class UserContextService {
                 String payload = new String(java.util.Base64.getDecoder().decode(parts[1]));
                 return payload.contains("\"sub\":");
             }
-            
+
             // For SSO/Keycloak tokens, check for typ:Refresh
             String payload = new String(java.util.Base64.getDecoder().decode(parts[1]));
             return payload.contains("\"typ\":\"Refresh\"");
-            
+
         } catch (Exception e) {
             log.error("Error parsing token: {}", e.getMessage());
             return false;
         }
     }
-} 
+}

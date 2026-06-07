@@ -231,7 +231,7 @@ public class LinqMicroServiceImpl implements LinqMicroService {
         // Special handling for api-gateway target - call API directly without /r/
         // prefix
         String url;
-        if ("api-gateway".equals(target)) {
+        if ("api-gateway".equals(target) || "linqra-gateway".equals(target)) {
             url = baseUrl + "/" + path;
         } else {
             url = baseUrl + "/r/" + target + "/" + path;

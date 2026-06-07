@@ -103,6 +103,10 @@ const Header = () => {
                 <span className="nav-separator"> | </span>
                 <Nav.Link as={NavLink} to="/knowledge-hub">Knowledge Hub</Nav.Link>
                 <span className="nav-separator"> | </span>
+                <Nav.Link as={NavLink} to="/resources">Resources</Nav.Link>
+                <span className="nav-separator"> | </span>
+                <Nav.Link as={NavLink} to="/resource-subscriptions">Subscriptions</Nav.Link>
+                <span className="nav-separator"> | </span>
                 <Nav.Link as={NavLink} to="/audits">Audits</Nav.Link>
                 <span className="nav-separator"> | </span>
               </>

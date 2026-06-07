@@ -121,4 +121,17 @@ public class AgentServiceImpl implements AgentService {
                 .doOnError(
                         error -> log.error("Failed to transfer agent {} ownership: {}", agentId, error.getMessage()));
     }
+
+    @Override
+    public Flux<Agent> getAgentsByIds(java.util.List<String> agentIds, String teamId) {
+        log.info("Fetching agents by list of IDs: {} for team {}", agentIds, teamId);
+        return agentRepository.findAllById(agentIds)
+                .filter(agent -> teamId.equals(agent.getTeamId()));
+    }
+
+    @Override
+    public Flux<Agent> getAgentsByIds(java.util.List<String> agentIds) {
+        log.info("Fetching agents by list of IDs: {}", agentIds);
+        return agentRepository.findAllById(agentIds);
+    }
 }

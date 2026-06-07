@@ -1,0 +1,223 @@
+.resources-page {
+    padding: 20px;
+}
+
+/* Breadcrumb styling */
+.resources-page .breadcrumb-item a {
+    color: var(--primary-color, #ed7534);
+    text-decoration: none;
+}
+
+.resources-page .breadcrumb-item a:hover {
+    color: var(--primary-dark, #d35f28);
+    text-decoration: underline;
+}
+
+/* Navigation tabs custom styles */
+.resources-page .nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+    margin-bottom: 20px;
+    gap: 5px;
+}
+
+.resources-page .nav-tabs .nav-link {
+    color: #495057;
+    font-weight: 500;
+    border: none;
+    border-radius: 4px 4px 0 0;
+    padding: 10px 20px;
+    transition: all 0.2s ease;
+}
+
+.resources-page .nav-tabs .nav-link:hover {
+    background-color: #f8f9fa;
+    color: var(--primary-color, #ed7534);
+}
+
+.resources-page .nav-tabs .nav-link.active {
+    color: var(--primary-color, #ed7534);
+    border-bottom: 3px solid var(--primary-color, #ed7534);
+    background-color: transparent;
+    font-weight: 600;
+}
+
+/* Tables styling */
+.resources-table-card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    background-color: var(--card-background, rgba(255, 255, 255, 0.95));
+}
+
+.resources-table {
+    margin-bottom: 0;
+}
+
+.resources-table thead {
+    background-color: #f8f9fa;
+}
+
+.resources-table th {
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    padding: 12px;
+}
+
+.resources-table td {
+    vertical-align: middle;
+    padding: 12px;
+}
+
+.resources-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.resources-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Metadata lists items formatting */
+.resource-domain {
+    font-weight: 600;
+    color: #212529;
+}
+
+.resource-desc {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+/* Notifications panel styles */
+.notification-card {
+    border-left: 5px solid var(--primary-color, #ed7534);
+    transition: all 0.2s ease;
+    background-color: #fff;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.notification-card.read {
+    border-left-color: #6c757d;
+    opacity: 0.75;
+}
+
+.notification-card.severity-high {
+    border-left-color: #ef4444; /* red */
+}
+
+.notification-card.severity-medium {
+    border-left-color: #f59e0b; /* amber */
+}
+
+.notification-card.severity-low {
+    border-left-color: #3b82f6; /* blue */
+}
+
+.notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f1f3f5;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+.notification-title {
+    font-weight: 600;
+    font-size: 1.05rem;
+    color: #1a1a1a;
+}
+
+.notification-meta {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.notification-details {
+    font-size: 0.92rem;
+    color: #495057;
+    margin-bottom: 10px;
+}
+
+/* Custom styles for Delta changes */
+.delta-viewer-box {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.85rem;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.delta-key {
+    color: #9cdcfe;
+}
+
+.delta-val {
+    color: #ce9178;
+}
+
+.delta-bracket {
+    color: #ffd700;
+}
+
+/* Action button overlays */
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.action-buttons .btn-link {
+    padding: 4px 8px;
+    color: var(--primary-color, #ed7534);
+    text-decoration: none;
+}
+
+.action-buttons .btn-link:hover {
+    color: var(--primary-dark, #d35f28);
+}
+
+.action-buttons .btn-link.text-danger {
+    color: #dc3545 !important;
+}
+
+.action-buttons .btn-link.text-danger:hover {
+    color: #c82333 !important;
+}
+
+/* Responsive constraints */
+@media (max-width: 768px) {
+    .resources-page {
+        padding: 10px;
+    }
+    
+    .resources-table th, .resources-table td {
+        padding: 8px;
+    }
+}
+
+/* Structured Price Comparison layout */
+.fee-comparison-card {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+    border-color: #ced4da !important;
+}
+
+/* Bullet list article blocks */
+.alert-article-item {
+    border-left: 4px solid var(--primary-color, #ed7534) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.alert-article-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.08);
+}
+
+.w-fit-content {
+    width: fit-content !important;
+}
+

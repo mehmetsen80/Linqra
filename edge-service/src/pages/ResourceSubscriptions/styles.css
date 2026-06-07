@@ -1,0 +1,99 @@
+.resources-page {
+    padding: 20px;
+}
+
+/* Breadcrumb styling */
+.resources-page .breadcrumb-item a {
+    color: var(--primary-color, #ed7534);
+    text-decoration: none;
+}
+
+.resources-page .breadcrumb-item a:hover {
+    color: var(--primary-dark, #d35f28);
+    text-decoration: underline;
+}
+
+/* Tables styling */
+.resources-table-card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    background-color: var(--card-background, rgba(255, 255, 255, 0.95));
+}
+
+.resources-table {
+    margin-bottom: 0;
+}
+
+.resources-table thead {
+    background-color: #f8f9fa;
+}
+
+.resources-table th {
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    padding: 12px;
+}
+
+.resources-table td {
+    vertical-align: middle;
+    padding: 12px;
+}
+
+.resources-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.resources-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Metadata lists items formatting */
+.resource-domain {
+    font-weight: 600;
+    color: #212529;
+}
+
+.resource-desc {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+/* Action button overlays */
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.action-buttons .btn-link {
+    padding: 4px 8px;
+    color: var(--primary-color, #ed7534);
+    text-decoration: none;
+}
+
+.action-buttons .btn-link:hover {
+    color: var(--primary-dark, #d35f28);
+}
+
+.action-buttons .btn-link.text-danger {
+    color: #dc3545 !important;
+}
+
+.action-buttons .btn-link.text-danger:hover {
+    color: #c82333 !important;
+}
+
+.w-fit-content {
+    width: fit-content !important;
+}
+
+/* Responsive constraints */
+@media (max-width: 768px) {
+    .resources-page {
+        padding: 10px;
+    }
+    
+    .resources-table th, .resources-table td {
+        padding: 8px;
+    }
+}

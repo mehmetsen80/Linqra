@@ -14,6 +14,7 @@ import org.lite.gateway.service.KnowledgeHubDocumentService;
 import org.lite.gateway.service.ObjectStorageService;
 import org.lite.gateway.service.TeamContextService;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -101,7 +102,7 @@ public class KnowledgeHubDocumentViewController {
                                                                                                 && document.getEncryptionKeyVersion() != null) {
                                                                                         fileBytesMono = chunkEncryptionService
                                                                                                         .decryptFile(encryptedBytes,
-                                                                                                                        teamId,
+                                                                                                                        document.getTeamId(),
                                                                                                                         document.getEncryptionKeyVersion());
                                                                                 } else {
                                                                                         // Try to detect legacy
@@ -125,15 +126,19 @@ public class KnowledgeHubDocumentViewController {
                                                                                                                 .bufferFactory()
                                                                                                                 .wrap(fileBytes);
 
-                                                                                                // Set response headers
-                                                                                                HttpHeaders headers = new HttpHeaders();
-                                                                                                headers.setContentType(
-                                                                                                                MediaType.parseMediaType(
-                                                                                                                                document.getContentType() != null
-                                                                                                                                                ? document.getContentType()
-                                                                                                                                                : "application/octet-stream"));
-                                                                                                headers.setContentLength(
-                                                                                                                fileBytes.length);
+                                                                                                 // Set response headers
+                                                                                                 HttpHeaders headers = new HttpHeaders();
+                                                                                                 headers.setContentType(
+                                                                                                                 MediaType.parseMediaType(
+                                                                                                                                 document.getContentType() != null
+                                                                                                                                                 ? document.getContentType()
+                                                                                                                                                 : "application/octet-stream"));
+                                                                                                 headers.setContentLength(
+                                                                                                                 fileBytes.length);
+                                                                                                 headers.setContentDisposition(
+                                                                                                                 ContentDisposition.builder("attachment")
+                                                                                                                                 .filename(document.getFileName() != null ? document.getFileName() : documentId + ".pdf")
+                                                                                                                                 .build());
                                                                                                 // Return file content
                                                                                                 return ResponseEntity
                                                                                                                 .ok()
@@ -229,7 +234,7 @@ public class KnowledgeHubDocumentViewController {
                                                                                 // Decrypt sensitive fields in processed
                                                                                 // document
                                                                                 return decryptProcessedDocumentDto(
-                                                                                                processedDoc, teamId)
+                                                                                                processedDoc, document.getTeamId())
                                                                                                 .thenReturn(processedDoc);
                                                                         } catch (Exception e) {
                                                                                 log.error(

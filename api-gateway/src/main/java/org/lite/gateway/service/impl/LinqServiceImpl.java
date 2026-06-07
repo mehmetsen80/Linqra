@@ -211,7 +211,7 @@ public class LinqServiceImpl implements LinqService {
 
                 // List of AI service targets that should bypass permission checks
                 Set<String> bypassTargets = Set.of("openai-chat", "ollama-chat", "huggingface-chat", "gemini-chat",
-                                "workflow", "openai-embed", "gemini-embed", "ollama-embed", "api-gateway", "assistant",
+                                "workflow", "openai-embed", "gemini-embed", "ollama-embed", "api-gateway", "linqra-gateway", "assistant",
                                 "tool");
 
                 // If the target is in our bypass list, return immediately

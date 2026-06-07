@@ -35,6 +35,8 @@ import WorkflowExecute from '../pages/LinqProtocol/Workflow/Execute';
 import WorkflowExamples from '../pages/LinqProtocol/Workflow/Examples';
 import WorkflowQuotes from '../pages/LinqProtocol/Workflow/Quotes';
 import Agents from '../pages/Agents';
+import Resources from '../pages/Resources';
+import ResourceSubscriptions from '../pages/ResourceSubscriptions';
 import ViewAgent from '../pages/Agents/ViewAgent';
 import ViewAgentTask from '../pages/Agents/ViewAgentTask';
 import AIAssistants from '../pages/AIAssistants';
@@ -187,6 +189,8 @@ const AppRoutes = () => {
         <Route path="/service-status" element={<ServiceStatus />} />
         <Route path="/workflows" element={<Workflows />} />
         <Route path="/agents" element={<Agents />} />
+        <Route path="/resources" element={<Resources />} />
+        <Route path="/resource-subscriptions" element={<ResourceSubscriptions />} />
         <Route path="/agents/:agentId" element={<ViewAgent />} />
         <Route path="/agents/:agentId/tasks/:taskId" element={<ViewAgentTask />} />
         <Route path="/ai-assistants" element={<AIAssistants />} />

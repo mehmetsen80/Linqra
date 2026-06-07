@@ -46,4 +46,13 @@ public interface AgentService {
      */
     Mono<Agent> transferAgentOwnership(String agentId, String fromTeamId, String toTeamId, String transferredBy);
 
+    /**
+     * Get agents by a list of IDs and verify they belong to the team
+     */
+    Flux<Agent> getAgentsByIds(java.util.List<String> agentIds, String teamId);
+
+    /**
+     * Get agents by a list of IDs (without team filter)
+     */
+    Flux<Agent> getAgentsByIds(java.util.List<String> agentIds);
 }

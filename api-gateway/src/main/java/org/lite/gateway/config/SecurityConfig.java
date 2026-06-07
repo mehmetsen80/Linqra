@@ -682,6 +682,7 @@ public class SecurityConfig implements BeanFactoryAware {
 
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(maxAge);
+        configuration.setExposedHeaders(List.of("Content-Disposition"));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

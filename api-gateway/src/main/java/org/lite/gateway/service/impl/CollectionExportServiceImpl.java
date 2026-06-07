@@ -474,7 +474,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
                                 document.getDocumentId(), document.getEncryptionKeyVersion());
                         return chunkEncryptionService.decryptFile(
                                 encryptedBytes,
-                                teamId,
+                                document.getTeamId(),
                                 document.getEncryptionKeyVersion())
                                 .onErrorResume(e -> {
                                     log.error("Failed to decrypt file for document {}: {}", document.getDocumentId(),
@@ -497,7 +497,7 @@ public class CollectionExportServiceImpl implements CollectionExportService {
                                 ProcessedDocumentDto.class);
 
                         // Decrypt sensitive fields in processed document
-                        return decryptProcessedDocumentDto(processedDoc, teamId)
+                        return decryptProcessedDocumentDto(processedDoc, document.getTeamId())
                                 .then(Mono.fromCallable(() -> objectMapper.writerWithDefaultPrettyPrinter()
                                         .writeValueAsString(processedDoc)
                                         .getBytes(StandardCharsets.UTF_8)));

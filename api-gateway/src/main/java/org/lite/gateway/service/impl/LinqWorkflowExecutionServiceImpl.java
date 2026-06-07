@@ -2241,7 +2241,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
         // Handle common target/action combinations for better descriptions
         if (target != null && action != null) {
             // Knowledge Graph/Milvus operations
-            if (target.equals("api-gateway") && intent != null && intent.contains("/api/milvus/")) {
+            if (("api-gateway".equals(target) || "linqra-gateway".equals(target)) && intent != null && intent.contains("/api/milvus/")) {
                 if (intent.contains("/search")) {
                     return "Searching knowledge base...";
                 } else if (intent.contains("/records")) {
@@ -2262,7 +2262,7 @@ public class LinqWorkflowExecutionServiceImpl implements LinqWorkflowExecutionSe
             String actionDisplay = action != null ? capitalizeFirst(action) : "Processing";
 
             // Special cases for common actions
-            if (action.equals("create") && target.equals("api-gateway")) {
+            if (action.equals("create") && ("api-gateway".equals(target) || "linqra-gateway".equals(target))) {
                 return "Processing with knowledge base...";
             } else if (action.equals("fetch")) {
                 return "Fetching data from " + targetDisplay + "...";

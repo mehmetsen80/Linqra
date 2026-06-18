@@ -452,7 +452,7 @@ public class KnowledgeHubDocumentServiceImpl implements KnowledgeHubDocumentServ
 
         @Override
         public Mono<KnowledgeHubDocument> getDocumentById(String documentId, String teamId) {
-                return documentRepository.findByDocumentId(documentId)
+                return documentRepository.findByDocumentIdAndTeamId(documentId, teamId)
                                 .switchIfEmpty(Mono.error(new RuntimeException("Document not found: " + documentId)));
         }
 

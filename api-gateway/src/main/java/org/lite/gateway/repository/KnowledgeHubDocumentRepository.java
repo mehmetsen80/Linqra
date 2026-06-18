@@ -13,6 +13,8 @@ public interface KnowledgeHubDocumentRepository extends ReactiveMongoRepository<
 
     Mono<KnowledgeHubDocument> findByDocumentId(String documentId);
 
+    Mono<KnowledgeHubDocument> findByDocumentIdAndTeamId(String documentId, String teamId);
+
     Flux<KnowledgeHubDocument> findByStatus(String status);
 
     Flux<KnowledgeHubDocument> findByTeamId(String teamId);

@@ -678,6 +678,7 @@ public class SecurityConfig implements BeanFactoryAware {
         allowedHeadersList.add("X-API-Key");
         allowedHeadersList.add("X-API-Key-Name");
         allowedHeadersList.add("X-Team-ID");
+        allowedHeadersList.add("X-Organization-Id");
         configuration.setAllowedHeaders(allowedHeadersList);
 
         configuration.setAllowCredentials(true);

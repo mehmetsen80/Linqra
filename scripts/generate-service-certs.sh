@@ -22,6 +22,7 @@
 # sudo ./generate-service-certs.sh medastex-app
 # sudo ./generate-service-certs.sh mytrux-app
 # sudo ./generate-service-certs.sh polytechnic-app
+# sudo ./generate-service-certs.sh campusready-app
 
 SERVICE_NAME=$1
 if [ -z "$SERVICE_NAME" ]; then
@@ -49,7 +50,8 @@ if [ ! -f "../keys/${SERVICE_NAME}-keystore-container.jks" ]; then
         -keystore "../keys/${SERVICE_NAME}-keystore-container.jks" \
         -storepass 123456 \
         -validity 3650 \
-        -dname "CN=${SERVICE_NAME}, OU=Software, O=Linqra, L=Richmond, ST=TX, C=US"
+        -dname "CN=${SERVICE_NAME}, OU=Software, O=Linqra, L=Richmond, ST=TX, C=US" \
+        -ext SAN="dns:localhost,dns:${SERVICE_NAME},ip:127.0.0.1,ip:192.168.64.1,ip:10.0.0.86"
 else
     echo "Keystore already exists for ${SERVICE_NAME}, skipping generation..."
 fi

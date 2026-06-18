@@ -111,8 +111,10 @@ public class TeamContextService {
                     .flatMap(jwt -> {
                         // 1. If explicit X-Team-ID header is present, try to validate and use it
                         if (requestedTeamId != null && !requestedTeamId.isBlank()) {
-                            // Verify the user is actually a member of this team
-                            if (isTeamInToken(jwt, requestedTeamId)) {
+                            // Verify the user is actually a member of this team or has admin privileges
+                            boolean hasAdminPrivileges = isSuperAdmin(jwt);
+
+                            if (hasAdminPrivileges || isTeamInToken(jwt, requestedTeamId)) {
                                 log.debug("Using requested teamId from X-Team-ID header: {}", requestedTeamId);
                                 return Mono.just(requestedTeamId);
                             } else {
@@ -142,6 +144,26 @@ public class TeamContextService {
 
         // No X-User-Token, fall back to Authorization header
         log.info("No X-User-Token found, using Authorization header");
+        if (requestedTeamId != null && !requestedTeamId.isBlank()) {
+            return ReactiveSecurityContextHolder.getContext()
+                    .map(SecurityContext::getAuthentication)
+                    .flatMap(auth -> {
+                        boolean hasAdminRole = auth != null && auth.getAuthorities().stream()
+                                .map(a -> a.getAuthority().toUpperCase())
+                                .anyMatch(role -> role.equals("ROLE_GATEWAY_ADMIN") ||
+                                        role.equals("GATEWAY_ADMIN") ||
+                                        role.equals("ROLE_ADMIN") ||
+                                        role.equals("ADMIN") ||
+                                        role.equals("ROLE_SUPER_ADMIN") ||
+                                        role.equals("SUPER_ADMIN"));
+
+                        if (hasAdminRole) {
+                            log.debug("Granting bypass to use requested X-Team-ID for GATEWAY_ADMIN");
+                            return Mono.just(requestedTeamId);
+                        }
+                        return getTeamFromContext();
+                    });
+        }
         return getTeamFromContext();
     }
 
@@ -210,9 +232,13 @@ public class TeamContextService {
 
                     // Check for admin role in authorities first (for API key bypass cases)
                     boolean hasAdminRole = auth.getAuthorities().stream()
-                            .anyMatch(a -> a.getAuthority().equals("ROLE_GATEWAY_ADMIN") ||
-                                    a.getAuthority().equals("ROLE_ADMIN") ||
-                                    a.getAuthority().equals("ROLE_SUPER_ADMIN"));
+                            .map(a -> a.getAuthority().toUpperCase())
+                            .anyMatch(role -> role.equals("ROLE_GATEWAY_ADMIN") ||
+                                    role.equals("GATEWAY_ADMIN") ||
+                                    role.equals("ROLE_ADMIN") ||
+                                    role.equals("ADMIN") ||
+                                    role.equals("ROLE_SUPER_ADMIN") ||
+                                    role.equals("SUPER_ADMIN"));
 
                     Object principal = auth.getPrincipal();
                     if (principal instanceof Jwt jwt) {

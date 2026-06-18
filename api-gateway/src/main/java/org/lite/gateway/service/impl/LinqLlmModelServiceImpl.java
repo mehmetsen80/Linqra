@@ -839,7 +839,11 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
             case "openai-chat":
                 payload.put("model",
                         llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "gpt-3.5-turbo");
-                payload.put("messages", request.getQuery().getPayload());
+                
+                Object messagesPayload = request.getQuery().getPayload();
+                messagesPayload = fixImageUrlKeys(messagesPayload);
+                payload.put("messages", messagesPayload);
+                
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     // Convert max.tokens to max_tokens for OpenAI API
                     Map<String, Object> settings = new HashMap<>(llmConfig.getSettings());
@@ -1256,6 +1260,27 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
 
         log.info("📦 Built {} payload for {}: {}", modelCategory, llmModel.getModelName(), payload);
         return payload;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object fixImageUrlKeys(Object obj) {
+        if (obj instanceof Map) {
+            Map<String, Object> map = new HashMap<>((Map<String, Object>) obj);
+            if (map.containsKey("image.url")) {
+                map.put("image_url", fixImageUrlKeys(map.remove("image.url")));
+            }
+            for (Map.Entry<String, Object> entry : map.entrySet()) {
+                map.put(entry.getKey(), fixImageUrlKeys(entry.getValue()));
+            }
+            return map;
+        } else if (obj instanceof List) {
+            List<Object> list = new ArrayList<>();
+            for (Object item : (List<Object>) obj) {
+                list.add(fixImageUrlKeys(item));
+            }
+            return list;
+        }
+        return obj;
     }
 
     private Mono<Object> invokeLlmService(String method, String url, Object payload,

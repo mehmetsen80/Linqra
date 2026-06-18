@@ -360,7 +360,31 @@ public class AgentTask {
     // Explicit getters and setters for complex fields
     
     public Map<String, Object> getLinqConfig() {
-        return linqConfig;
+        return (Map<String, Object>) restoreUnderscores(linqConfig);
+    }
+    
+    @SuppressWarnings("unchecked")
+    private Object restoreUnderscores(Object obj) {
+        if (obj instanceof Map) {
+            Map<String, Object> map = (Map<String, Object>) obj;
+            Map<String, Object> newMap = new java.util.HashMap<>();
+            for (Map.Entry<String, Object> entry : map.entrySet()) {
+                String key = entry.getKey();
+                if (key != null && key.contains(".")) {
+                    key = key.replace(".", "_");
+                }
+                newMap.put(key, restoreUnderscores(entry.getValue()));
+            }
+            return newMap;
+        } else if (obj instanceof java.util.List) {
+            java.util.List<Object> list = (java.util.List<Object>) obj;
+            java.util.List<Object> newList = new java.util.ArrayList<>();
+            for (Object item : list) {
+                newList.add(restoreUnderscores(item));
+            }
+            return newList;
+        }
+        return obj;
     }
     
     public void setLinqConfig(Map<String, Object> linqConfig) {

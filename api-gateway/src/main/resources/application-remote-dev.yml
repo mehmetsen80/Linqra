@@ -136,7 +136,7 @@ logging:
     javax.net.ssl: OFF
 
 cors:
-  allowed-origins: http://localhost:3000,https://localhost:3000
+  allowed-origins: http://localhost:3000,https://localhost:3000,http://localhost:6001,https://localhost:6001
   allowed-methods: GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD
   allowed-headers: Origin,Content-Type,Accept,Authorization,X-Requested-With,X-User-Token,X-Team-ID,X-API-Key
   max-age: 3600

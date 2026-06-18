@@ -21,6 +21,8 @@ import org.lite.gateway.service.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ServerWebExchange;
 
@@ -316,10 +318,25 @@ public class KnowledgeHubDocumentUploadController {
 
                 return Mono.zip(
                                 teamContextService.getTeamFromContext(exchange),
-                                userContextService.getCurrentUsername(exchange))
+                                ReactiveSecurityContextHolder.getContext())
                                 .flatMap(tuple -> {
                                         String teamId = tuple.getT1();
-                                        String username = tuple.getT2();
+                                        Authentication auth = tuple.getT2().getAuthentication();
+
+                                        boolean isGatewayAdmin = auth != null && auth.getAuthorities().stream()
+                                                        .anyMatch(a -> a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
+
+                                        if (isGatewayAdmin) {
+                                                log.info("Bypassing user database check for hard delete since user is a gateway admin");
+                                                return documentService.hardDeleteDocument(documentId, teamId)
+                                                                .then(Mono.just(ResponseEntity.ok().build()));
+                                        }
+
+                                        String username = auth != null ? auth.getName() : null;
+                                        if (username == null || username.equals("SYSTEM")) {
+                                                return Mono.error(new AccessDeniedException(
+                                                                "No authenticated user found"));
+                                        }
 
                                         return userService.findByUsername(username)
                                                         .flatMap(user -> teamService

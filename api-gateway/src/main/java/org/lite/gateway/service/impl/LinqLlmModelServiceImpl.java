@@ -541,7 +541,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                     .doOnError(auditError -> log.error("Failed to log audit event (validation failed): {}",
                             auditError.getMessage(), auditError))
                     .onErrorResume(auditError -> Mono.empty())
-                    .then(Mono.error(new IllegalArgumentException(errorMsg)));
+                    .then(Mono.<LinqResponse>error(new IllegalArgumentException(errorMsg)));
         }
 
         // Validate that the requested model matches the authorized team model
@@ -549,7 +549,9 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
         if (llmConfig != null && llmConfig.getModel() != null) {
             String requestedModel = llmConfig.getModel();
             if (llmModel.getModelName() != null && !requestedModel.equals(llmModel.getModelName())) {
-                String errorMsg = "Model '" + requestedModel + "' is not authorized for this team (resolved authorized model: " + llmModel.getModelName() + "). Dynamic overrides to unauthorized models are restricted.";
+                String errorMsg = "Model '" + requestedModel
+                        + "' is not authorized for this team (resolved authorized model: " + llmModel.getModelName()
+                        + "). Dynamic overrides to unauthorized models are restricted.";
 
                 Map<String, Object> errorContext = new HashMap<>();
                 errorContext.put("modelCategory", llmModel.getModelCategory());
@@ -577,7 +579,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         .doOnError(auditError -> log.error("Failed to log audit event (model validation failed): {}",
                                 auditError.getMessage(), auditError))
                         .onErrorResume(auditError -> Mono.empty())
-                        .then(Mono.error(new IllegalArgumentException(errorMsg)));
+                        .then(Mono.<LinqResponse>error(new IllegalArgumentException(errorMsg)));
             }
         }
 
@@ -729,7 +731,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                                             "Failed to log audit event (LLM request failed): {}",
                                             auditError.getMessage(), auditError))
                                     .onErrorResume(auditError -> Mono.empty())
-                                    .then(Mono.error(new RuntimeException(fullErrorMessage)));
+                                    .then(Mono.<LinqResponse>error(new RuntimeException(fullErrorMessage)));
                         }
                     }
 
@@ -814,7 +816,7 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             .doOnError(auditError -> log.error("Failed to log audit event (LLM request failed): {}",
                                     auditError.getMessage(), auditError))
                             .onErrorResume(auditError -> Mono.empty())
-                            .then(Mono.error(error));
+                            .then(Mono.<LinqResponse>error(error));
                 });
     }
 
@@ -839,11 +841,11 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
             case "openai-chat":
                 payload.put("model",
                         llmConfig != null && llmConfig.getModel() != null ? llmConfig.getModel() : "gpt-3.5-turbo");
-                
+
                 Object messagesPayload = request.getQuery().getPayload();
                 messagesPayload = fixImageUrlKeys(messagesPayload);
                 payload.put("messages", messagesPayload);
-                
+
                 if (llmConfig != null && llmConfig.getSettings() != null) {
                     // Convert max.tokens to max_tokens for OpenAI API
                     Map<String, Object> settings = new HashMap<>(llmConfig.getSettings());
@@ -895,7 +897,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
 
                         if ("system".equals(role)) {
                             // Map system message to top-level systemInstruction field for Gemini
-                            if (content.trim().isEmpty()) content = " "; // Prevent empty system prompt
+                            if (content.trim().isEmpty())
+                                content = " "; // Prevent empty system prompt
                             Map<String, Object> systemPart = new HashMap<>();
                             systemPart.put("text", content);
                             Map<String, Object> systemInstruction = new HashMap<>();
@@ -904,7 +907,9 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                         } else {
                             // Gemini uses "user" and "model" roles (not "assistant" or "system")
                             String geminiRole = "user".equals(role) ? "user" : "model";
-                            if (content.trim().isEmpty()) content = " "; // Prevent 'model output must contain either output text or tool calls' error
+                            if (content.trim().isEmpty())
+                                content = " "; // Prevent 'model output must contain either output text or tool calls'
+                                               // error
 
                             Map<String, Object> part = new HashMap<>();
                             part.put("text", content);
@@ -927,7 +932,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             String content = contentObj != null ? contentObj.toString() : "";
 
                             if ("system".equals(role)) {
-                                if (content.trim().isEmpty()) content = " "; // Prevent empty system prompt
+                                if (content.trim().isEmpty())
+                                    content = " "; // Prevent empty system prompt
                                 Map<String, Object> systemPart = new HashMap<>();
                                 systemPart.put("text", content);
                                 Map<String, Object> systemInstruction = new HashMap<>();
@@ -935,7 +941,9 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                                 payload.put("systemInstruction", systemInstruction);
                             } else {
                                 String geminiRole = "user".equals(role) ? "user" : "model";
-                                if (content.trim().isEmpty()) content = " "; // Prevent 'model output must contain either output text or tool calls' error
+                                if (content.trim().isEmpty())
+                                    content = " "; // Prevent 'model output must contain either output text or tool
+                                                   // calls' error
 
                                 Map<String, Object> part = new HashMap<>();
                                 part.put("text", content);
@@ -948,8 +956,10 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                             }
                         }
                     } else {
-                        String content = payloadMap.getOrDefault("content", payloadMap.getOrDefault("prompt", "")).toString();
-                        if (content.trim().isEmpty()) content = " ";
+                        String content = payloadMap.getOrDefault("content", payloadMap.getOrDefault("prompt", ""))
+                                .toString();
+                        if (content.trim().isEmpty())
+                            content = " ";
                         Map<String, Object> part = new HashMap<>();
                         part.put("text", content);
                         Map<String, Object> geminiContent = new HashMap<>();
@@ -960,7 +970,8 @@ public class LinqLlmModelServiceImpl implements LinqLlmModelService {
                 } else {
                     // Fallback to prompt from params
                     String prompt = request.getQuery().getParams().getOrDefault("prompt", "").toString();
-                    if (prompt.trim().isEmpty()) prompt = " ";
+                    if (prompt.trim().isEmpty())
+                        prompt = " ";
                     Map<String, Object> part = new HashMap<>();
                     part.put("text", prompt);
                     Map<String, Object> geminiContent = new HashMap<>();

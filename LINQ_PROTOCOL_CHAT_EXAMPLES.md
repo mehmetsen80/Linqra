@@ -701,3 +701,1963 @@ The Agent Task execution uses the existing workflow protocol, while the AI Assis
   }
 }
 ```
+
+### Example from uscis_form_n400_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_form_sync",
+    "params": {
+      "domain": "uscis-sentinel",
+      "category": "forms",
+      "resourceId": "N-400",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "collectionId": "69ac77018626a22133fff877",
+      "agentTaskId": "69c41f31aa54fc27fe60a542"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "N-400 Edition Check",
+        "description": "Monitoring USCIS for updates to the Application for Naturalization, including the G-1151 supplemental document and fee changes",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/sync/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 9
+        }
+      },
+      {
+        "step": 2,
+        "summary": "Form N-400 Ingestion",
+        "description": "Ingressing primary N-400 PDF into Knowledge Hub",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.resourceUrl}}",
+          "fileName": "{{params.resourceId}}_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Instruction Ingestion",
+        "description": "Ingressing N-400 Instructions for updated residency, physical presence, and moral character guidance",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.instructionsUrl}}",
+          "fileName": "{{params.resourceId}}_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "G-1151 Supplemental Ingestion",
+        "description": "Ingressing G-1151 Notification of Acceptance for naturalization filing fee confirmation",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.g1151.url}}",
+          "fileName": "G-1151_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 5,
+        "summary": "Main Form Delta Extraction",
+        "description": "Extracting content shifts for the primary N-400 Form PDF",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "newDocumentId": "{{step2.result.documentId}}",
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Naturalization Eligibility Checkboxes",
+            "Continuous Residence & Physical Presence Data",
+            "Good Moral Character (GMC) Disclosures"
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "summary": "Instructions Delta Extraction",
+        "description": "Extracting shifts in the N-400 Instructions regarding citizenship protocols",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "newDocumentId": "{{step3.result.documentId}}",
+          "resourceId": "{{params.resourceId}}_instructions",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Residency Calculation Rules",
+            "English & Civics Test Exemptions",
+            "Filing Locations & Fees"
+          ]
+        }
+      },
+      {
+        "step": 7,
+        "summary": "G-1151 Delta Extraction",
+        "description": "Extracting shifts in the fee notification supplemental document",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.supplementalResources.g1151.oldDocumentId}}",
+          "newDocumentId": "{{step4.result.documentId}}",
+          "resourceId": "G-1151",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Fee Acceptance Protocols",
+            "Electronic Notification Procedures"
+          ]
+        }
+      },
+      {
+        "step": 8,
+        "summary": "AI Suite-Wide Naturalization Analysis",
+        "description": "Synthesizing shifts across the full N-400 naturalization suite",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a High-Sensitivity USCIS Senior Specialist in Naturalization. Your mission is to detect ANY deviation in policy, procedures, or text within the ENTIRE Form N-400 suite.\n\nRULES:\n1. Output MUST be valid JSON.\n2. Be extremely sensitive: Any difference in text, even minor, MUST be reported with \"changeDetected\": true.\n3. For every category marked as 'CHANGED', you MUST provide a high-fidelity delta in the 'details' field following this format: '[Location: <Document Name>, Page X, Section Y] <Change Type>: <Context>'. \n4. If the inputs are empty (Initial Discovery), summarize the current version's key citizenship/residency protocols IF text is provided. IF the input text is empty for all documents, set \"changeDetected\": true, set status to \"INITIAL_DISCOVERY\", and in details state: \"Baseline established; waiting for full content ingestion for detailed summary.\"\n5. STRICT RULE: Do NOT invent Page numbers or specific policy changes if the input text is empty. Hallucination is UNACCEPTABLE.\n6. If ANY category status is 'CHANGED' or 'INITIAL_DISCOVERY', the top-level \"changeDetected\" MUST be true.\n7. The 'summary' field MUST be a comprehensive, human-readable synthesis of all detected shifts across the main form, instructions, and G-1151.\n8. Output MUST follow this schema:\n{\n  \"resourceId\": \"{{params.resourceId}}\",\n  \"changeDetected\": true,\n  \"categories\": [\n    { \"name\": \"Category Name\", \"status\": \"INITIAL_DISCOVERY\", \"details\": \"[Location: Document Name] Baseline summary of current protocol...\" }\n  ],\n  \"summary\": \"[Detailed synthesis...]\"\n}"
+          },
+          {
+            "role": "user",
+            "content": "### MAIN FORM DELTAS\nOld: {{step5.result.oldText}}\nNew: {{step5.result.newText}}\n\n### INSTRUCTIONS DELTAS\nOld: {{step6.result.oldText}}\nNew: {{step6.result.newText}}\n\n### G-1151 SUPPLEMENTAL DELTAS\nOld: {{step7.result.oldText}}\nNew: {{step7.result.newText}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-o4-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 9,
+        "summary": "N-400 State Commit",
+        "description": "Finalizing N-400 state into the Sovereign Knowledge Hub DB",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/sync/commit",
+        "payload": {
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "displayName": "{{step1.result.displayName}}",
+          "version": "{{step1.result.newVersion}}",
+          "effectiveDate": "{{step1.result.effectiveDate}}",
+          "hash": "{{step1.result.newHash}}",
+          "instructionsHash": "{{step1.result.instructionsHash}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "instructionsUrl": "{{step1.result.instructionsUrl}}",
+          "supplementalResources": {
+            "g1151": {
+              "name": "G-1151 Notification",
+              "url": "{{step1.result.supplementalResources.g1151.url}}",
+              "hash": "{{step1.result.supplementalResources.g1151.hash}}",
+              "documentId": "{{step4.result.documentId??step1.result.supplementalResources.g1151.oldDocumentId}}"
+            }
+          },
+          "documentId": "{{step2.result.documentId??step1.result.oldDocumentId}}",
+          "instructionsDocumentId": "{{step3.result.documentId??step1.result.oldInstructionsDocumentId}}",
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "oldInstructionsDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "changeType": "EDITION_UPDATE",
+          "agentTaskId": "{{params.agentTaskId}}",
+          "changeDetected": "{{step8.result.changeDetected??false}}",
+          "summary": "{{step8.result.summary??USCIS Form N-400 scan completed - No residency or eligibility changes detected.}}",
+          "analysis": "{{step8.result??{ \"status\": \"NO_CHANGE\", \"changeDetected\": false, \"details\": \"The surveillance check for Form N-400 was completed. No document content updates were found during this cycle.\" }}}"
+        },
+        "jump": {
+          "condition": "{{step9.result.changeDetected}} == false",
+          "conditionDesc": "Naturalization Up-to-Date",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 10,
+        "summary": "Dispatch Notification",
+        "description": "Notifying priority subscribers of N-400 naturalization policy shifts",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "resourceId": "{{params.resourceId}}",
+          "type": "EDITION_UPDATE",
+          "reportUrl": "https://komunas.com",
+          "severity": "HIGH",
+          "summary": "USCIS Form {{params.resourceId}} Updated to Edition {{step9.result.version}}",
+          "details": "{{step9.result.summary}}",
+          "delta": "{{step1.result.delta}}"
+        }
+      }
+    ]
+  }
+}
+
+```
+
+
+### Example from uscis_form_i130_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_form_sync",
+    "params": {
+      "domain": "uscis-sentinel",
+      "category": "forms",
+      "resourceId": "I-130",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "collectionId": "69ac77018626a22133fff877",
+      "agentTaskId": "69b224d79b8c45139dc7ed8a"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "I-130 Edition Check",
+        "description": "Monitoring USCIS for updates to the Petition for Alien Relative, including the I-130A supplemental for spouses",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/sync/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 9
+        }
+      },
+      {
+        "step": 2,
+        "summary": "Form I-130 Ingestion",
+        "description": "Ingressing primary I-130 PDF into Knowledge Hub",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.resourceUrl}}",
+          "fileName": "{{params.resourceId}}_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Instruction Ingestion",
+        "description": "Ingressing I-130 Instructions for updated relative evidence and filing location policies",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.instructionsUrl}}",
+          "fileName": "{{params.resourceId}}_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "I-130A Supplemental Ingestion",
+        "description": "Ingressing I-130A Supplemental Information for Spouse Beneficiary",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.i130a.url}}",
+          "fileName": "I-130A_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 5,
+        "summary": "Main Form Delta Extraction",
+        "description": "Extracting content shifts for the primary I-130 Form PDF",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "newDocumentId": "{{step2.result.documentId}}",
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Eligibility & Priority Dates",
+            "Petitioner & Beneficiary Info",
+            "Mailing Addresses"
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "summary": "Instructions Delta Extraction",
+        "description": "Extracting shifts in the I-130 Instructions regarding relative evidence",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "newDocumentId": "{{step3.result.documentId}}",
+          "resourceId": "{{params.resourceId}}_instructions",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Proof of Qualifying Relationship",
+            "Filing Locations & Jurisdictions",
+            "Evidentiary Standards"
+          ]
+        }
+      },
+      {
+        "step": 7,
+        "summary": "I-130A Delta Extraction",
+        "description": "Extracting shifts in the spouse supplemental form",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.supplementalResources.i130a.oldDocumentId}}",
+          "newDocumentId": "{{step4.result.documentId}}",
+          "resourceId": "I-130A",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Beneficiary Biographical Data",
+            "Spouse History Protocols"
+          ]
+        }
+      },
+      {
+        "step": 8,
+        "summary": "AI Suite-Wide Family Petition Analysis",
+        "description": "Synthesizing shifts across the full I-130 family suite",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a High-Sensitivity USCIS Senior Specialist in Family-Based Petitions. Your mission is to detect ANY deviation in policy, procedures, or text within the ENTIRE Form I-130 suite.\n\nRULES:\n1. Output MUST be valid JSON.\n2. Be extremely sensitive: Any difference in text, even minor, MUST be reported with \"changeDetected\": true.\n3. For every category marked as 'CHANGED', you MUST provide a high-fidelity delta in the 'details' field following this format: '[Location: <Document Name>, Page X, Section Y] <Change Type>: <Context>'. \n4. If the inputs are empty (Initial Discovery), summarize the current version's key marriage/relationship protocols IF text is provided. IF the input text is empty for all documents, set \"changeDetected\": true, set status to \"INITIAL_DISCOVERY\", and in details state: \"Baseline established; waiting for full content ingestion for detailed summary.\"\n5. STRICT RULE: Do NOT invent Page numbers or specific policy changes if the input text is empty. Hallucination is UNACCEPTABLE.\n6. If ANY category status is 'CHANGED' or 'INITIAL_DISCOVERY', the top-level \"changeDetected\" MUST be true.\n7. The 'summary' field MUST be a comprehensive, human-readable synthesis of all detected shifts across the main form, instructions, and I-130A.\n8. Output MUST follow this schema:\n{\n  \"resourceId\": \"{{params.resourceId}}\",\n  \"changeDetected\": true,\n  \"categories\": [\n    { \"name\": \"Category Name\", \"status\": \"INITIAL_DISCOVERY\", \"details\": \"[Location: Document Name] Baseline summary of current protocol...\" }\n  ],\n  \"summary\": \"[Detailed synthesis...]\"\n}"
+          },
+          {
+            "role": "user",
+            "content": "### MAIN FORM DELTAS\nOld: {{step5.result.oldText}}\nNew: {{step5.result.newText}}\n\n### INSTRUCTIONS DELTAS\nOld: {{step6.result.oldText}}\nNew: {{step6.result.newText}}\n\n### I-130A SUPPLEMENTAL DELTAS\nOld: {{step7.result.oldText}}\nNew: {{step7.result.newText}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-o4-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 9,
+        "summary": "I-130 State Commit",
+        "description": "Finalizing I-130 state into the Sovereign Knowledge Hub DB",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/sync/commit",
+        "payload": {
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "displayName": "{{step1.result.displayName}}",
+          "version": "{{step1.result.newVersion}}",
+          "effectiveDate": "{{step1.result.effectiveDate}}",
+          "hash": "{{step1.result.newHash}}",
+          "instructionsHash": "{{step1.result.instructionsHash}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "instructionsUrl": "{{step1.result.instructionsUrl}}",
+          "supplementalResources": {
+            "i130a": {
+              "name": "I-130A Supplemental",
+              "url": "{{step1.result.supplementalResources.i130a.url}}",
+              "hash": "{{step1.result.supplementalResources.i130a.hash}}",
+              "documentId": "{{step4.result.documentId??step1.result.supplementalResources.i130a.oldDocumentId}}"
+            }
+          },
+          "documentId": "{{step2.result.documentId??step1.result.oldDocumentId}}",
+          "instructionsDocumentId": "{{step3.result.documentId??step1.result.oldInstructionsDocumentId}}",
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "oldInstructionsDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "changeType": "EDITION_UPDATE",
+          "agentTaskId": "{{params.agentTaskId}}",
+          "changeDetected": "{{step8.result.changeDetected??false}}",
+          "summary": "{{step8.result.summary??USCIS Form I-130 scan completed - No version changes found for Relative Petition.}}",
+          "analysis": "{{step8.result??{ \"status\": \"NO_CHANGE\", \"changeDetected\": false, \"details\": \"The surveillance check for Form I-130 was completed. No document content updates were found during this cycle.\" }}}"
+        },
+        "jump": {
+          "condition": "{{step9.result.changeDetected}} == false",
+          "conditionDesc": "No Changes Found",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 10,
+        "summary": "Dispatch Notification",
+        "description": "Notifying priority subscribers of I-130 edition updates or priority date shifts",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "resourceId": "{{params.resourceId}}",
+          "type": "EDITION_UPDATE",
+          "reportUrl": "https://komunas.com",
+          "severity": "HIGH",
+          "summary": "USCIS Form {{params.resourceId}} Updated to Edition {{step9.result.version}}",
+          "details": "{{step9.result.summary}}",
+          "delta": "{{step1.result.delta}}"
+        }
+      }
+    ]
+  }
+}
+```
+
+
+### Example from uscis_form_i485_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_form_sync",
+    "params": {
+      "domain": "uscis-sentinel",
+      "category": "forms",
+      "resourceId": "I-485",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "collectionId": "69ac77018626a22133fff877",
+      "agentTaskId": "69aa53798626a22133fff865"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "I-485 Version Check",
+        "description": "Checking USCIS for latest form edition, mandatory dates, and instruction updates for Adjustment of Status applications",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/sync/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 7
+        }
+      },
+      {
+        "step": 2,
+        "summary": "Form I-485 Ingestion",
+        "description": "Ingressing primary I-485 Form PDF into Knowledge Hub",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.resourceUrl}}",
+          "fileName": "{{params.resourceId}}_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Instruction Ingestion",
+        "description": "Ingressing I-485 Instructions for updated public charge rules and filing policies",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.instructionsUrl}}",
+          "fileName": "{{params.resourceId}}_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "Main Form Delta Extraction",
+        "description": "Extracting content shifts for the primary I-485 Form PDF",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "newDocumentId": "{{step2.result.documentId}}",
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Eligibility Basis Checkboxes",
+            "Public Charge Disclosures",
+            "Biographical Information Protocols"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "summary": "Instructions Delta Extraction",
+        "description": "Extracting shifts in the I-485 Instructions regarding public charge and evidence",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "newDocumentId": "{{step3.result.documentId}}",
+          "resourceId": "{{params.resourceId}}_instructions",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Public Charge Definition Shifts",
+            "Filing Fees & Biometric Requirements",
+            "Filing Locations & Lockbox Policies"
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "summary": "AI Suite-Wide Adjustment Analysis",
+        "description": "Synthesizing shifts across the full I-485 adjustment suite",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a High-Sensitivity USCIS Senior Specialist in Adjustment of Status (INA 245). Your mission is to detect ANY deviation in policy, procedures, or text within the ENTIRE Form I-485 suite.\n\nRULES:\n1. Output MUST be valid JSON.\n2. Be extremely sensitive: Any difference in text, even minor, MUST be reported with \"changeDetected\": true.\n3. For every category marked as 'CHANGED', you MUST provide a high-fidelity delta in the 'details' field following this format: '[Location: <Document Name>, Page X, Section Y] <Change Type>: <Context>'. \n4. If the inputs are empty (Initial Discovery), summarize the current version's key adjustment/public-charge protocols IF text is provided. IF the input text is empty for all documents, set \"changeDetected\": true, set status to \"INITIAL_DISCOVERY\", and in details state: \"Baseline established; waiting for full content ingestion for detailed summary.\"\n5. STRICT RULE: Do NOT invent Page numbers or specific policy changes if the input text is empty. Hallucination is UNACCEPTABLE.\n6. If ANY category status is 'CHANGED' or 'INITIAL_DISCOVERY', the top-level \"changeDetected\" MUST be true.\n7. The 'summary' field MUST be a comprehensive, human-readable synthesis of all detected shifts across the main form and instructions.\n8. Output MUST follow this schema:\n{\n  \"resourceId\": \"{{params.resourceId}}\",\n  \"changeDetected\": true,\n  \"categories\": [\n    { \"name\": \"Category Name\", \"status\": \"INITIAL_DISCOVERY\", \"details\": \"[Location: Document Name] Baseline summary of current protocol...\" }\n  ],\n  \"summary\": \"[Detailed synthesis...]\"\n}"
+          },
+          {
+            "role": "user",
+            "content": "### MAIN FORM DELTAS\nOld: {{step4.result.oldText}}\nNew: {{step4.result.newText}}\n\n### INSTRUCTIONS DELTAS\nOld: {{step5.result.oldText}}\nNew: {{step5.result.newText}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-o4-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 7,
+        "summary": "I-485 State Commit",
+        "description": "Finalizing I-485 state into the Sovereign Knowledge Hub DB",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/sync/commit",
+        "payload": {
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "displayName": "{{step1.result.displayName}}",
+          "version": "{{step1.result.newVersion}}",
+          "effectiveDate": "{{step1.result.effectiveDate}}",
+          "hash": "{{step1.result.newHash}}",
+          "instructionsHash": "{{step1.result.instructionsHash}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "instructionsUrl": "{{step1.result.instructionsUrl}}",
+          "documentId": "{{step2.result.documentId??step1.result.oldDocumentId}}",
+          "instructionsDocumentId": "{{step3.result.documentId??step1.result.oldInstructionsDocumentId}}",
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "oldInstructionsDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "changeType": "EDITION_UPDATE",
+          "agentTaskId": "{{params.agentTaskId}}",
+          "changeDetected": "{{step6.result.changeDetected??false}}",
+          "summary": "{{step6.result.summary??No material changes detected for Form {{params.resourceId}}. Monitoring is active and up-to-date.}}",
+          "analysis": "{{step6.result??{ \"status\": \"NO_CHANGE\", \"changeDetected\": false, \"details\": \"The surveillance check for Form {{params.resourceId}} was successful. No document content updates were found during this cycle.\" }}}"
+        },
+        "jump": {
+          "condition": "{{step7.result.changeDetected}} == false",
+          "conditionDesc": "No Changes Found",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 8,
+        "summary": "Dispatch Notification",
+        "description": "Notifying priority subscribers of I-485 adjustment policy shifts or fee updates",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "resourceId": "{{params.resourceId}}",
+          "type": "EDITION_UPDATE",
+          "reportUrl": "https://komunas.com",
+          "severity": "HIGH",
+          "summary": "USCIS Form {{params.resourceId}} Updated to Edition {{step7.result.version}}",
+          "details": "{{step7.result.summary}}",
+          "delta": "{{step1.result.delta}}"
+        }
+      }
+    ]
+  }
+}
+
+```
+
+
+### Example from uscis_form_i90_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_form_sync",
+    "params": {
+      "domain": "uscis-sentinel",
+      "category": "forms",
+      "resourceId": "I-90",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "collectionId": "69ac77018626a22133fff877",
+      "agentTaskId": "69c37951aa54fc27fe60a36d"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "I-90 Edition Check",
+        "description": "Monitoring USCIS for updates to the Application to Replace Permanent Resident Card, including edition date, filing fees, and biometric requirements",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/sync/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 7
+        }
+      },
+      {
+        "step": 2,
+        "summary": "Form I-90 Ingestion",
+        "description": "Ingressing primary I-90 PDF into Knowledge Hub",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.resourceUrl}}",
+          "fileName": "{{params.resourceId}}_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Instruction Ingestion",
+        "description": "Ingressing I-90 Instructions for updated evidence requirements for lost, stolen, or damaged cards",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.instructionsUrl}}",
+          "fileName": "{{params.resourceId}}_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "Main Form Delta Extraction",
+        "description": "Extracting content shifts for the primary I-90 Form PDF",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "newDocumentId": "{{step2.result.documentId}}",
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Card Renewal Reason Codes",
+            "Biometric Appointment Logic",
+            "Mailing Address Formats"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "summary": "Instructions Delta Extraction",
+        "description": "Extracting shifts in the I-90 Instructions regarding evidence and fee protocols",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "newDocumentId": "{{step3.result.documentId}}",
+          "resourceId": "{{params.resourceId}}_instructions",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Filing Fees & Biometric Requirements",
+            "Evidence for Replacement Cards",
+            "Filing Locations & Online Eligibility"
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "summary": "AI Suite-Wide Green Card Analysis",
+        "description": "Synthesizing shifts across the full I-90 replacement suite",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a High-Sensitivity USCIS Senior Specialist in Green Card Renewals. Your mission is to detect ANY deviation in policy, procedures, or text within the ENTIRE Form I-90 suite.\n\nRULES:\n1. Output MUST be valid JSON.\n2. Be extremely sensitive: Any difference in text, even minor, MUST be reported with \"changeDetected\": true.\n3. For every category marked as 'CHANGED', you MUST provide a high-fidelity delta in the 'details' field following this format: '[Location: <Document Name>, Page X, Section Y] <Change Type>: <Context>'. \n4. If the inputs are empty (Initial Discovery), summarize the current version's key renewal/evidence protocols IF text is provided. IF the input text is empty for all documents, set \"changeDetected\": true, set status to \"INITIAL_DISCOVERY\", and in details state: \"Baseline established; waiting for full content ingestion for detailed summary.\"\n5. STRICT RULE: Do NOT invent Page numbers or specific policy changes if the input text is empty. Hallucination is UNACCEPTABLE.\n6. If ANY category status is 'CHANGED' or 'INITIAL_DISCOVERY', the top-level \"changeDetected\" MUST be true.\n7. The 'summary' field MUST be a comprehensive, human-readable synthesis of all detected shifts across the main form and instructions.\n8. Output MUST follow this schema:\n{\n  \"resourceId\": \"{{params.resourceId}}\",\n  \"changeDetected\": true,\n  \"categories\": [\n    { \"name\": \"Category Name\", \"status\": \"INITIAL_DISCOVERY\", \"details\": \"[Location: Document Name] Baseline summary of current protocol...\" }\n  ],\n  \"summary\": \"[Detailed synthesis...]\"\n}"
+          },
+          {
+            "role": "user",
+            "content": "### MAIN FORM DELTAS\nOld: {{step4.result.oldText}}\nNew: {{step4.result.newText}}\n\n### INSTRUCTIONS DELTAS\nOld: {{step5.result.oldText}}\nNew: {{step5.result.newText}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-o4-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 7,
+        "summary": "I-90 State Commit",
+        "description": "Finalizing I-90 state into the Sovereign Knowledge Hub DB",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/sync/commit",
+        "payload": {
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "displayName": "{{step1.result.displayName}}",
+          "version": "{{step1.result.newVersion}}",
+          "effectiveDate": "{{step1.result.effectiveDate}}",
+          "hash": "{{step1.result.newHash}}",
+          "instructionsHash": "{{step1.result.instructionsHash}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "instructionsUrl": "{{step1.result.instructionsUrl}}",
+          "documentId": "{{step2.result.documentId??step1.result.oldDocumentId}}",
+          "instructionsDocumentId": "{{step3.result.documentId??step1.result.oldInstructionsDocumentId}}",
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "oldInstructionsDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "changeType": "EDITION_UPDATE",
+          "agentTaskId": "{{params.agentTaskId}}",
+          "changeDetected": "{{step6.result.changeDetected??false}}",
+          "summary": "{{step6.result.summary??USCIS Form I-90 scan completed - No version changes found for Green Card Replacement.}}",
+          "analysis": "{{step6.result??{ \"status\": \"NO_CHANGE\", \"changeDetected\": false, \"details\": \"The surveillance check for Form I-90 was completed. No document content updates were found during this cycle.\" }}}"
+        },
+        "jump": {
+          "condition": "{{step7.result.changeDetected}} == false",
+          "conditionDesc": "No Changes Found",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 8,
+        "summary": "Dispatch Notification",
+        "description": "Notifying priority subscribers of I-90 edition updates or fee shifts",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "resourceId": "{{params.resourceId}}",
+          "type": "EDITION_UPDATE",
+          "reportUrl": "https://komunas.com",
+          "severity": "HIGH",
+          "summary": "USCIS Form {{params.resourceId}} Updated to Edition {{step7.result.version}}",
+          "details": "{{step7.result.summary}}",
+          "delta": "{{step1.result.delta}}"
+        }
+      }
+    ]
+  }
+}
+```
+
+
+### Example from uscis_form_i765_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_form_sync",
+    "params": {
+      "domain": "uscis-sentinel",
+      "category": "forms",
+      "resourceId": "I-765",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "collectionId": "69ac77018626a22133fff877",
+      "agentTaskId": "69c35d61aa54fc27fe609cb1"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "I-765 Edition Check",
+        "description": "Monitoring USCIS for updates to the Application for Employment Authorization, including the I-765WS worksheet and category fee logic",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/sync/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 9
+        }
+      },
+      {
+        "step": 2,
+        "summary": "Form I-765 Ingestion",
+        "description": "Ingressing primary I-765 PDF into Knowledge Hub",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.resourceUrl}}",
+          "fileName": "{{params.resourceId}}_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Instruction Ingestion",
+        "description": "Ingressing I-765 Instructions for updated category codes and document requirements",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.instructionsUrl}}",
+          "fileName": "{{params.resourceId}}_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "I-765WS Worksheet Ingestion",
+        "description": "Ingressing Form I-765 Worksheet (I-765WS) for category-specific eligibility data",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.i765ws.url}}",
+          "fileName": "I-765WS_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 5,
+        "summary": "Main Form Delta Extraction",
+        "description": "Extracting content shifts for the primary I-765 Form PDF",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "newDocumentId": "{{step2.result.documentId}}",
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Eligibility Category Basis",
+            "Mailing Address Protocols",
+            "Interpreter & Preparer Sections"
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "summary": "Instructions Delta Extraction",
+        "description": "Extracting shifts in the I-765 Instructions regarding category codes",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "newDocumentId": "{{step3.result.documentId}}",
+          "resourceId": "{{params.resourceId}}_instructions",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Eligibility Category Codes (OPT, STEM, DACA, etc.)",
+            "Filing Fees & Biometric Requirements",
+            "Filing Locations & Online Eligibility"
+          ]
+        }
+      },
+      {
+        "step": 7,
+        "summary": "I-765WS Delta Extraction",
+        "description": "Extracting shifts in the employment authorization worksheet",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.supplementalResources.i765ws.oldDocumentId}}",
+          "newDocumentId": "{{step4.result.documentId}}",
+          "resourceId": "I-765WS",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Financial Necessity Definitions",
+            "Expense/Income Documentation Rules"
+          ]
+        }
+      },
+      {
+        "step": 8,
+        "summary": "AI Suite-Wide Employment Auth Analysis",
+        "description": "Synthesizing shifts across the full I-765 suite",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a High-Sensitivity USCIS Senior Specialist in Employment Authorization. Your mission is to detect ANY deviation in policy, procedures, or text within the ENTIRE Form I-765 suite.\n\nRULES:\n1. Output MUST be valid JSON.\n2. Be extremely sensitive: Any difference in text, even minor, MUST be reported with \"changeDetected\": true.\n3. For every category marked as 'CHANGED', you MUST provide a high-fidelity delta in the 'details' field following this format: '[Location: <Document Name>, Page X, Section Y] <Change Type>: <Context>'. \n4. If the inputs are empty (Initial Discovery), summarize the current version's key category eligibility and fee protocols IF text is provided. IF the input text is empty for all documents, set \"changeDetected\": true, set status to \"INITIAL_DISCOVERY\", and in details state: \"Baseline established; waiting for full content ingestion for detailed summary.\"\n5. STRICT RULE: Do NOT invent Page numbers or specific policy changes if the input text is empty. Hallucination is UNACCEPTABLE.\n6. If ANY category status is 'CHANGED' or 'INITIAL_DISCOVERY', the top-level \"changeDetected\" MUST be true.\n7. The 'summary' field MUST be a comprehensive, human-readable synthesis of all detected shifts across the main form, instructions, and I-765WS.\n8. Output MUST follow this schema:\n{\n  \"resourceId\": \"{{params.resourceId}}\",\n  \"changeDetected\": true,\n  \"categories\": [\n    { \"name\": \"Category Name\", \"status\": \"INITIAL_DISCOVERY\", \"details\": \"[Location: Document Name] Baseline summary of current protocol...\" }\n  ],\n  \"summary\": \"[Detailed synthesis...]\"\n}"
+          },
+          {
+            "role": "user",
+            "content": "### MAIN FORM DELTAS\nOld: {{step5.result.oldText}}\nNew: {{step5.result.newText}}\n\n### INSTRUCTIONS DELTAS\nOld: {{step6.result.oldText}}\nNew: {{step6.result.newText}}\n\n### I-765WS WORKSHEET DELTAS\nOld: {{step7.result.oldText}}\nNew: {{step7.result.newText}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-o4-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 9,
+        "summary": "I-765 State Commit",
+        "description": "Finalizing I-765 state into the Sovereign Knowledge Hub DB",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/sync/commit",
+        "payload": {
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "displayName": "{{step1.result.displayName}}",
+          "version": "{{step1.result.newVersion}}",
+          "effectiveDate": "{{step1.result.effectiveDate}}",
+          "hash": "{{step1.result.newHash}}",
+          "instructionsHash": "{{step1.result.instructionsHash}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "instructionsUrl": "{{step1.result.instructionsUrl}}",
+          "supplementalResources": {
+            "i765ws": {
+              "name": "I-765 Worksheet",
+              "url": "{{step1.result.supplementalResources.i765ws.url}}",
+              "hash": "{{step1.result.supplementalResources.i765ws.hash}}",
+              "documentId": "{{step4.result.documentId??step1.result.supplementalResources.i765ws.oldDocumentId}}"
+            }
+          },
+          "documentId": "{{step2.result.documentId??step1.result.oldDocumentId}}",
+          "instructionsDocumentId": "{{step3.result.documentId??step1.result.oldInstructionsDocumentId}}",
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "oldInstructionsDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "changeType": "EDITION_UPDATE",
+          "agentTaskId": "{{params.agentTaskId}}",
+          "changeDetected": "{{step8.result.changeDetected??false}}",
+          "summary": "{{step8.result.summary??USCIS Form I-765 scan completed - No version changes found for Employment Authorization.}}",
+          "analysis": "{{step8.result??{ \"status\": \"NO_CHANGE\", \"changeDetected\": false, \"details\": \"The surveillance check for Form I-765 was completed. No document content updates were found during this cycle.\" }}}"
+        },
+        "jump": {
+          "condition": "{{step9.result.changeDetected}} == false",
+          "conditionDesc": "No Changes Found",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 10,
+        "summary": "Dispatch Notification",
+        "description": "Notifying priority subscribers of I-765 edition updates or fee shifts",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "resourceId": "{{params.resourceId}}",
+          "type": "EDITION_UPDATE",
+          "reportUrl": "https://komunas.com",
+          "severity": "HIGH",
+          "summary": "USCIS Form {{params.resourceId}} Updated to Edition {{step9.result.version}}",
+          "details": "{{step9.result.summary}}",
+          "delta": "{{step1.result.delta}}"
+        }
+      }
+    ]
+  }
+}
+
+```
+
+
+### Example from uscis_form_i131_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_form_sync",
+    "params": {
+      "domain": "uscis-sentinel",
+      "category": "forms",
+      "resourceId": "I-131",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "collectionId": "69ac77018626a22133fff877",
+      "agentTaskId": "69c086f708e1c76ac3e3d281"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "I-131 Version Check",
+        "description": "Scanning USCIS for updates to Application for Travel Document, including Re-entry Permits and Advance Parole editions",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/sync/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 7
+        }
+      },
+      {
+        "step": 2,
+        "summary": "Form I-131 Ingestion",
+        "description": "Ingressing primary I-131 Form PDF into Knowledge Hub",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.resourceUrl}}",
+          "fileName": "{{params.resourceId}}_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Instruction Ingestion",
+        "description": "Ingressing I-131 Instructions for updated evidence and eligibility requirements",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.instructionsUrl}}",
+          "fileName": "{{params.resourceId}}_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "Main Form Delta Extraction",
+        "description": "Extracting content shifts for the primary I-131 Form PDF",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "newDocumentId": "{{step2.result.documentId}}",
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Advance Parole Eligibility",
+            "Re-entry Permit Requirements",
+            "Refugee Travel Document Rules"
+          ]
+        }
+      },
+      {
+        "step": 5,
+        "summary": "Instructions Delta Extraction",
+        "description": "Extracting shifts in the I-131 Instructions regarding evidence and fee protocols",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "newDocumentId": "{{step3.result.documentId}}",
+          "resourceId": "{{params.resourceId}}_instructions",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Evidentiary Standards",
+            "Filing Fees & Biometric Protocols",
+            "Filing Locations"
+          ]
+        }
+      },
+      {
+        "step": 6,
+        "summary": "AI Suite-Wide Travel Document Analysis",
+        "description": "Synthesizing shifts across the full I-131 travel document suite",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a High-Sensitivity USCIS Senior Specialist in Travel Documents. Your mission is to detect ANY deviation in policy, procedures, or text within the ENTIRE Form I-131 suite.\n\nRULES:\n1. Output MUST be valid JSON.\n2. Be extremely sensitive: Any difference in text, even minor, MUST be reported with \"changeDetected\": true.\n3. For every category marked as 'CHANGED', you MUST provide a high-fidelity delta in the 'details' field following this format: '[Location: <Document Name>, Page X, Section Y] <Change Type>: <Context>'. \n4. If the inputs are empty (Initial Discovery), summarize the current version's key travel/advance-parole protocols IF text is provided. IF the input text is empty for all documents, set \"changeDetected\": true, set status to \"INITIAL_DISCOVERY\", and in details state: \"Baseline established; waiting for full content ingestion for detailed summary.\"\n5. STRICT RULE: Do NOT invent Page numbers or specific policy changes if the input text is empty. Hallucination is UNACCEPTABLE.\n6. If ANY category status is 'CHANGED' or 'INITIAL_DISCOVERY', the top-level \"changeDetected\" MUST be true.\n7. The 'summary' field MUST be a comprehensive, human-readable synthesis of all detected shifts across the main form and instructions.\n8. Output MUST follow this schema:\n{\n  \"resourceId\": \"{{params.resourceId}}\",\n  \"changeDetected\": true,\n  \"categories\": [\n    { \"name\": \"Category Name\", \"status\": \"INITIAL_DISCOVERY\", \"details\": \"[Location: Document Name] Baseline summary of current protocol...\" }\n  ],\n  \"summary\": \"[Detailed synthesis...]\"\n}"
+          },
+          {
+            "role": "user",
+            "content": "### MAIN FORM DELTAS\nOld: {{step4.result.oldText}}\nNew: {{step4.result.newText}}\n\n### INSTRUCTIONS DELTAS\nOld: {{step5.result.oldText}}\nNew: {{step5.result.newText}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-o4-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 7,
+        "summary": "I-131 State Commit",
+        "description": "Finalizing I-131 state into the Sovereign Knowledge Hub DB",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/sync/commit",
+        "payload": {
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "displayName": "{{step1.result.displayName}}",
+          "version": "{{step1.result.newVersion}}",
+          "effectiveDate": "{{step1.result.effectiveDate}}",
+          "hash": "{{step1.result.newHash}}",
+          "instructionsHash": "{{step1.result.instructionsHash}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "instructionsUrl": "{{step1.result.instructionsUrl}}",
+          "documentId": "{{step2.result.documentId??step1.result.oldDocumentId}}",
+          "instructionsDocumentId": "{{step3.result.documentId??step1.result.oldInstructionsDocumentId}}",
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "oldInstructionsDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "changeType": "EDITION_UPDATE",
+          "agentTaskId": "{{params.agentTaskId}}",
+          "changeDetected": "{{step6.result.changeDetected??false}}",
+          "summary": "{{step6.result.summary??USCIS Form {{params.resourceId}} scan completed - No version changes found for Travel Documents.}}",
+          "analysis": "{{step6.result??{ \"status\": \"NO_CHANGE\", \"changeDetected\": false, \"details\": \"The surveillance check for Form I-131 was completed. No document content updates were found during this cycle.\" }}}"
+        },
+        "jump": {
+          "condition": "{{step7.result.changeDetected}} == false",
+          "conditionDesc": "No Changes Found",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 8,
+        "summary": "Dispatch Notification",
+        "description": "Notifying priority subscribers of I-131 travel policy shifts or fee updates",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "resourceId": "{{params.resourceId}}",
+          "type": "EDITION_UPDATE",
+          "reportUrl": "https://komunas.com",
+          "severity": "HIGH",
+          "summary": "USCIS Form {{params.resourceId}} Updated to Edition {{step7.result.version}}",
+          "details": "{{step7.result.summary}}",
+          "delta": "{{step1.result.delta}}"
+        }
+      }
+    ]
+  }
+}
+
+```
+
+
+### Example from uscis_form_i129_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_form_sync",
+    "params": {
+      "domain": "uscis-sentinel",
+      "category": "forms",
+      "resourceId": "I-129",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen",
+      "collectionId": "69ac77018626a22133fff877",
+      "agentTaskId": "69c5a07794816c41cec7f40e"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "I-129 Edition Check",
+        "description": "Monitoring USCIS for updates to Petition for Nonimmigrant Worker, including H2A, H-1B, L-1, and R-1 supplemental protocols",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/sync/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 16
+        }
+      },
+      {
+        "step": 2,
+        "summary": "Form I-129 Ingestion",
+        "description": "Ingressing primary I-129 PDF for nonimmigrant worker petition analysis",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.resourceUrl}}",
+          "fileName": "{{params.resourceId}}_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Instruction Ingestion",
+        "description": "Ingressing I-129 Instructions for updated filing fees and classification criteria",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.instructionsUrl}}",
+          "fileName": "{{params.resourceId}}_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "I-129H2A Ingestion",
+        "description": "Ingressing Form I-129H2A for agricultural worker petitions",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.i129h2a.url}}",
+          "fileName": "I-129H2A_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 5,
+        "summary": "I-129H2A Instructions Ingestion",
+        "description": "Ingressing Instructions for Form I-129H2A",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.i129h2ainstr.url}}",
+          "fileName": "I-129H2A_instructions_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 6,
+        "summary": "H-1B Checklist Ingestion",
+        "description": "Ingressing M-735 Optional Checklist for H-1B filings",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.m735.url}}",
+          "fileName": "M-735_H1B_Checklist_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 7,
+        "summary": "H-2A Checklist Ingestion",
+        "description": "Ingressing M-1097 Optional Checklist for H-2A filings",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.m1097.url}}",
+          "fileName": "M-1097_H2A_Checklist_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 8,
+        "summary": "H-2B Checklist Ingestion",
+        "description": "Ingressing M-1087 Optional Checklist for H-2B filings",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.m1087.url}}",
+          "fileName": "M-1087_H2B_Checklist_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 9,
+        "summary": "R-1 Checklist Ingestion",
+        "description": "Ingressing M-736 Optional Checklist for Religious Workers (R-1)",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.m736.url}}",
+          "fileName": "M-736_R1_Checklist_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 10,
+        "summary": "DOT Codes Ingestion",
+        "description": "Ingressing M-746 Dictionary of Occupational Titles (DOT) Codes",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/ingression/url",
+        "payload": {
+          "url": "{{step1.result.supplementalResources.m746.url}}",
+          "fileName": "M-746_DOT_Codes_{{step1.result.newVersion}}.pdf",
+          "collectionId": "{{params.collectionId}}",
+          "teamId": "{{params.teamId}}",
+          "contentType": "application/pdf"
+        }
+      },
+      {
+        "step": 11,
+        "summary": "Main Form Delta Extraction",
+        "description": "Extracting content shifts for the primary I-129 Form PDF",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "newDocumentId": "{{step2.result.documentId}}",
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Temporary Employment Classifications (H, L, O, P)",
+            "Religious Worker Eligibility (R-1)",
+            "Petitioner Evidentiary Requirements"
+          ]
+        }
+      },
+      {
+        "step": 12,
+        "summary": "Instructions Delta Extraction",
+        "description": "Extracting shifts in the I-129 Instructions regarding filing fees and classification criteria",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "newDocumentId": "{{step3.result.documentId}}",
+          "resourceId": "{{params.resourceId}}_instructions",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Classification Criteria",
+            "Filing Fee Schedules",
+            "Residency Requirements"
+          ]
+        }
+      },
+      {
+        "step": 13,
+        "summary": "H-2A Suite Delta Extraction",
+        "description": "Extracting shifts in the H-2A supplemental form and instructions",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.supplementalResources.i129h2a.oldDocumentId}}",
+          "newDocumentId": "{{step4.result.documentId}}",
+          "resourceId": "I-129H2A",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Agricultural Labor Standards",
+            "H-2A Classification Specifics"
+          ]
+        }
+      },
+      {
+        "step": 14,
+        "summary": "Checklists & DOT Delta Extraction",
+        "description": "Extracting shifts across M-735, M-736, M-1097, M-1087, and M-746 Dictionary of Occupational Titles",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/kh/sync/delta-content",
+        "payload": {
+          "oldDocumentId": "{{step1.result.supplementalResources.m735.oldDocumentId}}",
+          "newDocumentId": "{{step6.result.documentId}}",
+          "resourceId": "I-129_Checklists",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "categories": [
+            "Evidence Checklists (H1B, R1, H2A, H2B)",
+            "DOT Code Mapping Shifts"
+          ]
+        }
+      },
+      {
+        "step": 15,
+        "summary": "AI Suite-Wide Labor Analysis",
+        "description": "Synthesizing shifts across the full I-129 labor petition suite",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a High-Sensitivity USCIS Senior Specialist in Nonimmigrant Worker Petitions. Your mission is to detect ANY deviation in policy, procedures, or text within the ENTIRE Form I-129 suite.\n\nRULES:\n1. Output MUST be valid JSON.\n2. Be extremely sensitive: Any difference in text, even minor, MUST be reported with \"changeDetected\": true.\n3. For every category marked as 'CHANGED', you MUST provide a high-fidelity delta in the 'details' field following this format: '[Location: <Document Name>, Page X, Section Y] <Change Type>: <Context>'. \n4. If the inputs are empty (Initial Discovery), summarize the current version's key classifications/checklists IF text is provided. IF the input text is empty for all documents, set \"changeDetected\": true, set status to \"INITIAL_DISCOVERY\", and in details state: \"Baseline established; waiting for full content ingestion for detailed summary.\"\n5. STRICT RULE: Do NOT invent Page numbers or specific policy changes if the input text is empty. Hallucination is UNACCEPTABLE.\n6. If ANY category status is 'CHANGED' or 'INITIAL_DISCOVERY', the top-level \"changeDetected\" MUST be true.\n7. The 'summary' field MUST be a comprehensive, human-readable synthesis of all detected shifts across the main form, instructions, H-2A suite, and specialized checklists.\n8. Output MUST follow this schema:\n{\n  \"resourceId\": \"{{params.resourceId}}\",\n  \"changeDetected\": true,\n  \"categories\": [\n    { \"name\": \"Category Name\", \"status\": \"INITIAL_DISCOVERY\", \"details\": \"[Location: Document Name] Baseline summary of current protocol...\" }\n  ],\n  \"summary\": \"[Detailed synthesis...]\"\n}"
+          },
+          {
+            "role": "user",
+            "content": "### MAIN FORM DELTAS\nOld: {{step11.result.oldText}}\nNew: {{step11.result.newText}}\n\n### INSTRUCTIONS DELTAS\nOld: {{step12.result.oldText}}\nNew: {{step12.result.newText}}\n\n### H-2A SUITE DELTAS\nOld: {{step13.result.oldText}}\nNew: {{step13.result.newText}}\n\n### CHECKLISTS & DOT DELTAS\nOld: {{step14.result.oldText}}\nNew: {{step14.result.newText}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-o4-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 16,
+        "summary": "I-129 State Commit",
+        "description": "Finalizing I-129 state (including specialized supplements) into the Sovereign Knowledge Hub DB",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/sync/commit",
+        "payload": {
+          "resourceId": "{{params.resourceId}}",
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "displayName": "{{step1.result.displayName}}",
+          "version": "{{step1.result.newVersion}}",
+          "effectiveDate": "{{step1.result.effectiveDate}}",
+          "hash": "{{step1.result.newHash}}",
+          "instructionsHash": "{{step1.result.instructionsHash}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "instructionsUrl": "{{step1.result.instructionsUrl}}",
+          "supplementalResources": {
+            "i129h2a": {
+              "name": "Form I-129H2A",
+              "url": "{{step1.result.supplementalResources.i129h2a.url}}",
+              "hash": "{{step1.result.supplementalResources.i129h2a.hash}}",
+              "documentId": "{{step4.result.documentId??step1.result.supplementalResources.i129h2a.oldDocumentId}}"
+            },
+            "i129h2ainstr": {
+              "name": "Instructions I-129H2A",
+              "url": "{{step1.result.supplementalResources.i129h2ainstr.url}}",
+              "hash": "{{step1.result.supplementalResources.i129h2ainstr.hash}}",
+              "documentId": "{{step5.result.documentId??step1.result.supplementalResources.i129h2ainstr.oldDocumentId}}"
+            },
+            "m735": {
+              "name": "H-1B Checklist",
+              "url": "{{step1.result.supplementalResources.m735.url}}",
+              "hash": "{{step1.result.supplementalResources.m735.hash}}",
+              "documentId": "{{step6.result.documentId??step1.result.supplementalResources.m735.oldDocumentId}}"
+            },
+            "m1097": {
+              "name": "H-2A Checklist",
+              "url": "{{step1.result.supplementalResources.m1097.url}}",
+              "hash": "{{step1.result.supplementalResources.m1097.hash}}",
+              "documentId": "{{step7.result.documentId??step1.result.supplementalResources.m1097.oldDocumentId}}"
+            },
+            "m1087": {
+              "name": "H-2B Checklist",
+              "url": "{{step1.result.supplementalResources.m1087.url}}",
+              "hash": "{{step1.result.supplementalResources.m1087.hash}}",
+              "documentId": "{{step8.result.documentId??step1.result.supplementalResources.m1087.oldDocumentId}}"
+            },
+            "m736": {
+              "name": "R-1 Checklist",
+              "url": "{{step1.result.supplementalResources.m736.url}}",
+              "hash": "{{step1.result.supplementalResources.m736.hash}}",
+              "documentId": "{{step9.result.documentId??step1.result.supplementalResources.m736.oldDocumentId}}"
+            },
+            "m746": {
+              "name": "DOT Codes Dictionary",
+              "url": "{{step1.result.supplementalResources.m746.url}}",
+              "hash": "{{step1.result.supplementalResources.m746.hash}}",
+              "documentId": "{{step10.result.documentId??step1.result.supplementalResources.m746.oldDocumentId}}"
+            }
+          },
+          "documentId": "{{step2.result.documentId??step1.result.oldDocumentId}}",
+          "instructionsDocumentId": "{{step3.result.documentId??step1.result.oldInstructionsDocumentId}}",
+          "oldDocumentId": "{{step1.result.oldDocumentId}}",
+          "oldInstructionsDocumentId": "{{step1.result.oldInstructionsDocumentId}}",
+          "changeType": "EDITION_UPDATE",
+          "agentTaskId": "{{params.agentTaskId}}",
+          "changeDetected": "{{step15.result.changeDetected??false}}",
+          "summary": "{{step15.result.summary??USCIS Form I-129 suite scan completed - No nonimmigrant classification shifts detected.}}",
+          "analysis": "{{step15.result??{ \"status\": \"NO_CHANGE\", \"changeDetected\": false, \"details\": \"The surveillance check for Form I-129 was completed. No document content updates were found during this cycle.\" }}}"
+        },
+        "jump": {
+          "condition": "{{step16.result.changeDetected}} == false",
+          "conditionDesc": "No Classification Changes",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 17,
+        "summary": "Dispatch Notification",
+        "description": "Notifying priority subscribers of Form I-129 edition updates or classification shifts",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "{{params.domain}}",
+          "category": "{{params.category}}",
+          "resourceId": "{{params.resourceId}}",
+          "type": "EDITION_UPDATE",
+          "reportUrl": "https://komunas.com",
+          "severity": "HIGH",
+          "summary": "USCIS Form {{params.resourceId}} Updated to Edition {{step16.result.version}}",
+          "details": "{{step16.result.summary}}",
+          "delta": "{{step1.result.delta}}"
+        }
+      }
+    ]
+  }
+}
+
+```
+
+
+### Example from uscis_newsroom_alerts_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_newsroom_sync",
+    "params": {
+      "resourceCategory": "announcements",
+      "resourceId": "newsroom-alerts",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "Newsroom Alert Check",
+        "description": "Monitoring USCIS Newsroom Alerts for new announcements and updates",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/newsroom/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 2,
+        "summary": "AI Announcement Digest",
+        "description": "Synthesizing a high-fidelity intelligence digest of recent USCIS announcements.",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a USCIS Policy Analyst. Review the provided JSON of the latest USCIS announcements. Provide a high-level summary of the overall activity, and then provide a SUBSTANTIVE summary for EACH alert. Explain the 'WHY' behind the alert and its 'PRACTICAL IMPACT' on applicants or practitioners. Avoid generic filler. You MUST preserve the exact 'url', 'title', and 'date' from the input for each alert. Output MUST follow this exact JSON schema: { \"title\": \"Short 3-6 word catchy title summarizing the most important update\", \"summary\": \"A high-fidelity 2-3 sentence overview of all recent USCIS activity covered in this digest.\", \"alerts\": [ { \"title\": \"Original Title\", \"date\": \"Original Date\", \"summary\": \"A detailed 3-5 sentence intelligence summary explaining the substantive changes and practical impact of this specific alert.\", \"url\": \"Original URL\" } ] }. IMPORTANT: Do NOT truncate or use ellipsis (...) in any field. Write complete sentences. Ensure your generated summaries use standard spaces only."
+          },
+          {
+            "role": "user",
+            "content": "Latest Announcements Payload:\n{{step1.result.payload}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-4o-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Commit Resource Metadata",
+        "description": "Committing detected changes and AI analysis to the central resource repository",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/newsroom/commit",
+        "payload": {
+          "domain": "uscis-sentinel",
+          "category": "announcements",
+          "resourceId": "newsroom-alerts",
+          "version": "{{step1.result.newVersion}}",
+          "hash": "{{step1.result.newHash}}",
+          "changeType": "ANNOUNCEMENT_UPDATE",
+          "changeDetected": "{{step1.result.changed}}",
+          "summary": "New announcements: {{step2.result.output.title}} ({{step1.result.newVersion}})",
+          "analysis": "{{step2.result}}",
+          "payload": "{{step2.result.output}}"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "Dispatch Notification",
+        "description": "Dispatching high-severity notifications for new USCIS announcements",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "uscis-sentinel",
+          "category": "announcements",
+          "resourceId": "newsroom-alerts",
+          "type": "NEWS_UPDATE",
+          "reportUrl": "{{step1.result.resourceUrl}}",
+          "severity": "HIGH",
+          "summary": "USCIS Alert: {{step2.result.output.title}} ({{step1.result.newVersion}})",
+          "details": "{{step2.result.output.summary}}",
+          "delta": {
+            "alerts": "{{step2.result.output.alerts}}"
+          }
+        }
+      }
+    ]
+  }
+}
+
+```
+
+
+### Example from uscis_news_releases_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_newsroom_sync",
+    "params": {
+      "resourceCategory": "announcements",
+      "resourceId": "news-releases",
+      "teamId": "67d0aeb17172416c411d419e",
+      "userId": "timursen"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "News Releases Check",
+        "description": "Checking USCIS Newsroom for latest press releases and official news updates",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/newsroom/check/{{params.resourceId}}",
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 2,
+        "summary": "AI News Release Digest",
+        "description": "Synthesizing a high-fidelity digest of recent USCIS news releases with AI analysis.",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are a USCIS Media Liaison. Review the provided JSON of the latest USCIS news releases. Provide a high-level summary of the recent news activity, and then provide a DETAILED summary for EACH release. Focus on why this news matters and what it signals for future policy or processing. You MUST preserve the exact 'url', 'title', and 'date' from the input for each item. Output MUST follow this exact JSON schema: { \"title\": \"Short 3-6 word catchy title for this news cycle\", \"summary\": \"A high-fidelity 2-3 sentence overview of all recent news releases covered in this digest.\", \"alerts\": [ { \"title\": \"Original Title\", \"date\": \"Original Date\", \"summary\": \"A descriptive 3-5 sentence intelligence summary providing full context and significance for this news release.\", \"url\": \"Original URL\" } ] }. IMPORTANT: Do NOT truncate or use ellipsis (...) in any field. Ensure your generated summaries use standard spaces only."
+          },
+          {
+            "role": "user",
+            "content": "Latest News Releases Payload:\n{{step1.result.payload}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-4o-mini",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 4096
+          }
+        }
+      },
+      {
+        "step": 3,
+        "summary": "Commit News Metadata",
+        "description": "Committing news releases and AI analysis to the central repository",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/newsroom/commit",
+        "payload": {
+          "domain": "uscis-sentinel",
+          "category": "announcements",
+          "resourceId": "news-releases",
+          "version": "{{step1.result.newVersion}}",
+          "hash": "{{step1.result.newHash}}",
+          "changeType": "ANNOUNCEMENT_UPDATE",
+          "changeDetected": "{{step1.result.changed}}",
+          "summary": "New news releases: {{step2.result.output.title}} ({{step1.result.newVersion}})",
+          "analysis": "{{step2.result}}",
+          "payload": "{{step2.result.output}}"
+        }
+      },
+      {
+        "step": 4,
+        "summary": "Dispatch Notification",
+        "description": "Dispatching high-severity notifications for new USCIS news releases",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "payload": {
+          "domain": "uscis-sentinel",
+          "category": "announcements",
+          "resourceId": "news-releases",
+          "type": "NEWS_UPDATE",
+          "reportUrl": "{{step1.result.resourceUrl}}",
+          "severity": "HIGH",
+          "summary": "USCIS News: {{step2.result.output.title}} ({{step1.result.newVersion}})",
+          "details": "{{step2.result.output.summary}}",
+          "delta": {
+            "alerts": "{{step2.result.output.alerts}}"
+          }
+        }
+      }
+    ]
+  }
+}
+
+```
+
+
+### Example from uscis_processing_times_i130_sync_workflow.json
+
+```json
+{
+  "link": {
+    "target": "workflow",
+    "action": "execute"
+  },
+  "query": {
+    "intent": "uscis_processing_times_i130_sync",
+    "params": {
+      "resourceCategory": "processing-times",
+      "formId": "I-130",
+      "teamId": "681a97eaec715f343bcb1ecf",
+      "userId": "timursen"
+    },
+    "workflow": [
+      {
+        "step": 1,
+        "summary": "Processing Times Fetch",
+        "description": "Continuous batch monitoring of the USCIS Processing Times API specifically for Form I-130 (Petition for Alien Relative) across all preference categories (Immediate Relatives, F1-F4) and offices (NBC, SCD, FOD).",
+        "target": "komunas-app",
+        "action": "fetch",
+        "intent": "/api/uscis/processing-times/check/form/{{params.formId}}",
+        "params": {},
+        "payload": null,
+        "llmConfig": null,
+        "async": null,
+        "jump": {
+          "condition": "{{step1.result.shouldSync}} == false",
+          "conditionDesc": "Up-to-Date",
+          "targetStep": 0
+        }
+      },
+      {
+        "step": 2,
+        "summary": "AI Processing Times Digest",
+        "description": "Analyzing I-130 processing times API response to determine 80th percentile shifts, Visa Bulletin constraints, and prioritization notes.",
+        "target": "openai-chat",
+        "action": "generate",
+        "intent": "generate",
+        "params": null,
+        "payload": [
+          {
+            "role": "system",
+            "content": "You are an expert USCIS Immigration Intelligence Analyst. Your task is to analyze the latest batch of processing times specifically for Form I-130 (Petition for Alien Relative). You will receive a JSON payload containing processing data across multiple service centers (NBC, SCD) and Field Offices (FOD) for various family preference categories. INSTRUCTIONS: 1. Identify Trends: Compare shifts across offices and categories. 2. Group by Impact: Highlight differences between Immediate Relatives (IR) vs. Family Preference categories (F11, F21, F31, F41). 3. Interpret 'See notes': If an estimated time is 'See notes', read the accompanying text and explain that USCIS is prioritizing cases based on Department of State Visa Bulletin constraints rather than fixed timelines. Output MUST follow this exact JSON schema: { \"title\": \"Catchy 4-7 word title summarizing I-130 processing times\", \"summary\": \"A high-fidelity 1-2 sentence overview of family-based petition backlogs.\", \"formId\": \"I-130\", \"percentile80\": \"e.g. 17.5-261.5 Months depending on office/category\", \"trend\": \"e.g. Increasing/Decreasing/Stable\", \"analysis\": \"Substantive impact analysis across the different field offices and categories, specifically addressing Visa Bulletin constraints when applicable.\" }. Ensure summaries are professional, objective, and avoid filler."
+          },
+          {
+            "role": "user",
+            "content": "Latest Processing Times Payload:\n{{step1.result.payload}}"
+          }
+        ],
+        "llmConfig": {
+          "model": "gpt-4o",
+          "settings": {
+            "temperature": 0.1,
+            "max.tokens": 2048
+          }
+        },
+        "async": null,
+        "cacheConfig": null
+      },
+      {
+        "step": 3,
+        "summary": "Commit Processing Times Metadata",
+        "description": "Persisting structured processing times data and version hashes into the Sovereign DB via Komunas.",
+        "target": "komunas-app",
+        "action": "create",
+        "intent": "/api/uscis/processing-times/commit",
+        "params": null,
+        "payload": {
+          "domain": "uscis-sentinel",
+          "category": "processing-times",
+          "resourceId": "{{params.formId}}",
+          "resourceUrl": "{{step1.result.resourceUrl}}",
+          "version": "{{step1.result.newVersion}}",
+          "hash": "{{step1.result.newHash}}",
+          "changeDetected": "{{step1.result.changed}}",
+          "summary": "{{step2.result.output.summary}}",
+          "analysis": "{{step2.result}}",
+          "payload": {
+            "title": "{{step2.result.output.title}}",
+            "summary": "{{step2.result.output.summary}}",
+            "formId": "{{step2.result.output.formId}}",
+            "percentile80": "{{step2.result.output.percentile80}}",
+            "trend": "{{step2.result.output.trend}}",
+            "analysis": "{{step2.result.output.analysis}}",
+            "combinations": "{{step1.result.payload}}"
+          }
+        },
+        "llmConfig": null,
+        "async": null
+      },
+      {
+        "step": 4,
+        "summary": "Dispatch Notification",
+        "description": "Routing the formatted processing times update to the Notification Service for email broadcast.",
+        "target": "api-gateway",
+        "action": "create",
+        "intent": "/api/notifications/dispatch",
+        "params": null,
+        "payload": {
+          "domain": "uscis-sentinel",
+          "category": "processing-times",
+          "resourceId": "{{params.formId}}",
+          "type": "PROCESSING_TIMES_UPDATE",
+          "reportUrl": "{{step1.result.resourceUrl}}",
+          "severity": "MEDIUM",
+          "summary": "Processing Times Alert: {{step2.result.output.title}}",
+          "details": "{{step2.result.output.summary}}",
+          "delta": {
+            "percentile80": "{{step2.result.output.percentile80}}",
+            "trend": "{{step2.result.output.trend}}",
+            "analysis": "{{step2.result.output.analysis}}",
+            "injectedHtml": "{{step1.result.payload.injectedHtml}}"
+          }
+        },
+        "llmConfig": null,
+        "async": false
+      }
+    ]
+  }
+}
+
+```
+

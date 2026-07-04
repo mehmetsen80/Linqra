@@ -35,7 +35,13 @@ public class LoggingGlobalFilter implements GlobalFilter, Ordered {
         }
 
         return chain.filter(exchange)
-                .doOnError(e -> log.error("Error in Gateway Filter Chain", e))
+                .doOnError(e -> {
+                    if (e instanceof org.springframework.cloud.gateway.support.NotFoundException) {
+                        log.warn("Service Unavailable: {}", e.getMessage());
+                    } else {
+                        log.error("Error in Gateway Filter Chain", e);
+                    }
+                })
                 .then(Mono.fromRunnable(() -> {
                     log.info("Gateway Filter Chain Completed. Response Status: {}",
                             exchange.getResponse().getStatusCode());

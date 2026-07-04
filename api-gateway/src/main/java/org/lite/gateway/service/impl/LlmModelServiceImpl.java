@@ -199,6 +199,17 @@ public class LlmModelServiceImpl implements LlmModelService {
                 List<LlmModel> models = new ArrayList<>();
                 LocalDateTime now = LocalDateTime.now();
 
+                // OpenAI GPT-5.6 Models (Latest 2026)
+                models.add(createModel("gpt-5.6-sol", "GPT-5.6 Sol (Flagship)", "openai", "chat",
+                                15.00, 75.00, true, "Flagship GPT-5.6 model for complex agentic work",
+                                "https://api.openai.com/v1/chat/completions", null, 256_000, now));
+                models.add(createModel("gpt-5.6-terra", "GPT-5.6 Terra (Balanced)", "openai", "chat",
+                                5.00, 15.00, true, "Balanced GPT-5.6 model for everyday tasks",
+                                "https://api.openai.com/v1/chat/completions", null, 256_000, now));
+                models.add(createModel("gpt-5.6-luna", "GPT-5.6 Luna (Efficient)", "openai", "chat",
+                                0.50, 1.50, true, "Efficient GPT-5.6 model for high-volume tasks",
+                                "https://api.openai.com/v1/chat/completions", null, 128_000, now));
+
                 // OpenAI GPT-4 Models
                 models.add(createModel("gpt-4o", "GPT-4 Optimized", "openai", "chat",
                                 2.50, 10.00, true, "Latest GPT-4 optimized model with improved performance",
@@ -226,6 +237,20 @@ public class LlmModelServiceImpl implements LlmModelService {
                 models.add(createModel("text-embedding-ada-002", "Text Embedding Ada", "openai", "embedding",
                                 0.100, 0.0, true, "Ada embedding model for semantic search",
                                 "https://api.openai.com/v1/embeddings", 1536, 8_192, now));
+
+                // Google Gemini 3 Models (Latest 2026)
+                models.add(createModel("gemini-3.5-flash", "Gemini 3.5 Flash", "gemini", "chat",
+                                0.075, 0.30, true, "Latest major release for frontier intelligence",
+                                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+                                null, 1_000_000, now));
+                models.add(createModel("gemini-3.1-pro", "Gemini 3.1 Pro", "gemini", "chat",
+                                1.25, 5.00, true, "Advanced reasoning Gemini model",
+                                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-pro:generateContent",
+                                null, 2_000_000, now));
+                models.add(createModel("gemini-3.1-flash-lite", "Gemini 3.1 Flash-Lite", "gemini", "chat",
+                                0.015, 0.075, true, "Cost-effective high-volume model",
+                                "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+                                null, 1_000_000, now));
 
                 // Google Gemini Models
                 models.add(createModel("gemini-2.0-flash", "Gemini 2.0 Flash", "gemini", "chat",
@@ -263,6 +288,20 @@ public class LlmModelServiceImpl implements LlmModelService {
                                 768, 3_072,
                                 now));
 
+                // Anthropic Claude Models - Latest 2026
+                models.add(createModel("claude-fable-5", "Claude Fable 5 (Mythos-Class)", "anthropic", "chat",
+                                30.00, 150.00, true,
+                                "Mythos-class model for complex reasoning and SWE",
+                                "https://api.anthropic.com/v1/messages", null, 200_000, now));
+                models.add(createModel("claude-opus-4-8", "Claude Opus 4.8", "anthropic", "chat",
+                                15.00, 75.00, true,
+                                "Latest flagship Opus model with high reliability",
+                                "https://api.anthropic.com/v1/messages", null, 200_000, now));
+                models.add(createModel("claude-sonnet-4-6", "Claude Sonnet 4.6", "anthropic", "chat",
+                                3.00, 15.00, true,
+                                "Latest Sonnet for everyday infrastructure agents",
+                                "https://api.anthropic.com/v1/messages", null, 200_000, now));
+
                 // Anthropic Claude Models - Latest 2025
                 models.add(createModel("claude-sonnet-4-5", "Claude Sonnet 4.5 (Latest)", "anthropic", "chat",
                                 3.00, 15.00, true,
@@ -292,6 +331,15 @@ public class LlmModelServiceImpl implements LlmModelService {
                                 "https://api.anthropic.com/v1/messages", null, 200_000, now));
 
                 // Cohere Command Models (Chat/Completion)
+                models.add(createModel("command-b-reasoning-06-2026", "Command B Reasoning", "cohere", "chat",
+                                1.5, 6.0, true,
+                                "Latest reasoning model from Cohere (2026). Excels at autonomous agents, complex tool use, and deep reasoning tasks.",
+                                "https://api.cohere.ai/v2/chat", null, 256_000, now));
+                models.add(createModel("command-b-05-2026", "Command B", "cohere", "chat",
+                                0.5, 2.0, true,
+                                "Most performant Command B model for enterprise RAG, high-throughput agents, and multilingual processing.",
+                                "https://api.cohere.ai/v2/chat", null, 256_000, now));
+
                 models.add(createModel("command-a-reasoning-08-2025", "Command A Reasoning", "cohere", "chat",
                                 0.0, 0.0, true,
                                 "First reasoning model from Cohere (111B params, 256K context, 32K max output) - Free until rate limits. Excels at agentic tasks, tool use, and multilingual reasoning",

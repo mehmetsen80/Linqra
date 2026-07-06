@@ -217,6 +217,17 @@ export interface ProcessFlowSlideContent {
   }[];
 }
 
+export interface TextBoxProcessSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  steps: {
+    title: TextContent;
+    description: (TextContent | TextContent[])[]; // Can be an array of paragraphs
+    color?: string;
+    stepLabel?: string; // e.g., "01"
+  }[];
+}
+
 export interface AlternatingFlowSlideContent {
   title?: TextContent;
   subtitle?: TextContent;

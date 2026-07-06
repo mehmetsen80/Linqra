@@ -18,6 +18,7 @@ import { InterlockingTrianglesSlide } from './InterlockingTrianglesSlide';
 import { NodeBranchTimelineSlide } from './NodeBranchTimelineSlide';
 import { AlternatingRingFlowSlide } from './AlternatingRingFlowSlide';
 import { HexagonTimelineSlide } from './HexagonTimelineSlide';
+import { TextBoxProcessSlide } from './TextBoxProcessSlide';
 import { sanitizeSlide } from '../slideSanitizer';
 
 interface Props {
@@ -45,6 +46,8 @@ const renderSlideContent = (slide: SlideData) => {
       return <ProcessFlowSlide content={slide.content} />;
     case 'code_block':
       return <CodeBlockSlide content={slide.content} />;
+    case 'text_box_process':
+      return <TextBoxProcessSlide content={slide.content} />;
     case 'node_branch_timeline':
       return <NodeBranchTimelineSlide content={slide.content} />;
     case 'custom_html':

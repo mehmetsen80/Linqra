@@ -17,6 +17,7 @@ import { InterlockingTrianglesSlide } from './InterlockingTrianglesSlide';
 import { HexagonTimelineSlide } from './HexagonTimelineSlide';
 import { ProcessFlowSlide } from './ProcessFlowSlide';
 import { NodeBranchTimelineSlide } from './NodeBranchTimelineSlide';
+import { TextBoxProcessSlide } from './TextBoxProcessSlide';
 
 interface Props {
   content: CustomHtmlSlideContent;
@@ -199,6 +200,17 @@ export const CustomHtmlSlide: React.FC<Props> = ({ content }) => {
               return <ProcessFlowSlide key={`proc-${Math.random()}`} content={parsedContent} />;
             } catch (e) {
               console.error("Failed to parse data for deqra-process-flow", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-text-box-process') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <TextBoxProcessSlide key={`txtbox-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-text-box-process", e);
             }
           }
         }

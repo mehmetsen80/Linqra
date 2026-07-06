@@ -65,7 +65,7 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
         </div>
       )}
 
-      <div style={{ flex: 1, position: 'relative', marginTop: '2rem' }} ref={containerRef}>
+      <div style={{ flex: 1, position: 'relative', marginTop: (content.title || content.subtitle) ? '2rem' : 0 }} ref={containerRef}>
         {dimensions.width > 0 && (
           <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', zIndex: 0 }}>
             <defs>
@@ -117,11 +117,16 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
               // Line is centered on the total width of the colored chevron
               const lineX = chevronStartX + (chevronW + ARROW_HEAD_WIDTH) / 2;
               
+              // Dynamically constrain vertical distance to guarantee it never exceeds available SVG height (prevents html2canvas crop)
+              const maxSafeDist = Math.max(5, (dimensions.height / 2) - HEX_R - (RIBBON_HEIGHT/2) - 20); // 20px shadow buffer
+              const hexDist = Math.min(40, maxSafeDist);
+              const textDist = hexDist + 15;
+
               // Move Hexagon away from the ribbon, keep Text further away
-              const hexCY = isTop ? CY - RIBBON_HEIGHT/2 - 40 : CY + RIBBON_HEIGHT/2 + 40;
+              const hexCY = isTop ? CY - RIBBON_HEIGHT/2 - hexDist : CY + RIBBON_HEIGHT/2 + hexDist;
               const lineStartY = isTop ? hexCY + HEX_R + 5 : hexCY - HEX_R - 5;
               
-              const textCY = isTop ? CY + RIBBON_HEIGHT/2 + 55 : CY - RIBBON_HEIGHT/2 - 55;
+              const textCY = isTop ? CY + RIBBON_HEIGHT/2 + textDist : CY - RIBBON_HEIGHT/2 - textDist;
               const lineEndY = isTop ? textCY - 65 : textCY + 65;
 
               return (
@@ -238,8 +243,12 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
           // Line is centered on the total width of the colored chevron
           const lineX = chevronStartX + (chevronW + ARROW_HEAD_WIDTH) / 2;
           
+          const maxSafeDist = Math.max(5, (dimensions.height / 2) - HEX_R - (RIBBON_HEIGHT/2) - 20);
+          const hexDist = Math.min(40, maxSafeDist);
+          const textDist = hexDist + 15;
+
           const isTop = idx % 2 === 0;
-          const textCY = isTop ? CY + RIBBON_HEIGHT/2 + 55 : CY - RIBBON_HEIGHT/2 - 55;
+          const textCY = isTop ? CY + RIBBON_HEIGHT/2 + textDist : CY - RIBBON_HEIGHT/2 - textDist;
           const maxTextWidth = Math.max(150, StepWidth * 0.9);
 
           return (

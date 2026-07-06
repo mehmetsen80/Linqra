@@ -10,3 +10,4 @@ export * from './components/ProcessFlowSlide';
 export * from './components/CustomHtmlSlide';
 export * from './components/PresentationRenderer';
 export * from './components/DynamicIcon';
+export * from './components/HexagonTimelineSlide';

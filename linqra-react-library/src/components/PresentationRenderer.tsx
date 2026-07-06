@@ -10,6 +10,14 @@ import { DiagramFocusSlide } from './DiagramFocusSlide';
 import { TimelineSlide } from './TimelineSlide';
 import { ProcessFlowSlide } from './ProcessFlowSlide';
 import { CodeBlockSlide } from './CodeBlockSlide';
+import { AlternatingFlowSlide } from './AlternatingFlowSlide';
+import { SerpentineFlowSlide } from './SerpentineFlowSlide';
+import { ChevronProcessSlide } from './ChevronProcessSlide';
+import { ArrowTimelineSlide } from './ArrowTimelineSlide';
+import { InterlockingTrianglesSlide } from './InterlockingTrianglesSlide';
+import { NodeBranchTimelineSlide } from './NodeBranchTimelineSlide';
+import { AlternatingRingFlowSlide } from './AlternatingRingFlowSlide';
+import { HexagonTimelineSlide } from './HexagonTimelineSlide';
 import { sanitizeSlide } from '../slideSanitizer';
 
 interface Props {
@@ -37,8 +45,24 @@ const renderSlideContent = (slide: SlideData) => {
       return <ProcessFlowSlide content={slide.content} />;
     case 'code_block':
       return <CodeBlockSlide content={slide.content} />;
+    case 'node_branch_timeline':
+      return <NodeBranchTimelineSlide content={slide.content} />;
     case 'custom_html':
       return <CustomHtmlSlide content={slide.content} />;
+    case 'alternating_flow':
+      return <AlternatingFlowSlide content={slide.content} />;
+    case 'serpentine_flow':
+      return <SerpentineFlowSlide content={slide.content} />;
+    case 'chevron_process':
+      return <ChevronProcessSlide content={slide.content} />;
+    case 'arrow_timeline':
+      return <ArrowTimelineSlide content={slide.content as any} />;
+    case 'hexagon_timeline':
+      return <HexagonTimelineSlide content={slide.content as any} />;
+    case 'interlocking_triangles':
+      return <InterlockingTrianglesSlide content={slide.content as any} />;
+    case 'alternating_ring_flow':
+      return <AlternatingRingFlowSlide content={slide.content as any} />;
     default:
       return <div>Unknown layout: {slide.layout}</div>;
   }
@@ -167,7 +191,7 @@ export const PresentationRenderer: React.FC<Props> = ({ deck, theme = 'light' })
           else if (snPos === 'hidden') { slideNumberStyles.display = 'none'; }
 
           return (
-          <div key={slide.id} style={{ 
+          <div key={slide.id} className="deqra-slide-container" style={{ 
             containerType: 'size',
             background: 'var(--slide-bg)', 
             color: 'var(--text-main)',

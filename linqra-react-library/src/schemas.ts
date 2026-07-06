@@ -172,6 +172,34 @@ export interface TimelineSlideContent {
   }[];
 }
 
+export interface HexagonTimelineSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  nodeSize?: number;
+  arrowType?: 'default' | 'solid' | 'circle' | 'none'; // Optional arrowhead style
+  steps: {
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    icon?: string;
+    stepLabel?: string; // e.g. "STEP 01"
+  }[];
+}
+
+export interface NodeBranchTimelineSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  nodeSize?: number; // Radius of the nodes
+  arrowType?: 'default' | 'solid' | 'circle' | 'none'; 
+  steps: {
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    icon?: string;
+    stepLabel?: string; // e.g. "STEP 01"
+  }[];
+}
+
 export interface ProcessFlowSlideContent {
   title: TextContent;
   image?: ImageContent;
@@ -186,6 +214,87 @@ export interface ProcessFlowSlideContent {
     cardStyle?: CSSProperties;  // pass-through: any CSS to apply to the card div
     arrowStyle?: CSSProperties; // pass-through: any CSS to apply to the arrow following this card
     arrowType?: 'classic' | 'chevron' | 'wedge' | 'line' | 'block' | 'curved' | 'looping' | '3d_ribbon_curve';
+  }[];
+}
+
+export interface AlternatingFlowSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  steps: {
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    icon?: string;
+    nodeStyle?: CSSProperties;
+  }[];
+}
+
+export interface AlternatingRingFlowSlideContent {
+  title: TextContent;
+  subtitle?: TextContent;
+  startDirection?: 'over' | 'under';
+  steps: {
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    icon?: string;
+  }[];
+}
+
+export interface SerpentineFlowSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  itemsPerRow?: number; // Default: 4
+  steps: {
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    icon?: string;
+    nodeStyle?: CSSProperties;
+  }[];
+}
+
+export interface ChevronProcessSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  cornerRadius?: number; // Global border radius for the interlocking chevrons
+  steps: {
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    icon?: string;
+    widthRatio?: number; // Optional relative width (e.g. 2 means twice as wide as ratio 1)
+  }[];
+}
+
+export interface ArrowTimelineSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  timelineColor?: string; // Color of the central arrow timeline
+  events: {
+    date: TextContent;
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    icon?: string;
+  }[];
+}
+
+export interface InterlockingTrianglesSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  flatStyle?: boolean; // If true, disables the 3D folded-paper split-shading
+  outlineCircle?: boolean; // If true, the circle has a white fill and a colored border
+  softCircle?: boolean; // If true, the circle has a soft pastel fill (tinted with the base color)
+  gapWidth?: number; // Customizes the thickness of the white divider between triangle groups
+  steps: {
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    nodeBgColor?: string; // Custom background color for this specific circular node
+    nodeRadius?: number; // Custom size for this specific circular node
+    hideDivider?: boolean; // If true, removes the white stroke separating this group
+    icon?: string;
   }[];
 }
 

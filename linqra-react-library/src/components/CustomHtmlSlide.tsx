@@ -8,6 +8,15 @@ import { StandardContentSlide } from './StandardContentSlide';
 import { SplitMediaSlide } from './SplitMediaSlide';
 import { StandaloneDiagram } from './DiagramFocusSlide';
 import { CodeBlockSlide } from './CodeBlockSlide';
+import { AlternatingRingFlowSlide } from './AlternatingRingFlowSlide';
+import { AlternatingFlowSlide } from './AlternatingFlowSlide';
+import { SerpentineFlowSlide } from './SerpentineFlowSlide';
+import { ChevronProcessSlide } from './ChevronProcessSlide';
+import { ArrowTimelineSlide } from './ArrowTimelineSlide';
+import { InterlockingTrianglesSlide } from './InterlockingTrianglesSlide';
+import { HexagonTimelineSlide } from './HexagonTimelineSlide';
+import { ProcessFlowSlide } from './ProcessFlowSlide';
+import { NodeBranchTimelineSlide } from './NodeBranchTimelineSlide';
 
 interface Props {
   content: CustomHtmlSlideContent;
@@ -94,6 +103,105 @@ export const CustomHtmlSlide: React.FC<Props> = ({ content }) => {
             }
           }
         }
+        if (domNode.name === 'deqra-alternating-ring-flow') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <AlternatingRingFlowSlide key={`altring-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-alternating-ring-flow", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-alternating-flow') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <AlternatingFlowSlide key={`altflow-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-alternating-flow", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-serpentine-flow') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <SerpentineFlowSlide key={`serp-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-serpentine-flow", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-chevron-process') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <ChevronProcessSlide key={`chev-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-chevron-process", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-arrow-timeline') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <ArrowTimelineSlide key={`arrow-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-arrow-timeline", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-interlocking-triangles') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <InterlockingTrianglesSlide key={`tri-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-interlocking-triangles", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-hexagon-timeline') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <HexagonTimelineSlide key={`hextl-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-hexagon-timeline", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-node-branch-timeline') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <NodeBranchTimelineSlide key={`nbrt-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-node-branch-timeline", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-process-flow') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <ProcessFlowSlide key={`proc-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-process-flow", e);
+            }
+          }
+        }
       }
     }
   };
@@ -101,7 +209,7 @@ export const CustomHtmlSlide: React.FC<Props> = ({ content }) => {
   return (
     <div 
       className="custom-html-slide"
-      style={{ width: '100%', height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}
+      style={{ width: '100%', height: '100%', boxSizing: 'border-box', overflow: 'visible' }}
     >
       {parse(content.html, options)}
     </div>

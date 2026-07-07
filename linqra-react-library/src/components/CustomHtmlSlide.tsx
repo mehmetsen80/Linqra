@@ -18,6 +18,14 @@ import { HexagonTimelineSlide } from './HexagonTimelineSlide';
 import { ProcessFlowSlide } from './ProcessFlowSlide';
 import { NodeBranchTimelineSlide } from './NodeBranchTimelineSlide';
 import { TextBoxProcessSlide } from './TextBoxProcessSlide';
+import { ComparisonSlide } from './ComparisonSlide';
+import { MediaColumnGridSlide } from './MediaColumnGridSlide';
+import { PortraitHeroSlide } from './PortraitHeroSlide';
+import { MediaAnnotatorSlide } from './MediaAnnotatorSlide';
+import { FocalMetricSlide } from './FocalMetricSlide';
+import { FeatureSplitSlide } from './FeatureSplitSlide';
+import { TaskListSlide } from './TaskListSlide';
+import { FeatureBannerSlide } from './FeatureBannerSlide';
 
 interface Props {
   content: CustomHtmlSlideContent;
@@ -208,9 +216,97 @@ export const CustomHtmlSlide: React.FC<Props> = ({ content }) => {
           if (dataAttr) {
             try {
               const parsedContent = JSON.parse(dataAttr);
-              return <TextBoxProcessSlide key={`txtbox-${Math.random()}`} content={parsedContent} />;
+              return <TextBoxProcessSlide key={`tbprocess-${Math.random()}`} content={parsedContent} />;
             } catch (e) {
               console.error("Failed to parse data for deqra-text-box-process", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-comparison') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <ComparisonSlide key={`comp-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-comparison", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-media-column-grid') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <MediaColumnGridSlide key={`mcg-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-media-column-grid", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-portrait-hero') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <PortraitHeroSlide key={`hero-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-portrait-hero", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-media-annotator') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <MediaAnnotatorSlide key={`annotator-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-media-annotator", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-focal-metric') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <FocalMetricSlide key={`focal-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-focal-metric", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-feature-split') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const parsedContent = JSON.parse(dataAttr);
+              return <FeatureSplitSlide key={`feature-${Math.random()}`} content={parsedContent} />;
+            } catch (e) {
+              console.error("Failed to parse data for deqra-feature-split", e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-task-list') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <TaskListSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-task-list data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-feature-banner') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <FeatureBannerSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-feature-banner data', e);
             }
           }
         }

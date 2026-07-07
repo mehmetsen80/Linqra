@@ -676,6 +676,27 @@ Use these HSL/Hex variables to maintain style consistency:
 | `--button-bg-start` | `var(--primary-color)` | Vibrant button fill start |
 | `--button-bg-end` | `var(--primary-dark)` | Gradient button fill end |
 
+### 📐 Component Development Rules & Responsive Spacing
+
+When developing new React components (especially Slide layouts) for the `linqra-react-library`:
+
+> [!WARNING]
+> **Never use hardcoded `rem` or `px` values for outer container paddings and margins.**
+
+Always use responsive CSS `clamp()` functions for padding and gap values. Global layout wrappers (like PresentationFooters or custom HTML injections) can dynamically shrink the available space. If slide layouts use rigid padding (e.g. `padding: '2rem 3rem'`), their content will overflow and trigger unwanted scrollbars when constrained vertically or viewed on Portrait/Mobile aspect ratios.
+
+**Correct:**
+```css
+padding: 'clamp(1rem, 3cqmin, 2rem) clamp(1.5rem, 4cqmin, 3rem)'
+gap: 'clamp(1.5rem, 3cqmin, 3rem)'
+```
+
+**Incorrect:**
+```css
+padding: '2rem 3rem'
+gap: '2rem'
+```
+
 ---
 
 ## 12. High-Level Backend Modules

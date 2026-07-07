@@ -318,7 +318,7 @@ export const ChartFocusSlide: React.FC<Props> = ({ content }) => {
     <div style={{ containerType: 'inline-size', padding: 'clamp(1rem, 5cqi, 3rem) clamp(1rem, 6cqi, 4rem)', height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
       {renderText(content.title, { marginBottom: 'clamp(1rem, 2cqi, 2rem)', color: 'var(--text-main)', fontSize: 'clamp(1.5rem, 5cqi, 2.25rem)' }, 'h1')}
       {renderText(content.summary, { fontSize: 'clamp(1rem, 3cqi, 1.5rem)', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 'clamp(1rem, 3cqi, 2rem)' }, 'p')}
-      <div style={{ flex: 1, minHeight: 0, minWidth: 0, width: '100%', background: 'var(--card-bg)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--card-border)' }}>
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, width: '100%', background: 'var(--card-bg)', padding: 'clamp(0.5rem, 2cqmin, 1rem)', borderRadius: '12px', border: '1px solid var(--card-border)' }}>
         <StandaloneChart chartSpec={chartSpec} />
       </div>
     </div>

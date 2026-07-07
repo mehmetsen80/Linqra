@@ -54,7 +54,7 @@ export const InterlockingTrianglesSlide: React.FC<InterlockingTrianglesSlideProp
   };
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: '1rem 2rem' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: 'clamp(0.5rem, 2cqmin, 1rem) clamp(1rem, 3cqmin, 2rem)', boxSizing: 'border-box' }}>
       {(content.title || content.subtitle) && (
         <div style={{ marginBottom: '1rem' }}>
           {content.title && renderText(content.title, { fontSize: `clamp(1.25rem, ${dimensions.width / 300}rem, 2.5rem)`, fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}

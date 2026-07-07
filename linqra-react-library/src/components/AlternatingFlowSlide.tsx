@@ -18,7 +18,7 @@ export const AlternatingFlowSlide: React.FC<AlternatingFlowSlideProps> = ({ cont
       height: '100%', 
       display: 'flex', 
       flexDirection: 'column', 
-      padding: '2rem'
+      padding: 'clamp(1rem, 3cqmin, 2rem)'
     }}>
       {/* Slide Header */}
       <div style={{ marginBottom: '2rem' }}>
@@ -42,7 +42,7 @@ export const AlternatingFlowSlide: React.FC<AlternatingFlowSlideProps> = ({ cont
         display: 'flex', 
         alignItems: 'center', 
         justifyContent: 'space-around',
-        padding: '2rem 0'
+        padding: 'clamp(1rem, 3cqmin, 2rem) 0'
       }}>
         
         {/* SVG Connectors Background */}

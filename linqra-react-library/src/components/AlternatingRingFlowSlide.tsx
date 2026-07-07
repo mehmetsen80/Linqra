@@ -54,7 +54,7 @@ export const AlternatingRingFlowSlide: React.FC<Props> = ({ content }) => {
       position: 'relative',
       display: 'flex',
       flexDirection: 'column',
-      padding: '2rem',
+      padding: 'clamp(1rem, 3cqmin, 2rem)',
       backgroundColor: 'transparent'
     }}>
       {/* Header */}

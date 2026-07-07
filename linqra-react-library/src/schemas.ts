@@ -7,9 +7,25 @@ export interface DeckMetadata {
   [key: string]: any;
 }
 
+export interface FooterData {
+  icon?: string;
+  iconColor?: string;
+  iconBg?: string;
+  textLeft?: TextContent;
+  textRight?: TextContent;
+  dividerStyle?: {
+    thickness?: string;
+    color?: string;
+    style?: 'solid' | 'dashed' | 'dotted';
+  };
+  containerStyle?: CSSProperties;
+  contentStyle?: CSSProperties;
+}
+
 export interface DeckData {
   deckTitle: string;
   metadata?: DeckMetadata;
+  footer?: FooterData;
   slides: SlideData[];
 }
 
@@ -54,6 +70,7 @@ export interface SlideData {
   id: string;
   layout: string;
   speakerNotes?: string;
+  hideFooter?: boolean;
   styleOverrides?: StyleOverrides;
   content: any;
 }
@@ -64,7 +81,12 @@ export interface CustomHtmlSlideContent {
 
 // Shared types
 export type ImageContent = string | { url: string; alt?: string; style?: CSSProperties };
-export type TextContent = string | { text: string; style?: CSSProperties };
+export type TextContent = string | { 
+  text: string; 
+  style?: CSSProperties;
+  icon?: string;
+  iconPosition?: 'left' | 'right';
+};
 
 // Layout-specific content schemas
 export interface TitleSlideContent {
@@ -319,3 +341,224 @@ export interface CodeBlockContent {
   containerStyle?: CSSProperties;
 }
 
+
+export interface FeatureSplitSlideContent {
+  separatorStyle?: CSSProperties; // e.g. { borderLeft: '2px solid #ccc' }
+  leftColumn: {
+    heading: TextContent;
+    icon?: string;
+    iconColor?: string; // Custom color for the column header icon
+    iconBg?: string;    // Custom background for the column header icon
+    items: {
+      title: TextContent;
+      description?: TextContent;
+      icon?: string;
+      iconColor?: string; // Custom color for the list item icon
+      iconBg?: string;    // Custom background for the list item icon
+    }[];
+  };
+  rightColumn: {
+    heading: TextContent;
+    icon?: string;
+    iconColor?: string; // Custom color for the column header icon
+    iconBg?: string;    // Custom background for the column header icon
+    items: {
+      text: TextContent;
+      icon?: string;
+      color?: string; // Determines the icon background color in the card
+      cardStyle?: CSSProperties; // Custom styling for the individual card (e.g. bg, border)
+    }[];
+  };
+}
+
+export interface TaskListSlideContent {
+  title?: TextContent;
+  tasks: {
+    title: TextContent;
+    subtitle?: TextContent;
+    subtitleColor?: string;
+    badgeText?: string;
+    badgeColor?: string;
+    badgeBg?: string;
+    checked?: boolean;
+    checkedColor?: string;
+  }[];
+}
+
+export interface ComparisonSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  leftColumn: {
+    heading: TextContent;
+    items: {
+      title: TextContent;
+      description?: TextContent;
+      icon?: string;
+      color?: string;
+    }[];
+  };
+  rightColumn: {
+    heading: TextContent;
+    items: {
+      title: TextContent;
+      description?: TextContent;
+      icon?: string;
+      color?: string;
+    }[];
+  };
+}
+
+export interface FocalMetricSlideContent {
+  variant?: 'centered' | 'left-aligned' | 'card' | 'split' | 'gradient';
+  title?: TextContent;
+  subtitle?: TextContent;
+  focalMetric: {
+    value: TextContent;
+    label: TextContent;
+    color?: string;
+  };
+  description: TextContent;
+  secondaryMetrics?: {
+    value: TextContent;
+    label: TextContent;
+  }[];
+}
+
+export interface MediaAnnotatorSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  mediaUrl?: string;
+  imagePosition?: 'left' | 'right';
+  containerStyle?: CSSProperties;
+  contentStyle?: CSSProperties;
+  lineStyle?: {
+    thickness?: string;
+    color?: string;
+    style?: 'solid' | 'dashed' | 'dotted';
+  };
+  steps: {
+    title: TextContent;
+    description?: TextContent;
+    color?: string;
+    icon?: string;
+    iconColor?: string;
+    iconBg?: string;
+    nodeScale?: number;
+  }[];
+}
+
+export interface MediaColumnGridSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  columns: {
+    heading: TextContent;
+    bullets?: TextContent[];
+    mediaUrl?: string;
+    icon?: string;
+    color?: string;
+  }[];
+}
+
+export interface NumberedTimelineSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  steps?: {
+    title: TextContent;
+    description?: TextContent;
+    number: string;
+    color?: string;
+    icon?: string;
+    subtitle?: string;
+    nodeScale?: number;
+  }[];
+  timelines?: {
+    title?: TextContent;
+    subtitle?: TextContent;
+    steps: {
+      title: TextContent;
+      description?: TextContent;
+      number: string;
+      color?: string;
+      icon?: string;
+      subtitle?: string;
+      nodeScale?: number;
+    }[];
+  }[];
+}
+
+export interface PortraitHeroSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  eyebrow?: TextContent;
+  mediaUrls: string[];
+  background?: string;
+  mediaLayout?: 'row' | 'stack' | 'grid' | 'collage';
+}
+
+export type SlideContent = 
+  | { layout: 'title'; content: TitleSlideContent }
+  | { layout: 'metric_grid'; content: MetricGridSlideContent }
+  | { layout: 'standard'; content: StandardContentSlideContent }
+  | { layout: 'split_media'; content: SplitMediaSlideContent }
+  | { layout: 'chart_focus'; content: ChartFocusSlideContent }
+  | { layout: 'diagram_focus'; content: DiagramFocusSlideContent }
+  | { layout: 'timeline'; content: TimelineSlideContent }
+  | { layout: 'process_flow'; content: ProcessFlowSlideContent }
+  | { layout: 'custom_html'; content: CustomHtmlSlideContent }
+  | { layout: 'alternating_flow'; content: AlternatingFlowSlideContent }
+  | { layout: 'alternating_ring_flow'; content: AlternatingRingFlowSlideContent }
+  | { layout: 'serpentine_flow'; content: SerpentineFlowSlideContent }
+  | { layout: 'chevron_process'; content: ChevronProcessSlideContent }
+  | { layout: 'arrow_timeline'; content: ArrowTimelineSlideContent }
+  | { layout: 'interlocking_triangles'; content: InterlockingTrianglesSlideContent }
+  | { layout: 'hex_timeline'; content: HexagonTimelineSlideContent }
+  | { layout: 'node_branch_timeline'; content: NodeBranchTimelineSlideContent }
+  | { layout: 'text_box_process'; content: TextBoxProcessSlideContent }
+  | { layout: 'comparison'; content: ComparisonSlideContent }
+  | { layout: 'focal_metric'; content: FocalMetricSlideContent }
+  | { layout: 'media_annotator'; content: MediaAnnotatorSlideContent }
+  | { layout: 'media_column_grid'; content: MediaColumnGridSlideContent }
+  | { layout: 'numbered_timeline'; content: NumberedTimelineSlideContent }
+  | { layout: 'portrait_hero'; content: PortraitHeroSlideContent }
+  | { layout: 'feature_split'; content: FeatureSplitSlideContent }
+  | { layout: 'task_list'; content: TaskListSlideContent }
+  | { layout: 'feature_banner'; content: FeatureBannerSlideContent };
+
+export interface Presentation {
+  id?: string;
+  title?: string;
+  slides: {
+    id: string;
+    layout: SlideContent['layout'];
+    content: any; // Using any here to avoid strict unions in the JSON but typed in renderer
+    metadata?: any;
+  }[];
+  theme?: {
+    primaryColor?: string;
+    fontFamily?: string;
+    slideBackground?: string;
+    textColor?: string;
+  };
+}
+
+export interface FeatureBannerSlideContent {
+  icon?: string;
+  iconBg?: string;
+  iconColor?: string;
+  iconPosition?: 'left' | 'right';
+  iconAlignment?: 'top' | 'center' | 'bottom';
+  cardBg?: string;
+  cardBorderColor?: string;
+  dividerStyle?: {
+    thickness?: string;
+    color?: string;
+    style?: 'solid' | 'dashed' | 'dotted';
+  };
+  title?: TextContent;
+  features: {
+    title: TextContent;
+    description: TextContent;
+    icon?: string;
+    iconColor?: string;
+  }[];
+}

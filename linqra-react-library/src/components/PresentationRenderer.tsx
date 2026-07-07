@@ -19,6 +19,16 @@ import { NodeBranchTimelineSlide } from './NodeBranchTimelineSlide';
 import { AlternatingRingFlowSlide } from './AlternatingRingFlowSlide';
 import { HexagonTimelineSlide } from './HexagonTimelineSlide';
 import { TextBoxProcessSlide } from './TextBoxProcessSlide';
+import { ComparisonSlide } from './ComparisonSlide';
+import { MediaColumnGridSlide } from './MediaColumnGridSlide';
+import { PortraitHeroSlide } from './PortraitHeroSlide';
+import { MediaAnnotatorSlide } from './MediaAnnotatorSlide';
+import { FocalMetricSlide } from './FocalMetricSlide';
+import { NumberedTimelineSlide } from './NumberedTimelineSlide';
+import { FeatureSplitSlide } from './FeatureSplitSlide';
+import { TaskListSlide } from './TaskListSlide';
+import { FeatureBannerSlide } from './FeatureBannerSlide';
+import { PresentationFooter } from './PresentationFooter';
 import { sanitizeSlide } from '../slideSanitizer';
 
 interface Props {
@@ -48,6 +58,24 @@ const renderSlideContent = (slide: SlideData) => {
       return <CodeBlockSlide content={slide.content} />;
     case 'text_box_process':
       return <TextBoxProcessSlide content={slide.content} />;
+    case 'comparison':
+      return <ComparisonSlide content={slide.content} />;
+    case 'media_column_grid':
+      return <MediaColumnGridSlide content={slide.content} />;
+    case 'portrait_hero':
+      return <PortraitHeroSlide content={slide.content} />;
+    case 'feature_split':
+      return <FeatureSplitSlide content={slide.content as any} />;
+    case 'task_list':
+      return <TaskListSlide content={slide.content as any} />;
+    case 'feature_banner':
+      return <FeatureBannerSlide content={slide.content as any} />;
+    case 'media_annotator':
+      return <MediaAnnotatorSlide content={slide.content} />;
+    case 'focal_metric':
+      return <FocalMetricSlide content={slide.content} />;
+    case 'numbered_timeline':
+      return <NumberedTimelineSlide content={slide.content} />;
     case 'node_branch_timeline':
       return <NodeBranchTimelineSlide content={slide.content} />;
     case 'custom_html':
@@ -193,19 +221,34 @@ export const PresentationRenderer: React.FC<Props> = ({ deck, theme = 'light' })
           else if (snPos === 'top-left') { slideNumberStyles.top = '0.25rem'; slideNumberStyles.left = '0.25rem'; }
           else if (snPos === 'hidden') { slideNumberStyles.display = 'none'; }
 
+          const getAspectRatio = (ar?: string) => {
+            if (ar === '4:3' || ar === '4/3') return '4/3';
+            if (ar === '16:9' || ar === '16/9') return '16/9';
+            if (ar === 'A4' || ar === 'a4' || ar === 'portrait') return '1 / 1.414';
+            if (ar === 'Letter' || ar === 'letter') return '8.5 / 11';
+            return '16/9'; // default
+          };
+
           return (
           <div key={slide.id} className="deqra-slide-container" style={{ 
             containerType: 'size',
             background: 'var(--slide-bg)', 
             color: 'var(--text-main)',
-            aspectRatio: deck.metadata?.aspectRatio === '4:3' ? '4/3' : '16/9',
+            aspectRatio: getAspectRatio(deck.metadata?.aspectRatio),
             maxWidth: '900px',
             margin: '0 auto 2rem auto',
             boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
             position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
             ...dynamicStyles
           }}>
-            {renderSlideContent(slide)}
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              {renderSlideContent(slide)}
+            </div>
+            {deck.footer && !slide.hideFooter && (
+              <PresentationFooter content={deck.footer} />
+            )}
             <div style={slideNumberStyles}>{idx + 1}</div>
           </div>
           );

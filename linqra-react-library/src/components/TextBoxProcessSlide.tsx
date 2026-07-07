@@ -20,7 +20,7 @@ export const TextBoxProcessSlide: React.FC<Props> = ({ content }) => {
       height: '100%',
       display: 'flex',
       flexDirection: 'column',
-      padding: '2rem 3rem',
+      padding: 'clamp(1rem, 3cqmin, 2rem) clamp(1.5rem, 4cqmin, 3rem)',
       boxSizing: 'border-box'
     }}>
       {/* Title Section */}

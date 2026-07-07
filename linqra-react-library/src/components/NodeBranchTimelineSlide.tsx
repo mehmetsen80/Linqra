@@ -11,6 +11,7 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
   const steps = content.steps || [];
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+  const [uid] = useState(() => Math.random().toString(36).substring(2, 9));
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -51,7 +52,7 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
   const subFontSize = 1.1;
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: '2rem 3rem' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: 'clamp(1rem, 3cqmin, 2rem) clamp(1.5rem, 4cqmin, 3rem)', boxSizing: 'border-box' }}>
       {(content.title || content.subtitle) && (
         <div style={{ marginBottom: '1rem' }}>
           {content.title && renderText(content.title, { fontSize: `${headerFontSize}rem`, fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
@@ -63,20 +64,11 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
         {dimensions.width > 0 && (
           <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', zIndex: 0 }}>
             <defs>
-              <filter id="node-shadow" x="-20%" y="-20%" width="140%" height="140%">
+              <filter id={`node-shadow-${uid}`} x="-20%" y="-20%" width="140%" height="140%">
                 <feDropShadow dx="0" dy="2" stdDeviation="4" floodOpacity="0.15" />
               </filter>
 
-              <marker id="branch-arrow-default" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
-                <path d="M 2 2 L 10 6 L 2 10" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </marker>
-              <marker id="branch-arrow-solid" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
-                <path d="M 2 2 L 10 6 L 2 10 Z" fill="#94a3b8" stroke="none" />
-              </marker>
-              <marker id="branch-arrow-circle" markerWidth="12" markerHeight="12" refX="6" refY="6" orient="auto">
-                <circle cx="6" cy="6" r="4" fill="#94a3b8" />
-              </marker>
-            </defs>
+              </defs>
 
             {/* 1. Main Horizontal Axis Line */}
             <line
@@ -99,19 +91,26 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
               const endY = isTop ? CY - BRANCH_Y_STEP - 20 : CY + BRANCH_Y_STEP + 20;
 
               return (
-                <path
-                  key={`branch-${idx}`}
-                  d={`
-                    M ${startX} ${CY}
-                    L ${startX} ${midY}
-                    L ${targetX} ${midY}
-                    L ${targetX} ${endY}
-                  `}
-                  fill="none"
-                  stroke="#94a3b8"
-                  strokeWidth="2"
-                  markerEnd={arrowType !== 'none' ? `url(#branch-arrow-${arrowType})` : undefined}
-                />
+                <g key={`branch-group-${idx}`}>
+                  <path
+                    d={`
+                      M ${startX} ${CY}
+                      L ${startX} ${midY}
+                      L ${targetX} ${midY}
+                      L ${targetX} ${endY}
+                    `}
+                    fill="none"
+                    stroke="#94a3b8"
+                    strokeWidth="2"
+                  />
+                  {arrowType === 'circle' && <circle cx={targetX} cy={endY} r="4" fill="#94a3b8" />}
+                  {arrowType === 'solid' && (
+                    <path d={`M ${targetX} ${endY} L ${targetX - 5} ${endY + (isTop ? 7 : -7)} L ${targetX + 5} ${endY + (isTop ? 7 : -7)} Z`} fill="#94a3b8" />
+                  )}
+                  {arrowType === 'default' && (
+                    <path d={`M ${targetX - 5} ${endY + (isTop ? 7 : -7)} L ${targetX} ${endY} L ${targetX + 5} ${endY + (isTop ? 7 : -7)}`} fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  )}
+                </g>
               );
             })}
 
@@ -121,7 +120,7 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
               const color = step.color || '#3b82f6';
 
               return (
-                <g key={`node-${idx}`} filter="url(#node-shadow)">
+                <g key={`node-${idx}`} filter={`url(#node-shadow-${uid})`}>
                   {/* Outer White Border */}
                   <circle cx={nodeX} cy={CY} r={NODE_R} fill="#ffffff" />
                   {/* Inner Colored Circle */}

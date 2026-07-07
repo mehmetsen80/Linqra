@@ -36,7 +36,7 @@ export const SerpentineFlowSlide: React.FC<SerpentineFlowSlideProps> = ({ conten
       height: '100%', 
       display: 'flex', 
       flexDirection: 'column', 
-      padding: '2rem'
+      padding: 'clamp(1rem, 3cqmin, 2rem)'
     }}>
       {/* Slide Header */}
       <div style={{ marginBottom: '2rem' }}>

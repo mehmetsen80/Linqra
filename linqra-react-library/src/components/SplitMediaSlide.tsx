@@ -26,7 +26,7 @@ export const SplitMediaSlide: React.FC<Props> = ({ content }) => {
   );
 
   const mediaSection = (
-    <div style={{ flex: 1, minHeight: 0, padding: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--card-bg)', overflow: 'hidden' }}>
+    <div style={{ flex: 1, minHeight: 0, padding: 'clamp(1rem, 3cqmin, 2rem)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--card-bg)', overflow: 'hidden' }}>
       {content.media?.type === 'image' && (
         <img 
           src={content.media.source} 

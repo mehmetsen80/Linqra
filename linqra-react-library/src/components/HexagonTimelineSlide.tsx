@@ -13,6 +13,7 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
   
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 1000, height: 500 });
+  const [uid] = useState(() => Math.random().toString(36).substring(2, 9));
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -57,7 +58,7 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
   const hexPointsString = hexPoints.join(' ');
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: '1rem 2rem' }}>
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: 'clamp(0.5rem, 2cqmin, 1rem) clamp(1rem, 3cqmin, 2rem)', boxSizing: 'border-box' }}>
       {(content.title || content.subtitle) && (
         <div style={{ marginBottom: '1rem' }}>
           {content.title && renderText(content.title, { fontSize: `${headerFontSize}rem`, fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
@@ -66,82 +67,22 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
       )}
 
       <div style={{ flex: 1, position: 'relative', marginTop: (content.title || content.subtitle) ? '2rem' : 0 }} ref={containerRef}>
-        {dimensions.width > 0 && (
-          <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', zIndex: 0 }}>
+        {dimensions.width > 0 && (() => {
+          const maxSafeDist = Math.max(20, (dimensions.height / 2) - HEX_R - (RIBBON_HEIGHT/2) - 20); // 20px shadow buffer
+          const globalHexDist = Math.max(60, Math.min(120, maxSafeDist));
+          const globalTextDist = globalHexDist + 20;
+
+          return (
+            <>
+              <svg style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', overflow: 'visible', zIndex: 0 }}>
             <defs>
               <filter id="hex-shadow" x="-30%" y="-30%" width="160%" height="160%">
                 <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.15" />
               </filter>
-              <filter id="ribbon-shadow" x="-5%" y="-30%" width="110%" height="160%">
+              <filter id={`ribbon-shadow-${uid}`} x="-5%" y="-30%" width="110%" height="160%">
                 <feDropShadow dx="0" dy="2" stdDeviation="4" floodOpacity="0.1" />
               </filter>
-              <marker 
-                id="hex-arrow-default"
-                markerWidth="12" 
-                markerHeight="12" 
-                refX="10" 
-                refY="6" 
-                orient="auto"
-              >
-                <path d="M 2 2 L 10 6 L 2 10" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </marker>
-              <marker 
-                id="hex-arrow-solid"
-                markerWidth="12" 
-                markerHeight="12" 
-                refX="10" 
-                refY="6" 
-                orient="auto"
-              >
-                <path d="M 2 2 L 10 6 L 2 10 Z" fill="#94a3b8" stroke="none" />
-              </marker>
-              <marker 
-                id="hex-arrow-circle"
-                markerWidth="12" 
-                markerHeight="12" 
-                refX="6" 
-                refY="6" 
-                orient="auto"
-              >
-                <circle cx="6" cy="6" r="4" fill="#94a3b8" />
-              </marker>
-            </defs>
-
-            {/* 1. Draw the Vertical Lines (drawn first so they are behind the ribbon) */}
-            {steps.map((_, idx) => {
-              const startX = offsetX + idx * StepWidth;
-              const chevronStartX = startX + (idx === 0 ? 0 : CHEVRON_GAP);
-              const chevronW = Math.min(60, StepWidth * 0.4);
-              const isTop = idx % 2 === 0;
-
-              // Line is centered on the total width of the colored chevron
-              const lineX = chevronStartX + (chevronW + ARROW_HEAD_WIDTH) / 2;
-              
-              // Dynamically constrain vertical distance to guarantee it never exceeds available SVG height (prevents html2canvas crop)
-              const maxSafeDist = Math.max(5, (dimensions.height / 2) - HEX_R - (RIBBON_HEIGHT/2) - 20); // 20px shadow buffer
-              const hexDist = Math.min(40, maxSafeDist);
-              const textDist = hexDist + 15;
-
-              // Move Hexagon away from the ribbon, keep Text further away
-              const hexCY = isTop ? CY - RIBBON_HEIGHT/2 - hexDist : CY + RIBBON_HEIGHT/2 + hexDist;
-              const lineStartY = isTop ? hexCY + HEX_R + 5 : hexCY - HEX_R - 5;
-              
-              const textCY = isTop ? CY + RIBBON_HEIGHT/2 + textDist : CY - RIBBON_HEIGHT/2 - textDist;
-              const lineEndY = isTop ? textCY - 65 : textCY + 65;
-
-              return (
-                <line 
-                  key={`line-${idx}`}
-                  x1={lineX} 
-                  y1={lineStartY} 
-                  x2={lineX} 
-                  y2={lineEndY} 
-                  stroke="#94a3b8" 
-                  strokeWidth="2"
-                  markerEnd={arrowType !== 'none' ? `url(#hex-arrow-${arrowType})` : undefined}
-                />
-              );
-            })}
+              </defs>
 
             {/* 2. Draw the Background White Ribbon */}
             <path 
@@ -155,8 +96,46 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
                 Z
               `} 
               fill="#ffffff" 
-              filter="url(#ribbon-shadow)"
+              filter={`url(#ribbon-shadow-${uid})`}
             />
+
+            {/* 1. Draw the Vertical Lines (drawn after ribbon so they are visible) */}
+            {steps.map((_, idx) => {
+              const startX = offsetX + idx * StepWidth;
+              const chevronStartX = startX + (idx === 0 ? 0 : CHEVRON_GAP);
+              const chevronW = Math.min(60, StepWidth * 0.4);
+              const isTop = idx % 2 === 0;
+
+              // Line is centered on the total width of the colored chevron
+              const lineX = chevronStartX + (chevronW + ARROW_HEAD_WIDTH) / 2;
+              
+              // Move Hexagon away from the ribbon, keep Text further away
+              const hexCY = isTop ? CY - RIBBON_HEIGHT/2 - globalHexDist : CY + RIBBON_HEIGHT/2 + globalHexDist;
+              const lineStartY = isTop ? hexCY + HEX_R + 5 : hexCY - HEX_R - 5;
+              
+              const textCY = isTop ? CY + RIBBON_HEIGHT/2 + globalTextDist : CY - RIBBON_HEIGHT/2 - globalTextDist;
+              const lineEndY = isTop ? textCY - 65 : textCY + 65;
+
+              return (
+                <g key={`line-group-${idx}`}>
+                  <line 
+                    x1={lineX} 
+                    y1={lineStartY} 
+                    x2={lineX} 
+                    y2={lineEndY} 
+                    stroke="#94a3b8" 
+                    strokeWidth="2"
+                  />
+                  {arrowType === 'circle' && <circle cx={lineX} cy={lineEndY} r="4" fill="#94a3b8" />}
+                  {arrowType === 'solid' && (
+                    <path d={`M ${lineX} ${lineEndY} L ${lineX - 5} ${lineEndY + (isTop ? -7 : 7)} L ${lineX + 5} ${lineEndY + (isTop ? -7 : 7)} Z`} fill="#94a3b8" />
+                  )}
+                  {arrowType === 'default' && (
+                    <path d={`M ${lineX - 5} ${lineEndY + (isTop ? -7 : 7)} L ${lineX} ${lineEndY} L ${lineX + 5} ${lineEndY + (isTop ? -7 : 7)}`} fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  )}
+                </g>
+              );
+            })}
 
             {/* 3. Draw the Colored Chevrons and Labels */}
             {steps.map((step, idx) => {
@@ -204,7 +183,7 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
               
               const isTop = idx % 2 === 0;
               const color = step.color || '#3b82f6';
-              const hexCY = isTop ? CY - RIBBON_HEIGHT/2 - 65 : CY + RIBBON_HEIGHT/2 + 65;
+              const hexCY = isTop ? CY - RIBBON_HEIGHT/2 - globalHexDist : CY + RIBBON_HEIGHT/2 + globalHexDist;
 
               return (
                 <g key={`hex-${idx}`}>
@@ -232,10 +211,9 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
               );
             })}
           </svg>
-        )}
 
         {/* 5. HTML Overlays for Text */}
-        {dimensions.width > 0 && steps.map((step, idx) => {
+        {steps.map((step, idx) => {
           const startX = offsetX + idx * StepWidth;
           const chevronStartX = startX + (idx === 0 ? 0 : CHEVRON_GAP);
           const chevronW = Math.min(60, StepWidth * 0.4);
@@ -243,12 +221,8 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
           // Line is centered on the total width of the colored chevron
           const lineX = chevronStartX + (chevronW + ARROW_HEAD_WIDTH) / 2;
           
-          const maxSafeDist = Math.max(5, (dimensions.height / 2) - HEX_R - (RIBBON_HEIGHT/2) - 20);
-          const hexDist = Math.min(40, maxSafeDist);
-          const textDist = hexDist + 15;
-
           const isTop = idx % 2 === 0;
-          const textCY = isTop ? CY + RIBBON_HEIGHT/2 + textDist : CY - RIBBON_HEIGHT/2 - textDist;
+          const textCY = isTop ? CY + RIBBON_HEIGHT/2 + globalTextDist : CY - RIBBON_HEIGHT/2 - globalTextDist;
           const maxTextWidth = Math.max(150, StepWidth * 0.9);
 
           return (
@@ -281,9 +255,12 @@ export const HexagonTimelineSlide: React.FC<Props> = ({ content }) => {
                   </div>
                 )}
               </div>
-            </React.Fragment>
+              </React.Fragment>
+            );
+          })}
+            </>
           );
-        })}
+        })()}
       </div>
     </div>
   );

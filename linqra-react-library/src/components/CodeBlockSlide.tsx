@@ -31,12 +31,13 @@ export const CodeBlockSlide: React.FC<Props> = ({ content }) => {
 
   const defaultContainerStyle: React.CSSProperties = {
     flex: 1,
-    padding: '1.5rem',
+    minHeight: 0,
+    padding: 'clamp(0.5rem, 2cqmin, 1.5rem)',
     borderRadius: '12px',
     boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
     overflow: 'auto',
     margin: 0,
-    fontSize: '0.9rem',
+    fontSize: 'clamp(0.7rem, 2cqmin, 1.5rem)',
     lineHeight: 1.5,
     fontFamily: '"Fira Code", "Consolas", monospace',
     ...content.containerStyle
@@ -46,7 +47,8 @@ export const CodeBlockSlide: React.FC<Props> = ({ content }) => {
     <div
       style={{
         containerType: 'size',
-        height: '100%',
+        flex: 1,
+        minHeight: 0,
         display: 'flex',
         flexDirection: 'column',
         boxSizing: 'border-box',
@@ -60,6 +62,7 @@ export const CodeBlockSlide: React.FC<Props> = ({ content }) => {
       <pre style={defaultContainerStyle} className={`language-${content.language}`}>
         <code 
           className={`language-${content.language}`} 
+          style={{ display: 'block', paddingBottom: '0.5rem' }}
           dangerouslySetInnerHTML={{ __html: highlightedHtml }}
         />
       </pre>

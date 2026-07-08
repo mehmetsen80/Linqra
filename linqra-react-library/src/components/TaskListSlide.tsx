@@ -23,7 +23,7 @@ export const TaskListSlide: React.FC<Props> = ({ content }) => {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'flex-start',
-      padding: 'clamp(2rem, 4cqmin, 4rem)',
+      padding: 'clamp(0.5rem, 3cqmin, 4rem)',
       boxSizing: 'border-box',
       background: 'var(--slide-bg, #ffffff)',
       fontFamily: 'var(--font-family, inherit)'
@@ -35,13 +35,13 @@ export const TaskListSlide: React.FC<Props> = ({ content }) => {
         borderRadius: '16px',
         boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01)',
         border: '1px solid #f1f5f9',
-        padding: 'clamp(1.5rem, 3cqmin, 2.5rem)',
+        padding: 'clamp(0.75rem, 2cqmin, 2.5rem)',
         display: 'flex',
         flexDirection: 'column'
       }}>
         {/* Header */}
         {title && (
-          <div style={{ marginBottom: '1rem' }}>
+          <div style={{ marginBottom: 'clamp(0.5rem, 2cqmin, 1rem)' }}>
             {renderText(title, {
               fontSize: 'clamp(1.15rem, 2cqmin, 1.35rem)',
               fontWeight: 800,
@@ -60,9 +60,9 @@ export const TaskListSlide: React.FC<Props> = ({ content }) => {
               <div key={idx} style={{
                 display: 'flex',
                 alignItems: 'center',
-                padding: '1.25rem 0',
+                padding: 'clamp(0.5rem, 2cqmin, 1.25rem) 0',
                 borderBottom: isLast ? 'none' : '1px solid #f1f5f9',
-                gap: '1rem'
+                gap: 'clamp(0.5rem, 2cqmin, 1rem)'
               }}>
                 {/* Checkbox Icon */}
                 <div style={{ 
@@ -79,7 +79,7 @@ export const TaskListSlide: React.FC<Props> = ({ content }) => {
                 {/* Text Content */}
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                   {renderText(task.title, {
-                    fontSize: '1rem',
+                    fontSize: 'clamp(0.85rem, 2cqmin, 1rem)',
                     fontWeight: 700,
                     color: '#334155',
                     margin: 0,
@@ -87,7 +87,7 @@ export const TaskListSlide: React.FC<Props> = ({ content }) => {
                   }, 'div')}
                   
                   {task.subtitle && renderText(task.subtitle, {
-                    fontSize: '0.85rem',
+                    fontSize: 'clamp(0.75rem, 1.5cqmin, 0.85rem)',
                     fontWeight: 600,
                     color: task.subtitleColor || '#94a3b8',
                     margin: 0
@@ -101,7 +101,7 @@ export const TaskListSlide: React.FC<Props> = ({ content }) => {
                     color: task.badgeColor || '#475569',
                     padding: '0.2rem 0.6rem',
                     borderRadius: '8px',
-                    fontSize: '0.85rem',
+                    fontSize: 'clamp(0.7rem, 1.5cqmin, 0.85rem)',
                     fontWeight: 700,
                     flexShrink: 0,
                     display: 'flex',

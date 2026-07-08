@@ -681,20 +681,22 @@ Use these HSL/Hex variables to maintain style consistency:
 When developing new React components (especially Slide layouts) for the `linqra-react-library`:
 
 > [!WARNING]
-> **Never use hardcoded `rem` or `px` values for outer container paddings and margins.**
+> **Never use hardcoded `rem` or `px` values for outer container paddings, margins, or font sizes.**
 
-Always use responsive CSS `clamp()` functions for padding and gap values. Global layout wrappers (like PresentationFooters or custom HTML injections) can dynamically shrink the available space. If slide layouts use rigid padding (e.g. `padding: '2rem 3rem'`), their content will overflow and trigger unwanted scrollbars when constrained vertically or viewed on Portrait/Mobile aspect ratios.
+Always use responsive CSS `clamp()` functions for padding, gap, and font-size values. Global layout wrappers (like PresentationFooters or custom HTML injections) can dynamically shrink the available space. If slide layouts use rigid padding or typography (e.g. `padding: '2rem 3rem'`, `fontSize: '2.5rem'`), their content will overflow and trigger unwanted scrollbars (or get cut off) when constrained vertically or viewed on Portrait/Mobile aspect ratios.
 
 **Correct:**
 ```css
-padding: 'clamp(1rem, 3cqmin, 2rem) clamp(1.5rem, 4cqmin, 3rem)'
+padding: 'clamp(1rem, 3cqmin, 2rem)'
 gap: 'clamp(1.5rem, 3cqmin, 3rem)'
+fontSize: 'clamp(1.5rem, 6cqmin, 2.5rem)'
 ```
 
 **Incorrect:**
 ```css
 padding: '2rem 3rem'
 gap: '2rem'
+fontSize: '2.5rem'
 ```
 
 ---

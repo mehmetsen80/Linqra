@@ -27,10 +27,10 @@ export const ChevronProcessSlide: React.FC<ChevronProcessSlideProps> = ({ conten
   if (steps.length === 0) return null;
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: 'clamp(1rem, 3cqmin, 2rem)', boxSizing: 'border-box' }}>
+    <div style={{ width: '100%', height: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'clamp(1rem, 3cqmin, 2rem)', boxSizing: 'border-box' }}>
       <div style={{ marginBottom: '2rem' }}>
-        {renderText(content.title, { fontSize: '2.5rem', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
-        {renderText(content.subtitle, { fontSize: '1.25rem', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
+        {renderText(content.title, { fontSize: 'clamp(1.5rem, 4cqmin, 2.5rem)', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
+        {renderText(content.subtitle, { fontSize: 'clamp(1rem, 2cqmin, 1.25rem)', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
       </div>
 
       <div ref={containerRef} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -48,7 +48,7 @@ export const ChevronProcessSlide: React.FC<ChevronProcessSlideProps> = ({ conten
           const stepWidth = (step.widthRatio || 1) * unitWidth;
           
           // Fixed height for the chevron bar
-          const H = 140; 
+          const H = Math.min(140, dimensions.height * 0.4); 
           const W = stepWidth;
 
           // Determine the SVG path in exact pixels
@@ -104,8 +104,8 @@ export const ChevronProcessSlide: React.FC<ChevronProcessSlideProps> = ({ conten
                 color: '#ffffff'
               }}>
                 {step.icon && <DynamicIcon name={step.icon} size={32} color="#ffffff" />}
-                {renderText(step.title, { margin: step.icon ? '0.5rem 0 0.25rem' : '0 0 0.25rem', color: '#ffffff', fontSize: '1.25rem', fontWeight: 600 }, 'h3')}
-                {renderText(step.description, { margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: '0.9rem', lineHeight: 1.3 }, 'p')}
+                {renderText(step.title, { margin: step.icon ? '0.5rem 0 0.25rem' : '0 0 0.25rem', color: '#ffffff', fontSize: 'clamp(0.85rem, 2cqmin, 1.25rem)', fontWeight: 600 }, 'h3')}
+                {renderText(step.description, { margin: 0, color: 'rgba(255,255,255,0.9)', fontSize: 'clamp(0.7rem, 1.5cqmin, 0.9rem)', lineHeight: 1.3 }, 'p')}
               </div>
             </div>
           );

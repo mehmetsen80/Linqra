@@ -18,6 +18,8 @@ export const TextBoxProcessSlide: React.FC<Props> = ({ content }) => {
     <div style={{
       width: '100%',
       height: '100%',
+      flex: 1,
+      minHeight: 0,
       display: 'flex',
       flexDirection: 'column',
       padding: 'clamp(1rem, 3cqmin, 2rem) clamp(1.5rem, 4cqmin, 3rem)',
@@ -25,7 +27,7 @@ export const TextBoxProcessSlide: React.FC<Props> = ({ content }) => {
     }}>
       {/* Title Section */}
       {(content.title || content.subtitle) && (
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '3rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 'clamp(1rem, 3cqmin, 3rem)' }}>
           {/* Target Icon */}
           <div style={{
             marginRight: '1rem',
@@ -53,8 +55,8 @@ export const TextBoxProcessSlide: React.FC<Props> = ({ content }) => {
             }} />
           </div>
           <div>
-            {content.title && renderText(content.title, { fontSize: '2.5rem', fontWeight: 800, color: '#111', margin: 0 }, 'h1')}
-            {content.subtitle && renderText(content.subtitle, { fontSize: '1.2rem', color: '#666', marginTop: '0.25rem' }, 'p')}
+            {content.title && renderText(content.title, { fontSize: 'clamp(1.5rem, 4cqmin, 2.5rem)', fontWeight: 800, color: '#111', margin: 0 }, 'h1')}
+            {content.subtitle && renderText(content.subtitle, { fontSize: 'clamp(0.85rem, 2cqmin, 1.2rem)', color: '#666', marginTop: '0.25rem' }, 'p')}
           </div>
         </div>
       )}
@@ -64,7 +66,7 @@ export const TextBoxProcessSlide: React.FC<Props> = ({ content }) => {
         flex: 1,
         display: 'flex',
         flexDirection: 'row',
-        gap: '2rem',
+        gap: 'clamp(0.5rem, 2cqmin, 2rem)',
         alignItems: 'stretch'
       }}>
         {steps.map((step, idx) => {
@@ -108,7 +110,7 @@ export const TextBoxProcessSlide: React.FC<Props> = ({ content }) => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   color: 'white',
-                  fontSize: '1.5rem',
+                  fontSize: 'clamp(1rem, 2cqmin, 1.5rem)',
                   fontWeight: 800
                 }}>
                   {step.stepLabel || `0${idx + 1}`}
@@ -122,7 +124,7 @@ export const TextBoxProcessSlide: React.FC<Props> = ({ content }) => {
                   alignItems: 'center',
                   paddingLeft: '1rem',
                   color: 'white',
-                  fontSize: '1.2rem',
+                  fontSize: 'clamp(1rem, 2.5cqmin, 1.35rem)',
                   fontWeight: 700,
                   textTransform: 'uppercase'
                 }}>
@@ -150,19 +152,21 @@ export const TextBoxProcessSlide: React.FC<Props> = ({ content }) => {
                 borderTop: 'none',
                 marginLeft: '14px', // Offset from the 3D fold
                 marginRight: '30px', // Match ribbon width
-                padding: '2rem 1.5rem',
+                padding: 'clamp(1rem, 2cqmin, 2rem) clamp(0.5rem, 1.5cqmin, 1.5rem)',
                 boxShadow: '4px 8px 24px rgba(0,0,0,0.08)',
                 zIndex: 1,
                 position: 'relative'
               }}>
                 {Array.isArray(step.description) ? (
                   step.description.map((paragraph, pIdx) => (
-                    <div key={pIdx} style={{ marginBottom: pIdx === step.description.length - 1 ? 0 : '1.5rem' }}>
-                      {renderText(paragraph, { color: '#64748b', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }, 'p')}
+                    <div key={pIdx} style={{ marginBottom: pIdx === step.description.length - 1 ? 0 : 'clamp(0.5rem, 2cqmin, 1.5rem)' }}>
+                      {renderText(paragraph, { color: '#64748b', fontSize: 'clamp(1rem, 2.2cqmin, 1.3rem)', lineHeight: 1.6, margin: 0 }, 'p')}
                     </div>
                   ))
                 ) : (
-                  renderText(step.description, { color: '#64748b', fontSize: '0.95rem', lineHeight: 1.6, margin: 0 }, 'p')
+                  <div style={{}}>
+                    {renderText(step.description, { color: '#64748b', fontSize: 'clamp(1rem, 2.2cqmin, 1.3rem)', lineHeight: 1.6, margin: 0 }, 'p')}
+                  </div>
                 )}
               </div>
 

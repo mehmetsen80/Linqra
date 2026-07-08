@@ -17,7 +17,7 @@ export const FeatureSplitSlide: React.FC<Props> = ({ content }) => {
       display: 'flex',
       flexDirection: 'column',
       justifyContent: 'flex-start',
-      padding: 'clamp(2rem, 4cqmin, 4rem)',
+      padding: 'clamp(0.5rem, 3cqmin, 4rem)',
       boxSizing: 'border-box',
       background: 'var(--slide-bg, #ffffff)',
       fontFamily: 'var(--font-family, inherit)'
@@ -26,7 +26,7 @@ export const FeatureSplitSlide: React.FC<Props> = ({ content }) => {
         display: 'flex',
         flexDirection: 'row',
         alignItems: 'stretch',
-        gap: 'clamp(2rem, 5cqmin, 4rem)'
+        gap: 'clamp(1rem, 5cqmin, 4rem)'
       }}>
       
       {/* Left Column (List) */}
@@ -39,8 +39,8 @@ export const FeatureSplitSlide: React.FC<Props> = ({ content }) => {
           display: 'flex', 
           alignItems: 'center', 
           gap: '1rem', 
-          marginBottom: 'clamp(1.5rem, 3cqmin, 2.5rem)',
-          paddingBottom: 'clamp(0.5rem, 1.5cqmin, 1rem)'
+          marginBottom: 'clamp(0.5rem, 2cqmin, 2.5rem)',
+          paddingBottom: 'clamp(0.2rem, 1cqmin, 1rem)'
         }}>
           {leftColumn.icon && (
             <div style={{
@@ -64,7 +64,7 @@ export const FeatureSplitSlide: React.FC<Props> = ({ content }) => {
           }, 'h2')}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(1rem, 2.5cqmin, 1.5rem)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.5rem, 2cqmin, 1.5rem)' }}>
           {leftColumn.items.map((item, idx) => (
             <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
               {item.icon && (
@@ -118,8 +118,8 @@ export const FeatureSplitSlide: React.FC<Props> = ({ content }) => {
           display: 'flex', 
           alignItems: 'center', 
           gap: '1rem', 
-          marginBottom: 'clamp(1.5rem, 3cqmin, 2.5rem)',
-          paddingBottom: 'clamp(0.5rem, 1.5cqmin, 1rem)'
+          marginBottom: 'clamp(0.5rem, 2cqmin, 2.5rem)',
+          paddingBottom: 'clamp(0.2rem, 1cqmin, 1rem)'
         }}>
           {rightColumn.icon && (
             <div style={{
@@ -143,7 +143,7 @@ export const FeatureSplitSlide: React.FC<Props> = ({ content }) => {
           }, 'h2')}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.75rem, 2cqmin, 1.25rem)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'clamp(0.25rem, 1.5cqmin, 1.25rem)' }}>
           {rightColumn.items.map((item, idx) => {
             const iconColor = item.color || '#f59e0b';
             
@@ -155,7 +155,7 @@ export const FeatureSplitSlide: React.FC<Props> = ({ content }) => {
                 backgroundColor: '#ffffff',
                 border: '1px solid #f1f5f9',
                 borderRadius: '12px',
-                padding: 'clamp(0.75rem, 2cqmin, 1.25rem)',
+                padding: 'clamp(0.5rem, 1.5cqmin, 1.25rem)',
                 boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)',
                 ...(item.cardStyle || {})
               }}>

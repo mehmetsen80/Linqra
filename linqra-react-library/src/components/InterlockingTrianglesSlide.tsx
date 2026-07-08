@@ -35,9 +35,9 @@ export const InterlockingTrianglesSlide: React.FC<InterlockingTrianglesSlideProp
   const N = steps.length;
   const W = dimensions.width > 0 ? (2 * dimensions.width) / (N + 1) : 0;
   
-  const H = 120; // Slightly shorter triangles so the whole graph fits
-  const R = 55;  // Even larger default circles
-  const START_Y = R + 60; // Perfect balance point
+  const H = Math.min(120, dimensions.height * 0.35); // Scale down if container is short
+  const R = Math.min(55, dimensions.height * 0.15);  
+  const START_Y = R + Math.min(60, dimensions.height * 0.15); // Balance point
 
   // Helper to darken a hex color for the left-side shade
   const darkenHex = (hex: string, amount = 30) => {
@@ -54,11 +54,11 @@ export const InterlockingTrianglesSlide: React.FC<InterlockingTrianglesSlideProp
   };
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: 'clamp(0.5rem, 2cqmin, 1rem) clamp(1rem, 3cqmin, 2rem)', boxSizing: 'border-box' }}>
+    <div style={{ width: '100%', height: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'clamp(0.5rem, 2cqmin, 1rem) clamp(1rem, 3cqmin, 2rem)', boxSizing: 'border-box' }}>
       {(content.title || content.subtitle) && (
         <div style={{ marginBottom: '1rem' }}>
-          {content.title && renderText(content.title, { fontSize: `clamp(1.25rem, ${dimensions.width / 300}rem, 2.5rem)`, fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
-          {content.subtitle && renderText(content.subtitle, { fontSize: `clamp(0.875rem, ${dimensions.width / 600}rem, 1.25rem)`, margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
+          {content.title && renderText(content.title, { fontSize: `clamp(1.1rem, 3cqmin, 2.5rem)`, fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
+          {content.subtitle && renderText(content.subtitle, { fontSize: `clamp(0.85rem, 2cqmin, 1.25rem)`, margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
         </div>
       )}
 
@@ -236,7 +236,7 @@ export const InterlockingTrianglesSlide: React.FC<InterlockingTrianglesSlideProp
                   }}>
                     {step.icon && <DynamicIcon name={step.icon} size={24} color={textIconColor} />}
                     <div style={{ 
-                      fontSize: '0.8rem', 
+                      fontSize: 'clamp(0.65rem, 1.5cqmin, 0.8rem)', 
                       fontWeight: 700, 
                       lineHeight: 1.1, 
                       marginTop: step.icon ? '4px' : '0' 
@@ -256,7 +256,7 @@ export const InterlockingTrianglesSlide: React.FC<InterlockingTrianglesSlideProp
                     padding: '0 1rem',
                     zIndex: 1
                   }}>
-                    {renderText(step.description, { margin: 0, color: '#475569', fontSize: '0.85rem', lineHeight: 1.4 }, 'p')}
+                    {renderText(step.description, { margin: 0, color: '#475569', fontSize: 'clamp(0.7rem, 1.5cqmin, 0.85rem)', lineHeight: 1.4 }, 'p')}
                   </div>
                 </React.Fragment>
               );

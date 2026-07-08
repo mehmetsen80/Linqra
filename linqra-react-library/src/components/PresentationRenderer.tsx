@@ -1,5 +1,8 @@
 import React from 'react';
 import type { DeckData, SlideData } from '../schemas';
+import { ArchitectureSlide } from './ArchitectureSlide';
+import { DataGridSlide } from './DataGridSlide';
+import { TeamProfileSlide } from './TeamProfileSlide';
 import { TitleSlide } from './TitleSlide';
 import { MetricGridSlide } from './MetricGridSlide';
 import { CustomHtmlSlide } from './CustomHtmlSlide';
@@ -27,6 +30,8 @@ import { FocalMetricSlide } from './FocalMetricSlide';
 import { NumberedTimelineSlide } from './NumberedTimelineSlide';
 import { FeatureSplitSlide } from './FeatureSplitSlide';
 import { TaskListSlide } from './TaskListSlide';
+import { PricingTierSlide } from './PricingTierSlide';
+import { TestimonialSlide } from './TestimonialSlide';
 import { FeatureBannerSlide } from './FeatureBannerSlide';
 import { PresentationFooter } from './PresentationFooter';
 import { sanitizeSlide } from '../slideSanitizer';
@@ -52,6 +57,12 @@ const renderSlideContent = (slide: SlideData) => {
       return <DiagramFocusSlide content={slide.content} />;
     case 'timeline':
       return <TimelineSlide content={slide.content} />;
+    case 'data_grid':
+      return <DataGridSlide content={slide.content} />;
+    case 'team_profile':
+      return <TeamProfileSlide content={slide.content} />;
+    case 'architecture':
+      return <ArchitectureSlide content={slide.content} />;
     case 'process_flow':
       return <ProcessFlowSlide content={slide.content} />;
     case 'code_block':
@@ -68,6 +79,10 @@ const renderSlideContent = (slide: SlideData) => {
       return <FeatureSplitSlide content={slide.content as any} />;
     case 'task_list':
       return <TaskListSlide content={slide.content as any} />;
+    case 'pricing_tiers':
+      return <PricingTierSlide content={slide.content as any} />;
+    case 'testimonial':
+      return <TestimonialSlide content={slide.content as any} />;
     case 'feature_banner':
       return <FeatureBannerSlide content={slide.content as any} />;
     case 'media_annotator':
@@ -243,7 +258,7 @@ export const PresentationRenderer: React.FC<Props> = ({ deck, theme = 'light' })
             flexDirection: 'column',
             ...dynamicStyles
           }}>
-            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+            <div style={{ flex: 1, minHeight: 0, position: 'relative', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
               {renderSlideContent(slide)}
             </div>
             {deck.footer && !slide.hideFooter && (

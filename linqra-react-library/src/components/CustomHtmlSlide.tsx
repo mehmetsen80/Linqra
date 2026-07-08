@@ -26,6 +26,13 @@ import { FocalMetricSlide } from './FocalMetricSlide';
 import { FeatureSplitSlide } from './FeatureSplitSlide';
 import { TaskListSlide } from './TaskListSlide';
 import { FeatureBannerSlide } from './FeatureBannerSlide';
+import { PricingTierSlide } from './PricingTierSlide';
+import { TestimonialSlide } from './TestimonialSlide';
+import { ArchitectureSlide } from './ArchitectureSlide';
+import { TimelineSlide } from './TimelineSlide';
+import { NumberedTimelineSlide } from './NumberedTimelineSlide';
+import { DataGridSlide } from './DataGridSlide';
+import { TeamProfileSlide } from './TeamProfileSlide';
 
 interface Props {
   content: CustomHtmlSlideContent;
@@ -307,6 +314,83 @@ export const CustomHtmlSlide: React.FC<Props> = ({ content }) => {
               return <FeatureBannerSlide content={data} />;
             } catch (e) {
               console.error('Failed to parse deqra-feature-banner data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-pricing-tier') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <PricingTierSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-pricing-tier data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-testimonial') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <TestimonialSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-testimonial data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-architecture') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <ArchitectureSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-architecture data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-timeline') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <TimelineSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-timeline data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-numbered-timeline') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <NumberedTimelineSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-numbered-timeline data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-data-grid') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <DataGridSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-data-grid data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-team-profile') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <TeamProfileSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-team-profile data', e);
             }
           }
         }

@@ -1,13 +1,17 @@
 import React from 'react';
 import type { ImageContent } from './schemas';
 
-export const renderImage = (img: ImageContent | undefined, key?: string | number) => {
+export const renderImage = (
+  img: ImageContent | undefined, 
+  key?: string | number,
+  defaultStyle: React.CSSProperties = { maxWidth: '100%', maxHeight: '40vh', objectFit: 'contain', margin: '0 auto 1rem auto' }
+) => {
   if (!img) return null;
   const isObj = typeof img === 'object' && img !== null;
   const url = isObj ? (img as any).url : img;
   const alt = isObj ? (img as any).alt || '' : '';
   const customStyle = isObj ? (img as any).style : {};
-  return <img key={key} src={url} alt={alt} style={{ maxWidth: '100%', maxHeight: '40vh', objectFit: 'contain', margin: '0 auto 1rem auto', ...customStyle }} />;
+  return <img key={key} src={url} alt={alt} style={{ ...defaultStyle, ...customStyle }} />;
 };
 
 export const renderText = (

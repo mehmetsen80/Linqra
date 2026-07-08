@@ -18,10 +18,11 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
   return (
     <div style={{
       width: '100%',
-      height: '100%',
+      flex: 1,
+      minHeight: 0,
       display: 'flex',
       flexDirection: 'column',
-      padding: 'clamp(2.5rem, 4cqmin, 4rem)',
+      padding: 'clamp(1rem, 3cqmin, 4rem)',
       boxSizing: 'border-box',
       background: 'var(--slide-bg, #ffffff)',
       fontFamily: 'var(--font-family, inherit)',
@@ -30,13 +31,12 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
       
       {/* Slide Title & Subtitle */}
       {(title || subtitle) && (
-        <div style={{ marginBottom: '2rem', flexShrink: 0 }}>
+        <div style={{ marginBottom: 'clamp(0.5rem, 2cqmin, 2rem)', flexShrink: 0 }}>
           {renderText(title, {
             fontSize: 'clamp(1.75rem, 4cqmin, 2.5rem)',
             fontWeight: 800,
             color: 'var(--text-main, #0f172a)',
-            margin: '0 0 1rem 0',
-            lineHeight: 1.2
+            margin: '0 0 clamp(0.25rem, 1cqmin, 1rem) 0',
           }, 'h1')}
           
           {renderText(subtitle, {
@@ -50,21 +50,21 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
       )}
 
       {/* Timelines Container */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'clamp(2rem, 4cqmin, 3rem)' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 'clamp(0.5rem, 2cqmin, 3rem)' }}>
         {timelines.map((timeline, tIdx) => (
           <div key={tIdx} style={{ display: 'flex', flexDirection: 'column' }}>
             
             {/* Timeline Title & Subtitle (Optional) */}
             {(timeline.title || timeline.subtitle) && (
-              <div style={{ marginBottom: 'clamp(1rem, 2cqmin, 1.5rem)' }}>
+              <div style={{ marginBottom: 'clamp(0.5rem, 1.5cqmin, 1.5rem)' }}>
                 {renderText(timeline.title, {
-                  fontSize: '1.5rem',
+                  fontSize: 'clamp(1rem, 3cqmin, 1.5rem)',
                   fontWeight: 700,
                   color: 'var(--text-main, #0f172a)',
-                  margin: '0 0 0.5rem 0'
+                  margin: '0 0 clamp(0.25rem, 1cqmin, 0.5rem) 0'
                 }, 'h2')}
                 {renderText(timeline.subtitle, {
-                  fontSize: '1rem',
+                  fontSize: 'clamp(0.85rem, 2cqmin, 1rem)',
                   color: 'var(--text-secondary, #475569)',
                   margin: 0
                 }, 'p')}
@@ -111,16 +111,16 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
                     
                     {/* Number Circle Wrapper (Fixed Height for Alignment) */}
                     <div style={{
-                      height: 'clamp(80px, 10cqmin, 96px)',
+                      height: 'clamp(40px, 10cqmin, 96px)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      marginBottom: 'clamp(0.75rem, 2cqmin, 1rem)',
+                      marginBottom: 'clamp(0.25rem, 1cqmin, 1rem)',
                       flexShrink: 0
                     }}>
                       <div style={{
-                        width: `calc(clamp(56px, 7cqmin, 64px) * ${scale})`,
-                        height: `calc(clamp(56px, 7cqmin, 64px) * ${scale})`,
+                        width: `calc(clamp(28px, 7cqmin, 64px) * ${scale})`,
+                        height: `calc(clamp(28px, 7cqmin, 64px) * ${scale})`,
                         borderRadius: '50%',
                         background: 'var(--slide-bg, #ffffff)', // Solid background to block dashed line
                         display: 'flex',
@@ -137,8 +137,8 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
                           justifyContent: 'center',
                         }}>
                         <div style={{
-                          width: `calc(clamp(40px, 5cqmin, 48px) * ${scale})`,
-                          height: `calc(clamp(40px, 5cqmin, 48px) * ${scale})`,
+                          width: `calc(clamp(20px, 5cqmin, 48px) * ${scale})`,
+                          height: `calc(clamp(20px, 5cqmin, 48px) * ${scale})`,
                           borderRadius: '50%',
                           background: color,
                           color: '#ffffff',
@@ -146,7 +146,7 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
                           alignItems: 'center',
                           justifyContent: 'center',
                           fontWeight: 700,
-                          fontSize: `calc(clamp(1.25rem, 2cqmin, 1.5rem) * ${scale})`
+                          fontSize: `calc(clamp(0.75rem, 2cqmin, 1.5rem) * ${scale})`
                         }}>
                             {step.number}
                           </div>
@@ -157,14 +157,14 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
                     {/* Icon Box */}
                     {step.icon && (
                       <div style={{
-                        width: 'clamp(56px, 6cqmin, 64px)',
-                        height: 'clamp(56px, 6cqmin, 64px)',
+                        width: 'clamp(32px, 6cqmin, 64px)',
+                        height: 'clamp(32px, 6cqmin, 64px)',
                         borderRadius: 'clamp(14px, 2cqmin, 16px)',
                         background: '#f8fafc',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        marginBottom: 'clamp(0.75rem, 2cqmin, 1.5rem)',
+                        marginBottom: 'clamp(0.25rem, 2cqmin, 1.5rem)',
                         boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
                         flexShrink: 0
                       }}>
@@ -176,7 +176,7 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
                     <div style={{ textAlign: 'center', padding: '0 clamp(0.25rem, 1cqmin, 1rem)' }}>
                       {renderText(step.title, {
                         display: 'block',
-                        fontSize: 'clamp(1.1rem, 2cqmin, 1.25rem)',
+                        fontSize: 'clamp(0.75rem, 2cqmin, 1.25rem)',
                         fontWeight: 700,
                         color: color,
                         marginBottom: '0.25rem'
@@ -184,14 +184,14 @@ export const NumberedTimelineSlide: React.FC<Props> = ({ content }) => {
 
                       {renderText(step.subtitle, {
                         display: 'block',
-                        fontSize: 'clamp(0.95rem, 1.5cqmin, 1rem)',
+                        fontSize: 'clamp(0.7rem, 1.5cqmin, 1rem)',
                         color: '#64748b',
                         marginBottom: 'clamp(0.5rem, 1.5cqmin, 1rem)'
                       }, 'div')}
 
                       {renderText(step.description, {
                         display: 'block',
-                        fontSize: 'clamp(1rem, 1.5cqmin, 1.1rem)',
+                        fontSize: 'clamp(0.75rem, 1.5cqmin, 1.1rem)',
                         color: '#334155',
                         lineHeight: 1.5
                       }, 'div')}

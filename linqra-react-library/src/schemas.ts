@@ -177,6 +177,64 @@ export interface DiagramFocusSlideContent {
   };
 }
 
+export interface DataGridColumn {
+  key: string;
+  header: TextContent;
+  align?: 'left' | 'center' | 'right';
+  width?: string;
+  isNumeric?: boolean;
+}
+
+export interface DataGridRow {
+  id: string;
+  cells: Record<string, TextContent>;
+  isHighlighted?: boolean;
+}
+
+export interface DataGridSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  columns: DataGridColumn[];
+  rows: DataGridRow[];
+  styleOptions?: {
+    headerBg?: string;
+    headerColor?: string;
+    rowHoverBg?: string;
+    striped?: boolean;
+    compact?: boolean;
+  };
+}
+
+export interface TeamMember {
+  id: string;
+  name: TextContent;
+  role: TextContent;
+  bio?: TextContent;
+  imageUrl?: string;
+  socials?: {
+    linkedin?: string;
+    twitter?: string;
+    github?: string;
+    email?: string;
+  };
+}
+
+export interface TeamProfileSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  members: TeamMember[];
+  layout?: 'grid' | 'carousel';
+  gridColumns?: number; // Force a specific number of columns (e.g., 2 for portrait)
+}
+
+export interface ArchitectureSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  description?: TextContent;
+  descriptionPosition?: 'right' | 'left' | 'top' | 'bottom'; // Defaults to 'right'
+  mermaidCode: string;
+}
+
 export interface TimelineSlideContent {
   title: TextContent;
   image?: ImageContent;
@@ -522,7 +580,8 @@ export type SlideContent =
   | { layout: 'portrait_hero'; content: PortraitHeroSlideContent }
   | { layout: 'feature_split'; content: FeatureSplitSlideContent }
   | { layout: 'task_list'; content: TaskListSlideContent }
-  | { layout: 'feature_banner'; content: FeatureBannerSlideContent };
+  | { layout: 'feature_banner'; content: FeatureBannerSlideContent }
+  | { layout: 'testimonial'; content: TestimonialSlideContent };
 
 export interface Presentation {
   id?: string;
@@ -542,6 +601,8 @@ export interface Presentation {
 }
 
 export interface FeatureBannerSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
   icon?: string;
   iconBg?: string;
   iconColor?: string;
@@ -554,11 +615,57 @@ export interface FeatureBannerSlideContent {
     color?: string;
     style?: 'solid' | 'dashed' | 'dotted';
   };
-  title?: TextContent;
   features: {
     title: TextContent;
-    description: TextContent;
+    description?: TextContent;
     icon?: string;
     iconColor?: string;
+    iconBg?: string;
   }[];
+}
+
+export interface PricingFeature {
+  text: TextContent;
+  icon?: string;       // e.g., 'Check', 'X'
+  iconColor?: string;
+  iconBg?: string;
+  isExcluded?: boolean; // if true and no icon provided, defaults to 'X' and gray text
+}
+
+export interface PricingTier {
+  name: TextContent;
+  price: TextContent;
+  period?: TextContent; // e.g., '/mo'
+  description?: TextContent;
+  features: PricingFeature[];
+  buttonText?: TextContent;
+  isHighlighted?: boolean;
+  highlightText?: TextContent; // e.g., 'Most Popular'
+  buttonStyle?: {
+    background?: string;
+    color?: string;
+    border?: string;
+  };
+  cardStyle?: {
+    background?: string;
+    borderColor?: string;
+  };
+}
+
+export interface PricingTierSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  tiers: PricingTier[];
+}
+
+export interface TestimonialSlideContent {
+  quote: TextContent;
+  author: TextContent;
+  role?: TextContent;
+  avatar?: ImageContent;
+  companyLogo?: ImageContent;
+  companyName?: TextContent;
+  rating?: number; // 1-5
+  layoutVariant?: 'centered' | 'left-aligned' | 'split';
+  accentColor?: string;
 }

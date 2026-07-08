@@ -33,15 +33,17 @@ export const SerpentineFlowSlide: React.FC<SerpentineFlowSlideProps> = ({ conten
   return (
     <div style={{ 
       width: '100%', 
-      height: '100%', 
+      height: '100%',
+      flex: 1,
+      minHeight: 0,
       display: 'flex', 
       flexDirection: 'column', 
       padding: 'clamp(1rem, 3cqmin, 2rem)'
     }}>
       {/* Slide Header */}
-      <div style={{ marginBottom: '2rem' }}>
-        {renderText(content.title, { fontSize: '2.5rem', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
-        {renderText(content.subtitle, { fontSize: '1.25rem', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
+      <div style={{ marginBottom: 'clamp(0.5rem, 2cqmin, 2rem)' }}>
+        {renderText(content.title, { fontSize: 'clamp(1.5rem, 4cqmin, 2.5rem)', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
+        {renderText(content.subtitle, { fontSize: 'clamp(1rem, 2cqmin, 1.25rem)', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
       </div>
 
       {/* Main Serpentine Grid Container */}
@@ -154,8 +156,8 @@ export const SerpentineFlowSlide: React.FC<SerpentineFlowSlideProps> = ({ conten
                     
                     {/* Middle: Node Icon/Circle (auto) */}
                     <div style={{
-                      width: '80px',
-                      height: '80px',
+                      width: 'clamp(40px, 8cqmin, 80px)',
+                      height: 'clamp(40px, 8cqmin, 80px)',
                       borderRadius: '50%',
                       backgroundColor: '#ffffff',
                       border: `4px solid ${nodeColor}`,
@@ -167,9 +169,9 @@ export const SerpentineFlowSlide: React.FC<SerpentineFlowSlideProps> = ({ conten
                       ...step.nodeStyle
                     }}>
                       {step.icon ? (
-                        <DynamicIcon name={step.icon} size={32} color={nodeColor} />
+                        <DynamicIcon name={step.icon} size={24} color={nodeColor} />
                       ) : (
-                        <span style={{ fontSize: '1.5rem', fontWeight: 700, color: nodeColor }}>{r * C + localIndex + 1}</span>
+                        <span style={{ fontSize: 'clamp(0.85rem, 2cqmin, 1.5rem)', fontWeight: 700, color: nodeColor }}>{r * C + localIndex + 1}</span>
                       )}
                     </div>
                     
@@ -179,8 +181,8 @@ export const SerpentineFlowSlide: React.FC<SerpentineFlowSlideProps> = ({ conten
                       padding: '0.5rem 1rem 1rem', // Reduced top padding to move text closer to the node
                       alignSelf: 'start' // Align to the top of its 1fr track
                     }}>
-                      {renderText(step.title, { margin: '0 0 0.25rem 0', color: nodeColor, fontSize: '1.25rem' }, 'h3')}
-                      {renderText(step.description, { margin: 0, color: '#64748b', fontSize: '0.9rem', lineHeight: 1.4 }, 'p')}
+                      {renderText(step.title, { margin: '0 0 0.25rem 0', color: nodeColor, fontSize: 'clamp(0.85rem, 2cqmin, 1.25rem)' }, 'h3')}
+                      {renderText(step.description, { margin: 0, color: '#64748b', fontSize: 'clamp(0.7rem, 1.5cqmin, 0.9rem)', lineHeight: 1.4 }, 'p')}
                     </div>
                   </div>
                 );

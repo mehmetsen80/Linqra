@@ -34,29 +34,29 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
   const NODE_R = content.nodeSize || 36; // Increased from 28 to 36 for larger nodes
 
   // Geometry Math
-  const PADDING_LEFT = 30; // Visual left balance
+  const PADDING_LEFT = 70; // Visual left balance for the first text box
   const PADDING_RIGHT = 220; // Reserves exact space needed for the final text box overflow
   const TotalWidth = dimensions.width - PADDING_LEFT - PADDING_RIGHT;
   const StepWidth = N > 1 ? TotalWidth / (N - 1) : TotalWidth; // Spreads nodes fully across the available width
-  const offsetX = PADDING_LEFT; 
-  const CY = dimensions.height / 2 + 5; 
+  const offsetX = PADDING_LEFT;
+  // Center the timeline to give equal room to top and bottom text boxes
+  const CY = dimensions.height / 2;
   const BRANCH_OFFSET_X = NODE_R + 15;
   const TEXT_BOX_OFFSET_X = BRANCH_OFFSET_X + 25; // Consistent 25px horizontal arrow run for all nodes 
   const BRANCH_Y_STEP = 20; // Decreased to reduce vertical footprint
 
   // HTML Text Box Sizing (Takes advantage of alternating top/bottom to allow wider boxes)
   // We use a high multiplier (1.85) because top/bottom alternating gives us 2x StepWidth clearance
-  const maxTextWidth = Math.min(260, Math.max(200, StepWidth * 1.85)); 
+  const maxTextWidth = Math.min(260, Math.max(200, StepWidth * 1.85));
 
-  const headerFontSize = 2.2;
-  const subFontSize = 1.1;
+
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: 'clamp(1rem, 3cqmin, 2rem) clamp(1.5rem, 4cqmin, 3rem)', boxSizing: 'border-box' }}>
+    <div style={{ width: '100%', height: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'clamp(1rem, 3cqmin, 2rem) clamp(1.5rem, 4cqmin, 3rem)', boxSizing: 'border-box' }}>
       {(content.title || content.subtitle) && (
         <div style={{ marginBottom: '1rem' }}>
-          {content.title && renderText(content.title, { fontSize: `${headerFontSize}rem`, fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
-          {content.subtitle && renderText(content.subtitle, { fontSize: `${subFontSize}rem`, margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
+          {content.title && renderText(content.title, { fontSize: 'clamp(1.5rem, 4cqmin, 2.5rem)', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
+          {content.subtitle && renderText(content.subtitle, { fontSize: 'clamp(1rem, 2cqmin, 1.25rem)', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
         </div>
       )}
 
@@ -68,14 +68,10 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
                 <feDropShadow dx="0" dy="2" stdDeviation="4" floodOpacity="0.15" />
               </filter>
 
-              </defs>
+            </defs>
 
-            {/* 1. Main Horizontal Axis Line */}
-            <line
-              x1={offsetX - NODE_R - 20}
-              y1={CY}
-              x2={offsetX + (N - 1) * StepWidth + StepWidth * 0.8}
-              y2={CY}
+            <path
+              d={`M ${offsetX - 20} ${CY} L ${offsetX + (N - 1) * StepWidth + TEXT_BOX_OFFSET_X + 20} ${CY}`}
               stroke="#cbd5e1"
               strokeWidth="3"
             />
@@ -86,7 +82,7 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
               const isTop = idx % 2 === 0;
               const startX = nodeX + BRANCH_OFFSET_X;
               const targetX = nodeX + TEXT_BOX_OFFSET_X;
-              
+
               const midY = isTop ? CY - BRANCH_Y_STEP : CY + BRANCH_Y_STEP;
               const endY = isTop ? CY - BRANCH_Y_STEP - 20 : CY + BRANCH_Y_STEP + 20;
 
@@ -162,7 +158,7 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
               backgroundColor: color,
               color: '#ffffff',
               padding: '6px 12px',
-              fontSize: '0.65rem',
+              fontSize: 'clamp(0.75rem, 1.5cqmin, 0.9rem)',
               fontWeight: 700,
               textTransform: 'uppercase',
               textAlign: 'center',
@@ -180,23 +176,26 @@ export const NodeBranchTimelineSlide: React.FC<NodeBranchTimelineSlideProps> = (
               flexDirection: 'column',
               gap: '6px'
             }}>
-              <div style={{ color: color, fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase' }}>
+              <div style={{ color: color, fontSize: 'clamp(0.9rem, 2cqmin, 1.1rem)', fontWeight: 800, textTransform: 'uppercase' }}>
                 {renderText(step.title, {}, 'span')}
               </div>
               {step.description && (
-                <div style={{ color: '#64748b', fontSize: '0.7rem', lineHeight: 1.5 }}>
+                <div style={{ color: '#64748b', fontSize: 'clamp(0.85rem, 1.8cqmin, 1rem)', lineHeight: 1.5 }}>
                   {renderText(step.description, {}, 'span')}
                 </div>
               )}
             </div>
           );
 
+          const rawTextLeft = targetX - maxTextWidth / 2;
+          const textLeft = Math.max(0, Math.min(dimensions.width - maxTextWidth, rawTextLeft));
+
           return (
             <div
               key={`html-${idx}`}
               style={{
                 position: 'absolute',
-                left: `${targetX - maxTextWidth / 2}px`,
+                left: `${textLeft}px`,
                 width: `${maxTextWidth}px`,
                 ...(isTop
                   ? { bottom: `${dimensions.height - (endY - GAP)}px` }

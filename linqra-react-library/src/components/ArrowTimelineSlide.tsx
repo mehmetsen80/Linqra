@@ -14,10 +14,10 @@ export const ArrowTimelineSlide: React.FC<ArrowTimelineSlideProps> = ({ content 
   const timelineColor = content.timelineColor || '#cbd5e1';
 
   return (
-    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', padding: 'clamp(1rem, 3cqmin, 2rem)', boxSizing: 'border-box' }}>
+    <div style={{ width: '100%', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'clamp(1rem, 3cqmin, 2rem)', boxSizing: 'border-box' }}>
       <div style={{ marginBottom: '1rem' }}>
-        {renderText(content.title, { fontSize: '2.5rem', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
-        {renderText(content.subtitle, { fontSize: '1.25rem', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
+        {renderText(content.title, { fontSize: 'clamp(1.5rem, 4cqmin, 2.5rem)', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
+        {renderText(content.subtitle, { fontSize: 'clamp(1rem, 2cqmin, 1.25rem)', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')}
       </div>
 
       {/* Apply a physical transform to shift the entire graph UP to counter-balance the title header */}
@@ -70,13 +70,13 @@ export const ArrowTimelineSlide: React.FC<ArrowTimelineSlideProps> = ({ content 
                       borderRadius: '999px',
                       fontWeight: 700,
                       marginBottom: '0.75rem',
-                      fontSize: '0.9rem',
+                      fontSize: 'clamp(0.75rem, 1.5cqmin, 0.9rem)',
                       boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                     }}>
                       {renderText(event.date, {}, 'span')}
                     </div>
-                    {renderText(event.title, { margin: '0 0 0.25rem 0', color: '#1e293b', fontSize: '1.15rem' }, 'h3')}
-                    {renderText(event.description, { margin: 0, color: '#64748b', fontSize: '0.85rem', lineHeight: 1.4 }, 'p')}
+                    {renderText(event.title, { margin: '0 0 0.25rem 0', color: '#1e293b', fontSize: 'clamp(0.85rem, 2cqmin, 1.15rem)' }, 'h3')}
+                    {renderText(event.description, { margin: 0, color: '#64748b', fontSize: 'clamp(0.7rem, 1.5cqmin, 0.85rem)', lineHeight: 1.4 }, 'p')}
                   </div>
                 ) : <div />}
 
@@ -111,15 +111,15 @@ export const ArrowTimelineSlide: React.FC<ArrowTimelineSlideProps> = ({ content 
                 {/* Bottom Content Area */}
                 {!isTop ? (
                   <div style={{ alignSelf: 'start', paddingTop: '1rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    {renderText(event.title, { margin: '0 0 0.25rem 0', color: '#1e293b', fontSize: '1.15rem' }, 'h3')}
-                    {renderText(event.description, { margin: '0 0 0.75rem 0', color: '#64748b', fontSize: '0.85rem', lineHeight: 1.4 }, 'p')}
+                    {renderText(event.title, { margin: '0 0 0.25rem 0', color: '#1e293b', fontSize: 'clamp(0.85rem, 2cqmin, 1.15rem)' }, 'h3')}
+                    {renderText(event.description, { margin: '0 0 0.75rem 0', color: '#64748b', fontSize: 'clamp(0.7rem, 1.5cqmin, 0.85rem)', lineHeight: 1.4 }, 'p')}
                     <div style={{
                       padding: '0.25rem 0.75rem',
                       backgroundColor: color,
                       color: '#fff',
                       borderRadius: '999px',
                       fontWeight: 700,
-                      fontSize: '0.9rem',
+                      fontSize: 'clamp(0.75rem, 1.5cqmin, 0.9rem)',
                       boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                     }}>
                       {renderText(event.date, {}, 'span')}

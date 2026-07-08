@@ -38,30 +38,32 @@ export const AlternatingRingFlowSlide: React.FC<Props> = ({ content }) => {
   const TotalWidth = StepWidth * N;
   const offsetX = (dimensions.width - TotalWidth) / 2;
 
-  // Shift the entire graph up by 60px to visually balance it better with the title
-  const CY = (dimensions.height / 2) - 60; 
+  // Shift the entire graph up slightly to visually balance it better with the title and account for footer space
+  const CY = (dimensions.height / 2) - 30; 
   const maxOuterR = 60;
   // Ensure the rings don't overlap by limiting OuterR based on available width
-  const OuterR = Math.min(maxOuterR, (StepWidth / 2) - 20);
-  const RingThickness = Math.max(8, OuterR * 0.25);
-  const InnerR = OuterR - RingThickness;
+  const OuterR = Math.max(10, Math.min(maxOuterR, (StepWidth / 2) - 20));
+  const RingThickness = Math.max(4, OuterR * 0.25);
+  const InnerR = Math.max(1, OuterR - RingThickness);
   const ArcRY = OuterR + 20; // Height of the arrow arc
 
   return (
     <div ref={containerRef} style={{
       width: '100%',
       height: '100%',
+      flex: 1,
+      minHeight: 0,
       position: 'relative',
       display: 'flex',
       flexDirection: 'column',
       padding: 'clamp(1rem, 3cqmin, 2rem)',
+      boxSizing: 'border-box',
       backgroundColor: 'transparent'
     }}>
-      {/* Header */}
       <div style={{ marginBottom: '1rem', zIndex: 10 }}>
-        {renderText(content.title, { fontSize: '2.5rem', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
+        {renderText(content.title, { fontSize: 'clamp(1.5rem, 4cqmin, 2.5rem)', fontWeight: 700, margin: 0, color: '#1e293b' }, 'h2')}
         {content.subtitle && (
-          renderText(content.subtitle, { fontSize: '1.25rem', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')
+          renderText(content.subtitle, { fontSize: 'clamp(1rem, 2cqmin, 1.25rem)', margin: '0.5rem 0 0 0', color: '#64748b' }, 'p')
         )}
       </div>
 
@@ -104,8 +106,8 @@ export const AlternatingRingFlowSlide: React.FC<Props> = ({ content }) => {
             const startX = offsetX + i * StepWidth;
             const endX = offsetX + (i + 1) * StepWidth;
             
-            const rx = StepWidth / 2;
-            const ry = ArcRY;
+            const rx = Math.max(1, StepWidth / 2);
+            const ry = Math.max(1, ArcRY);
             const sweepFlag = isDown ? 1 : 0; // 1 = DOWN (positive Y, arc UNDER), 0 = UP (negative Y, arc OVER)
             
             const arcPath = `M ${startX} ${CY} A ${rx} ${ry} 0 0 ${sweepFlag} ${endX} ${CY}`;
@@ -149,8 +151,8 @@ export const AlternatingRingFlowSlide: React.FC<Props> = ({ content }) => {
 
         {/* HTML Overlays for Icons and Text */}
         {steps.map((step, i) => {
-          const isDown = i % 2 === 0;
-          const CX = i * StepWidth + (StepWidth / 2);
+          const isDown = startDirection === 'under' ? (i % 2 === 0) : (i % 2 !== 0);
+          const CX = offsetX + i * StepWidth + (StepWidth / 2);
           
           return (
             <React.Fragment key={`html-step-${i}`}>
@@ -192,11 +194,11 @@ export const AlternatingRingFlowSlide: React.FC<Props> = ({ content }) => {
                     textAlign: 'center'
                   }}>
                     <h3 style={{ margin: '0 0 2px 0' }}>
-                      {renderText(step.title, { fontSize: '1.25rem', fontWeight: 600, color: step.color || '#3b82f6', margin: 0 }, 'span')}
+                      {renderText(step.title, { fontSize: 'clamp(1rem, 2.5cqmin, 1.25rem)', fontWeight: 600, color: step.color || '#3b82f6', margin: 0 }, 'span')}
                     </h3>
                     {step.description && (
                       <p style={{ margin: 0 }}>
-                        {renderText(step.description, { fontSize: '0.85rem', color: 'var(--text-secondary, #64748b)', lineHeight: 1.4, margin: 0 }, 'span')}
+                        {renderText(step.description, { fontSize: 'clamp(0.85rem, 2cqmin, 1rem)', color: 'var(--text-secondary, #64748b)', lineHeight: 1.4, margin: 0 }, 'span')}
                       </p>
                     )}
                   </div>

@@ -89,6 +89,35 @@ export type TextContent = string | {
 };
 
 // Layout-specific content schemas
+
+export interface CodeAnnotation {
+  id: string;
+  lineRange: [number, number]; // [startLine, endLine] (1-indexed)
+  title?: string;
+  description: string;
+}
+
+export interface CodeWalkthroughSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  code: string;
+  language: string;
+  filename?: string;
+  annotations?: CodeAnnotation[];
+  activeAnnotationId?: string;
+  layout?: 'row' | 'row-reverse' | 'column' | 'column-reverse'; // Controls the orientation of the IDE and sidebar
+}
+
+export interface TitleBadge {
+  text: TextContent;
+  icon?: string;
+  iconSize?: string;
+  background?: string;
+  textColor?: string;
+  border?: string;
+  style?: CSSProperties;
+}
+
 export interface TitleSlideContent {
   title: TextContent;
   subtitle?: TextContent;
@@ -96,6 +125,12 @@ export interface TitleSlideContent {
   footer?: TextContent;
   image?: ImageContent;
   backgroundImage?: string;
+  backgroundElements?: CSSProperties[];
+  topLeftArea?: TextContent[];
+  topRightArea?: TextContent[];
+  bottomLeftArea?: TextContent[];
+  bottomRightArea?: (TextContent | TitleBadge)[]; 
+  centerBadges?: TitleBadge[];
 }
 
 export interface StandardContentSlideContent {
@@ -225,6 +260,30 @@ export interface TeamProfileSlideContent {
   members: TeamMember[];
   layout?: 'grid' | 'carousel';
   gridColumns?: number; // Force a specific number of columns (e.g., 2 for portrait)
+}
+
+export interface BentoBoxItem {
+  id: string;
+  colSpan?: number; // number of columns to span (default 1)
+  rowSpan?: number; // number of rows to span (default 1)
+  title?: TextContent;
+  description?: TextContent;
+  metric?: string;
+  iconName?: string;
+  imageUrl?: string;
+  styleOptions?: {
+    background?: string;
+    color?: string;
+    isGlassmorphic?: boolean;
+  };
+}
+
+export interface BentoBoxSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  gridColumns?: number; // default 4
+  portraitGridColumns?: number; // default 1
+  items: BentoBoxItem[];
 }
 
 export interface ArchitectureSlideContent {
@@ -551,6 +610,24 @@ export interface PortraitHeroSlideContent {
   mediaUrls: string[];
   background?: string;
   mediaLayout?: 'row' | 'stack' | 'grid' | 'collage';
+  imageFit?: 'cover' | 'contain' | 'fill';
+}
+
+export interface CalloutBoxItem {
+  text: TextContent;
+  icon?: string;
+  iconColor?: string;
+  iconSize?: number;
+  iconPosition?: 'left' | 'right' | 'top' | 'bottom';
+  boxBg?: string;
+  boxTextColor?: string;
+  boxBorderRadius?: string;
+  boxPadding?: string;
+  boxShadow?: string;
+}
+
+export interface CalloutBoxSlideContent {
+  callouts: CalloutBoxItem[];
 }
 
 export type SlideContent = 
@@ -578,10 +655,12 @@ export type SlideContent =
   | { layout: 'media_column_grid'; content: MediaColumnGridSlideContent }
   | { layout: 'numbered_timeline'; content: NumberedTimelineSlideContent }
   | { layout: 'portrait_hero'; content: PortraitHeroSlideContent }
+  | { layout: 'callout_box'; content: CalloutBoxSlideContent }
   | { layout: 'feature_split'; content: FeatureSplitSlideContent }
   | { layout: 'task_list'; content: TaskListSlideContent }
   | { layout: 'feature_banner'; content: FeatureBannerSlideContent }
-  | { layout: 'testimonial'; content: TestimonialSlideContent };
+  | { layout: 'testimonial'; content: TestimonialSlideContent }
+  | { layout: 'problem_split'; content: ProblemSplitSlideContent };
 
 export interface Presentation {
   id?: string;
@@ -668,4 +747,40 @@ export interface TestimonialSlideContent {
   rating?: number; // 1-5
   layoutVariant?: 'centered' | 'left-aligned' | 'split';
   accentColor?: string;
+}
+
+export interface ProblemSplitSlideContent {
+  title: TextContent;
+  subtitle?: TextContent;
+  leftColumnWidth?: string;
+  columnGap?: string;
+  leftGap?: string;
+  rightGap?: string;
+  backgroundElements?: CSSProperties[];
+  leftCards: {
+    category: TextContent;
+    value: TextContent;
+    description: TextContent;
+    badges?: TextContent[];
+    icon?: string;
+    iconColor?: string;
+    cardStyle?: CSSProperties;
+    categoryStyle?: CSSProperties;
+    valueStyle?: CSSProperties;
+  }[];
+  rightItems: {
+    title: TextContent;
+    description: TextContent;
+    icon?: string;
+    iconColor?: string;
+    iconBg?: string;
+    cardStyle?: CSSProperties;
+  }[];
+  bottomBanner?: {
+    label?: TextContent;
+    text: TextContent;
+    icon?: string;
+    iconColor?: string;
+    bannerStyle?: CSSProperties;
+  };
 }

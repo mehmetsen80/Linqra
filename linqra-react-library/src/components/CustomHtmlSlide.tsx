@@ -33,6 +33,8 @@ import { TimelineSlide } from './TimelineSlide';
 import { NumberedTimelineSlide } from './NumberedTimelineSlide';
 import { DataGridSlide } from './DataGridSlide';
 import { TeamProfileSlide } from './TeamProfileSlide';
+import { BentoBoxSlide } from './BentoBoxSlide';
+import { CodeWalkthroughSlide } from './CodeWalkthroughSlide';
 
 interface Props {
   content: CustomHtmlSlideContent;
@@ -391,6 +393,28 @@ export const CustomHtmlSlide: React.FC<Props> = ({ content }) => {
               return <TeamProfileSlide content={data} />;
             } catch (e) {
               console.error('Failed to parse deqra-team-profile data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-bento-box') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <BentoBoxSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-bento-box data', e);
+            }
+          }
+        }
+        if (domNode.name === 'deqra-code-walkthrough') {
+          const dataAttr = domNode.attribs['data'];
+          if (dataAttr) {
+            try {
+              const data = JSON.parse(dataAttr);
+              return <CodeWalkthroughSlide content={data} />;
+            } catch (e) {
+              console.error('Failed to parse deqra-code-walkthrough data', e);
             }
           }
         }

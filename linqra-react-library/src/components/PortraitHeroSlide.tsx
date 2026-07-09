@@ -7,7 +7,7 @@ interface Props {
 }
 
 export const PortraitHeroSlide: React.FC<Props> = ({ content }) => {
-  const { title, subtitle, eyebrow, mediaUrls, background, mediaLayout = 'collage' } = content;
+  const { title, subtitle, eyebrow, mediaUrls, background, mediaLayout = 'collage', imageFit = 'cover' } = content;
 
   const renderText = (textObj: any, defaultStyle: React.CSSProperties = {}, Tag: any = 'span') => {
     if (!textObj) return null;
@@ -34,43 +34,72 @@ export const PortraitHeroSlide: React.FC<Props> = ({ content }) => {
   };
 
   const getMediaStyle = (index: number, total: number, layout: string): React.CSSProperties => {
+    const isContain = imageFit === 'contain';
+    const height = isContain ? 'auto' : '100%';
+    const alignSelf = isContain ? 'center' : 'stretch';
+
     if (layout === 'row' || layout === 'stack') {
-      return { flex: 1, width: '100%', height: '100%', objectFit: 'cover', borderRadius: '16px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', minWidth: 0, minHeight: 0 };
+      return { 
+        flex: isContain ? '0 1 auto' : 1, 
+        width: isContain ? 'auto' : '100%', 
+        height, 
+        maxWidth: '100%',
+        maxHeight: '100%',
+        objectFit: imageFit, 
+        borderRadius: '16px', 
+        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', 
+        minWidth: 0, 
+        minHeight: 0, 
+        alignSelf 
+      };
     }
     if (layout === 'grid') {
-      return { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '16px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', minWidth: 0, minHeight: 0 };
+      return { 
+        width: isContain ? 'auto' : '100%', 
+        height: isContain ? 'auto' : '100%', 
+        maxWidth: '100%',
+        maxHeight: isContain ? '35vh' : '100%',
+        objectFit: imageFit, 
+        borderRadius: '16px', 
+        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)', 
+        minWidth: 0, 
+        minHeight: 0, 
+        alignSelf 
+      };
     }
     // Default collage
     if (total === 1) {
-      return { width: '100%', height: '100%', objectFit: 'cover', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' };
+      return { width: '100%', height: '100%', objectFit: imageFit, borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' };
     }
     if (total === 2) {
       if (index === 0) {
-        return { position: 'absolute', left: 0, top: '5%', width: '70%', height: '90%', objectFit: 'cover', borderRadius: '16px', zIndex: 1, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' };
+        return { position: 'absolute', left: 0, top: '5%', width: '70%', height: '90%', objectFit: imageFit, borderRadius: '16px', zIndex: 1, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' };
       } else {
-        return { position: 'absolute', right: 0, bottom: '5%', width: '70%', height: '90%', objectFit: 'cover', borderRadius: '16px', zIndex: 2, boxShadow: '-10px 20px 25px -5px rgba(0, 0, 0, 0.15)', transform: 'translateY(-5%)' };
+        return { position: 'absolute', right: 0, bottom: '5%', width: '70%', height: '90%', objectFit: imageFit, borderRadius: '16px', zIndex: 2, boxShadow: '-10px 20px 25px -5px rgba(0, 0, 0, 0.15)', transform: 'translateY(-5%)' };
       }
     }
     // 3 images - diagonal cascade
     if (index === 0) {
-      return { position: 'absolute', left: '5%', top: '5%', width: '60%', height: '70%', objectFit: 'cover', borderRadius: '16px', zIndex: 1, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' };
+      return { position: 'absolute', left: '5%', top: '5%', width: '60%', height: '70%', objectFit: imageFit, borderRadius: '16px', zIndex: 1, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' };
     } else if (index === 1) {
-      return { position: 'absolute', left: '20%', top: '15%', width: '60%', height: '70%', objectFit: 'cover', borderRadius: '16px', zIndex: 2, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' };
+      return { position: 'absolute', left: '20%', top: '15%', width: '60%', height: '70%', objectFit: imageFit, borderRadius: '16px', zIndex: 2, boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' };
     } else {
-      return { position: 'absolute', right: '5%', bottom: '5%', width: '60%', height: '70%', objectFit: 'cover', borderRadius: '16px', zIndex: 3, boxShadow: '-10px 25px 50px -12px rgba(0, 0, 0, 0.25)' };
+      return { position: 'absolute', right: '5%', bottom: '5%', width: '60%', height: '70%', objectFit: imageFit, borderRadius: '16px', zIndex: 3, boxShadow: '-10px 25px 50px -12px rgba(0, 0, 0, 0.25)' };
     }
   };
 
   const getContainerStyle = (layout: string, total: number): React.CSSProperties => {
+    const isContain = imageFit === 'contain';
     const base: React.CSSProperties = { flex: 1, marginTop: '3rem', width: '100%', minHeight: '300px' };
-    if (layout === 'row') return { ...base, display: 'flex', flexDirection: 'row', gap: '2rem' };
-    if (layout === 'stack') return { ...base, display: 'flex', flexDirection: 'column', gap: '2rem' };
+    if (layout === 'row') return { ...base, display: 'flex', flexDirection: 'row', gap: '2rem', justifyContent: isContain ? 'center' : 'flex-start' };
+    if (layout === 'stack') return { ...base, display: 'flex', flexDirection: 'column', gap: '2rem', justifyContent: isContain ? 'center' : 'flex-start' };
     if (layout === 'grid') {
       return { 
         ...base, 
         display: 'grid', 
         gridTemplateColumns: total === 1 ? '1fr' : (total === 2 ? '1fr 1fr' : '1fr 1fr'), 
-        gridTemplateRows: total === 3 ? '1fr 1fr' : '1fr',
+        gridTemplateRows: 'auto',
+        justifyItems: isContain ? 'center' : 'stretch',
         gap: '2rem' 
       };
     }

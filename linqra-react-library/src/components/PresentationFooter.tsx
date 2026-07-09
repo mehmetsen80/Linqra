@@ -29,7 +29,7 @@ export const PresentationFooter: React.FC<Props> = ({ content }) => {
   return (
     <div style={{
       width: '100%',
-      padding: 'clamp(0.5rem, 1.5cqmin, 1.5rem) clamp(2rem, 4cqmin, 4rem) 0.5rem clamp(2rem, 4cqmin, 4rem)',
+      padding: 'clamp(0.5rem, 1.5cqmin, 1.5rem) clamp(2rem, 4cqmin, 4rem) 0.25rem clamp(2rem, 4cqmin, 4rem)',
       display: 'flex',
       alignItems: 'center',
       boxSizing: 'border-box',

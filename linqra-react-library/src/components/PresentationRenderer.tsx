@@ -3,6 +3,8 @@ import type { DeckData, SlideData } from '../schemas';
 import { ArchitectureSlide } from './ArchitectureSlide';
 import { DataGridSlide } from './DataGridSlide';
 import { TeamProfileSlide } from './TeamProfileSlide';
+import { BentoBoxSlide } from './BentoBoxSlide';
+import { CodeWalkthroughSlide } from './CodeWalkthroughSlide';
 import { TitleSlide } from './TitleSlide';
 import { MetricGridSlide } from './MetricGridSlide';
 import { CustomHtmlSlide } from './CustomHtmlSlide';
@@ -28,11 +30,13 @@ import { PortraitHeroSlide } from './PortraitHeroSlide';
 import { MediaAnnotatorSlide } from './MediaAnnotatorSlide';
 import { FocalMetricSlide } from './FocalMetricSlide';
 import { NumberedTimelineSlide } from './NumberedTimelineSlide';
+import { CalloutBoxSlide } from './CalloutBoxSlide';
 import { FeatureSplitSlide } from './FeatureSplitSlide';
 import { TaskListSlide } from './TaskListSlide';
 import { PricingTierSlide } from './PricingTierSlide';
 import { TestimonialSlide } from './TestimonialSlide';
 import { FeatureBannerSlide } from './FeatureBannerSlide';
+import { ProblemSplitSlide } from './ProblemSplitSlide';
 import { PresentationFooter } from './PresentationFooter';
 import { sanitizeSlide } from '../slideSanitizer';
 
@@ -61,6 +65,10 @@ const renderSlideContent = (slide: SlideData) => {
       return <DataGridSlide content={slide.content} />;
     case 'team_profile':
       return <TeamProfileSlide content={slide.content} />;
+    case 'bento_box':
+      return <BentoBoxSlide content={slide.content} />;
+    case 'code_walkthrough':
+      return <CodeWalkthroughSlide content={slide.content} />;
     case 'architecture':
       return <ArchitectureSlide content={slide.content} />;
     case 'process_flow':
@@ -73,8 +81,12 @@ const renderSlideContent = (slide: SlideData) => {
       return <ComparisonSlide content={slide.content} />;
     case 'media_column_grid':
       return <MediaColumnGridSlide content={slide.content} />;
+    case 'numbered_timeline':
+      return <NumberedTimelineSlide content={slide.content as any} />;
     case 'portrait_hero':
-      return <PortraitHeroSlide content={slide.content} />;
+      return <PortraitHeroSlide content={slide.content as any} />;
+    case 'callout_box':
+      return <CalloutBoxSlide content={slide.content as any} />;
     case 'feature_split':
       return <FeatureSplitSlide content={slide.content as any} />;
     case 'task_list':
@@ -83,6 +95,8 @@ const renderSlideContent = (slide: SlideData) => {
       return <PricingTierSlide content={slide.content as any} />;
     case 'testimonial':
       return <TestimonialSlide content={slide.content as any} />;
+    case 'problem_split':
+      return <ProblemSplitSlide content={slide.content as any} />;
     case 'feature_banner':
       return <FeatureBannerSlide content={slide.content as any} />;
     case 'media_annotator':

@@ -109,7 +109,7 @@ export const TaskListSlide: React.FC<Props> = ({ content }) => {
                     justifyContent: 'center',
                     minWidth: '1.5rem'
                   }}>
-                    {task.badgeText}
+                    {renderText(task.badgeText, {}, 'span')}
                   </div>
                 )}
               </div>

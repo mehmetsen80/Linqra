@@ -98,7 +98,7 @@ export const StandaloneChart: React.FC<{ chartSpec: ChartFocusSlideContent['char
             <Tooltip contentStyle={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-main)', ...chartSpec.tooltipStyle }} />
             {renderLegend()}
             {seriesToRender.map((s, idx) => (
-              <Bar key={s.dataKey} dataKey={s.dataKey} name={s.name || s.dataKey} fill={s.color || COLORS[idx % COLORS.length]} stackId={isStacked ? (s.stackId || "a") : undefined} radius={isStacked ? undefined : [4, 4, 0, 0]}>
+              <Bar key={s.dataKey} dataKey={s.dataKey} name={typeof s.name === 'object' ? s.name.text : (s.name || s.dataKey)} fill={s.color || COLORS[idx % COLORS.length]} stackId={isStacked ? (s.stackId || "a") : undefined} radius={isStacked ? undefined : [4, 4, 0, 0]}>
                 {!chartSpec.series && chartSpec.data.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color || s.color || "#3b82f6"} />
                 ))}
@@ -119,7 +119,7 @@ export const StandaloneChart: React.FC<{ chartSpec: ChartFocusSlideContent['char
             <Tooltip contentStyle={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-main)', ...chartSpec.tooltipStyle }} />
             {renderLegend()}
             {seriesToRender.map((s, idx) => (
-              <Line key={s.dataKey} type="monotone" dataKey={s.dataKey} name={s.name || s.dataKey} stroke={s.color || COLORS[idx % COLORS.length]} strokeWidth={3} activeDot={{ r: 8 }}>
+              <Line key={s.dataKey} type="monotone" dataKey={s.dataKey} name={typeof s.name === 'object' ? s.name.text : (s.name || s.dataKey)} stroke={s.color || COLORS[idx % COLORS.length]} strokeWidth={3} activeDot={{ r: 8 }}>
                 <LabelList dataKey={s.dataKey} position="top" offset={10} fill="var(--text-secondary)" fontSize={12} />
               </Line>
             ))}
@@ -161,7 +161,7 @@ export const StandaloneChart: React.FC<{ chartSpec: ChartFocusSlideContent['char
             <Tooltip contentStyle={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-main)', ...chartSpec.tooltipStyle }} />
             {renderLegend()}
             {seriesToRender.map((s, idx) => (
-              <Area key={s.dataKey} type="monotone" dataKey={s.dataKey} name={s.name || s.dataKey} stroke={s.color || COLORS[idx % COLORS.length]} fill={s.color || COLORS[idx % COLORS.length]} fillOpacity={0.3}>
+              <Area key={s.dataKey} type="monotone" dataKey={s.dataKey} name={typeof s.name === 'object' ? s.name.text : (s.name || s.dataKey)} stroke={s.color || COLORS[idx % COLORS.length]} fill={s.color || COLORS[idx % COLORS.length]} fillOpacity={0.3}>
                 <LabelList dataKey={s.dataKey} position="top" offset={10} fill="var(--text-secondary)" fontSize={12} />
               </Area>
             ))}
@@ -178,7 +178,7 @@ export const StandaloneChart: React.FC<{ chartSpec: ChartFocusSlideContent['char
             <Tooltip contentStyle={{ backgroundColor: 'var(--card-bg)', borderColor: 'var(--card-border)', color: 'var(--text-main)', ...chartSpec.tooltipStyle }} />
             {renderLegend()}
             {seriesToRender.map((s, idx) => (
-              <Radar key={s.dataKey} dataKey={s.dataKey} name={s.name || s.dataKey} stroke={s.color || COLORS[idx % COLORS.length]} fill={s.color || COLORS[idx % COLORS.length]} fillOpacity={0.6} label={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
+              <Radar key={s.dataKey} dataKey={s.dataKey} name={typeof s.name === 'object' ? s.name.text : (s.name || s.dataKey)} stroke={s.color || COLORS[idx % COLORS.length]} fill={s.color || COLORS[idx % COLORS.length]} fillOpacity={0.6} label={{ fill: 'var(--text-secondary)', fontSize: 12 }} />
             ))}
           </RadarChart>
         </ResponsiveContainer>
@@ -195,11 +195,11 @@ export const StandaloneChart: React.FC<{ chartSpec: ChartFocusSlideContent['char
             {seriesToRender.map((s, idx) => {
               const color = s.color || COLORS[idx % COLORS.length];
               if (s.type === 'line') {
-                return <Line key={s.dataKey} type="monotone" dataKey={s.dataKey} name={s.name || s.dataKey} stroke={color} strokeWidth={3} activeDot={{ r: 8 }}><LabelList dataKey={s.dataKey} position="top" offset={10} fill={color} style={{ textShadow: '1px 1px 0px var(--card-bg), -1px -1px 0px var(--card-bg), 1px -1px 0px var(--card-bg), -1px 1px 0px var(--card-bg)' }} fontSize={12} formatter={formatLabel} /></Line>;
+                return <Line key={s.dataKey} type="monotone" dataKey={s.dataKey} name={typeof s.name === 'object' ? s.name.text : (s.name || s.dataKey)} stroke={color} strokeWidth={3} activeDot={{ r: 8 }}><LabelList dataKey={s.dataKey} position="top" offset={10} fill={color} style={{ textShadow: '1px 1px 0px var(--card-bg), -1px -1px 0px var(--card-bg), 1px -1px 0px var(--card-bg), -1px 1px 0px var(--card-bg)' }} fontSize={12} formatter={formatLabel} /></Line>;
               } else if (s.type === 'area') {
-                return <Area key={s.dataKey} type="monotone" dataKey={s.dataKey} name={s.name || s.dataKey} stroke={color} fill={color} fillOpacity={0.3}><LabelList dataKey={s.dataKey} position="top" offset={10} fill="var(--text-secondary)" fontSize={12} formatter={formatLabel} /></Area>;
+                return <Area key={s.dataKey} type="monotone" dataKey={s.dataKey} name={typeof s.name === 'object' ? s.name.text : (s.name || s.dataKey)} stroke={color} fill={color} fillOpacity={0.3}><LabelList dataKey={s.dataKey} position="top" offset={10} fill="var(--text-secondary)" fontSize={12} formatter={formatLabel} /></Area>;
               }
-              return <Bar key={s.dataKey} dataKey={s.dataKey} name={s.name || s.dataKey} fill={color} radius={[4, 4, 0, 0]}><LabelList dataKey={s.dataKey} position="top" offset={10} fill="var(--text-secondary)" fontSize={12} formatter={formatLabel} /></Bar>;
+              return <Bar key={s.dataKey} dataKey={s.dataKey} name={typeof s.name === 'object' ? s.name.text : (s.name || s.dataKey)} fill={color} radius={[4, 4, 0, 0]}><LabelList dataKey={s.dataKey} position="top" offset={10} fill="var(--text-secondary)" fontSize={12} formatter={formatLabel} /></Bar>;
             })}
           </ComposedChart>
         </ResponsiveContainer>

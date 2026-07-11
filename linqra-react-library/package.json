@@ -43,6 +43,7 @@
     "lucide-react": "^1.22.0",
     "mermaid": "^11.16.0",
     "prismjs": "^1.30.0",
+    "react-qr-code": "^2.2.0",
     "recharts": "^3.9.1"
   }
 }

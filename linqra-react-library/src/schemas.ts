@@ -23,9 +23,10 @@ export interface FooterData {
 }
 
 export interface DeckData {
-  deckTitle: string;
+  deckTitle: TextContent;
   metadata?: DeckMetadata;
   footer?: FooterData;
+  globalBackground?: SlideData[];
   slides: SlideData[];
 }
 
@@ -66,12 +67,57 @@ export interface StyleOverrides {
   [key: string]: any;
 }
 
+export type AtomicComponentLayout =
+  | 'text_block'
+  | 'icon'
+  | 'image'
+  | 'badge'
+  | 'stepper'
+  | 'avatar'
+  | 'code_snippet'
+  | 'atomic_chart'
+  | 'divider'
+  | 'button'
+  | 'progress_bar'
+  | 'stat'
+  | 'qr_code'
+  | 'alert'
+  | 'checkbox'
+  | 'radio'
+  | 'list_item';
+
 export interface SlideData {
-  id: string;
-  layout: string;
+  id?: string;
+  layout: 
+    | 'feature_banner'
+    | 'numbered_timeline'
+    | 'data_grid'
+    | 'split_text_media'
+    | 'code_walkthrough'
+    | 'orbit_diagram'
+    | 'status_quo_comparison'
+    | 'detailed_comparison'
+    | 'badge_group'
+    | 'task_list'
+    | 'quadrant_matrix'
+    | 'pain_point_grid'
+    | 'process_breakdown'
+    | 'step_slide'
+    | 'problem_statement'
+    | 'chart_focus'
+    | 'feature_cards'
+    | 'card'
+    | 'portrait_hero'
+    | 'flex'
+    | 'grid'
+    | 'highlight_card'
+    // atomic
+    | AtomicComponentLayout
+    | string;
   speakerNotes?: string;
   hideFooter?: boolean;
   styleOverrides?: StyleOverrides;
+  footerOverrides?: Partial<FooterData>;
   content: any;
 }
 
@@ -93,7 +139,7 @@ export type TextContent = string | {
 export interface CodeAnnotation {
   id: string;
   lineRange: [number, number]; // [startLine, endLine] (1-indexed)
-  title?: string;
+  title?: TextContent;
   description: string;
 }
 
@@ -188,7 +234,7 @@ export interface ChartFocusSlideContent {
     legendStyle?: CSSProperties;
     tooltipStyle?: CSSProperties;
     data: ({ label: string; value?: number; color?: string; labelStyle?: CSSProperties } & Record<string, any>)[];
-    series?: { dataKey: string; color?: string; name?: string; stackId?: string; type?: 'bar' | 'line' | 'area' }[];
+    series?: { dataKey: string; color?: string; name?: TextContent; stackId?: string; type?: 'bar' | 'line' | 'area' }[];
   };
 }
 
@@ -494,7 +540,7 @@ export interface TaskListSlideContent {
     title: TextContent;
     subtitle?: TextContent;
     subtitleColor?: string;
-    badgeText?: string;
+    badgeText?: TextContent;
     badgeColor?: string;
     badgeBg?: string;
     checked?: boolean;
@@ -585,7 +631,7 @@ export interface NumberedTimelineSlideContent {
     number: string;
     color?: string;
     icon?: string;
-    subtitle?: string;
+    subtitle?: TextContent;
     nodeScale?: number;
   }[];
   timelines?: {
@@ -597,7 +643,7 @@ export interface NumberedTimelineSlideContent {
       number: string;
       color?: string;
       icon?: string;
-      subtitle?: string;
+      subtitle?: TextContent;
       nodeScale?: number;
     }[];
   }[];
@@ -630,7 +676,313 @@ export interface CalloutBoxSlideContent {
   callouts: CalloutBoxItem[];
 }
 
+export interface PainPointGridSlideContent {
+  title: TextContent;
+  subtitle?: TextContent;
+  columns?: number;
+  cards: {
+    title: TextContent;
+    description: TextContent;
+    icon?: string;
+    iconColor?: string;
+    metric?: TextContent;
+    cardStyle?: CSSProperties;
+  }[];
+}
+
+export interface ProblemStatementSlideContent {
+  statement: TextContent;
+  metrics?: {
+    value: TextContent;
+    label: TextContent;
+  }[];
+  backgroundElements?: CSSProperties[];
+}
+
+export interface StatusQuoComparisonSlideContent {
+  title: TextContent;
+  subtitle?: TextContent;
+  currentBox: {
+    label: TextContent;
+    points: TextContent[];
+    style?: CSSProperties;
+  };
+  impactBox: {
+    label: TextContent;
+    points: TextContent[];
+    style?: CSSProperties;
+  };
+}
+
+export interface FeatureCardSlideContent {
+  icon?: string;
+  iconColor?: string;
+  iconBg?: string;
+  iconBorderColor?: string;
+  title: TextContent;
+  subtitle?: TextContent;
+  description: string;
+  containerStyle?: CSSProperties;
+}
+
+export interface OrbitDiagramSlideContent {
+  centerIcon?: string;
+  centerTitle?: TextContent;
+  centerSubtitle?: TextContent;
+  themeColor?: string;
+  size?: string;
+  rings?: {
+    size: string;
+    border: string;
+  }[];
+  dots?: {
+    size: string;
+    color?: string;
+    top?: string;
+    right?: string;
+    bottom?: string;
+    left?: string;
+  }[];
+  showCrossLines?: boolean;
+  crossLineColor?: string;
+  containerStyle?: CSSProperties;
+}
+
+export interface MetricRowSlideContent {
+  metrics: {
+    icon?: string;
+    iconColor?: string;
+    title: TextContent;
+    subtitle?: TextContent;
+  }[];
+  metricLayoutStyle?: CSSProperties;
+  textLayout?: 'title-top' | 'subtitle-top';
+  containerStyle?: CSSProperties;
+}
+
+export interface DetailedComparisonCardContent {
+  badge?: {
+    text: TextContent;
+    backgroundColor?: string;
+    color?: string;
+  };
+  headerIcon?: string;
+  headerIconColor?: string;
+  headerIconBackgroundColor?: string;
+  headerTitle: TextContent;
+  headerSubtitle?: TextContent;
+  headerRightText?: TextContent;
+  headerRightValue?: TextContent;
+  items: {
+    icon: string;
+    iconColor?: string;
+    title: TextContent;
+    description: TextContent;
+  }[];
+}
+
+export interface DetailedComparisonSlideContent {
+  title: TextContent;
+  subtitle?: TextContent;
+  leftCard: DetailedComparisonCardContent;
+  rightCard: DetailedComparisonCardContent;
+}
+
+export interface ProcessBreakdownSlideContent {
+  title: TextContent;
+  subtitle?: TextContent;
+  steps: {
+    label: TextContent;
+    description?: TextContent;
+    icon?: string;
+    isBottleneck?: boolean;
+  }[];
+}
+
+export interface HeroTitleSlideContent {
+  title: TextContent;
+  subtitle?: TextContent;
+  alignment?: 'left' | 'center' | 'right';
+  containerStyle?: React.CSSProperties;
+}
+
+export interface BrandLogoSlideContent {
+  image: ImageContent;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface BadgeItem {
+  text: TextContent;
+  style?: React.CSSProperties;
+  icon?: string;
+  iconSize?: string;
+}
+
+export interface BadgeGroupSlideContent {
+  badges: (string | BadgeItem)[];
+  alignment?: 'left' | 'center' | 'right' | 'space-between';
+  layout?: 'row' | 'column';
+  gap?: string;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface TextBlockSlideContent {
+  blocks: TextContent[];
+  alignment?: 'left' | 'center' | 'right';
+  gap?: string;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface HighlightCardSlideContent {
+  category?: TextContent;
+  value: TextContent;
+  description?: TextContent;
+  icon?: string;
+  iconColor?: string;
+  iconBg?: string;
+  badges?: TextContent[];
+  cardStyle?: React.CSSProperties;
+}
+
+export interface CardSlideContent {
+  children?: SlideData[];
+  containerStyle?: React.CSSProperties;
+}
+
+export interface ListItem {
+  text: TextContent;
+  icon?: string;
+  iconColor?: string;
+}
+
+export interface ListSlideContent {
+  items: ListItem[];
+  gap?: string;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface GridSlideContent {
+  children?: SlideData[];
+  columns?: string;
+  gap?: string;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface IconSlideContent {
+  name: string;
+  size?: string | number;
+  color?: string;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface ImageSlideContent {
+  src: string;
+  alt?: string;
+  objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
+  containerStyle?: React.CSSProperties;
+}
+
+export interface FlexSlideContent {
+  children?: SlideData[];
+  direction?: 'row' | 'column';
+  align?: string;
+  justify?: string;
+  gap?: string;
+  wrap?: boolean;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface DividerSlideContent {
+  orientation?: 'horizontal' | 'vertical';
+  thickness?: string;
+  color?: string;
+  margin?: string;
+}
+
+export interface CodeBlockSlideContent {
+  code: string;
+  language?: string;
+  showLineNumbers?: boolean;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface QuoteSlideContent {
+  quote: string;
+  author?: string;
+  role?: string;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface AvatarSlideContent {
+  src?: string;
+  name?: TextContent;
+  alt?: string;
+  size?: string;
+  border?: string;
+  fallbackColor?: string;
+  fallbackTextColor?: string;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface ButtonSlideContent {
+  text: TextContent;
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost';
+  icon?: string;
+  containerStyle?: React.CSSProperties;
+}
+
+export interface StepSlideContent {
+  number?: string;
+  title?: TextContent;
+  description?: string;
+  icon?: string;
+  status?: 'active' | 'completed' | 'pending';
+  containerStyle?: React.CSSProperties;
+}
+
+export interface ConnectorSlideContent {
+  direction?: 'horizontal' | 'vertical';
+  style?: 'solid' | 'dashed' | 'dotted';
+  color?: string;
+  length?: string;
+}
+export interface QuadrantMatrixSlideContent {
+  title?: TextContent;
+  subtitle?: TextContent;
+  targetBadge?: {
+    text: TextContent;
+    highlightText: TextContent;
+    icon?: string;
+  };
+  cardTitle: TextContent;
+  legendItems: {
+    color: string;
+    text: TextContent;
+    isHighlight?: boolean;
+  }[];
+  xAxisLabel: string;
+  yAxisLabel: string;
+  quadrants: {
+    topLeft: { title: TextContent; subtitle: TextContent; color?: string; subtitleColor?: string };
+    topRight: { title: TextContent; subtitle: TextContent; color?: string; subtitleColor?: string };
+    bottomLeft: { title: TextContent; subtitle: TextContent; color?: string; subtitleColor?: string };
+    bottomRight: { title: TextContent; subtitle: TextContent; color?: string; subtitleColor?: string };
+  };
+  bubbles: {
+    id: string;
+    title: TextContent;
+    subtitle: TextContent;
+    color: string;
+    top: string;
+    left: string;
+    size?: string;
+    isHighlight?: boolean;
+    badge?: string;
+  }[];
+}
+
 export type SlideContent = 
+  | { layout: 'quadrant_matrix'; content: QuadrantMatrixSlideContent }
   | { layout: 'title'; content: TitleSlideContent }
   | { layout: 'metric_grid'; content: MetricGridSlideContent }
   | { layout: 'standard'; content: StandardContentSlideContent }
@@ -653,6 +1005,19 @@ export type SlideContent =
   | { layout: 'focal_metric'; content: FocalMetricSlideContent }
   | { layout: 'media_annotator'; content: MediaAnnotatorSlideContent }
   | { layout: 'media_column_grid'; content: MediaColumnGridSlideContent }
+  | { layout: 'card'; content: CardSlideContent }
+  | { layout: 'list'; content: ListSlideContent }
+  | { layout: 'grid'; content: GridSlideContent }
+  | { layout: 'icon'; content: IconSlideContent }
+  | { layout: 'image'; content: ImageSlideContent }
+  | { layout: 'flex'; content: FlexSlideContent }
+  | { layout: 'divider'; content: DividerSlideContent }
+  | { layout: 'code_block'; content: CodeBlockSlideContent }
+  | { layout: 'quote'; content: QuoteSlideContent }
+  | { layout: 'avatar'; content: AvatarSlideContent }
+  | { layout: 'button'; content: ButtonSlideContent }
+  | { layout: 'step'; content: StepSlideContent }
+  | { layout: 'connector'; content: ConnectorSlideContent }
   | { layout: 'numbered_timeline'; content: NumberedTimelineSlideContent }
   | { layout: 'portrait_hero'; content: PortraitHeroSlideContent }
   | { layout: 'callout_box'; content: CalloutBoxSlideContent }
@@ -660,7 +1025,17 @@ export type SlideContent =
   | { layout: 'task_list'; content: TaskListSlideContent }
   | { layout: 'feature_banner'; content: FeatureBannerSlideContent }
   | { layout: 'testimonial'; content: TestimonialSlideContent }
-  | { layout: 'problem_split'; content: ProblemSplitSlideContent };
+  | { layout: 'problem_split'; content: ProblemSplitSlideContent }
+  | { layout: 'pain_point_grid'; content: PainPointGridSlideContent }
+  | { layout: 'problem_statement'; content: ProblemStatementSlideContent }
+  | { layout: 'status_quo_comparison'; content: StatusQuoComparisonSlideContent }
+  | { layout: 'detailed_comparison'; content: DetailedComparisonSlideContent }
+  | { layout: 'highlight_card'; content: HighlightCardSlideContent }
+  | { layout: 'hero_title'; content: HeroTitleSlideContent }
+  | { layout: 'brand_logo'; content: BrandLogoSlideContent }
+  | { layout: 'badge_group'; content: BadgeGroupSlideContent }
+  | { layout: 'text_block'; content: TextBlockSlideContent }
+  | { layout: 'process_breakdown'; content: ProcessBreakdownSlideContent };
 
 export interface Presentation {
   id?: string;
@@ -783,4 +1158,114 @@ export interface ProblemSplitSlideContent {
     iconColor?: string;
     bannerStyle?: CSSProperties;
   };
+}
+
+// ==========================================
+// ==========================================
+// NEW ATOMIC COMPONENTS
+// ==========================================
+
+export interface CheckboxSlideContent {
+  checked?: boolean;
+  label?: TextContent;
+  variant?: 'primary' | 'success' | 'warning' | 'error' | 'neutral';
+  size?: string;
+  containerStyle?: CSSProperties;
+}
+
+export interface RadioSlideContent {
+  checked?: boolean;
+  label?: TextContent;
+  variant?: 'primary' | 'success' | 'warning' | 'error' | 'neutral';
+  size?: string;
+  containerStyle?: CSSProperties;
+}
+
+export interface ListItemSlideContent {
+  title: TextContent;
+  description?: TextContent;
+  icon?: string;
+  iconColor?: string;
+  variant?: 'primary' | 'success' | 'warning' | 'error' | 'neutral';
+  containerStyle?: CSSProperties;
+}
+
+export interface BadgeSlideContent {
+  text: TextContent;
+  variant?: 'neutral' | 'success' | 'warning' | 'error' | 'info' | 'primary';
+  icon?: string;
+  containerStyle?: CSSProperties;
+  textStyle?: CSSProperties;
+}
+
+export interface ChartSlideContent {
+  type: 'bar' | 'line';
+  data: any[];
+  xAxisKey: string;
+  series: {
+    key: string;
+    color?: string;
+    name?: TextContent;
+  }[];
+  height?: string | number;
+  width?: string | number;
+  containerStyle?: CSSProperties;
+  showLegend?: boolean;
+  showGrid?: boolean;
+}
+
+export interface StepperSlideContent {
+  steps: {
+    label: TextContent;
+    description?: TextContent;
+    icon?: string;
+  }[];
+  activeIndex: number;
+  orientation?: 'horizontal' | 'vertical';
+  activeColor?: string;
+  inactiveColor?: string;
+  containerStyle?: CSSProperties;
+}
+
+
+export interface CodeSnippetSlideContent {
+  code: string;
+  language?: string;
+  showLineNumbers?: boolean;
+  containerStyle?: CSSProperties;
+}
+
+export interface ProgressBarSlideContent {
+  progress: number;
+  type?: 'linear' | 'radial';
+  label?: TextContent;
+  color?: string;
+  thickness?: string;
+  containerStyle?: CSSProperties;
+}
+
+export interface QRCodeSlideContent {
+  value: string;
+  size?: number;
+  fgColor?: string;
+  bgColor?: string;
+  containerStyle?: CSSProperties;
+}
+
+export interface StatSlideContent {
+  value: TextContent;
+  label?: TextContent;
+  trend?: {
+    value: TextContent;
+    direction: 'up' | 'down' | 'neutral';
+  };
+  containerStyle?: CSSProperties;
+}
+
+export interface AlertSlideContent {
+  description: TextContent;
+  title?: TextContent;
+  variant?: 'info' | 'success' | 'warning' | 'error';
+  icon?: string;
+  containerStyle?: CSSProperties;
 }

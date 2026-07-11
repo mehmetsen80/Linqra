@@ -198,15 +198,9 @@ export const CodeWalkthroughSlide: React.FC<CodeWalkthroughSlideProps> = ({ cont
                     }}>
                       L{annotation.lineRange[0]}{annotation.lineRange[1] !== annotation.lineRange[0] ? `-${annotation.lineRange[1]}` : ''}
                     </div>
-                    {annotation.title && (
-                      <h4 style={{ margin: 0, fontSize: 'clamp(1rem, 2cqmin, 1.15rem)', fontWeight: 600, color: '#1e293b' }}>
-                        {annotation.title}
-                      </h4>
-                    )}
+                    {annotation.title && renderText(annotation.title, { margin: 0, fontSize: 'clamp(1rem, 2cqmin, 1.15rem)', fontWeight: 600, color: '#1e293b' }, 'h4')}
                   </div>
-                  <p style={{ margin: 0, fontSize: 'clamp(0.85rem, 1.8cqmin, 1rem)', lineHeight: 1.5, color: '#475569' }}>
-                    {annotation.description}
-                  </p>
+                  {renderText(annotation.description, { margin: 0, fontSize: 'clamp(0.85rem, 1.8cqmin, 1rem)', lineHeight: 1.5, color: '#475569' }, 'p')}
                 </div>
               );
             })}

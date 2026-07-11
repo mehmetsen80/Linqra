@@ -69,3 +69,4 @@ export { CalloutBoxSlide } from './components/CalloutBoxSlide';
 export * from './components/ArchitectureSlide';
 export * from './components/DataGridSlide';
 export * from './components/TeamProfileSlide';
+export * from './components/SlideComponentRenderer';

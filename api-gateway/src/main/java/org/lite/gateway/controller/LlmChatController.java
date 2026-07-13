@@ -7,7 +7,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.lite.gateway.service.ExternalUsageLoggerService;
 import org.lite.gateway.service.ExternalUserCreditService;
 import org.lite.gateway.service.LlmModelService;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
@@ -151,16 +153,8 @@ public class LlmChatController {
                                 })
                                 .bodyValue(request)
                                 .retrieve()
-                                .bodyToFlux(String.class)
-                                .map(chunk -> {
-                                    if (chunk == null)
-                                        return "";
-                                    String trimmed = chunk.trim();
-                                    if (trimmed.startsWith("data: ")) {
-                                        return trimmed.substring(6).trim();
-                                    }
-                                    return trimmed;
-                                })
+                                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
+                                .map(sse -> sse.data() != null ? sse.data() : "")
                                 .filter(payload -> !payload.isEmpty())
                                 .doOnNext(payload -> {
                                     try {

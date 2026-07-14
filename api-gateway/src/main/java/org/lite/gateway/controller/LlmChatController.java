@@ -66,14 +66,14 @@ public class LlmChatController {
             if (isManaged) {
                 effectiveModelId = "gpt-4o-mini";
             } else {
-                return Flux.just("data: {\"error\": \"Missing X-LLM-Model header\"}\n\n");
+                return Flux.just("{\"error\": \"Missing X-LLM-Model header\"}");
             }
         } else {
             effectiveModelId = modelId;
         }
 
         if (authorization == null || !authorization.startsWith("Bearer ")) {
-            return Flux.just("data: {\"error\": \"Missing or invalid Authorization header\"}\n\n");
+            return Flux.just("{\"error\": \"Missing or invalid Authorization header\"}");
         }
 
         String resolvedUserId = externalUserId;
@@ -102,6 +102,7 @@ public class LlmChatController {
                 new HashMap<>());
         streamOptions.put("include_usage", true);
         request.put("stream_options", streamOptions);
+        request.put("model", effectiveModelId);
 
         String safeServiceName = serviceName != null ? serviceName : "unknown";
 
@@ -112,7 +113,7 @@ public class LlmChatController {
         Mono<String> apiKeyMono;
         if (isManaged) {
             if (managedTeamId == null || managedTeamId.isBlank()) {
-                return Flux.just("data: {\"error\": \"Managed team ID not configured on server.\"}\n\n");
+                return Flux.just("{\"error\": \"Managed team ID not configured on server.\"}");
             }
             apiKeyMono = llmModelService.getModelByName(effectiveModelId)
                     .switchIfEmpty(Mono.error(new IllegalArgumentException("Model not found: " + effectiveModelId)))
@@ -130,7 +131,7 @@ public class LlmChatController {
         return creditCheckMono.flatMapMany(hasCredits -> {
             if (!hasCredits) {
                 return Flux.just(
-                        "data: {\"error\": \"Insufficient AI credits. Please upgrade your account to continue.\"}\n\n");
+                        "{\"error\": \"Insufficient AI credits. Please upgrade your account to continue.\"}");
             }
 
             return apiKeyMono.flatMapMany(apiKey -> llmModelService.getModelByName(effectiveModelId)
@@ -207,6 +208,129 @@ public class LlmChatController {
                                             externalUserCreditService.consumeCredit(finalUserId, safeServiceName, 1)
                                                     .subscribe();
                                         }
+                                    }
+                                });
+                    }));
+        });
+    }
+
+    @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    public Mono<String> chat(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestHeader(value = "X-LLM-Model", required = false) String modelId,
+            @RequestHeader(value = "X-External-User-Id", required = false) String externalUserId,
+            @RequestHeader(value = "X-Is-BYOK", required = false, defaultValue = "false") boolean isByok,
+            @RequestHeader(value = "X-Is-Managed", required = false, defaultValue = "false") boolean isManaged,
+            @RequestHeader(value = "X-Machine-Id", required = false) String machineId,
+            @RequestHeader(value = "X-Service-Name", required = false) String serviceName,
+            @RequestHeader(value = "X-Team-Id", required = false) String managedTeamId,
+            @RequestBody Map<String, Object> request
+    ) {
+        String resolvedUserId = externalUserId;
+        if ((resolvedUserId == null || resolvedUserId.trim().isEmpty()) && authorization != null && authorization.startsWith("Bearer ")) {
+            try {
+                String token = authorization.substring(7);
+                com.nimbusds.jwt.SignedJWT signedJWT = com.nimbusds.jwt.SignedJWT.parse(token);
+                resolvedUserId = signedJWT.getJWTClaimsSet().getSubject();
+            } catch (Exception e) {
+                log.warn("Failed to extract sub from JWT token", e);
+            }
+        }
+        final String finalUserId = resolvedUserId;
+
+        final String effectiveModelId;
+        if (modelId == null || modelId.trim().isEmpty()) {
+            if (isManaged) {
+                effectiveModelId = "gpt-4o-mini";
+            } else {
+                return Mono.just("{\"error\": \"Missing X-LLM-Model header\"}");
+            }
+        } else {
+            effectiveModelId = modelId;
+        }
+
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return Mono.just("{\"error\": \"Missing or invalid Authorization header\"}");
+        }
+
+        log.info("Received chat non-stream request. Model: {}, BYOK: {}, Managed: {}, User: {}", effectiveModelId, isByok,
+                isManaged, finalUserId);
+
+        request.put("model", effectiveModelId);
+
+        String safeServiceName = serviceName != null ? serviceName : "unknown";
+
+        Mono<Boolean> creditCheckMono = isManaged && finalUserId != null
+                ? externalUserCreditService.hasSufficientCredits(finalUserId, safeServiceName, machineId)
+                : Mono.just(true);
+
+        Mono<String> apiKeyMono;
+        if (isManaged) {
+            if (managedTeamId == null || managedTeamId.isBlank()) {
+                return Mono.just("{\"error\": \"Managed team ID not configured on server.\"}");
+            }
+            apiKeyMono = llmModelService.getModelByName(effectiveModelId)
+                    .switchIfEmpty(Mono.error(new IllegalArgumentException("Model not found: " + effectiveModelId)))
+                    .flatMap(model -> linqLlmModelService.deriveModelCategory(effectiveModelId, model.getProvider(),
+                            managedTeamId))
+                    .flatMap(category -> linqLlmModelService.findByModelCategoryAndModelNameAndTeamId(category,
+                            effectiveModelId, managedTeamId))
+                    .map(org.lite.gateway.entity.LinqLlmModel::getApiKey)
+                    .switchIfEmpty(
+                            Mono.error(new IllegalArgumentException("Managed LLM Configuration not found for team")));
+        } else {
+            apiKeyMono = Mono.just(authorization.substring(7));
+        }
+
+        return creditCheckMono.flatMap(hasCredits -> {
+            if (!hasCredits) {
+                return Mono.just(
+                        "{\"error\": \"Insufficient AI credits. Please upgrade your account to continue.\"}");
+            }
+
+            return apiKeyMono.flatMap(apiKey -> llmModelService.getModelByName(effectiveModelId)
+                    .switchIfEmpty(Mono.error(new IllegalArgumentException("Model not found: " + effectiveModelId)))
+                    .flatMap(model -> {
+                        return webClient.post()
+                                .uri(model.getEndpoint())
+                                .headers(h -> {
+                                    if ("anthropic".equalsIgnoreCase(model.getProvider())) {
+                                        h.set("x-api-key", apiKey);
+                                        h.set("anthropic-version", "2023-06-01");
+                                    } else {
+                                        h.set("Authorization", "Bearer " + apiKey);
+                                    }
+                                    h.set("Content-Type", "application/json");
+                                    h.set("Accept", "application/json");
+                                })
+                                .bodyValue(request)
+                                .retrieve()
+                                .bodyToMono(String.class)
+                                .doOnNext(payload -> {
+                                    try {
+                                        com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(payload);
+                                        int pTokens = 0, cTokens = 0;
+                                        if (root.has("usage") && !root.get("usage").isNull()) {
+                                            com.fasterxml.jackson.databind.JsonNode usage = root.get("usage");
+                                            if (usage.has("prompt_tokens")) pTokens = usage.get("prompt_tokens").asInt();
+                                            if (usage.has("completion_tokens")) cTokens = usage.get("completion_tokens").asInt();
+                                        }
+                                        if (finalUserId != null && (pTokens > 0 || cTokens > 0)) {
+                                            externalUsageLoggerService.logUsage(
+                                                    serviceName != null ? serviceName : "unknown",
+                                                    finalUserId,
+                                                    effectiveModelId,
+                                                    isByok,
+                                                    pTokens,
+                                                    cTokens).subscribe();
+
+                                            if (isManaged) {
+                                                externalUserCreditService.consumeCredit(finalUserId, safeServiceName, 1)
+                                                        .subscribe();
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        log.debug("Failed to parse non-stream chunk for usage: {}", e.getMessage());
                                     }
                                 });
                     }));

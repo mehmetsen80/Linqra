@@ -23,12 +23,14 @@ import org.lite.gateway.service.*;
 import org.lite.gateway.util.AuditLogHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.web.server.ResponseStatusException;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -89,6 +91,11 @@ public abstract class BaseChatExecutionService implements ChatExecutionService {
     // Streaming state
     protected final Map<String, Thread> activeStreamingThreads = new ConcurrentHashMap<>();
     protected final Map<String, Boolean> cancellationFlags = new ConcurrentHashMap<>();
+    protected final Map<String, Sinks.Many<ServerSentEvent<String>>> sseSinks = new ConcurrentHashMap<>();
+
+    public void registerSseSink(String conversationId, Sinks.Many<ServerSentEvent<String>> sink) {
+        sseSinks.put(conversationId, sink);
+    }
 
     public void setChatMessageChannel(MessageChannel chatMessageChannel) {
         this.chatMessageChannel = chatMessageChannel;
@@ -317,6 +324,20 @@ public abstract class BaseChatExecutionService implements ChatExecutionService {
             update.put("type", type);
             update.put("timestamp", LocalDateTime.now().toString());
             update.putAll(data);
+
+            // Push to SSE sink if registered
+            if (data.containsKey("conversationId")) {
+                String conversationId = String.valueOf(data.get("conversationId"));
+                Sinks.Many<ServerSentEvent<String>> sink = sseSinks.get(conversationId);
+                if (sink != null) {
+                    try {
+                        String jsonData = objectMapper.writeValueAsString(update);
+                        sink.tryEmitNext(ServerSentEvent.builder(jsonData).event(type).build());
+                    } catch (Exception e) {
+                        log.warn("Failed to serialize SSE chunk: {}", e.getMessage());
+                    }
+                }
+            }
 
             boolean sent = chatMessageChannel.send(MessageBuilder.withPayload(update).build());
             if (sent) {

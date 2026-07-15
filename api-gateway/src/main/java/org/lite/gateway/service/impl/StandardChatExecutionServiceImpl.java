@@ -17,10 +17,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -56,6 +58,10 @@ public class StandardChatExecutionServiceImpl extends BaseChatExecutionService {
 
         @Override
         public Mono<LinqResponse> executeChat(LinqRequest request) {
+                return executeChat(request, null);
+        }
+
+        public Mono<LinqResponse> executeChat(LinqRequest request, Sinks.Many<ServerSentEvent<String>> sseSink) {
                 log.info("Executing chat request for assistant (Standard)");
 
                 if (request.getQuery() == null || request.getQuery().getChat() == null) {
@@ -77,6 +83,11 @@ public class StandardChatExecutionServiceImpl extends BaseChatExecutionService {
                                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
                                                 "AI Assistant not found: " + assistantId)))
                                 .flatMap(assistant -> getOrCreateConversation(chat, assistant, teamId, executedBy)
+                                                .doOnNext(conversation -> {
+                                                        if (sseSink != null) {
+                                                                registerSseSink(conversation.getId(), sseSink);
+                                                        }
+                                                })
                                                 .flatMap(conversation -> logChatExecutionStarted(assistant,
                                                                 conversation, executedBy, startTime)
                                                                 .then(Mono.defer(() -> buildChatMessages(conversation,

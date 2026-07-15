@@ -18,6 +18,10 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.http.MediaType;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -659,5 +663,88 @@ public class AIAssistantController {
                                         return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                                         .body(Map.of("error", errorMessage)));
                                 });
+        }
+
+        @PostMapping(value = "/{assistantId}/conversations/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+        public Flux<ServerSentEvent<String>> startConversationStream(
+                        @PathVariable String assistantId,
+                        @RequestBody Map<String, Object> requestBody,
+                        ServerWebExchange exchange) {
+
+                log.info("Starting SSE conversation for assistant {}", assistantId);
+
+                Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().unicast().onBackpressureBuffer();
+
+                aiAssistantService.getAssistantById(assistantId)
+                                .switchIfEmpty(Mono.error(
+                                                new IllegalArgumentException("AI Assistant not found: " + assistantId)))
+                                .flatMap(assistant -> userContextService.getCurrentUsername(exchange)
+                                                .switchIfEmpty(Mono
+                                                                .error(new IllegalArgumentException("User not found")))
+                                                .flatMap(userService::findByUsername)
+                                                .switchIfEmpty(Mono
+                                                                .error(new IllegalArgumentException("User not found")))
+                                                .flatMap(user -> teamContextService.getTeamFromContext(exchange)
+                                                                .switchIfEmpty(Mono.error(new IllegalArgumentException(
+                                                                                "Team not found")))
+                                                                .flatMap(teamId -> {
+                                                                        if (!user.getRoles().contains("SUPER_ADMIN")
+                                                                                        && !assistant.getTeamId()
+                                                                                                        .equals(teamId)) {
+                                                                                return Mono.error(
+                                                                                                new IllegalArgumentException(
+                                                                                                                "Unauthorized access to assistant"));
+                                                                        }
+
+                                                                        String message = (String) requestBody
+                                                                                        .getOrDefault("message", "");
+
+                                                                        LinqRequest linqRequest = new LinqRequest();
+                                                                        LinqRequest.Link link = new LinqRequest.Link();
+                                                                        link.setTarget("assistant");
+                                                                        link.setAction("chat");
+                                                                        linqRequest.setLink(link);
+
+                                                                        LinqRequest.Query query = new LinqRequest.Query();
+                                                                        query.setIntent("chat");
+
+                                                                        Map<String, Object> params = new HashMap<>();
+                                                                        params.put("teamId", teamId);
+                                                                        params.put("userId", user.getId());
+                                                                        query.setParams(params);
+
+                                                                        LinqRequest.Query.ChatConversation chat = new LinqRequest.Query.ChatConversation();
+                                                                        chat.setAssistantId(assistantId);
+                                                                        chat.setMessage(message);
+                                                                        chat.setConversationId(null);
+                                                                        chat.setHistory(null);
+                                                                        chat.setContext((Map<String, Object>) requestBody
+                                                                                        .getOrDefault("context",
+                                                                                                        new HashMap<>()));
+                                                                        query.setChat(chat);
+
+                                                                        linqRequest.setQuery(query);
+                                                                        linqRequest.setExecutedBy(user.getUsername());
+
+                                                                        ChatExecutionService resolvedService = resolveChatExecutionService(
+                                                                                        assistant);
+
+                                                                        // Execute async and push to sink
+                                                                        return resolvedService.executeChat(linqRequest,
+                                                                                        sink);
+                                                                })))
+                                .doFinally(signalType -> sink.tryEmitComplete())
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .subscribe(
+                                                res -> log.debug("SSE conversation completed"),
+                                                err -> {
+                                                        log.error("SSE conversation error", err);
+                                                        sink.tryEmitNext(ServerSentEvent
+                                                                        .builder("Error: " + err.getMessage())
+                                                                        .event("error").build());
+                                                        sink.tryEmitComplete();
+                                                });
+
+                return sink.asFlux();
         }
 }

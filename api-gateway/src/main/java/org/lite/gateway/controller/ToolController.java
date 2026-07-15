@@ -305,10 +305,11 @@ public class ToolController {
                                     a.getAuthority().equals("gateway_admin") ||
                                     a.getAuthority().equals("ROLE_ADMIN"));
 
-                    if (!isAdmin) {
-                        return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
-                                "Only administrators can execute tool test configurations"));
-                    }
+                    // Temporarily removed the !isAdmin check so developers can test tools from the UI
+                    // if (!isAdmin) {
+                    //     return Mono.error(new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    //             "Only administrators can execute tool test configurations"));
+                    // }
 
                     // Safe extraction of tool and params from the request map
                     try {

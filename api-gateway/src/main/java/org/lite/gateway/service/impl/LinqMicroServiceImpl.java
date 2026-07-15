@@ -246,7 +246,8 @@ public class LinqMicroServiceImpl implements LinqMicroService {
                 : Map.of();
 
         if (!queryParams.isEmpty()) {
-            url += "?" + queryParams.entrySet().stream()
+            String queryDelimiter = url.contains("?") ? "&" : "?";
+            url += queryDelimiter + queryParams.entrySet().stream()
                     .map(e -> e.getKey() + "=" + e.getValue())
                     .collect(Collectors.joining("&"));
         }

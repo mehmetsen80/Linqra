@@ -31,7 +31,8 @@ import {
   HiRefresh,
   HiServer
 } from 'react-icons/hi';
-import { SiOpenai, SiGoogle, SiAnthropic } from 'react-icons/si';
+import { SiGoogle, SiAnthropic } from 'react-icons/si';
+import { TbBrandOpenai } from 'react-icons/tb';
 import { FaCloud } from 'react-icons/fa';
 import { teamService } from '../../../services/teamService';
 import { linqLlmModelService } from '../../../services/linqLlmModelService';
@@ -969,7 +970,7 @@ function ViewTeam() {
                     onClick={() => setShowOpenAIModal(true)}
                     disabled={team.status === 'INACTIVE' || operationLoading}
                   >
-                    <SiOpenai className="me-1" size={16} /> OpenAI
+                    <TbBrandOpenai className="me-1" size={16} /> OpenAI
                   </BootstrapButton>
                   <BootstrapButton
                     size="sm"

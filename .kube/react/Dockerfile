@@ -31,7 +31,7 @@ ENV REACT_APP_KEYCLOAK_URL=$REACT_APP_KEYCLOAK_URL
 ENV REACT_APP_KEYCLOAK_REALM=$REACT_APP_KEYCLOAK_REALM
 ENV REACT_APP_KEYCLOAK_CLIENT_ID=$REACT_APP_KEYCLOAK_CLIENT_ID
 
-RUN npm run build
+RUN NODE_OPTIONS="--max-old-space-size=8192" npm run build
 
 # ========================================================
 # Stage 2: Serve with Nginx

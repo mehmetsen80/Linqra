@@ -64,15 +64,20 @@ public class SecuritySentinelService {
                             .collect(Collectors.groupingBy(AuditLog::getUserId));
 
                     logsByUser.forEach((userId, logs) -> {
+                        String username = logs.get(0).getUsername();
+                        if ("SYSTEM".equalsIgnoreCase(username)) {
+                            return; // Skip mass exfiltration alerts for systemic background processes
+                        }
+                        
                         if (logs.size() >= THRESHOLD_MASS_EXFILTRATION) {
                             createIncident(
                                     "MASS_EXFILTRATION",
                                     IncidentSeverity.CRITICAL,
                                     "Mass Data Exfiltration Detected",
                                     String.format("User %s accessed %d records in 1 minute.",
-                                            logs.get(0).getUsername(), logs.size()),
+                                            username, logs.size()),
                                     userId,
-                                    logs.get(0).getUsername(),
+                                    username,
                                     logs.get(0).getTeamId(),
                                     logs).subscribe();
                         }

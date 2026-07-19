@@ -94,7 +94,7 @@ public class UserServiceImpl implements UserService {
                                                         .onErrorResume(auditError -> Mono.empty()) // Don't fail if
                                                                                                    // audit logging
                                                                                                    // fails
-                                                        .then(Mono.error(new ResourceNotFoundException(
+                                                        .then(Mono.<User>error(new ResourceNotFoundException(
                                                                         "username '" + request.getUsername()
                                                                                         + "' does not exist",
                                                                         ErrorCode.USER_NOT_FOUND)));
@@ -180,7 +180,7 @@ public class UserServiceImpl implements UserService {
                                                         .onErrorResume(auditError -> Mono.empty()) // Don't fail if
                                                                                                    // audit logging
                                                                                                    // fails
-                                                        .then(Mono.error(new InvalidCredentialsException(
+                                                        .then(Mono.<AuthResponse>error(new InvalidCredentialsException(
                                                                         ErrorCode.USER_INVALID_CREDENTIALS)));
                                 })
                                 .doOnError(e -> log.error("Login error: ", e));
@@ -236,7 +236,7 @@ public class UserServiceImpl implements UserService {
                                                                                                            // if audit
                                                                                                            // logging
                                                                                                            // fails
-                                                                .then(Mono.error(new DuplicateUserException(
+                                                                .then(Mono.<Boolean>error(new DuplicateUserException(
                                                                                 ErrorCode.USER_ALREADY_EXISTS
                                                                                                 .getDefaultMessage())));
                                         }
@@ -277,7 +277,7 @@ public class UserServiceImpl implements UserService {
                                                                                                            // if audit
                                                                                                            // logging
                                                                                                            // fails
-                                                                .then(Mono.error(new DuplicateUserException(
+                                                                .then(Mono.<AuthResponse>error(new DuplicateUserException(
                                                                                 ErrorCode.USER_EMAIL_EXISTS
                                                                                                 .getDefaultMessage())));
                                         }

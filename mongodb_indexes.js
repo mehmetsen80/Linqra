@@ -722,6 +722,42 @@ db.collection_export_jobs.createIndex(
 // AUDIT_LOGS COLLECTION
 // ============================================================================
 
+// ============================================================================
+// EXTERNAL_USER_CREDITS COLLECTION
+// ============================================================================
+
+// 1. External User Service Unique Index (unique constraint)
+db.external_user_credits.createIndex(
+  { "externalUserId": 1, "serviceName": 1 },
+  {
+    "name": "external_user_service_idx",
+    "unique": true,
+    "background": true
+  }
+);
+
+// ============================================================================
+// EXTERNAL_USAGE_LOG COLLECTION
+// ============================================================================
+
+// 1. External User Service Timestamp Index
+db.external_usage_log.createIndex(
+  { "externalUserId": 1, "serviceName": 1, "timestamp": -1 },
+  {
+    "name": "external_user_service_time_idx",
+    "background": true
+  }
+);
+
+// 2. Service Timestamp Index
+db.external_usage_log.createIndex(
+  { "serviceName": 1, "timestamp": -1 },
+  {
+    "name": "service_time_idx",
+    "background": true
+  }
+);
+
 // 1. EventId Unique Index (unique constraint)
 db.audit_logs.createIndex(
   { "eventId": 1 },
@@ -1317,6 +1353,18 @@ db.resource_metadata.getIndexes().forEach(function (index) {
   printjson(index.key);
 });
 
+
+print("\n=== EXTERNAL_USER_CREDITS Indexes ===");
+db.external_user_credits.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
+
+print("\n=== EXTERNAL_USAGE_LOG Indexes ===");
+db.external_usage_log.getIndexes().forEach(function (index) {
+  print("Index: " + index.name);
+  printjson(index.key);
+});
 
 print("\n=== AUDIT_LOGS Indexes ===");
 db.audit_logs.getIndexes().forEach(function (index) {

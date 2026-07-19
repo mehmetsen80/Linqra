@@ -17,10 +17,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -56,6 +58,10 @@ public class StandardChatExecutionServiceImpl extends BaseChatExecutionService {
 
         @Override
         public Mono<LinqResponse> executeChat(LinqRequest request) {
+                return executeChat(request, null);
+        }
+
+        public Mono<LinqResponse> executeChat(LinqRequest request, Sinks.Many<ServerSentEvent<String>> sseSink) {
                 log.info("Executing chat request for assistant (Standard)");
 
                 if (request.getQuery() == null || request.getQuery().getChat() == null) {
@@ -77,6 +83,11 @@ public class StandardChatExecutionServiceImpl extends BaseChatExecutionService {
                                 .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND,
                                                 "AI Assistant not found: " + assistantId)))
                                 .flatMap(assistant -> getOrCreateConversation(chat, assistant, teamId, executedBy)
+                                                .doOnNext(conversation -> {
+                                                        if (sseSink != null) {
+                                                                registerSseSink(conversation.getId(), sseSink);
+                                                        }
+                                                })
                                                 .flatMap(conversation -> logChatExecutionStarted(assistant,
                                                                 conversation, executedBy, startTime)
                                                                 .then(Mono.defer(() -> buildChatMessages(conversation,
@@ -113,6 +124,31 @@ public class StandardChatExecutionServiceImpl extends BaseChatExecutionService {
                                                                                                                                                         null,
                                                                                                                                                         null,
                                                                                                                                                         true)
+                                                                                                                                                        .map(enrichedMessages -> {
+                                                                                                                                                                if (chat.getContext() != null && chat.getContext().containsKey("currentSlides")) {
+                                                                                                                                                                        try {
+                                                                                                                                                                                java.util.List<java.util.Map<String, Object>> finalMsgs = new java.util.ArrayList<>(enrichedMessages);
+                                                                                                                                                                                StringBuilder sb = new StringBuilder();
+                                                                                                                                                                                sb.append("=== PRESENTATION CONTEXT ===\n");
+                                                                                                                                                                                sb.append(objectMapper.writeValueAsString(chat.getContext().get("currentSlides")));
+                                                                                                                                                                                if (chat.getContext().containsKey("activeSlideId")) {
+                                                                                                                                                                                        sb.append("\n\n=== ACTIVE SLIDE ID ===\n").append(chat.getContext().get("activeSlideId"));
+                                                                                                                                                                                }
+                                                                                                                                                                                sb.append("\n\nINSTRUCTIONS: If the user asks you to modify the presentation or a slide, you MUST output the FULL, updated JSON object for that slide (including the 'id', 'layout', and 'content' fields) wrapped in a ```json code block so the UI can parse it. Do NOT output just the 'html' or 'content' field, and do NOT use HTML tags like <REPLACE_SELECTION>.");
+                                                                                                                                                                                
+                                                                                                                                                                                java.util.Map<String, Object> sysMsg = new java.util.HashMap<>();
+                                                                                                                                                                                sysMsg.put("role", "system");
+                                                                                                                                                                                sysMsg.put("content", sb.toString());
+                                                                                                                                                                                
+                                                                                                                                                                                int insertPos = Math.max(0, finalMsgs.size() - 1);
+                                                                                                                                                                                finalMsgs.add(insertPos, sysMsg);
+                                                                                                                                                                                return finalMsgs;
+                                                                                                                                                                        } catch (Exception e) {
+                                                                                                                                                                                log.warn("Failed to inject presentation context", e);
+                                                                                                                                                                        }
+                                                                                                                                                                }
+                                                                                                                                                                return enrichedMessages;
+                                                                                                                                                        })
                                                                                                                                                         .flatMap(enrichedMessages -> {
                                                                                                                                                                 AIAssistant.ModelConfig modelConfig = assistant
                                                                                                                                                                                 .getDefaultModel();

@@ -459,10 +459,11 @@ public class SecurityConfig implements BeanFactoryAware {
                                         return authenticationMono.flatMap(auth -> {
                                             boolean isAuthorizedByRole = auth.getAuthorities().stream()
                                                     .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS") ||
-                                                            a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
+                                                            a.getAuthority().equals("ROLE_GATEWAY_ADMIN") ||
+                                                            a.getAuthority().equals("ROLE_WEB_UI"));
 
                                             if (isAuthorizedByRole) {
-                                                log.info("Access granted: Authorized via role (API/ADMIN) for path: {}",
+                                                log.info("Access granted: Authorized via role (API/ADMIN/WEB_UI) for path: {}",
                                                         path);
                                                 return Mono.just(new AuthorizationDecision(true));
                                             }
@@ -481,10 +482,11 @@ public class SecurityConfig implements BeanFactoryAware {
                         return authenticationMono.flatMap(auth -> {
                             boolean isAuthorizedByRole = auth.getAuthorities().stream()
                                     .anyMatch(a -> a.getAuthority().equals("ROLE_API_ACCESS") ||
-                                            a.getAuthority().equals("ROLE_GATEWAY_ADMIN"));
+                                            a.getAuthority().equals("ROLE_GATEWAY_ADMIN") ||
+                                            a.getAuthority().equals("ROLE_WEB_UI"));
 
                             if (isAuthorizedByRole) {
-                                log.info("Access granted: Authorized via role (API/ADMIN) for path: {}", path);
+                                log.info("Access granted: Authorized via role (API/ADMIN/WEB_UI) for path: {}", path);
                                 return Mono.just(new AuthorizationDecision(true));
                             }
                             return continueWithJwtChecks(Mono.just(auth), path, scope);
@@ -607,6 +609,15 @@ public class SecurityConfig implements BeanFactoryAware {
                 return Mono.just(true);
             }
 
+            // Check for ROLE_WEB_UI authority
+            boolean hasWebUiRole = auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_WEB_UI"));
+
+            if (hasWebUiRole) {
+                log.info("Web UI request detected: bypassing route permission check for path: {}", path);
+                return Mono.just(true);
+            }
+
             if (auth instanceof JwtAuthenticationToken jwtAuth) {
                 if (isAdmin(jwtAuth.getToken())) {
                     log.info("Administrator identified via JWT: bypassing route permission check for path: {}", path);
@@ -679,6 +690,17 @@ public class SecurityConfig implements BeanFactoryAware {
         allowedHeadersList.add("X-API-Key-Name");
         allowedHeadersList.add("X-Team-ID");
         allowedHeadersList.add("X-Organization-Id");
+        
+        // Deqra App Headers
+        allowedHeadersList.add("X-Service-Name");
+        allowedHeadersList.add("X-Machine-Id");
+        allowedHeadersList.add("X-Is-Managed");
+        allowedHeadersList.add("X-LLM-Model");
+        allowedHeadersList.add("X-Local-Endpoint");
+        allowedHeadersList.add("X-Is-Local");
+        allowedHeadersList.add("X-Is-BYOK");
+        allowedHeadersList.add("X-BYOK-Key");
+        
         configuration.setAllowedHeaders(allowedHeadersList);
 
         configuration.setAllowCredentials(true);

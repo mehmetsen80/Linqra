@@ -59,7 +59,11 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             "https://www.komunas.com",
             "https://komunas.linqra.com",
             "https://smartadvising.ai",
-            "https://www.smartadvising.ai");
+            "https://www.smartadvising.ai",
+            "http://localhost:5173", // Vite default
+            "app://-", // Electron default
+            "file://" // Electron fallback
+    );
 
     @Override
     public @NonNull Mono<Void> filter(@NonNull ServerWebExchange exchange, @NonNull WebFilterChain chain) {
@@ -111,11 +115,23 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
         String authHeader = exchange.getRequest().getHeaders().getFirst(AUTHORIZATION_HEADER);
 
         // If request has Authorization token AND valid Origin/Referer, it's from Web UI
-        if (authHeader != null && !authHeader.isEmpty() && isFromWebUI(origin, referer)) {
-            log.debug(
+        boolean isWebUi = isFromWebUI(origin, referer);
+        log.info("ApiKey Filter checks: authHeader present={}, origin={}, referer={}, isWebUI={}", 
+                 (authHeader != null && !authHeader.isEmpty()), origin, referer, isWebUi);
+
+        if (authHeader != null && !authHeader.isEmpty() && isWebUi) {
+            log.info(
                     "Web UI request detected (has Authorization + valid origin/referer), skipping API key for path: {}",
                     path);
-            return chain.filter(exchange);
+
+            // Create a synthetic authentication object so dynamicPathAuthorization lets it pass through to the routed app
+            UsernamePasswordAuthenticationToken webUiAuth = new UsernamePasswordAuthenticationToken(
+                    "WEB_UI_USER",
+                    null,
+                    List.of(new SimpleGrantedAuthority("ROLE_WEB_UI")));
+
+            return chain.filter(exchange)
+                    .contextWrite(ReactiveSecurityContextHolder.withAuthentication(webUiAuth));
         }
 
         // For external API/SDK/Postman requests, API key is required

@@ -50,15 +50,31 @@ public class GlobalExceptionHandler {
             )));
     }
 
+    @ExceptionHandler(org.springframework.cloud.gateway.support.NotFoundException.class)
+    public Mono<ResponseEntity<ErrorResponse>> handleGatewayNotFoundException(org.springframework.cloud.gateway.support.NotFoundException ex) {
+        log.warn("Service Unavailable: {}", ex.getMessage());
+        return Mono.just(ResponseEntity
+            .status(HttpStatus.SERVICE_UNAVAILABLE)
+            .body(ErrorResponse.fromErrorCode(
+                ErrorCode.INTERNAL_ERROR, // Or a more specific code if you have one
+                ex.getMessage(),
+                HttpStatus.SERVICE_UNAVAILABLE.value()
+            )));
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Mono<ResponseEntity<ErrorResponse>> handleGenericException(Exception ex) {
-        log.error("Internal server error: {}", ex.getMessage(), ex);
+        String msg = ex.getMessage();
+        if (ex instanceof org.springframework.web.reactive.function.client.WebClientResponseException) {
+            msg += " " + ((org.springframework.web.reactive.function.client.WebClientResponseException) ex).getResponseBodyAsString();
+        }
+        log.error("Internal server error: {}", msg, ex);
         return Mono.just(ResponseEntity
             .status(HttpStatus.INTERNAL_SERVER_ERROR)
             .body(ErrorResponse.fromErrorCode(
                 ErrorCode.INTERNAL_ERROR,
-                ex.getMessage(),
+                msg,
                 HttpStatus.INTERNAL_SERVER_ERROR.value()
             )));
     }

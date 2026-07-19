@@ -141,7 +141,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                            // if audit
                                                                                                            // logging
                                                                                                            // fails
-                                                                .then(Mono.error(new RuntimeException(
+                                                                .then(Mono.<AgentExecution>error(new RuntimeException(
                                                                                 "Task is not ready to execute")));
                                         }
 
@@ -188,7 +188,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                            // if audit
                                                                                                            // logging
                                                                                                            // fails
-                                                                .then(Mono.error(new RuntimeException(
+                                                                .then(Mono.<AgentExecution>error(new RuntimeException(
                                                                                 "Invalid execution trigger configuration")));
                                         }
 
@@ -233,7 +233,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                            // if audit
                                                                                                            // logging
                                                                                                            // fails
-                                                                .then(Mono.error(new RuntimeException(
+                                                                .then(Mono.<AgentExecution>error(new RuntimeException(
                                                                                 "CRON tasks must have autoExecute enabled")));
                                         }
 
@@ -270,7 +270,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                            // if audit
                                                                                                            // logging
                                                                                                            // fails
-                                                                .then(Mono.error(new RuntimeException(
+                                                                .then(Mono.<AgentExecution>error(new RuntimeException(
                                                                                 "Agent is not ready to execute")));
                                         }
 
@@ -587,7 +587,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                                                                                                                                      // fails
                                                                                                                                         }
                                                                                                                                 })
-                                                                                                                                .then(Mono.error(
+                                                                                                                                .then(Mono.<AgentExecution>error(
                                                                                                                                                 error));
                                                                                                         });
                                                                                 });
@@ -635,7 +635,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                         .onErrorResume(auditError -> Mono.empty()) // Don't fail if
                                                                                                    // audit logging
                                                                                                    // fails
-                                                        .then(Mono.error(error)); // Return the original error after
+                                                        .then(Mono.<AgentExecution>error(error)); // Return the original error after
                                                                                   // logging
                                 });
         }
@@ -707,7 +707,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                                                 execution != null ? execution.getExecutionId() : "null", executionId))
                                 .doOnError(error -> log.error("Error fetching execution by id {}: {}", executionId,
                                                 error.getMessage()))
-                                .switchIfEmpty(Mono.error(
+                                .switchIfEmpty(Mono.<AgentExecution>error(
                                                 new RuntimeException("Execution not found with id: " + executionId)));
         }
 
@@ -730,7 +730,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
         private Mono<Void> executeWorkflow(AgentExecution execution, AgentTask task, Agent agent) {
                 if (execution == null) {
                         log.error("Cannot execute workflow: execution is null");
-                        return Mono.error(
+                        return Mono.<Void>error(
                                         new IllegalStateException("Execution is null when trying to execute workflow"));
                 }
 
@@ -740,7 +740,7 @@ public class AgentExecutionServiceImpl implements AgentExecutionService {
                 return switch (task.getTaskType()) {
                         case WORKFLOW_EMBEDDED -> workflowEmbeddedExecutor.executeTask(execution, task, agent);
                         case WORKFLOW_TRIGGER -> workflowTriggerExecutor.executeTask(execution, task, agent);
-                        default -> Mono.error(
+                        default -> Mono.<Void>error(
                                         new IllegalArgumentException("Unsupported task type: " + task.getTaskType()));
                 };
         }

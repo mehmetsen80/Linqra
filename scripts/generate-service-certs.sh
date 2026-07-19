@@ -23,6 +23,8 @@
 # sudo ./generate-service-certs.sh mytrux-app
 # sudo ./generate-service-certs.sh polytechnic-app
 # sudo ./generate-service-certs.sh campusready-app
+# sudo ./generate-service-certs.sh deqra-app
+
 
 SERVICE_NAME=$1
 if [ -z "$SERVICE_NAME" ]; then

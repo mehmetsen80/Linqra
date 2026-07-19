@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Modal, Form, Alert, Spinner, Table, Row, Col, Accordion, OverlayTrigger, Tooltip } from 'react-bootstrap';
 import { HiKey, HiTrash, HiEye } from 'react-icons/hi';
-import { SiOpenai } from 'react-icons/si';
+import { TbBrandOpenai } from 'react-icons/tb';
 import { linqLlmModelService } from '../../services/linqLlmModelService';
 import llmModelService from '../../services/llmModelService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
@@ -247,7 +247,7 @@ function OpenAIModal({ show, onHide, team, onTeamUpdate }) {
       <Modal show={show} onHide={onHide} size="lg">
         <Modal.Header closeButton>
           <Modal.Title>
-            <SiOpenai className="me-2" size={24} />
+            <TbBrandOpenai className="me-2" size={24} />
             OpenAI Configuration
             <span className="ms-2 text-muted">- {team.name}</span>
           </Modal.Title>

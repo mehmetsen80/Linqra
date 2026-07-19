@@ -36,13 +36,23 @@ public class KnowledgeHubSyncController {
         log.info("🔍 Received Delta Content request for resource: {}", request.getResourceId());
 
         return teamContextService.getTeamFromContext(exchange)
-                .flatMap(teamId -> documentService.fetchDeltaContent(
-                        request.getOldDocumentId(),
-                        request.getNewDocumentId(),
-                        teamId,
-                        request.getResourceId(),
-                        request.getResourceCategory(),
-                        request.getCategories()))
+                .flatMap(teamId -> {
+                    log.info("🕵️ DEBUG: fetchDeltaContent called. Resolved teamId: '{}'. OldDoc: '{}', NewDoc: '{}'",
+                             teamId, request.getOldDocumentId(), request.getNewDocumentId());
+                    return documentRepository.findByDocumentId(request.getNewDocumentId())
+                        .doOnNext(doc -> log.info("🕵️ DEBUG: Found document by ID directly. Its teamId is '{}'", doc.getTeamId()))
+                        .switchIfEmpty(Mono.defer(() -> {
+                            log.info("🕵️ DEBUG: Document NOT FOUND directly by ID either!");
+                            return Mono.empty();
+                        }))
+                        .then(documentService.fetchDeltaContent(
+                                request.getOldDocumentId(),
+                                request.getNewDocumentId(),
+                                teamId,
+                                request.getResourceId(),
+                                request.getResourceCategory(),
+                                request.getCategories()));
+                })
                 .onErrorResume(error -> {
                     log.error("❌ Delta Content fetch failed: {}", error.getMessage());
                     return Mono.error(new RuntimeException("Fetch failed: " + error.getMessage()));

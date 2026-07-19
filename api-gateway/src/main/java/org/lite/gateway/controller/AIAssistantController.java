@@ -25,6 +25,9 @@ import reactor.core.scheduler.Schedulers;
 
 import java.util.HashMap;
 import java.util.Map;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import org.lite.gateway.service.ExternalUserCreditService;
 
 @RestController
 @RequestMapping("/api/ai-assistants")
@@ -38,6 +41,8 @@ public class AIAssistantController {
         private final TeamService teamService;
         private final ChatExecutionService standardChatExecutionService;
         private final ChatExecutionService docReviewChatExecutionService;
+        private final ExternalUserCreditService externalUserCreditService;
+        private final ObjectMapper objectMapper;
 
         public AIAssistantController(
                         AIAssistantService aiAssistantService,
@@ -45,6 +50,8 @@ public class AIAssistantController {
                         UserContextService userContextService,
                         UserService userService,
                         TeamService teamService,
+                        ExternalUserCreditService externalUserCreditService,
+                        ObjectMapper objectMapper,
                         @Qualifier("standardChatExecutionService") ChatExecutionService standardChatExecutionService,
                         @Qualifier("docReviewChatExecutionService") ChatExecutionService docReviewChatExecutionService) {
                 this.aiAssistantService = aiAssistantService;
@@ -52,6 +59,8 @@ public class AIAssistantController {
                 this.userContextService = userContextService;
                 this.userService = userService;
                 this.teamService = teamService;
+                this.externalUserCreditService = externalUserCreditService;
+                this.objectMapper = objectMapper;
                 this.standardChatExecutionService = standardChatExecutionService;
                 this.docReviewChatExecutionService = docReviewChatExecutionService;
         }
@@ -666,35 +675,75 @@ public class AIAssistantController {
         }
 
         @PostMapping(value = "/{assistantId}/conversations/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-        public Flux<ServerSentEvent<String>> startConversationStream(
+        public Flux<ServerSentEvent<String>> streamChat(
                         @PathVariable String assistantId,
+                        @RequestHeader(value = "X-Is-Managed", required = false, defaultValue = "false") boolean isManaged,
+                        @RequestHeader(value = "Authorization", required = false) String authorization,
+                        @RequestHeader(value = "X-External-User-Id", required = false) String externalUserId,
+                        @RequestHeader(value = "X-Service-Name", required = false) String serviceName,
+                        @RequestHeader(value = "X-Machine-Id", required = false) String machineId,
                         @RequestBody Map<String, Object> requestBody,
                         ServerWebExchange exchange) {
 
-                log.info("Starting SSE conversation for assistant {}", assistantId);
+                log.info("Starting SSE conversation for assistant {}, managed: {}", assistantId, isManaged);
 
                 Sinks.Many<ServerSentEvent<String>> sink = Sinks.many().unicast().onBackpressureBuffer();
 
-                aiAssistantService.getAssistantById(assistantId)
+                Mono<AIAssistant> assistantMono = aiAssistantService.getAssistantById(assistantId)
                                 .switchIfEmpty(Mono.error(
-                                                new IllegalArgumentException("AI Assistant not found: " + assistantId)))
-                                .flatMap(assistant -> userContextService.getCurrentUsername(exchange)
-                                                .switchIfEmpty(Mono
-                                                                .error(new IllegalArgumentException("User not found")))
-                                                .flatMap(userService::findByUsername)
-                                                .switchIfEmpty(Mono
-                                                                .error(new IllegalArgumentException("User not found")))
-                                                .flatMap(user -> teamContextService.getTeamFromContext(exchange)
-                                                                .switchIfEmpty(Mono.error(new IllegalArgumentException(
-                                                                                "Team not found")))
-                                                                .flatMap(teamId -> {
-                                                                        if (!user.getRoles().contains("SUPER_ADMIN")
-                                                                                        && !assistant.getTeamId()
-                                                                                                        .equals(teamId)) {
-                                                                                return Mono.error(
-                                                                                                new IllegalArgumentException(
-                                                                                                                "Unauthorized access to assistant"));
-                                                                        }
+                                                new IllegalArgumentException("AI Assistant not found: " + assistantId)));
+
+                Mono<String> userValidationMono;
+                Mono<Boolean> creditCheckMono;
+
+                if (isManaged) {
+                        String resolvedUserId = externalUserId;
+                        if (resolvedUserId == null && authorization != null && authorization.startsWith("Bearer ")) {
+                                try {
+                                        String[] parts = authorization.substring(7).split("\\.");
+                                        if (parts.length >= 2) {
+                                                String payloadJson = new String(java.util.Base64.getUrlDecoder().decode(parts[1]));
+                                                JsonNode payload = objectMapper.readTree(payloadJson);
+                                                if (payload.has("sub")) {
+                                                        resolvedUserId = payload.get("sub").asText();
+                                                }
+                                        }
+                                } catch (Exception e) {
+                                        log.warn("Failed to extract sub from JWT token for managed request", e);
+                                }
+                        }
+                        
+                        if (resolvedUserId == null) {
+                                return Flux.error(new IllegalArgumentException("Unable to determine external user ID from managed request"));
+                        }
+
+                        final String finalUserId = resolvedUserId;
+                        userValidationMono = Mono.just(finalUserId);
+                        String safeServiceName = serviceName != null ? serviceName : "unknown";
+                        
+                        creditCheckMono = externalUserCreditService.hasSufficientCredits(finalUserId, safeServiceName, machineId);
+                } else {
+                        userValidationMono = userContextService.getCurrentUsername(exchange)
+                                        .switchIfEmpty(Mono.error(new IllegalArgumentException("User not found in context")))
+                                        .flatMap(userService::findByUsername)
+                                        .switchIfEmpty(Mono.error(new IllegalArgumentException("User not found in database")))
+                                        .flatMap(user -> teamContextService.getTeamFromContext(exchange)
+                                                        .switchIfEmpty(Mono.error(new IllegalArgumentException("Team not found")))
+                                                        .flatMap(teamId -> assistantMono.flatMap(assistant -> {
+                                                                if (!user.getRoles().contains("SUPER_ADMIN")
+                                                                                && !assistant.getTeamId().equals(teamId)) {
+                                                                        return Mono.error(new IllegalArgumentException("Unauthorized access to assistant"));
+                                                                }
+                                                                return Mono.just(user.getId());
+                                                        })));
+                        creditCheckMono = Mono.just(true);
+                }
+
+                assistantMono.flatMap(assistant -> creditCheckMono.flatMap(hasCredits -> {
+                        if (!hasCredits) {
+                                return Mono.error(new IllegalArgumentException("Insufficient AI credits. Please upgrade your account to continue."));
+                        }
+                        return userValidationMono.flatMap(userId -> {
 
                                                                         String message = (String) requestBody
                                                                                         .getOrDefault("message", "");
@@ -709,8 +758,8 @@ public class AIAssistantController {
                                                                         query.setIntent("chat");
 
                                                                         Map<String, Object> params = new HashMap<>();
-                                                                        params.put("teamId", teamId);
-                                                                        params.put("userId", user.getId());
+                                                                        params.put("teamId", assistant.getTeamId());
+                                                                        params.put("userId", userId);
                                                                         query.setParams(params);
 
                                                                         LinqRequest.Query.ChatConversation chat = new LinqRequest.Query.ChatConversation();
@@ -724,7 +773,7 @@ public class AIAssistantController {
                                                                         query.setChat(chat);
 
                                                                         linqRequest.setQuery(query);
-                                                                        linqRequest.setExecutedBy(user.getUsername());
+                                                                        linqRequest.setExecutedBy(userId);
 
                                                                         ChatExecutionService resolvedService = resolveChatExecutionService(
                                                                                         assistant);
@@ -732,11 +781,12 @@ public class AIAssistantController {
                                                                         // Execute async and push to sink
                                                                         return resolvedService.executeChat(linqRequest,
                                                                                         sink);
-                                                                })))
-                                .doFinally(signalType -> sink.tryEmitComplete())
+                                                                });
+                                                        })
+                                        )
                                 .subscribeOn(Schedulers.boundedElastic())
                                 .subscribe(
-                                                res -> log.debug("SSE conversation completed"),
+                                                res -> log.debug("SSE conversation completed async processing"),
                                                 err -> {
                                                         log.error("SSE conversation error", err);
                                                         sink.tryEmitNext(ServerSentEvent

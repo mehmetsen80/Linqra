@@ -40,6 +40,16 @@ export default defineConfig(({ mode }) => {
           secure: false, // Bypasses self-signed SSL certificate warning on backend gateway
           changeOrigin: true,
           ws: true // Support websocket / persistent streams
+        },
+        '/linq/': {
+          target: apiGatewayUrl,
+          secure: false,
+          changeOrigin: true
+        },
+        '/ws-linqra': {
+          target: apiGatewayUrl,
+          secure: false,
+          ws: true
         }
       }
     },

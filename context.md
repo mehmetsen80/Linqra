@@ -431,6 +431,11 @@ WebSocket Chunks (Streams response word-by-word, ChatGPT-style, with cancellatio
 *   **Private Assistants**: Default configuration scoped strictly to authenticated team members.
 *   **Public Assistants**: Accessible to anonymous guests. These are embeddable on external web pages as widgets using **public API keys**, secure domain whitelists, and custom CORS controls.
 
+### 🌐 Server-Sent Events (SSE) & UI Tool Architecture
+When external applications (e.g., DeqraApp React frontend) connect to Linqra Assistants for real-time generative UI loops, they use the robust `/api/ai-assistants/{assistantId}/conversations/stream` SSE endpoint.
+*   **Server-Side Tool Execution (`executeClientSide: false`)**: By configuring tools like UI component fetchers to run server-side, the Linqra API Gateway handles the entire LLM tool-calling loop internally. It pauses the text stream, executes the tool against the external backend (e.g. `/api/deqra/components/`), supplies the schema back to the LLM, and resumes the generative text/JSON stream.
+*   **Frontend Simplicity**: This architecture drastically reduces frontend complexity. The client only needs to parse incoming SSE events (`data.type === 'tool_call'`) to show a "Thinking..." indicator, rather than managing the intercept, fetch, and recursive submit loop itself.
+
 ---
 
 ## 9. Frontend Conventions (`edge-service`)

@@ -333,6 +333,11 @@ public abstract class BaseChatExecutionService implements ChatExecutionService {
                     try {
                         String jsonData = objectMapper.writeValueAsString(update);
                         sink.tryEmitNext(ServerSentEvent.builder(jsonData).event(type).build());
+                        
+                        if ("LLM_RESPONSE_STREAMING_COMPLETE".equals(type) || "LLM_RESPONSE_STREAMING_CANCELLED".equals(type)) {
+                            sink.tryEmitComplete();
+                            sseSinks.remove(conversationId);
+                        }
                     } catch (Exception e) {
                         log.warn("Failed to serialize SSE chunk: {}", e.getMessage());
                     }
@@ -516,6 +521,9 @@ public abstract class BaseChatExecutionService implements ChatExecutionService {
      */
     protected void streamMessageChunks(String conversationId, String fullMessage) {
         if (fullMessage == null || fullMessage.isEmpty()) {
+            publishChatUpdate("LLM_RESPONSE_STREAMING_COMPLETE", Map.of(
+                    "conversationId", conversationId,
+                    "message", ""));
             return;
         }
 

@@ -161,6 +161,17 @@ public class TeamContextService {
                             log.debug("Granting bypass to use requested X-Team-ID for GATEWAY_ADMIN");
                             return Mono.just(requestedTeamId);
                         }
+                        
+                        if (auth != null && auth.getPrincipal() instanceof Jwt jwt) {
+                            if (isTeamInToken(jwt, requestedTeamId)) {
+                                log.debug("Using requested teamId from X-Team-ID header for standard user");
+                                return Mono.just(requestedTeamId);
+                            } else {
+                                log.warn("User requested teamId {} but is not a member of it according to token", requestedTeamId);
+                                return Mono.error(new InvalidAuthenticationException("User is not authorized for the requested team"));
+                            }
+                        }
+                        
                         return getTeamFromContext();
                     });
         }

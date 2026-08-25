@@ -10,13 +10,13 @@ import resourceService from '../../services/resourceService';
 import { apiRouteService } from '../../services/apiRouteService';
 import { teamService } from '../../services/teamService';
 import { showSuccessToast, showErrorToast } from '../../utils/toastConfig';
-import { 
-  HiPlus, 
-  HiTrash, 
+import {
+  HiPlus,
+  HiTrash,
   HiRefresh,
   HiUser,
-  HiOutlineOfficeBuilding, 
-  HiMail, 
+  HiOutlineOfficeBuilding,
+  HiMail,
   HiGlobeAlt
 } from 'react-icons/hi';
 import './styles.css';
@@ -36,7 +36,7 @@ function ResourceSubscriptions() {
   const [personalSubscriptions, setPersonalSubscriptions] = useState([]);
   const [teamSubscriptions, setTeamSubscriptions] = useState([]);
   const [teamRoutes, setTeamRoutes] = useState([]);
-  
+
   const [loadingSubscriptions, setLoadingSubscriptions] = useState(true);
   const [error, setError] = useState(null);
 
@@ -92,7 +92,7 @@ function ResourceSubscriptions() {
     try {
       setLoadingSubscriptions(true);
       setError(null);
-      
+
       let whitelistedRoutes = [];
       if (currentTeam?.id) {
         try {
@@ -125,14 +125,14 @@ function ResourceSubscriptions() {
         resourceService.getMySubscriptions(),
         resourceService.getTeamSubscriptions()
       ]);
-      
+
       console.log('All fetched personal subscriptions:', personalSubs);
       console.log('All fetched team subscriptions:', teamSubs);
 
       // Filter subscriptions to show only those belonging to the team's whitelisted route identifiers
       const filteredPersonal = (personalSubs || []).filter(sub => whitelistedRoutes.includes(sub.appName));
       const filteredTeam = (teamSubs || []).filter(sub => whitelistedRoutes.includes(sub.appName));
-      
+
       console.log('Filtered personal subscriptions:', filteredPersonal);
       console.log('Filtered team subscriptions:', filteredTeam);
 
@@ -187,7 +187,7 @@ function ResourceSubscriptions() {
       }
       showSuccessToast('Successfully registered new resource subscription!');
       setShowSubscribeModal(false);
-      
+
       // Reset Subscription state
       setNewSubscription({
         domain: 'uscis-sentinel',
@@ -297,8 +297,8 @@ function ResourceSubscriptions() {
             <HiRefresh className="me-1" /> Refresh Subscriptions
           </Button>
         </div>
-        <p className="text-muted text-start mb-4" style={{fontSize: '0.9rem'}}>
-          This dashboard lists active subscriptions associated with your team's application routing identifiers. 
+        <p className="text-muted text-start mb-4" style={{ fontSize: '0.9rem' }}>
+          This dashboard lists active subscriptions associated with your team's application routing identifiers.
           Only subscriptions matching active route configurations (like <code>komunas-app</code>) are displayed.
         </p>
 
@@ -315,7 +315,7 @@ function ResourceSubscriptions() {
                 <th>Resource / Display Name</th>
                 <th>Domain</th>
                 <th>Category</th>
-                <th>Type</th>
+                <th>Ownership</th>
                 <th>App Listener</th>
                 <th>Delivery Configurations</th>
                 <th>Actions</th>
@@ -332,7 +332,7 @@ function ResourceSubscriptions() {
                         <div className="d-flex flex-column text-start">
                           <span className="fw-semibold text-dark">{meta?.displayName || sub.resourceId}</span>
                           {meta?.description ? (
-                            <small className="text-muted text-truncate" style={{maxWidth: '320px'}} title={meta.description}>
+                            <small className="text-muted text-truncate" style={{ maxWidth: '320px' }} title={meta.description}>
                               {meta.description}
                             </small>
                           ) : (
@@ -349,7 +349,7 @@ function ResourceSubscriptions() {
                     <Badge bg="info">{sub.category}</Badge>
                   </td>
                   <td>
-                    <Badge bg="dark" className="d-flex align-items-center gap-1 w-fit-content" style={{width: 'fit-content'}}>
+                    <Badge bg="dark" className="d-flex align-items-center gap-1 w-fit-content" style={{ width: 'fit-content' }}>
                       <HiUser /> Personal
                     </Badge>
                   </td>
@@ -404,7 +404,7 @@ function ResourceSubscriptions() {
                         <div className="d-flex flex-column text-start">
                           <span className="fw-semibold text-dark">{meta?.displayName || sub.resourceId}</span>
                           {meta?.description ? (
-                            <small className="text-muted text-truncate" style={{maxWidth: '320px'}} title={meta.description}>
+                            <small className="text-muted text-truncate" style={{ maxWidth: '320px' }} title={meta.description}>
                               {meta.description}
                             </small>
                           ) : (
@@ -421,7 +421,7 @@ function ResourceSubscriptions() {
                     <Badge bg="info">{sub.category}</Badge>
                   </td>
                   <td>
-                    <Badge bg="warning" className="d-flex align-items-center gap-1 text-dark" style={{width: 'fit-content'}}>
+                    <Badge bg="warning" className="d-flex align-items-center gap-1 text-dark" style={{ width: 'fit-content' }}>
                       <HiOutlineOfficeBuilding /> Team-wide
                     </Badge>
                   </td>
@@ -480,10 +480,10 @@ function ResourceSubscriptions() {
         <Form onSubmit={handleSubscribe}>
           <Modal.Body>
             <Form.Group className="mb-3">
-              <Form.Label>Subscription Scope Type *</Form.Label>
+              <Form.Label>Subscription Ownership *</Form.Label>
               <Form.Select
                 value={newSubscription.type}
-                onChange={(e) => setNewSubscription({...newSubscription, type: e.target.value})}
+                onChange={(e) => setNewSubscription({ ...newSubscription, type: e.target.value })}
               >
                 <option value="personal">Personal subscription (bound to your login email)</option>
                 <option value="team">Team-wide subscription (accessible to all members)</option>
@@ -493,7 +493,7 @@ function ResourceSubscriptions() {
             {resources.length > 0 && (
               <Form.Group className="mb-3">
                 <Form.Label>Autofill from Registered Resources</Form.Label>
-                <Form.Select 
+                <Form.Select
                   onChange={(e) => handleSelectResourceForSubscription(e.target.value)}
                   defaultValue=""
                 >
@@ -509,9 +509,9 @@ function ResourceSubscriptions() {
 
             <Form.Group className="mb-3">
               <Form.Label>Domain *</Form.Label>
-              <Form.Select 
+              <Form.Select
                 value={newSubscription.domain}
-                onChange={(e) => setNewSubscription({...newSubscription, domain: e.target.value})}
+                onChange={(e) => setNewSubscription({ ...newSubscription, domain: e.target.value })}
               >
                 <option value="uscis-sentinel">USCIS Sentinel (uscis-sentinel)</option>
               </Form.Select>
@@ -519,9 +519,9 @@ function ResourceSubscriptions() {
 
             <Form.Group className="mb-3">
               <Form.Label>Category *</Form.Label>
-              <Form.Select 
+              <Form.Select
                 value={newSubscription.category}
-                onChange={(e) => setNewSubscription({...newSubscription, category: e.target.value})}
+                onChange={(e) => setNewSubscription({ ...newSubscription, category: e.target.value })}
               >
                 <option value="forms">Forms tracking (forms)</option>
                 <option value="announcements">Announcements updates (announcements)</option>
@@ -533,12 +533,12 @@ function ResourceSubscriptions() {
 
             <Form.Group className="mb-3">
               <Form.Label>Resource ID *</Form.Label>
-              <Form.Control 
-                type="text" 
-                placeholder="e.g. I-485" 
+              <Form.Control
+                type="text"
+                placeholder="e.g. I-485"
                 required
                 value={newSubscription.resourceId}
-                onChange={(e) => setNewSubscription({...newSubscription, resourceId: e.target.value})}
+                onChange={(e) => setNewSubscription({ ...newSubscription, resourceId: e.target.value })}
               />
             </Form.Group>
 
@@ -548,19 +548,19 @@ function ResourceSubscriptions() {
                 <Form.Select
                   required
                   value={newSubscription.appName}
-                  onChange={(e) => setNewSubscription({...newSubscription, appName: e.target.value})}
+                  onChange={(e) => setNewSubscription({ ...newSubscription, appName: e.target.value })}
                 >
                   {teamRoutes.map((routeId, idx) => (
                     <option key={idx} value={routeId}>{routeId}</option>
                   ))}
                 </Form.Select>
               ) : (
-                <Form.Control 
-                  type="text" 
+                <Form.Control
+                  type="text"
                   required
                   placeholder="e.g. komunas-app"
                   value={newSubscription.appName}
-                  onChange={(e) => setNewSubscription({...newSubscription, appName: e.target.value})}
+                  onChange={(e) => setNewSubscription({ ...newSubscription, appName: e.target.value })}
                 />
               )}
             </Form.Group>
@@ -570,48 +570,48 @@ function ResourceSubscriptions() {
 
             {/* Email configuration */}
             <Form.Group className="mb-3">
-              <Form.Check 
-                type="checkbox" 
-                id="emailEnabled" 
+              <Form.Check
+                type="checkbox"
+                id="emailEnabled"
                 label="Enable Email Notifications"
                 checked={newSubscription.emailEnabled}
-                onChange={(e) => setNewSubscription({...newSubscription, emailEnabled: e.target.checked})}
+                onChange={(e) => setNewSubscription({ ...newSubscription, emailEnabled: e.target.checked })}
               />
             </Form.Group>
-            
+
             {newSubscription.emailEnabled && (
               <Form.Group className="mb-3">
                 <Form.Label>Delivery Target Email *</Form.Label>
-                <Form.Control 
-                  type="email" 
-                  placeholder="e.g. notifications@company.com" 
+                <Form.Control
+                  type="email"
+                  placeholder="e.g. notifications@company.com"
                   required
                   value={newSubscription.email}
-                  onChange={(e) => setNewSubscription({...newSubscription, email: e.target.value})}
+                  onChange={(e) => setNewSubscription({ ...newSubscription, email: e.target.value })}
                 />
               </Form.Group>
             )}
 
             {/* Webhook configuration */}
             <Form.Group className="mb-3">
-              <Form.Check 
-                type="checkbox" 
-                id="webhookEnabled" 
+              <Form.Check
+                type="checkbox"
+                id="webhookEnabled"
                 label="Enable Webhook Payload Submissions"
                 checked={newSubscription.webhookEnabled}
-                onChange={(e) => setNewSubscription({...newSubscription, webhookEnabled: e.target.checked})}
+                onChange={(e) => setNewSubscription({ ...newSubscription, webhookEnabled: e.target.checked })}
               />
             </Form.Group>
 
             {newSubscription.webhookEnabled && (
               <Form.Group className="mb-3">
                 <Form.Label>Target Webhook URL *</Form.Label>
-                <Form.Control 
-                  type="url" 
-                  placeholder="e.g. https://api.linqra.com/webhooks/sentinel" 
+                <Form.Control
+                  type="url"
+                  placeholder="e.g. https://api.linqra.com/webhooks/sentinel"
                   required
                   value={newSubscription.webhookUrl}
-                  onChange={(e) => setNewSubscription({...newSubscription, webhookUrl: e.target.value})}
+                  onChange={(e) => setNewSubscription({ ...newSubscription, webhookUrl: e.target.value })}
                 />
               </Form.Group>
             )}

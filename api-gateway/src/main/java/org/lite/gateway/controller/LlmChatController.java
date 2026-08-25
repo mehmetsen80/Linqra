@@ -49,7 +49,7 @@ public class LlmChatController {
         this.objectMapper = objectMapper;
     }
 
-    @PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @PostMapping(value = { "/stream", "/completions" }, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<String> streamChat(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestHeader(value = "X-LLM-Model", required = false) String modelId,
@@ -154,7 +154,8 @@ public class LlmChatController {
                                 })
                                 .bodyValue(request)
                                 .retrieve()
-                                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {})
+                                .bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {
+                                })
                                 .map(sse -> sse.data() != null ? sse.data() : "")
                                 .filter(payload -> !payload.isEmpty())
                                 .doOnNext(payload -> {
@@ -214,7 +215,7 @@ public class LlmChatController {
         });
     }
 
-    @PostMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    @PostMapping(value = { "", "/", "/completions" }, produces = MediaType.APPLICATION_JSON_VALUE)
     public Mono<String> chat(
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestHeader(value = "X-LLM-Model", required = false) String modelId,
@@ -224,10 +225,10 @@ public class LlmChatController {
             @RequestHeader(value = "X-Machine-Id", required = false) String machineId,
             @RequestHeader(value = "X-Service-Name", required = false) String serviceName,
             @RequestHeader(value = "X-Team-Id", required = false) String managedTeamId,
-            @RequestBody Map<String, Object> request
-    ) {
+            @RequestBody Map<String, Object> request) {
         String resolvedUserId = externalUserId;
-        if ((resolvedUserId == null || resolvedUserId.trim().isEmpty()) && authorization != null && authorization.startsWith("Bearer ")) {
+        if ((resolvedUserId == null || resolvedUserId.trim().isEmpty()) && authorization != null
+                && authorization.startsWith("Bearer ")) {
             try {
                 String token = authorization.substring(7);
                 com.nimbusds.jwt.SignedJWT signedJWT = com.nimbusds.jwt.SignedJWT.parse(token);
@@ -253,7 +254,8 @@ public class LlmChatController {
             return Mono.just("{\"error\": \"Missing or invalid Authorization header\"}");
         }
 
-        log.info("Received chat non-stream request. Model: {}, BYOK: {}, Managed: {}, User: {}", effectiveModelId, isByok,
+        log.info("Received chat non-stream request. Model: {}, BYOK: {}, Managed: {}, User: {}", effectiveModelId,
+                isByok,
                 isManaged, finalUserId);
 
         request.put("model", effectiveModelId);
@@ -312,8 +314,10 @@ public class LlmChatController {
                                         int pTokens = 0, cTokens = 0;
                                         if (root.has("usage") && !root.get("usage").isNull()) {
                                             com.fasterxml.jackson.databind.JsonNode usage = root.get("usage");
-                                            if (usage.has("prompt_tokens")) pTokens = usage.get("prompt_tokens").asInt();
-                                            if (usage.has("completion_tokens")) cTokens = usage.get("completion_tokens").asInt();
+                                            if (usage.has("prompt_tokens"))
+                                                pTokens = usage.get("prompt_tokens").asInt();
+                                            if (usage.has("completion_tokens"))
+                                                cTokens = usage.get("completion_tokens").asInt();
                                         }
                                         if (finalUserId != null && (pTokens > 0 || cTokens > 0)) {
                                             externalUsageLoggerService.logUsage(

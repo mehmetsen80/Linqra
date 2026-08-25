@@ -11,7 +11,7 @@ Linqra is an enterprise-grade **AI Governance & Orchestration Platform** built f
 ### 📡 The Linq Protocol
 Traditional AI agent execution requires the client to chain multiple API requests manually—creating embeddings, querying vector databases, formatting results, and sending them back to the chat model. This requires complex client-side state handling, error recovery, and multiple round-trips.
 
-**Linq Protocol** abstracts this complex pipeline into a **single unified request**. A single Linq request specifies target, actions, query parameters, and a multi-step sequential or parallel execution flow. The Linqra Gateway handles the orchestration, state sharing, intermediate caching, and secure token passing internally.
+**Linq Protocol** abstracts this complex pipeline into a **single unified request**. A single Linq request specifies target, actions, query parameters, and a multi-step execution flow. Workflow steps run **sequentially** by default; a step flagged `"async": true` is handed to a Redis-backed queue and runs as a fire-and-forget background task. The Linqra Gateway handles the orchestration, state sharing, intermediate caching, and secure token passing internally.
 
 ```
 Traditional RAG:
@@ -262,7 +262,7 @@ Every `POST /linq` request maps to standard Java DTO bounds (`org.lite.gateway.d
 ---
 
 ### ⚙️ Case A: Workflow Execution JSON (`"link.target": "workflow"`)
-Workflows execute sequential or parallel steps. They leverage a **double curly-brace parser** (`{{params.value}}` or `{{step1.result.value}}`) to bind context parameters dynamically from step to step.
+Workflows execute their steps **sequentially** (there is no parallel fan-out of independent steps). A step flagged `"async": true` is dispatched to a Redis-backed queue (`async:step:queue`, drained by `QueuedWorkflowServiceImpl`) and recorded as `queued` while the remaining steps continue — its result is therefore not available to later steps. Steps leverage a **double curly-brace parser** (`{{params.value}}` or `{{step1.result.value}}`) to bind context parameters dynamically from step to step.
 
 > [!NOTE]
 > For executing internal API Gateway steps (such as Milvus vector search or KG indexing) directly without routing through external microservice prefixes (`/r/`), you can specify either `"api-gateway"` or `"linqra-gateway"` as the `"target"` parameter inside workflow steps. Both are resolved and bypassed identically by the internal router.
@@ -397,15 +397,29 @@ Responses wrap synthesized contents and include telemetry logs details:
 
 ---
 
-### ⚙️ Case C: Dynamic Handlebars Loop Templates (`"query.workflow"`)
-When orchestrating complex RAG steps, workflow prompt payloads can utilize standard Handlebars templates (e.g. `{{#each step1.result.results}}` loops) to map vector search context snippets:
+### ⚙️ Case C: Placeholder Syntax & Null Fallbacks (`"query.workflow"`)
+The workflow engine (`LinqWorkflowExecutionServiceImpl.resolvePlaceholders`) supports the following placeholder forms, resolved recursively (maximum depth 5):
+
+| Syntax | Resolves from |
+| :--- | :--- |
+| `{{params.key}}`, `{{params.a.b}}` | The request's global `query.params` map |
+| `{{stepN.result.path}}` | A previous step's result (dot-path traversal, array indexing like `embeddings[0]`) |
+| `{{steps.stepN.output.path}}` | Alias of the above |
+| `{{expr ?? fallback}}` | Null-coalescing fallback (literal, variable, or nested placeholder) |
+
+When a whole string is a single placeholder, the engine passes the resolved value through **as-is** (e.g. an entire results array); when a placeholder is embedded in a larger string, the value is serialized into the surrounding text.
+
 ```json
 {
   "role": "user",
-  "content": "Question: {{params.question}}\n\nUse the following knowledge snippets...\n\nContext snippets:\n{{#each step1.result.results}}\n- [{{this.title}}] (pages {{this.pageNumbers}}): {{this.text}}\n{{/each}}"
+  "content": "Question: {{params.question}}\n\nAnswer using the following knowledge snippets...\n\nContext snippets: {{step1.result.results}}"
 }
 ```
-*   **Compiler Binding**: During execution, the gateway's `LinqWorkflowExecutionServiceImpl` compiles the handlebars template, loops through each matching segment retrieved in the preceding vector similarity search step, and dynamically replaces property placeholders (`title`, `pageNumbers`, `text`) recursively prior to executing the downstream LLM chat services.
+
+> [!WARNING]
+> There is **no Handlebars/`{{#each}}` loop support** in the placeholder engine. Collections are passed wholesale by referencing the array itself (as above); per-item formatting must be done by the LLM prompt itself or by an intermediate formatting step.
+
+*   **Provider Normalization**: During execution, `smartExtractContent()` normalizes OpenAI/Claude/Gemini/Cohere response shapes so downstream steps see plain content regardless of which provider produced the previous step's result.
 
 ---
 
@@ -414,7 +428,8 @@ When orchestrating complex RAG steps, workflow prompt payloads can utilize stand
 Linqra extends the Linq Protocol to support conversational AI interfaces through `assistant` targets and `chat` actions.
 
 ```
-User Query (WebSocket /ws-linqra)
+User Query (WebSocket /ws-linqra for the built-in console,
+           or SSE /api/ai-assistants/{assistantId}/conversations/stream for external apps)
   ↓
 AIAssistantService (Calculates sliding window tokens + context history)
   ↓
@@ -422,10 +437,18 @@ Orchestrator (Executes selected Agent Tasks in parallel)
   ↓
 Response Synthesizer (Consolidates task outputs using the assistant's default model)
   ↓
-PII & Guardrail Scan (Checks for sensitive terms)
+PII Detection (opt-in per assistant via guardrails.piiDetectionEnabled;
+               PIIDetectionService redacts sensitive terms before message persistence)
   ↓
-WebSocket Chunks (Streams response word-by-word, ChatGPT-style, with cancellation support)
+Stream Chunks (delivered word-by-word, ChatGPT-style, with cancellation support —
+               WebSocket STOMP events for the console, Server-Sent Events for external apps)
 ```
+
+> [!NOTE]
+> **PII detection is off by default.** It runs only when the assistant enables
+> `guardrails.piiDetectionEnabled` (a sibling flag, `guardrails.auditLoggingEnabled`, controls
+> enhanced chat audit logging). Both are configured on the assistant entity — see
+> `BaseChatExecutionService` and `PIIDetectionService`.
 
 ### 🔐 Private vs. Public Assistants
 *   **Private Assistants**: Default configuration scoped strictly to authenticated team members.
@@ -876,11 +899,10 @@ Linqra features a zero-overhead compliance auditing and active security monitori
         *   **Transparent Federated Queries**: The service transparently queries both S3 cold storage and hot MongoDB buckets when performing historical range audits.
 *   **Active Security Sentinel (`SecuritySentinelService.java`)**:
     *   An active threat-prevention agent continuously subscribing to the live hot audit stream.
-    *   Aggregates compliance metrics over a sliding 10-minute window, grouping events dynamically by `userId` and client `ipAddress`.
+    *   Aggregates compliance metrics over sliding windows grouped by `userId` and client `ipAddress` — **1-minute windows** for data-volume anomalies and **5-minute windows** for authentication failures.
     *   Automatically triggers automated protective actions (such as generating threat alerts, recording a `SecurityIncident` state entry, notifying system administrators, and placing temporary IP blocks) upon identifying malicious behavior, including:
-        *   **Brute-Force Detection**: Unusually high rates of login failures.
-        *   **Data Scrape Scans**: Massive document retrieval runs within a brief span.
-        *   **Exfiltration Alarms**: Frequent access to metadata flagged as containing sensitive PII.
+        *   **Brute-Force Detection**: **≥ 10 login failures** from a single IP within 5 minutes.
+        *   **Mass Exfiltration / Data Scrape Scans**: **≥ 1000 document reads** within 1 minute.
 
 ---
 
@@ -1099,19 +1121,23 @@ To fulfill strict HIPAA compliance standards for raw text, Linqra implements a t
 
 ### 🛡️ 3. Non-Blocking Resilience Pipeline (Spring Cloud Gateway Filters)
 To guarantee high cluster availability and isolate down-stream service outages, the API Gateway incorporates standard WebFlux resilience filters on outbound dispatches:
-*   **Circuit Breaker (`CircuitBreakerFilterService.java`)**: Wraps outbound routing targets in Resilience4j reactive circuit breakers. If failure counts exceed a 50% threshold on a service instance, it halts traffic and routes requests to fallback controllers.
-*   **Retry Engine (`RetryFilterService.java`)**: Configures non-blocking retry behaviors (e.g. up to 3 attempts with exponential backoff) for transient HTTP errors (such as `503 Service Unavailable` or connection dropouts).
-*   **Time Limiter (`TimeLimiterFilterService.java`)**: Limits maximum outbound wait boundaries. Calls extending beyond configured limits (e.g. 5 seconds for RAG lookups) are terminated, preventing socket pool exhaustion.
+*   **Circuit Breaker (`CircuitBreakerFilterService.java`)**: Wraps outbound routing targets in Resilience4j reactive circuit breakers. Route defaults (from `ApiRoute.createDefaultFilters()`): **80%** failure-rate threshold over a sliding window of **2 calls**, **10s** wait in open state, automatic transition to half-open (3 permitted calls), failures recorded via `HttpResponsePredicate`; open circuits redirect to `/fallback/{routeIdentifier}`.
+*   **Retry Engine (`RetryFilterService.java`)**: Non-blocking retries for transient failures. Route defaults: **4 attempts** with a fixed **2-second** wait (`waitDuration: PT2S`), applied to `IOException`, `SocketTimeoutException`, and `RuntimeException`.
+*   **Time Limiter (`TimeLimiterFilterService.java`)**: Limits maximum outbound wait boundaries. Route default: **30 seconds** (`timeoutDuration`) with `cancelRunningFuture` enabled, preventing socket pool exhaustion.
+*   **Redis Rate Limiter (`RedisRateLimiterFilterService.java`)**: Token-bucket limiting per route. Defaults: **10 requests/second** replenish rate, **20** burst capacity, 1 token per request; 429 responses carry a customized body.
 
 ### ⚙️ 4. Quartz Scheduling & Clustering Engine (`AgentQuartzServiceImpl.java`)
 Linqra schedules complex periodic agent tasks dynamically at scale without hardcoding crons in JVM configurations:
-*   **Quartz-MongoDB Bridging**: [AgentQuartzServiceImpl.java](file:///Users/mehmetsen/IdeaProjects/Linqra/api-gateway/src/main/java/org/lite/gateway/service/impl/AgentQuartzServiceImpl.java) integrates the Quartz scheduler directly with MongoDB job stores. It maps recurring agent crons (Quartz-compliant) dynamically into active Quartz jobs.
-*   **Distributed Clustering Locks**: To prevent duplicate triggers in clustered EKS environments running multiple backend replicas, Quartz leverages Redis/MongoDB-backed distributed lock registries to ensure that exactly one EKS node fires a scheduled job.
+*   **Cron Definitions in MongoDB, Job Store in Memory**: [AgentQuartzServiceImpl.java](file:///Users/mehmetsen/IdeaProjects/Linqra/api-gateway/src/main/java/org/lite/gateway/service/impl/AgentQuartzServiceImpl.java) maps recurring agent crons (Quartz-compliant) from the MongoDB `agent_tasks` collection into active Quartz jobs. Quartz itself runs with its **default in-memory job store** (there is no `spring.quartz` job-store configuration); schedules are rebuilt from MongoDB on startup (`AgentTask.scheduleOnStartup`) and re-registered whenever a task is created or updated.
+*   **Distributed Clustering Locks**: To prevent duplicate triggers in clustered EKS environments running multiple backend replicas, `AgentTaskQuartzJob` acquires a **Redis lock** (`cacheService.setIfAbsent`, 10-minute TTL) before executing, and the job class is annotated `@DisallowConcurrentExecution`. Separately, the `@Scheduled` backup/pricing/archival jobs use **ShedLock** (`@EnableSchedulerLock` in `RedisConfig`, backed by `RedisLockProvider`) for cluster-wide mutual exclusion.
 *   **Workflow Dispatch**: When a Quartz job triggers, it retrieves the task context, decodes Keycloak identity tokens securely via `AgentAuthContextServiceImpl.java`, and dispatches the compiled prompt sequence directly to the `LinqWorkflowExecutionServiceImpl.java`.
 
 ---
 
 ## 21. Linqra React Library (Slide Deck Components)
+
+> [!NOTE]
+> The `linqra-react-library` source **no longer lives in this repository** — it was moved into the Deqra App codebase (see commit `b3a9573`). This section documents the schema and styling conventions that remain binding when authoring slide JSON for Deqra.
 
 The `linqra-react-library` provides a robust, zero-dependency presentation rendering engine (the `PresentationRenderer`) tailored specifically for AI-generated slide decks. It supports dynamic layouts, custom styling passthroughs, and unified constraints.
 

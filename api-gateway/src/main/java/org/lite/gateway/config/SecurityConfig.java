@@ -130,7 +130,8 @@ public class SecurityConfig implements BeanFactoryAware {
             "/api/auth/**", // Public Auth Endpoints (SSO Callback, Login, Register)
             "/api/teams", // Public Team/Institution metadata for registration/home
             "/api/teams/**",
-            "/r/*/auth/**", // Public Auth for routed apps
+            "/r/*/auth/**", // Public Auth for routed apps (legacy path shape)
+            "/r/**/api/auth/**", // Public Auth for routed apps (e.g. /r/deqra-app/api/auth/support)
             "/api/internal/**", // Secured by X-Change-Log-Token
             "/linqra-knowledge-hub-dev/**", // MinIO Proxy (Secured by S3 Signature)
             "/backup-linqra-knowledge-hub-dev/**",

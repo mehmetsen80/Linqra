@@ -10,7 +10,7 @@ import './styles.css';
 function Home() {
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const [showImageModal, setShowImageModal] = useState(false);
+  const [modalImageSrc, setModalImageSrc] = useState(null);
   const [activeMcpTab, setActiveMcpTab] = useState('vscode');
   const [copiedText, setCopiedText] = useState(false);
 
@@ -241,6 +241,28 @@ function Home() {
 
       </div>
 
+      {/* ALL-IN-ONE PLATFORM OVERVIEW */}
+      <section className="platform-overview-section">
+        <div className="platform-overview-inner">
+          <p className="platform-overview-eyebrow">The Linqra Platform</p>
+          <h2 className="visually-hidden">Five systems. One governed platform.</h2>
+          <p className="section-subtitle">
+            Linqra ships API management, MCP tools, agent workflows, knowledge, and resource control together —
+            on a secure, audited, compliance-governed foundation.
+          </p>
+
+          <div className="platform-overview-visual">
+            <img
+              src="/images/Linqra_One_Governed_Platform.png"
+              alt="Linqra unified platform: API Management, MCP Tools Registry, Agent Workflow Engine, Knowledge Hub, and Resource Management on a secure, audited, compliance-governed architecture with governance, observability, and control."
+              className="platform-overview-image clickable"
+              onClick={() => setModalImageSrc('/images/Linqra_One_Governed_Platform.png')}
+            />
+            <p className="platform-overview-caption">Click to view fullscreen</p>
+          </div>
+        </div>
+      </section>
+
       <div className="orchestration-section">
         <h2 className="home-section-title">Unified AI Orchestration Architecture</h2>
         <div className="hero-image-container">
@@ -253,7 +275,7 @@ function Home() {
         <div className="container">
           <h2 className="home-section-title" style={{ color: 'white' }}>Real-World AI Applications</h2>
           <p className="section-subtitle" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
-            Powering regulated AI solutions for educational leadership and immigration compliance.
+            Powering regulated AI solutions across education, immigration, enrollment, and AI development studios.
           </p>
 
           <div className="ecosystem-grid">
@@ -288,6 +310,40 @@ function Home() {
               </ul>
               <a href="https://komunas.com" target="_blank" rel="noopener noreferrer" className="ecosystem-btn">
                 Visit Komunas <i className="fas fa-external-link-alt"></i>
+              </a>
+            </div>
+
+            {/* campusready.ai Card */}
+            <div className="ecosystem-card campusready">
+              <span className="ecosystem-domain">campusready.ai</span>
+              <h3>International Enrollment & Onboarding</h3>
+              <p className="ecosystem-desc">
+                AI-powered admissions platform that turns international applicants into campus-ready students — with FERPA-compliant document review and visa readiness.
+              </p>
+              <ul className="ecosystem-features">
+                <li><i className="fas fa-check-circle"></i> AI Document Review (Passport, Affidavit, Transcript)</li>
+                <li><i className="fas fa-check-circle"></i> Personalized Checklists & Real-Time Status Updates</li>
+                <li><i className="fas fa-check-circle"></i> Visa & I-20 Readiness Workflows</li>
+              </ul>
+              <a href="https://campusready.ai" target="_blank" rel="noopener noreferrer" className="ecosystem-btn">
+                Visit CampusReady <i className="fas fa-external-link-alt"></i>
+              </a>
+            </div>
+
+            {/* deqra.ai Card */}
+            <div className="ecosystem-card deqra">
+              <span className="ecosystem-domain">deqra.ai</span>
+              <h3>AI-Powered Artifact as Code Studio</h3>
+              <p className="ecosystem-desc">
+                Build polished decks and documents with AI — from first draft to board-ready slides. AaC keeps every presentation versionable, editable, and ready to ship in minutes.
+              </p>
+              <ul className="ecosystem-features">
+                <li><i className="fas fa-check-circle"></i> Chat-Driven Slide Creation & Editing</li>
+                <li><i className="fas fa-check-circle"></i> Brand-Consistent Layouts Out of the Box</li>
+                <li><i className="fas fa-check-circle"></i> Export to PDF & PowerPoint Instantly</li>
+              </ul>
+              <a href="https://deqra.ai" target="_blank" rel="noopener noreferrer" className="ecosystem-btn">
+                Visit Deqra <i className="fas fa-external-link-alt"></i>
               </a>
             </div>
           </div>
@@ -708,7 +764,7 @@ function Home() {
                 src={architectureDiagram}
                 alt="Linqra Security Architecture"
                 className="security-diagram clickable"
-                onClick={() => setShowImageModal(true)}
+                onClick={() => setModalImageSrc(architectureDiagram)}
               />
               <p className="caption">Click to view Security Architecture</p>
             </div>
@@ -1004,9 +1060,9 @@ function Home() {
       <Footer />
 
       <ImageModal
-        show={showImageModal}
-        onHide={() => setShowImageModal(false)}
-        imageSrc={architectureDiagram}
+        show={!!modalImageSrc}
+        onHide={() => setModalImageSrc(null)}
+        imageSrc={modalImageSrc}
       />
     </div>
   );

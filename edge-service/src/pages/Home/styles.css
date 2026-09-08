@@ -2480,6 +2480,67 @@ body,
   align-items: center;
 }
 
+/* All-in-one platform overview — visual card before deep architecture */
+.platform-overview-section {
+  padding: 5rem 2rem 4rem;
+  background: #ffffff;
+  text-align: center;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.platform-overview-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.platform-overview-eyebrow {
+  margin: 0 0 1.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--primary-color, #ed7534);
+}
+
+.platform-overview-section .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.platform-overview-section .section-subtitle {
+  margin-bottom: 2.5rem;
+}
+
+.platform-overview-visual {
+  margin: 0 auto;
+}
+
+.platform-overview-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: zoom-in;
+}
+
+.platform-overview-caption {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+@media (max-width: 768px) {
+  .platform-overview-section {
+    padding: 3.5rem 1.25rem 3rem;
+  }
+}
+
 .orchestration-section {
   padding: 4rem 2rem;
   background: linear-gradient(180deg, #f8f9fa 0%, #e2e8f0 100%);
@@ -2554,25 +2615,16 @@ body,
   opacity: 0.5;
 }
 
-.ecosystem-card.smartadvising::before {
-  background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
-}
-
-.ecosystem-card.komunas::before {
+.ecosystem-card.smartadvising::before,
+.ecosystem-card.komunas::before,
+.ecosystem-card.campusready::before,
+.ecosystem-card.deqra::before {
   background: linear-gradient(90deg, var(--primary-color), var(--primary-dark));
 }
 
 .ecosystem-card:hover {
   transform: translateY(-8px);
   border-color: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-}
-
-.ecosystem-card.smartadvising:hover {
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-}
-
-.ecosystem-card.komunas:hover {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
 }
 
@@ -2597,13 +2649,10 @@ body,
   border-radius: 30px;
 }
 
-.smartadvising .ecosystem-domain {
-  color: var(--primary-color);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--primary-color);
-}
-
-.komunas .ecosystem-domain {
+.smartadvising .ecosystem-domain,
+.komunas .ecosystem-domain,
+.campusready .ecosystem-domain,
+.deqra .ecosystem-domain {
   color: var(--primary-color);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--primary-color);
@@ -2635,11 +2684,10 @@ body,
   font-size: 1rem;
 }
 
-.smartadvising .ecosystem-features li i {
-  color: var(--primary-color);
-}
-
-.komunas .ecosystem-features li i {
+.smartadvising .ecosystem-features li i,
+.komunas .ecosystem-features li i,
+.campusready .ecosystem-features li i,
+.deqra .ecosystem-features li i {
   color: var(--primary-color);
 }
 
@@ -2655,22 +2703,18 @@ body,
   transition: all 0.3s ease;
 }
 
-.smartadvising .ecosystem-btn {
+.smartadvising .ecosystem-btn,
+.komunas .ecosystem-btn,
+.campusready .ecosystem-btn,
+.deqra .ecosystem-btn {
   background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
   color: white;
 }
 
-.smartadvising .ecosystem-btn:hover {
-  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
-  transform: translateX(4px);
-}
-
-.komunas .ecosystem-btn {
-  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
-  color: white;
-}
-
-.komunas .ecosystem-btn:hover {
+.smartadvising .ecosystem-btn:hover,
+.komunas .ecosystem-btn:hover,
+.campusready .ecosystem-btn:hover,
+.deqra .ecosystem-btn:hover {
   background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-color) 100%);
   transform: translateX(4px);
 }

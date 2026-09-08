@@ -265,8 +265,25 @@ function Home() {
 
       <div className="orchestration-section">
         <h2 className="home-section-title">Unified AI Orchestration Architecture</h2>
-        <div className="hero-image-container">
-          <img src="/images/linqra_orchestrator_final.png" alt="Unified AI Orchestrator" className="hero-image" />
+        <div
+          className="orchestration-visual clickable-card"
+          role="button"
+          tabIndex={0}
+          onClick={() => setModalImageSrc('/images/linqra_orchestrator_final.png')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setModalImageSrc('/images/linqra_orchestrator_final.png');
+            }
+          }}
+          aria-label="Open Unified AI Orchestration Architecture fullscreen"
+        >
+          <img
+            src="/images/linqra_orchestrator_final.png"
+            alt="Unified AI Orchestrator"
+            className="orchestration-image"
+          />
+          <p className="orchestration-caption">Click to view fullscreen</p>
         </div>
       </div>
 

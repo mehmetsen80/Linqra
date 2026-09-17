@@ -2542,9 +2542,30 @@ body,
 }
 
 .orchestration-section {
-  padding: 4rem 2rem;
-  background: linear-gradient(180deg, #f8f9fa 0%, #e2e8f0 100%);
+  padding: 4rem 1.25rem 5rem;
+  background: transparent;
   text-align: center;
+}
+
+.orchestration-visual {
+  max-width: 1180px;
+  width: 100%;
+  margin: 2rem auto 0;
+  cursor: zoom-in;
+  background: transparent;
+}
+
+.orchestration-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: transparent;
+}
+
+.orchestration-caption {
+  margin: 0.85rem 0 0;
+  font-size: 0.9rem;
+  color: #64748b;
 }
 
 .hero-image {

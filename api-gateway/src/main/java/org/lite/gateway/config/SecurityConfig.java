@@ -726,7 +726,19 @@ public class SecurityConfig implements BeanFactoryAware {
         configuration.setMaxAge(maxAge);
         configuration.setExposedHeaders(List.of("Content-Disposition"));
 
+        // MCP OAuth login/consent runs in Claude popups / sandboxed contexts that send
+        // Origin: null (or claude.ai). Strict CORS → Chrome "HTTP ERROR 403" on form POST.
+        CorsConfiguration oauthOpen = new CorsConfiguration();
+        oauthOpen.setAllowedOriginPatterns(List.of("*"));
+        oauthOpen.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
+        oauthOpen.setAllowedHeaders(List.of("*"));
+        oauthOpen.setAllowCredentials(false);
+        oauthOpen.setMaxAge(maxAge);
+
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/r/*/oauth/**", oauthOpen);
+        source.registerCorsConfiguration("/r/*/oauth2/**", oauthOpen);
+        source.registerCorsConfiguration("/r/*/.well-known/**", oauthOpen);
         source.registerCorsConfiguration("/**", configuration);
         return source;
     }

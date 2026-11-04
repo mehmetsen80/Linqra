@@ -62,6 +62,8 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
             "https://komunas.linqra.com",
             "https://smartadvising.ai",
             "https://www.smartadvising.ai",
+            "https://deqra.ai",
+            "https://www.deqra.ai",
             "http://localhost:5173", // Vite default
             "app://-", // Electron default
             "file://" // Electron fallback
@@ -362,6 +364,11 @@ public class ApiKeyAuthenticationFilter implements WebFilter {
     private boolean isPublicPath(String path) {
         // Core public paths
         if (path.contains("/whatsapp/webhook") || path.contains("/auth/") || path.contains("-ws")) {
+            return true;
+        }
+
+        // Deqra MCP OAuth 2.1 AS (authorize / token / login / consent / RFC 8414 metadata)
+        if (path.contains("/oauth2/") || path.contains("/oauth/") || path.contains("/.well-known/")) {
             return true;
         }
 

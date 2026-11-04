@@ -132,6 +132,10 @@ public class SecurityConfig implements BeanFactoryAware {
             "/api/teams/**",
             "/r/*/auth/**", // Public Auth for routed apps (legacy path shape)
             "/r/**/api/auth/**", // Public Auth for routed apps (e.g. /r/deqra-app/api/auth/support)
+            // Deqra MCP OAuth 2.1 Authorization Server (AS lives in deqra-app under context path)
+            "/r/**/oauth2/**", // authorize, token, revoke, JWKS
+            "/r/**/oauth/**", // login + consent UI
+            "/r/**/.well-known/**", // RFC 8414 oauth-authorization-server metadata
             "/api/internal/**", // Secured by X-Change-Log-Token
             "/linqra-knowledge-hub-dev/**", // MinIO Proxy (Secured by S3 Signature)
             "/backup-linqra-knowledge-hub-dev/**",
@@ -252,9 +256,14 @@ public class SecurityConfig implements BeanFactoryAware {
             // Skip token relay for certain paths
             // ADDED: /r/ to skip this filter for routed internal requests (preserves User
             // Token)
+            // Deqra MCP OAuth AS: browser authorize/login must not receive a gateway
+            // client-credentials Bearer — deqra-app would treat it as an access token and 401.
             if (path.startsWith("/actuator") ||
                     path.contains("-ws") ||
-                    path.startsWith("/favicon")) {
+                    path.startsWith("/favicon") ||
+                    path.contains("/oauth2/") ||
+                    path.contains("/oauth/") ||
+                    path.contains("/.well-known/")) {
                 return chain.filter(exchange);
             }
             // log.info("TokenRelayWebFilter for path: {}", path);
@@ -279,8 +288,12 @@ public class SecurityConfig implements BeanFactoryAware {
 
                             ServerHttpRequest request = exchange.getRequest().mutate()
                                     .headers(headers -> {
-                                        // Only swap Authorization if NOT a routed path OR if no user token exists (internal call)
-                                        if (!path.startsWith("/r/") || userToken == null) {
+                                        // Only swap Authorization if NOT a routed path OR if no user token exists (internal call).
+                                        // Never overwrite on OAuth AS paths (defense in depth; also skipped above).
+                                        boolean oauthAsPath = path.contains("/oauth2/")
+                                                || path.contains("/oauth/")
+                                                || path.contains("/.well-known/");
+                                        if (!oauthAsPath && (!path.startsWith("/r/") || userToken == null)) {
                                             headers.set("Authorization", "Bearer " + gatewayToken);
                                         }
                                         // Removed forced Accept and Content-Type to preserve original browser headers
@@ -443,8 +456,13 @@ public class SecurityConfig implements BeanFactoryAware {
                             return Mono.just(new AuthorizationDecision(true));
                         }
 
-                        // For /r/ paths, check route permissions first (exempt /auth/ and webhook)
-                        if (path.startsWith("/r/") && !path.contains("/auth/") && !path.contains("/whatsapp/webhook")) {
+                        // For /r/ paths, check route permissions first (exempt auth / OAuth AS / webhook)
+                        if (path.startsWith("/r/")
+                                && !path.contains("/auth/")
+                                && !path.contains("/oauth2/")
+                                && !path.contains("/oauth/")
+                                && !path.contains("/.well-known/")
+                                && !path.contains("/whatsapp/webhook")) {
                             // log.info("Checking route permissions for path: {}", path);
                             return checkRoutePermission(authenticationMono, path, authorizationContext.getExchange())
                                     .doOnNext(hasPermission -> log.info("Route permission result for {}: {}", path,
